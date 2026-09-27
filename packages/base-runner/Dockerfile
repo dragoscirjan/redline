@@ -13,7 +13,7 @@ RUN apk add --no-cache python3 uv \
     && npm ci --prefix /opt/redline/mcp --omit=dev --ignore-scripts \
     && npm cache clean --force \
     && mkdir -p /opt/redline/bin /opt/redline/uv-tools \
-    && UV_TOOL_DIR=/opt/redline/uv-tools UV_TOOL_BIN_DIR=/opt/redline/bin UV_CACHE_DIR=/tmp/redline/uv-cache uv tool install --python python3 --requirements /opt/redline/mcp/codegraphcontext-requirements.txt \
+    && UV_TOOL_DIR=/opt/redline/uv-tools UV_TOOL_BIN_DIR=/opt/redline/bin UV_CACHE_DIR=/tmp/redline/uv-cache uv tool install --python python3 --with-requirements /opt/redline/mcp/codegraphcontext-requirements.txt codegraphcontext \
     && mkdir -p /var/lib/redline/mcp/gitnexus /var/lib/redline/mcp/codegraphcontext/config /var/lib/redline/mcp/codegraphcontext/data /var/lib/redline/mcp/codegraphcontext/cache \
     && chown -R 10001:10001 /var/lib/redline/mcp \
     && chmod -R 0750 /var/lib/redline/mcp \

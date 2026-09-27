@@ -2,7 +2,7 @@
 
 `Dockerfile` defines the common Node.js runtime and unprivileged user for the Pi and OpenCode runner images in `packages/base-runner/`. The harness images build from the same base reference, then install only their own CLI and required operating-system packages.
 
-The default reference is the official `node:24-alpine` multi-platform image. Override `NODE_BASE` to an approved digest at release time. The Node Alpine base keeps the common layer small, but uses musl; confirm each harness and its transitive native dependencies support both `linux/amd64` and `linux/arm64` before publishing. If a dependency requires glibc, use a small Debian slim base rather than adding a compatibility layer.
+The default reference is the official `node:24-bookworm-slim` multi-platform image. Override `NODE_BASE` to an approved digest at release time. Debian slim is used because CodeGraphContext's `falkordblite` dependency compiles Redis during installation and relies on glibc-compatible native Python packages. A build toolchain is installed temporarily to compile it, then removed before the base image is finalized. CI builds for both `linux/amd64` and `linux/arm64`.
 
 ## MCP database storage
 

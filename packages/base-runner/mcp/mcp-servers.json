@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "sequential-thinking": {
+      "command": "mcp-server-sequential-thinking",
+      "args": []
+    },
+    "gitnexus": {
+      "command": "gitnexus",
+      "args": ["mcp"],
+      "env": {
+        "GITNEXUS_SKIP_OPTIONAL_GRAMMARS": "1",
+        "GITNEXUS_STORAGE_ROOT": "/var/lib/redline/mcp/gitnexus"
+      }
+    },
+    "codegraphcontext": {
+      "command": "cgc",
+      "args": ["mcp", "start"],
+      "env": {
+        "XDG_CONFIG_HOME": "/var/lib/redline/mcp/codegraphcontext/config",
+        "XDG_DATA_HOME": "/var/lib/redline/mcp/codegraphcontext/data",
+        "XDG_CACHE_HOME": "/var/lib/redline/mcp/codegraphcontext/cache"
+      }
+    },
+    "context-mode": {
+      "command": "context-mode",
+      "args": []
+    }
+  }
+}

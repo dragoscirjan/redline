@@ -1,0 +1,63 @@
+name: CI » Validate container images
+
+on:
+  workflow_call: {}
+
+permissions: {}
+
+jobs:
+  validate:
+    name: Check definitions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Validate image package metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f packages/base-runner/Dockerfile
+          test -f packages/pi-runner/Dockerfile
+          test -f packages/opencode-runner/Dockerfile
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+
+          const jsonFiles = [
+            'packages/base-runner/mcp/package.json',
+            'packages/base-runner/mcp/mcp-servers.json',
+            'packages/pi-runner/pi/settings.json',
+            'packages/opencode-runner/opencode/opencode.json',
+          ];
+
+          for (const file of jsonFiles) JSON.parse(fs.readFileSync(file, 'utf8'));
+
+          const pi = JSON.parse(fs.readFileSync(jsonFiles[2], 'utf8'));
+          const opencode = JSON.parse(fs.readFileSync(jsonFiles[3], 'utf8'));
+          for (const server of ['sequential-thinking', 'gitnexus', 'codegraphcontext', 'context-mode']) {
+            assert.ok(pi.mcpServers[server], `Pi missing MCP server: ${server}`);
+            assert.ok(opencode.mcp[server], `OpenCode missing MCP server: ${server}`);
+          }
+          NODE
+
+      - name: Lint Dockerfiles
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          recursive: true
+          dockerfile: packages
+
+      - name: Check workflow syntax
+        uses: rhysd/actionlint@v1.7.7
+        with:
+          github_token: ${{ github.token }}

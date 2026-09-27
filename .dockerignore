@@ -1,0 +1,14 @@
+.git
+.github
+.pi
+.agents
+node_modules
+**/node_modules
+**/.env
+**/.env.*
+**/secrets
+**/credentials
+**/.cache
+**/coverage
+**/dist
+**/target

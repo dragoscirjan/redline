@@ -1,0 +1,13 @@
+{
+  "name": "@redline/base-runner-mcps",
+  "private": true,
+  "description": "Pinned MCP server dependencies shared by Redline runner images.",
+  "version": "1.0.0",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/server-sequential-thinking": "2026.8.31",
+    "context-mode": "1.0.169",
+    "gitnexus": "1.6.12"
+  }
+}

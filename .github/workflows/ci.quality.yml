@@ -30,8 +30,8 @@ jobs:
           test -f packages/base-runner/Dockerfile
           test -f packages/pi-runner/Dockerfile
           test -f packages/opencode-runner/Dockerfile
-          grep -Eq '^codegraphcontext==[0-9]+\\.[0-9]+\\.[0-9]+$' packages/base-runner/mcp/codegraphcontext-requirements.txt
-          grep -Fq -- '--with-requirements /opt/redline/mcp/codegraphcontext-requirements.txt codegraphcontext' packages/base-runner/Dockerfile
+          grep -Eq '^codegraphcontext==[0-9]+\.[0-9]+\.[0-9]+$' packages/base-runner/mcp/codegraphcontext-requirements.txt
+          grep -Eq 'uv tool install --python python3 --with-requirements /opt/redline/mcp/codegraphcontext-requirements.txt codegraphcontext' packages/base-runner/Dockerfile
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           import assert from 'node:assert/strict';

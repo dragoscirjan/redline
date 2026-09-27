@@ -51,13 +51,21 @@ jobs:
           }
           NODE
 
-      - name: Lint Dockerfiles
+      - name: Lint base runner Dockerfile
         uses: hadolint/hadolint-action@v3.1.0
         with:
-          recursive: true
-          dockerfile: packages
+          dockerfile: packages/base-runner/Dockerfile
+
+      - name: Lint Pi runner Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: packages/pi-runner/Dockerfile
+
+      - name: Lint OpenCode runner Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: packages/opencode-runner/Dockerfile
 
       - name: Check workflow syntax
         uses: rhysd/actionlint@v1.7.7
-        with:
-          github_token: ${{ github.token }}
+

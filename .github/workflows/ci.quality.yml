@@ -37,6 +37,10 @@ jobs:
           grep -Eq 'TARGETARCH.*amd64.*x86_64.*arm64.*aarch64' packages/base-runner/Dockerfile
           grep -Eq 'build-essential' packages/base-runner/Dockerfile
           grep -Eq 'sha256sum --check --status' packages/base-runner/Dockerfile
+          for dockerfile in packages/pi-runner/Dockerfile packages/opencode-runner/Dockerfile; do
+            grep -Eq 'apt-get install --no-install-recommends --yes' "$dockerfile"
+            ! grep -Eq 'apk add' "$dockerfile"
+          done
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           import assert from 'node:assert/strict';

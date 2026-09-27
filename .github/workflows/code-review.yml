@@ -1,8 +1,17 @@
-name: Pull request review context
+name: Code review
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, edited, ready_for_review]
+  workflow_call:
+    inputs:
+      artifact-retention-days:
+        description: Number of days to retain the review debug artifact
+        required: false
+        type: number
+        default: 3
+    secrets:
+      github-token:
+        description: Optional token for fetching private pull request head repositories
+        required: false
 
 permissions: {}
 
@@ -18,13 +27,14 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Attach pull request requirements
+      - name: Write pull request requirements
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
+          set -euo pipefail
           mkdir -p review
           {
             printf '# Pull request requirements\n\n'
@@ -35,4 +45,4 @@ jobs:
         uses: ./github
         with:
           artifact-name: pull-request-review-${{ github.event.pull_request.number }}-${{ github.run_id }}
-          artifact-retention-days: "3"
+          artifact-retention-days: ${{ inputs.artifact-retention-days }}

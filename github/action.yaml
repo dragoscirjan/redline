@@ -45,8 +45,12 @@ runs:
         set -euo pipefail
         base_url="https://github.com/${GITHUB_REPOSITORY}.git"
         head_url="https://github.com/${HEAD_REPOSITORY}.git"
-        git fetch --no-tags "$base_url" "$BASE_SHA"
-        git fetch --no-tags "$head_url" "$HEAD_SHA"
+        if [[ "$HEAD_REPOSITORY" == "$GITHUB_REPOSITORY" ]]; then
+          git fetch --no-tags "$base_url" "$BASE_SHA" "$HEAD_SHA"
+        else
+          git fetch --no-tags "$base_url" "$BASE_SHA"
+          git fetch --no-tags "$head_url" "$HEAD_SHA"
+        fi
         git cat-file -e "$BASE_SHA^{commit}"
         git cat-file -e "$HEAD_SHA^{commit}"
 

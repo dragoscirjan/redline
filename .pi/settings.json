@@ -1,0 +1,10 @@
+{
+  "packages": [
+    "npm:pi-mcp-adapter@2.32.1",
+    "npm:pi-subagents@0.66.0",
+    "npm:pi-mcp-adapter@2.32.1",
+    "npm:@juicesharp/rpiv-ask-user-question@2.9.0",
+    "git:github.com/badlogic/pi-telegram",
+    "npm:context-mode"
+  ]
+}

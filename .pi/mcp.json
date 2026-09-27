@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    "gitnexus": {
+      "command": "npx",
+      "args": ["-y", "gitnexus@latest", "mcp"],
+      "env": {
+        "GITNEXUS_SKIP_OPTIONAL_GRAMMARS": "1"
+      }
+    },
+    "codegraphcontext": {
+      "command": "uvx",
+      "args": ["codegraphcontext", "mcp", "start"]
+    },
+    "context-mode": {
+      "command": "npx",
+      "args": ["-y", "context-mode"]
+    }
+  }
+}

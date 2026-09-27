@@ -1,0 +1,34 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "sequential-thinking": {
+      "type": "local",
+      "command": ["/opt/redline/mcp/node_modules/.bin/mcp-server-sequential-thinking"],
+      "enabled": true
+    },
+    "gitnexus": {
+      "type": "local",
+      "command": ["/opt/redline/bin/gitnexus", "mcp"],
+      "environment": {
+        "GITNEXUS_SKIP_OPTIONAL_GRAMMARS": "1",
+        "GITNEXUS_STORAGE_ROOT": "/var/lib/redline/mcp/gitnexus"
+      },
+      "enabled": true
+    },
+    "codegraphcontext": {
+      "type": "local",
+      "command": ["cgc", "mcp", "start"],
+      "environment": {
+        "XDG_CONFIG_HOME": "/var/lib/redline/mcp/codegraphcontext/config",
+        "XDG_DATA_HOME": "/var/lib/redline/mcp/codegraphcontext/data",
+        "XDG_CACHE_HOME": "/var/lib/redline/mcp/codegraphcontext/cache"
+      },
+      "enabled": true
+    },
+    "context-mode": {
+      "type": "local",
+      "command": ["/opt/redline/mcp/node_modules/.bin/context-mode"],
+      "enabled": true
+    }
+  }
+}

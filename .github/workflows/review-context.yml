@@ -1,0 +1,38 @@
+name: Pull request review context
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions: {}
+
+jobs:
+  context:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out workflow source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Attach pull request requirements
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          mkdir -p review
+          {
+            printf '# Pull request requirements\n\n'
+            printf 'PR #%s: %s\n\n%s\n\n%s\n' "$PR_NUMBER" "$PR_TITLE" "$PR_BODY" "$PR_URL"
+          } > pr-requirements.md
+
+      - name: Run Redline review context action
+        uses: ./github
+        with:
+          artifact-name: pull-request-review-${{ github.event.pull_request.number }}-${{ github.run_id }}
+          artifact-retention-days: "3"

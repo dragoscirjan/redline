@@ -39,7 +39,10 @@ jobs:
           grep -Eq 'sha256sum --check --status' packages/base-runner/Dockerfile
           for dockerfile in packages/pi-runner/Dockerfile packages/opencode-runner/Dockerfile; do
             grep -Eq 'apt-get install --no-install-recommends --yes' "$dockerfile"
-            ! grep -Eq 'apk add' "$dockerfile"
+            if grep -Eq 'apk add' "$dockerfile"; then
+              echo "Alpine package manager found in Debian runner: $dockerfile" >&2
+              exit 1
+            fi
           done
           node --input-type=module <<'NODE'
           import fs from 'node:fs';

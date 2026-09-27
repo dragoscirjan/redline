@@ -9,6 +9,8 @@ RUN apt-get update \
     && apt-get install --no-install-recommends --yes bash ca-certificates git \
     && npm install --global --omit=dev "@earendil-works/pi-coding-agent@${PI_VERSION}" \
     && npm cache clean --force \
+    && chown -R root:root /usr/local/lib/node_modules /usr/local/bin \
+    && chmod -R go-w /usr/local/lib/node_modules /usr/local/bin \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PI_SETTINGS_PATH=/etc/redline/pi/settings.json \

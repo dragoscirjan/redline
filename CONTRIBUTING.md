@@ -43,7 +43,7 @@ Do not start implementation when the requirement changes authentication semantic
 
 ## Implementation rules
 
-- Write new production code in TypeScript unless an accepted design requires another language.
+- Use Bash for shell-based collection and workflow tasks. Use TypeScript only when the feature needs application code that Bash cannot handle clearly.
 - Provide forge-specific action entry points (including `github/action.yaml` and a Gitea-compatible manifest under `gitea/`) and develop them in parallel. Their engines and manifest formats differ; keep review flow in shared core code and forge integration in adapters.
 - Keep the review domain independent from forge SDKs, action runtimes, Pi, and OpenCode.
 - Add forge-specific behavior through adapters.

@@ -1,0 +1,15 @@
+name: Pull request code review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions: {}
+
+jobs:
+  review:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/code-review.yml
+    with:
+      artifact-retention-days: 3

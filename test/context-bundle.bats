@@ -68,3 +68,19 @@ teardown() {
   run bash -c 'cd "$1" && bash "$2" --base missing-revision --head "$3" --output "$4"' _ "$TMP/source" "$SCRIPT" "$HEAD_SHA" "$TMP/review"
   [ "$status" -ne 0 ]
 }
+
+@test "does not execute scripts or hooks from the checked-out PR source" {
+  marker="$TMP/pr-source-was-executed"
+  mkdir -p "$REPO/.github/workflows"
+  printf '#!/usr/bin/env bash\ntouch %q\n' "$marker" > "$REPO/.github/workflows/untrusted.sh"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -qm 'add untrusted script'
+  HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
+  rm -rf "$TMP/source-at-head"
+  mkdir -p "$TMP/review"
+
+  run bash -c 'cd "$1" && bash "$2" --base "$3" --head "$4" --output "$5" --source "$6"' _ "$TMP/source" "$SCRIPT" "$BASE" "$HEAD_SHA" "$TMP/review" "$TMP/source-at-head"
+  [ "$status" -eq 0 ]
+  [ -f "$TMP/source-at-head/.github/workflows/untrusted.sh" ]
+  [ ! -e "$marker" ]
+}

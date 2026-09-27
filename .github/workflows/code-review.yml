@@ -21,9 +21,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Check out workflow source
+      - name: Check out trusted workflow tooling
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
           fetch-depth: 0
 

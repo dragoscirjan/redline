@@ -7,8 +7,7 @@ USER root
 COPY packages/pi-runner/pi/settings.json /etc/redline/pi/settings.json
 RUN apk add --no-cache bash ca-certificates git \
     && npm install --global --omit=dev "@earendil-works/pi-coding-agent@${PI_VERSION}" \
-    && npm cache clean --force \
-    && chown -R 10001:10001 /usr/local/lib/node_modules /usr/local/bin
+    && npm cache clean --force
 
 ENV PI_SETTINGS_PATH=/etc/redline/pi/settings.json \
     PI_CODING_AGENT_DIR=/tmp/redline/pi

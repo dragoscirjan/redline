@@ -7,13 +7,11 @@ USER root
 COPY packages/opencode-runner/opencode/opencode.json /etc/redline/opencode.json
 RUN apk add --no-cache ca-certificates git \
     && npm install --global --omit=dev "opencode-ai@${OPENCODE_VERSION}" \
-    && npm cache clean --force \
-    && chown -R 10001:10001 /usr/local/lib/node_modules /usr/local/bin
+    && npm cache clean --force
 
 ENV OPENCODE_CONFIG_DIR=/tmp/redline/opencode \
     OPENCODE_CONFIG=/etc/redline/opencode.json
 
-USER 10001:10001
 USER 10001:10001
 
 ENTRYPOINT ["opencode"]

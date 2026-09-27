@@ -14,12 +14,12 @@ jobs:
       contents: read
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
         with:
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
         with:
           node-version: 24
 
@@ -52,20 +52,23 @@ jobs:
           NODE
 
       - name: Lint base runner Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
         with:
           dockerfile: packages/base-runner/Dockerfile
+          failure-threshold: error
 
       - name: Lint Pi runner Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
         with:
           dockerfile: packages/pi-runner/Dockerfile
+          failure-threshold: error
 
       - name: Lint OpenCode runner Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
         with:
           dockerfile: packages/opencode-runner/Dockerfile
+          failure-threshold: error
 
       - name: Check workflow syntax
-        uses: rhysd/actionlint@v1.7.7
+        uses: rhysd/actionlint@03d0035246f3e81f36aed592ffb4bebf33a03106 # v1.7.7
 

@@ -9,6 +9,8 @@ RUN apt-get update \
     && apt-get install --no-install-recommends --yes ca-certificates git \
     && npm install --global --omit=dev "opencode-ai@${OPENCODE_VERSION}" \
     && npm cache clean --force \
+    && chown -R root:root /usr/local/lib/node_modules /usr/local/bin \
+    && chmod -R go-w /usr/local/lib/node_modules /usr/local/bin \
     && rm -rf /var/lib/apt/lists/*
 
 ENV OPENCODE_CONFIG_DIR=/tmp/redline/opencode \

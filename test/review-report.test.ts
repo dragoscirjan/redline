@@ -20,6 +20,8 @@ import {
   type ReviewForgePublisher,
 } from '../src/review-publication.js';
 import {
+  OPENCODE_TEXT_DELTA_PREFIX,
+  OPENCODE_TEXT_END_PREFIX,
   ReviewBackendOutputConsumer,
   ReviewEventStreamParser,
   extractOpenCodeTextDelta,
@@ -123,6 +125,7 @@ class FakePublisher implements ReviewForgePublisher {
   summaries: string[] = [];
   inline: InlinePublication[] = [];
   inlineFailure: Error | undefined;
+  afterInline: (() => Promise<void>) | undefined;
 
   async currentHead(): Promise<string> {
     return this.head;
@@ -136,6 +139,7 @@ class FakePublisher implements ReviewForgePublisher {
   async publishInline(_scope: ReviewRunScope, publication: InlinePublication): Promise<number> {
     if (this.inlineFailure) throw this.inlineFailure;
     this.inline.push(publication);
+    if (this.afterInline) await this.afterInline();
     return 100 + this.inline.length;
   }
 }
@@ -147,7 +151,9 @@ test('parses chunked review events and backend text deltas', () => {
   assert.deepEqual(parser.push(finding.slice(0, 20)), []);
   assert.equal(parser.push(`${finding.slice(20)}${completion.slice(0, 10)}`).length, 1);
   assert.equal(parser.push(completion.slice(10)).length, 0);
-  assert.equal(parser.finish()[0]?.type, 'completion');
+  const result = parser.finish()[0];
+  assert.ok(result?.ok);
+  assert.equal(result.event.type, 'completion');
   assert.equal(parser.completed, true);
 
   assert.equal(
@@ -203,14 +209,20 @@ test('OpenCode output plugin forwards text deltas without adding a model tool', 
     await hooks.event({ event: { type: 'message.part.delta', properties: {
       sessionID: 'session-1', messageID: 'message-1', partID: 'part-2', field: 'text', delta: 'ignored-reasoning'
     } } });
+    await hooks.event({ event: { type: 'message.part.updated', properties: { part: {
+      sessionID: 'session-1', messageID: 'message-1', id: 'part-1', type: 'text', text: 'chunk',
+      time: { start: 1, end: 2 }
+    } } } });
   `;
   const result = await executeFile(process.execPath, ['--input-type=module', '--eval', script], {
     env: { ...process.env, REDLINE_REPORT_EVENTS: '1' },
   });
   assert.match(result.stdout, /^REDLINE_REVIEW_TEXT_DELTA /u);
   assert.doesNotMatch(result.stdout, /ignored-reasoning/u);
-  assert.equal(result.stdout.trim().split('\n').length, 1);
-  assert.equal(extractOpenCodeTextDelta(result.stdout.trim(), 'session-1'), 'chunk');
+  const outputLines = result.stdout.trim().split('\n');
+  assert.equal(outputLines.length, 2);
+  assert.equal(extractOpenCodeTextDelta(outputLines[0] as string, 'session-1'), 'chunk');
+  assert.match(outputLines[1] as string, /^REDLINE_REVIEW_TEXT_END /u);
 });
 
 test('OpenCode consumer accepts only the selected plugin session and ignores native aggregate text', async () => {
@@ -237,18 +249,80 @@ test('OpenCode consumer accepts only the selected plugin session and ignores nat
   assert.deepEqual(accepted, ['finding', 'completion']);
 });
 
-test('rejects malformed, repeated, and post-completion stream events', () => {
+test('flushes Pi message and OpenCode text-part boundaries without trailing newlines', async () => {
+  for (const backend of ['pi', 'opencode'] as const) {
+    const accepted: Array<'finding' | 'completion'> = [];
+    const sink = {
+      accept(event: ReviewFindingEvent | ReviewCompletionEvent) {
+        accepted.push(event.type);
+        return Promise.resolve();
+      },
+    };
+    const consumer = backend === 'pi'
+      ? new ReviewBackendOutputConsumer({ backend, sink })
+      : new ReviewBackendOutputConsumer({ backend, sink, sessionId: 'coordinator' });
+    const segments = [JSON.stringify(findingEvent()), JSON.stringify(completionEvent())];
+    for (const [index, segment] of segments.entries()) {
+      if (backend === 'pi') {
+        await consumer.pushHarnessLine(
+          JSON.stringify({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: segment } }),
+        );
+        await consumer.pushHarnessLine(JSON.stringify({ type: 'message_end', message: { role: 'assistant' } }));
+      } else {
+        const envelope = { version: 1, sessionID: 'coordinator', messageID: `m-${index}`, partID: `p-${index}` };
+        await consumer.pushHarnessLine(`${OPENCODE_TEXT_DELTA_PREFIX}${JSON.stringify({ ...envelope, delta: segment })}`);
+        await consumer.pushHarnessLine(`${OPENCODE_TEXT_END_PREFIX}${JSON.stringify(envelope)}`);
+      }
+    }
+    assert.deepEqual(accepted, ['finding', 'completion']);
+  }
+});
+
+test('returns malformed, repeated, and post-completion lines as parse failures', () => {
   const parser = new ReviewEventStreamParser();
-  assert.throws(() => parser.push('{bad}\n'), /not valid JSON/u);
+  const malformed = parser.push('{bad}\n')[0];
+  assert.equal(malformed?.ok, false);
+  if (!malformed?.ok) assert.match(malformed?.error.message ?? '', /not valid JSON/u);
 
   const completed = new ReviewEventStreamParser();
   completed.push(`${JSON.stringify(completionEvent('clean'))}\n`);
-  assert.throws(() => completed.push(`${JSON.stringify(findingEvent())}\n`), /after completion/u);
+  const afterCompletion = completed.push(`${JSON.stringify(findingEvent())}\n`)[0];
+  assert.equal(afterCompletion?.ok, false);
+  if (!afterCompletion?.ok) assert.match(afterCompletion?.error.message ?? '', /after completion/u);
 
   assert.throws(
     () => parseReviewEvent({ ...findingEvent(), unexpected: true }),
     /unsupported fields/u,
   );
+});
+
+test('delivers valid sibling events when parsing or sink acceptance fails', async () => {
+  const accepted: Array<'finding' | 'completion'> = [];
+  let findingCalls = 0;
+  const consumer = new ReviewBackendOutputConsumer({
+    backend: 'pi',
+    sink: {
+      accept(event) {
+        accepted.push(event.type);
+        if (event.type === 'finding' && findingCalls++ === 0) return Promise.reject(new Error('rejected finding'));
+        return Promise.resolve();
+      },
+    },
+  });
+  const text = [
+    JSON.stringify(findingEvent()),
+    '{bad}',
+    JSON.stringify(findingEvent({ impact: 'Second valid finding.' })),
+    JSON.stringify(completionEvent()),
+  ].join('\n') + '\n';
+  await assert.rejects(
+    consumer.pushHarnessLine(
+      JSON.stringify({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: text } }),
+    ),
+    AggregateError,
+  );
+  assert.deepEqual(accepted, ['finding', 'finding', 'completion']);
+  assert.equal(consumer.completed, true);
 });
 
 test('validates changed lines, exact evidence, finding scope, and completion consistency', async () => {
@@ -334,6 +408,22 @@ test('persists before progressive inline publication and finalizes from journal 
     assert.match(publisher.summaries[1] as string, /Review completed with findings/u);
     assert.match(publisher.summaries[1] as string, /does not repeat them/u);
     await journal.close();
+  });
+});
+
+test('propagates journal failure after a successful inline publication', async () => {
+  await withBundle(async ({ root, review, source }) => {
+    const bundle = await loadReviewBundle(review, source);
+    const validator = await ReviewFindingValidator.create(bundle, 'defects');
+    const journal = await ReviewJournal.create(join(root, 'journal.jsonl'), SCOPE);
+    const publisher = new FakePublisher();
+    publisher.afterInline = async () => journal.close();
+    const service = new ReviewPublicationService({ validator, journal, publisher, scope: SCOPE });
+
+    await service.initialize();
+    await assert.rejects(service.accept(findingEvent()), /journal is closed/u);
+    assert.equal(publisher.inline.length, 1);
+    assert.equal(journal.snapshot().publicationFailures.size, 0);
   });
 });
 

@@ -194,14 +194,16 @@ export class ReviewPublicationService {
   }
 
   async #publishInline(finding: ValidatedFinding): Promise<void> {
+    let commentId: number;
     try {
       await this.#assertCurrentHead();
-      const commentId = await this.#publisher.publishInline(this.#scope, renderInlineFinding(this.#scope, finding));
-      await this.#journal.recordPublished(finding.id, commentId);
+      commentId = await this.#publisher.publishInline(this.#scope, renderInlineFinding(this.#scope, finding));
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'unknown publication failure';
       await this.#journal.recordPublicationFailure(finding.id, reason.slice(0, 1_024));
+      return;
     }
+    await this.#journal.recordPublished(finding.id, commentId);
   }
 
   async #assertCurrentHead(): Promise<void> {

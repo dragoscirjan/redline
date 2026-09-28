@@ -28,13 +28,13 @@ It emits one completion event last:
 {"version":1,"type":"completion","outcome":"findings","coverage":{"reviewedFileIds":["000001"],"omitted":[],"capabilityFailures":[]}}
 ```
 
-The parser rejects malformed JSON, unknown fields, unsupported versions, oversized lines, more than ten findings, repeated completion, and events after completion. It does not repair model output.
+The parser rejects malformed JSON, unknown fields, unsupported versions, oversized lines, more than ten findings, repeated completion, and events after completion. It does not repair model output. A malformed line does not discard valid sibling lines that arrived in the same output chunk. The host delivers every parsed sibling before it reports the collected protocol or validation errors.
 
 ## Backend adapters
 
-Pi's `--mode json` output includes assistant `text_delta` events. The host extracts only those deltas.
+Pi's `--mode json` output includes assistant `text_delta` events. The host extracts only those deltas and flushes pending review text at each assistant `message_end` boundary.
 
-The pinned OpenCode CLI does not expose every text delta in its normal JSON output. The runner image therefore includes a fixed output plugin. When the host sets `REDLINE_REPORT_EVENTS=1`, the plugin tracks part types from `message.part.updated` events and forwards `message.part.delta` content only for text parts. Reasoning parts are discarded. Forwarded text uses the `REDLINE_REVIEW_TEXT_DELTA` prefix. The plugin adds no model tool and receives no GitHub credential.
+The pinned OpenCode CLI does not expose every text delta in its normal JSON output. The runner image therefore includes a fixed output plugin. When the host sets `REDLINE_REPORT_EVENTS=1`, the plugin tracks part types from `message.part.updated` events and forwards `message.part.delta` content only for text parts. Reasoning parts are discarded. Forwarded text uses the `REDLINE_REVIEW_TEXT_DELTA` prefix, and a text-part completion emits `REDLINE_REVIEW_TEXT_END`. The host flushes pending review text at that boundary, so a complete event does not require a trailing newline. The plugin adds no model tool and receives no GitHub credential.
 
 The host should accept events only from the selected coordinator session. Subagent collection remains deferred.
 

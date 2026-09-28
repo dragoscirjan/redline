@@ -8,7 +8,12 @@ import {
 import { byteLength, isRecord } from './review-bundle.js';
 
 export const OPENCODE_TEXT_DELTA_PREFIX = 'REDLINE_REVIEW_TEXT_DELTA ';
+export const OPENCODE_TEXT_END_PREFIX = 'REDLINE_REVIEW_TEXT_END ';
 const MAX_HARNESS_EVENT_BYTES = 1024 * 1024;
+
+export type ReviewEventParseResult =
+  | { ok: true; event: ReviewEvent }
+  | { ok: false; error: Error };
 
 export class ReviewEventStreamParser {
   #buffer = '';
@@ -20,7 +25,7 @@ export class ReviewEventStreamParser {
     return this.#completed;
   }
 
-  push(text: string): ReviewEvent[] {
+  push(text: string): ReviewEventParseResult[] {
     this.#bytes += byteLength(text);
     if (this.#bytes > MAX_REVIEW_EVENT_STREAM_BYTES) throw new Error('review event stream exceeds its byte limit');
     this.#buffer += text;
@@ -28,19 +33,19 @@ export class ReviewEventStreamParser {
       throw new Error('review event line exceeds its byte limit');
     }
 
-    const events: ReviewEvent[] = [];
+    const results: ReviewEventParseResult[] = [];
     while (true) {
       const newline = this.#buffer.indexOf('\n');
       if (newline < 0) break;
       const line = this.#buffer.slice(0, newline).replace(/\r$/u, '');
       this.#buffer = this.#buffer.slice(newline + 1);
       if (line.length === 0) continue;
-      events.push(this.#parseLine(line));
+      results.push(this.#parseLine(line));
     }
-    return events;
+    return results;
   }
 
-  finish(): ReviewEvent[] {
+  finishSegment(): ReviewEventParseResult[] {
     if (this.#buffer.length === 0) return [];
     const line = this.#buffer.replace(/\r$/u, '');
     this.#buffer = '';
@@ -48,69 +53,87 @@ export class ReviewEventStreamParser {
     return [this.#parseLine(line)];
   }
 
-  #parseLine(line: string): ReviewEvent {
-    if (byteLength(line) > MAX_REVIEW_EVENT_LINE_BYTES) throw new Error('review event line exceeds its byte limit');
-    if (this.#completed) throw new Error('review event appears after completion');
-    let decoded: unknown;
+  finish(): ReviewEventParseResult[] {
+    return this.finishSegment();
+  }
+
+  #parseLine(line: string): ReviewEventParseResult {
     try {
-      decoded = JSON.parse(line) as unknown;
-    } catch {
-      throw new Error('review event line is not valid JSON');
+      if (byteLength(line) > MAX_REVIEW_EVENT_LINE_BYTES) throw new Error('review event line exceeds its byte limit');
+      if (this.#completed) throw new Error('review event appears after completion');
+      let decoded: unknown;
+      try {
+        decoded = JSON.parse(line) as unknown;
+      } catch {
+        throw new Error('review event line is not valid JSON');
+      }
+      const event = parseReviewEvent(decoded);
+      if (event.type === 'finding') {
+        this.#findingCount += 1;
+        if (this.#findingCount > MAX_REVIEW_FINDINGS) throw new Error('review event stream exceeds the finding limit');
+      } else {
+        this.#completed = true;
+      }
+      return { ok: true, event };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error : new Error(String(error)) };
     }
-    const event = parseReviewEvent(decoded);
-    if (event.type === 'finding') {
-      this.#findingCount += 1;
-      if (this.#findingCount > MAX_REVIEW_FINDINGS) throw new Error('review event stream exceeds the finding limit');
-    } else {
-      this.#completed = true;
-    }
-    return event;
   }
 }
 
-export function extractPiTextDelta(line: string): string | undefined {
-  if (byteLength(line) > MAX_HARNESS_EVENT_BYTES) throw new Error('Pi event exceeds its byte limit');
+function parseHarnessEvent(line: string, label: string): Record<string, unknown> | undefined {
+  if (byteLength(line) > MAX_HARNESS_EVENT_BYTES) throw new Error(`${label} event exceeds its byte limit`);
   let event: unknown;
   try {
     event = JSON.parse(line) as unknown;
   } catch {
-    throw new Error('Pi event is not valid JSON');
+    throw new Error(`${label} event is not valid JSON`);
   }
-  if (!isRecord(event) || event.type !== 'message_update') return undefined;
+  return isRecord(event) ? event : undefined;
+}
+
+export function extractPiTextDelta(line: string): string | undefined {
+  const event = parseHarnessEvent(line, 'Pi');
+  if (!event || event.type !== 'message_update') return undefined;
   const assistant = event.assistantMessageEvent;
   if (!isRecord(assistant) || assistant.type !== 'text_delta') return undefined;
   if (typeof assistant.delta !== 'string') throw new Error('Pi text delta is malformed');
   return assistant.delta;
 }
 
+export function isPiAssistantMessageEnd(line: string): boolean {
+  const event = parseHarnessEvent(line, 'Pi');
+  return event?.type === 'message_end' && isRecord(event.message) && event.message.role === 'assistant';
+}
+
+function parseOpenCodeForwarded(line: string, prefix: string, label: string): Record<string, unknown> {
+  let forwarded: unknown;
+  try {
+    forwarded = JSON.parse(line.slice(prefix.length)) as unknown;
+  } catch {
+    throw new Error(`${label} is not valid JSON`);
+  }
+  if (!isRecord(forwarded) || forwarded.version !== 1 || typeof forwarded.sessionID !== 'string') {
+    throw new Error(`${label} is malformed`);
+  }
+  return forwarded;
+}
+
 export function extractOpenCodeTextDelta(line: string, expectedSessionId?: string): string | undefined {
   if (byteLength(line) > MAX_HARNESS_EVENT_BYTES) throw new Error('OpenCode event exceeds its byte limit');
   if (line.startsWith(OPENCODE_TEXT_DELTA_PREFIX)) {
-    let forwarded: unknown;
-    try {
-      forwarded = JSON.parse(line.slice(OPENCODE_TEXT_DELTA_PREFIX.length)) as unknown;
-    } catch {
-      throw new Error('OpenCode forwarded text delta is not valid JSON');
-    }
-    if (
-      !isRecord(forwarded) ||
-      forwarded.version !== 1 ||
-      typeof forwarded.sessionID !== 'string' ||
-      typeof forwarded.delta !== 'string'
-    ) {
-      throw new Error('OpenCode forwarded text delta is malformed');
-    }
+    const forwarded = parseOpenCodeForwarded(
+      line,
+      OPENCODE_TEXT_DELTA_PREFIX,
+      'OpenCode forwarded text delta',
+    );
+    if (typeof forwarded.delta !== 'string') throw new Error('OpenCode forwarded text delta is malformed');
     if (expectedSessionId && forwarded.sessionID !== expectedSessionId) return undefined;
     return forwarded.delta;
   }
 
-  let event: unknown;
-  try {
-    event = JSON.parse(line) as unknown;
-  } catch {
-    throw new Error('OpenCode event is not valid JSON');
-  }
-  if (!isRecord(event)) return undefined;
+  const event = parseHarnessEvent(line, 'OpenCode');
+  if (!event) return undefined;
   if (event.type === 'message.part.delta') {
     const properties = event.properties;
     if (!isRecord(properties) || properties.field !== 'text' || typeof properties.delta !== 'string') return undefined;
@@ -124,6 +147,13 @@ export function extractOpenCodeTextDelta(line: string, expectedSessionId?: strin
     return part.text;
   }
   return undefined;
+}
+
+export function isOpenCodeTextEnd(line: string, expectedSessionId: string): boolean {
+  if (!line.startsWith(OPENCODE_TEXT_END_PREFIX)) return false;
+  if (byteLength(line) > MAX_HARNESS_EVENT_BYTES) throw new Error('OpenCode text-end event exceeds its byte limit');
+  const forwarded = parseOpenCodeForwarded(line, OPENCODE_TEXT_END_PREFIX, 'OpenCode text-end event');
+  return forwarded.sessionID === expectedSessionId;
 }
 
 export interface ReviewEventSink {
@@ -154,16 +184,39 @@ export class ReviewBackendOutputConsumer {
   }
 
   async pushHarnessLine(line: string): Promise<void> {
-    if (this.#backend === 'opencode' && !line.startsWith(OPENCODE_TEXT_DELTA_PREFIX)) return;
-    const delta =
-      this.#backend === 'pi'
-        ? extractPiTextDelta(line)
-        : extractOpenCodeTextDelta(line, this.#sessionId);
-    if (delta === undefined) return;
-    for (const event of this.#parser.push(delta)) await this.#sink.accept(event);
+    if (this.#backend === 'pi') {
+      const delta = extractPiTextDelta(line);
+      if (delta !== undefined) await this.#deliver(this.#parser.push(delta));
+      else if (isPiAssistantMessageEnd(line)) await this.#deliver(this.#parser.finishSegment());
+      return;
+    }
+
+    const sessionId = this.#sessionId as string;
+    if (line.startsWith(OPENCODE_TEXT_DELTA_PREFIX)) {
+      const delta = extractOpenCodeTextDelta(line, sessionId);
+      if (delta !== undefined) await this.#deliver(this.#parser.push(delta));
+    } else if (isOpenCodeTextEnd(line, sessionId)) {
+      await this.#deliver(this.#parser.finishSegment());
+    }
   }
 
   async finish(): Promise<void> {
-    for (const event of this.#parser.finish()) await this.#sink.accept(event);
+    await this.#deliver(this.#parser.finish());
+  }
+
+  async #deliver(results: readonly ReviewEventParseResult[]): Promise<void> {
+    const errors: unknown[] = [];
+    for (const result of results) {
+      if (!result.ok) {
+        errors.push(result.error);
+        continue;
+      }
+      try {
+        await this.#sink.accept(result.event);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length > 0) throw new AggregateError(errors, 'review events were rejected');
   }
 }

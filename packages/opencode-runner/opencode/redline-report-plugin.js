@@ -1,4 +1,5 @@
-const PREFIX = 'REDLINE_REVIEW_TEXT_DELTA ';
+const DELTA_PREFIX = 'REDLINE_REVIEW_TEXT_DELTA ';
+const END_PREFIX = 'REDLINE_REVIEW_TEXT_END ';
 const MAX_TRACKED_PARTS = 1024;
 
 function partKey(sessionID, partID) {
@@ -21,6 +22,15 @@ export const RedlineReportPlugin = async () => {
           if (oldest !== undefined) partTypes.delete(oldest);
         }
         partTypes.set(key, part.type);
+        if (part.type === 'text' && part.time?.end !== undefined) {
+          const payload = {
+            version: 1,
+            sessionID: part.sessionID,
+            messageID: part.messageID,
+            partID: part.id,
+          };
+          process.stdout.write(`${END_PREFIX}${JSON.stringify(payload)}\n`);
+        }
         return;
       }
 
@@ -50,7 +60,7 @@ export const RedlineReportPlugin = async () => {
         partID: properties.partID,
         delta: properties.delta,
       };
-      process.stdout.write(`${PREFIX}${JSON.stringify(payload)}\n`);
+      process.stdout.write(`${DELTA_PREFIX}${JSON.stringify(payload)}\n`);
     },
   };
 };

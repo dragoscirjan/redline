@@ -21,4 +21,6 @@ Replace `OWNER` and `TAG` with the GHCR owner and matching base-image tag. Set `
 
 The image runs as UID/GID 10001. It contains no checkout or credentials. The MCP servers are installed in the shared base and configured in `opencode/opencode.json`; the Dockerfile copies that file to `/etc/redline/opencode.json`. GitNexus and CodeGraphContext use `/var/lib/redline/mcp` for persistent data. Mount the host-managed cache there, following the base runner's per-repository and per-architecture cache guidance. The mount must be writable by UID/GID 10001. The caller must provide a restricted execution environment and generate any other native OpenCode configuration in a private temporary directory at runtime. Disable tools when Redline's review policy requires it.
 
+The image also contains the fixed `redline-report-plugin.js` output adapter. It forwards OpenCode `message.part.delta` text only when trusted host code sets `REDLINE_REPORT_EVENTS=1`. It does not add a model tool, publish to a forge, or receive forge credentials. Host code parses the forwarded text through `redline-review-events/v1`.
+
 No image build has been run locally. Multi-platform build validation remains for Linux CI.

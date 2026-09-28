@@ -5,6 +5,7 @@ FROM ${RUNNER_BASE}
 ARG OPENCODE_VERSION=1.18.32
 USER root
 COPY packages/opencode-runner/opencode/opencode.json /etc/redline/opencode.json
+COPY packages/opencode-runner/opencode/redline-report-plugin.js /opt/redline/opencode/redline-report-plugin.js
 RUN apt-get update \
     && apt-get install --no-install-recommends --yes ca-certificates git \
     && npm install --global --omit=dev "opencode-ai@${OPENCODE_VERSION}" \

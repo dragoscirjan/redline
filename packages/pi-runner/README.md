@@ -21,4 +21,6 @@ Replace `OWNER` and `TAG` with the GHCR owner and matching base-image tag. Set `
 
 The image runs as UID/GID 10001. It contains no checkout or credentials. The MCP servers are installed in the shared base and configured in `pi/settings.json`; the Dockerfile copies that file to `/etc/redline/pi/settings.json`. GitNexus and CodeGraphContext use `/var/lib/redline/mcp` for persistent data. Mount the host-managed cache there, following the base runner's per-repository and per-architecture cache guidance. The mount must be writable by UID/GID 10001. The caller must provide a restricted execution environment and generate any other native Pi configuration in a private temporary directory at runtime. Disable Pi tools and project resource discovery when Redline's review policy requires it.
 
+Run reviews with Pi JSON event output. Trusted host code extracts assistant `text_delta` events and parses `redline-review-events/v1` lines. This reporting path does not add a Pi tool or expose forge credentials to the container.
+
 No image build has been run locally. Multi-platform build validation remains for Linux CI.

@@ -8,7 +8,7 @@ Options:
   --finding-scope <defects|defects-and-risks>           Default: defects
   --vulnerability-checks <off|changed-dependencies>    Default: off
   --vulnerability-tool <available|unavailable>         Default: unavailable
-  --reporting <cli|tools>                               Default: cli
+  --reporting <events>                                  Default: events
   --report-style <single-block|inline>                  Default: single-block
   --subagents <available|unavailable>                   Default: unavailable
   --help

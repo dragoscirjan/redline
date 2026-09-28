@@ -191,14 +191,25 @@ test('OpenCode output plugin forwards text deltas without adding a model tool', 
   const script = `
     const { RedlineReportPlugin } = await import(${JSON.stringify(pluginUrl)});
     const hooks = await RedlineReportPlugin();
+    await hooks.event({ event: { type: 'message.part.updated', properties: { part: {
+      sessionID: 'session-1', messageID: 'message-1', id: 'part-1', type: 'text', text: ''
+    } } } });
     await hooks.event({ event: { type: 'message.part.delta', properties: {
       sessionID: 'session-1', messageID: 'message-1', partID: 'part-1', field: 'text', delta: 'chunk'
+    } } });
+    await hooks.event({ event: { type: 'message.part.updated', properties: { part: {
+      sessionID: 'session-1', messageID: 'message-1', id: 'part-2', type: 'reasoning', text: ''
+    } } } });
+    await hooks.event({ event: { type: 'message.part.delta', properties: {
+      sessionID: 'session-1', messageID: 'message-1', partID: 'part-2', field: 'text', delta: 'ignored-reasoning'
     } } });
   `;
   const result = await executeFile(process.execPath, ['--input-type=module', '--eval', script], {
     env: { ...process.env, REDLINE_REPORT_EVENTS: '1' },
   });
   assert.match(result.stdout, /^REDLINE_REVIEW_TEXT_DELTA /u);
+  assert.doesNotMatch(result.stdout, /ignored-reasoning/u);
+  assert.equal(result.stdout.trim().split('\n').length, 1);
   assert.equal(extractOpenCodeTextDelta(result.stdout.trim(), 'session-1'), 'chunk');
 });
 

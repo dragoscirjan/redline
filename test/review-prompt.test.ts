@@ -94,7 +94,8 @@ test('assembles the fixed policy in order with safe defaults', async () => {
     assert.match(result.prompt, /"findingScope": "defects"/u);
     assert.match(result.prompt, /"vulnerabilityChecks": "off"/u);
     assert.match(result.prompt, /"reportStyle": "single-block"/u);
-    assert.match(result.prompt, /"reportingTools": \[\]/u);
+    assert.match(result.prompt, /"reviewEventProtocol": "redline-review-events\/v1"/u);
+    assert.match(result.prompt, /"publicationTools": \[\]/u);
     assert.match(result.prompt, /"subagents": false/u);
     assert.match(result.prompt, /"vulnerabilityLookupTool": null/u);
 
@@ -140,7 +141,7 @@ test('keeps the policy digest stable while dynamic configuration changes', async
       reviewDirectory: review,
       sourceDirectory: source,
       findingScope: 'defects-and-risks',
-      reporting: 'tools',
+      reporting: 'events',
       reportStyle: 'inline',
       subagents: 'available',
     });
@@ -148,9 +149,8 @@ test('keeps the policy digest stable while dynamic configuration changes', async
     assert.notEqual(first.promptDigest, second.promptDigest);
     assert.match(second.prompt, /"findingScope": "defects-and-risks"/u);
     assert.match(second.prompt, /"reportStyle": "inline"/u);
-    assert.match(second.prompt, /"inline_review"/u);
-    assert.match(second.prompt, /"summarize_review"/u);
-    assert.doesNotMatch(second.prompt, /"full_review_report"\s*\]/u);
+    assert.match(second.prompt, /"reviewEventProtocol": "redline-review-events\/v1"/u);
+    assert.match(second.prompt, /"publicationTools": \[\]/u);
     assert.match(second.prompt, /"subagents": true/u);
   });
 });

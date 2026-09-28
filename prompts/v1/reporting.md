@@ -28,11 +28,14 @@ The document has this shape:
   "outcome": "clean | findings | incomplete",
   "coverage": {
     "reviewedFileIds": ["000001"],
-    "omitted": [{"fileId": "000002", "reason": "bounded explanation"}]
+    "omitted": [{"fileId": "000002", "reason": "bounded explanation"}],
+    "capabilityFailures": [
+      {"capability": "vulnerabilityLookup", "reason": "bounded explanation"}
+    ]
   },
   "findings": [
     {
-      "category": "correctness | security | regression | testing",
+      "category": "correctness | security | regression | testing | operational | maintainability",
       "classification": "defect | risk",
       "severity": "critical | high | medium | low",
       "confidence": 0.0,
@@ -54,9 +57,10 @@ Contract rules:
 - `confidence` is a number from 0 through 1.
 - Return at most 10 findings.
 - `reviewedFileIds` and `omitted` must be disjoint and together account for every manifest entry.
-- `clean` requires complete coverage and no findings.
-- `findings` requires complete coverage and at least one finding.
-- `incomplete` requires at least one omitted file and may include validated findings from reviewed files.
+- `capabilityFailures` records a required declared capability that failed even when file inspection completed.
+- Use `clean` only for complete coverage, no capability failures, and no findings.
+- Use `findings` only for complete coverage, no capability failures, and at least one finding.
+- Use `incomplete` when at least one file is omitted or at least one required capability failed. It may include validated findings from reviewed files.
 - `risk` is invalid when the configured finding scope is `defects`.
 - A finding path and side must match its manifest entry.
 - Keep evidence, impact, fix, and omission reasons concise.

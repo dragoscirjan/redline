@@ -2,7 +2,7 @@
 
 import { assembleReviewPrompt, type ReviewPromptOptions } from './review-prompt.js';
 
-const USAGE = `Usage: redline-review-prompt assemble --review-dir <path> --source-dir <path> [options]
+const USAGE = `Usage: redline-review-prompt assemble --review-dir <path> --source-dir <path> --inspection read-only [options]
 
 Options:
   --finding-scope <defects|defects-and-risks>           Default: defects
@@ -29,6 +29,7 @@ function parseArguments(arguments_: string[]): ReviewPromptOptions | 'help' {
   const supported = new Set([
     '--review-dir',
     '--source-dir',
+    '--inspection',
     '--finding-scope',
     '--vulnerability-checks',
     '--vulnerability-tool',
@@ -46,6 +47,8 @@ function parseArguments(arguments_: string[]): ReviewPromptOptions | 'help' {
   const reviewDirectory = values.get('--review-dir');
   const sourceDirectory = values.get('--source-dir');
   if (!reviewDirectory || !sourceDirectory) throw new Error('--review-dir and --source-dir are required');
+  const inspection = values.get('--inspection');
+  if (inspection !== 'read-only') throw new Error('--inspection read-only is required');
 
   const findingScope = values.get('--finding-scope');
   const vulnerabilityChecks = values.get('--vulnerability-checks');
@@ -56,6 +59,7 @@ function parseArguments(arguments_: string[]): ReviewPromptOptions | 'help' {
   return {
     reviewDirectory,
     sourceDirectory,
+    inspection,
     ...(findingScope ? { findingScope: findingScope as NonNullable<ReviewPromptOptions['findingScope']> } : {}),
     ...(vulnerabilityChecks
       ? { vulnerabilityChecks: vulnerabilityChecks as NonNullable<ReviewPromptOptions['vulnerabilityChecks']> }

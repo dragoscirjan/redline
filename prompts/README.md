@@ -22,17 +22,19 @@ Build the TypeScript command, then give it a host-generated review bundle and th
 pnpm run build
 node dist/src/review-prompt-cli.js assemble \
   --review-dir /path/to/review \
-  --source-dir /path/to/source-at-head
+  --source-dir /path/to/source-at-head \
+  --inspection read-only
 ```
 
 The command writes the prompt to standard output and writes policy and prompt digests to standard error. Redirect standard output to a private file or pipe it directly to a review backend. Do not log the prompt because its untrusted inventory contains repository paths and metadata.
 
-The default configuration uses the `defects` scope, disables dependency vulnerability checks, reports through the command-line JSON contract, and does not advertise subagents. The trusted caller may select fixed alternatives:
+The caller must attest that the review runtime can read the bundle and source-at-head through `--inspection read-only`. The default configuration otherwise uses the `defects` scope, disables dependency vulnerability checks, reports through the command-line JSON contract, and does not advertise subagents. The trusted caller may select fixed alternatives:
 
 ```sh
 node dist/src/review-prompt-cli.js assemble \
   --review-dir /path/to/review \
   --source-dir /path/to/source-at-head \
+  --inspection read-only \
   --finding-scope defects-and-risks \
   --vulnerability-checks changed-dependencies \
   --vulnerability-tool available \

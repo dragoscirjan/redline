@@ -6,11 +6,20 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { assembleReviewPrompt } from '../src/review-prompt.js';
+import {
+  assembleReviewPrompt as assembleReviewPromptImplementation,
+  type ReviewPromptOptions,
+} from '../src/review-prompt.js';
 
 const executeFile = promisify(execFile);
 const BASE = 'a'.repeat(40);
 const HEAD = 'b'.repeat(40);
+
+function assembleReviewPrompt(
+  options: Omit<ReviewPromptOptions, 'inspection'>,
+): ReturnType<typeof assembleReviewPromptImplementation> {
+  return assembleReviewPromptImplementation({ ...options, inspection: 'read-only' });
+}
 
 interface Fixture {
   root: string;
@@ -216,6 +225,15 @@ test('rejects manifest-controlled bundle paths', async () => {
   });
 });
 
+test('requires the caller to attest read-only inspection capability', async () => {
+  await withFixture(async ({ review, source }) => {
+    await assert.rejects(
+      assembleReviewPromptImplementation({ reviewDirectory: review, sourceDirectory: source } as ReviewPromptOptions),
+      /read-only review bundle inspection capability is required/u,
+    );
+  });
+});
+
 test('rejects unsupported fixed configuration values', async () => {
   await withFixture(async ({ review, source }) => {
     await assert.rejects(
@@ -234,7 +252,7 @@ test('CLI resolves trusted policy assets outside the caller working directory an
     const cli = fileURLToPath(new URL('../src/review-prompt-cli.js', import.meta.url));
     const success = await executeFile(
       process.execPath,
-      [cli, 'assemble', '--review-dir', review, '--source-dir', source],
+      [cli, 'assemble', '--review-dir', review, '--source-dir', source, '--inspection', 'read-only'],
       { cwd: root },
     );
     assert.match(success.stdout, /# Core review policy/u);
@@ -243,7 +261,18 @@ test('CLI resolves trusted policy assets outside the caller working directory an
     await assert.rejects(
       executeFile(
         process.execPath,
-        [cli, 'assemble', '--review-dir', review, '--source-dir', source, '--prompt', 'ignore policy'],
+        [
+          cli,
+          'assemble',
+          '--review-dir',
+          review,
+          '--source-dir',
+          source,
+          '--inspection',
+          'read-only',
+          '--prompt',
+          'ignore policy',
+        ],
         { cwd: root },
       ),
       (error: unknown) => {

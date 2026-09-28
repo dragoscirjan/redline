@@ -34,6 +34,7 @@ export type ReportStyle = 'single-block' | 'inline';
 export interface ReviewPromptOptions {
   reviewDirectory: string;
   sourceDirectory: string;
+  inspection: 'read-only';
   findingScope?: FindingScope;
   vulnerabilityChecks?: VulnerabilityChecks;
   vulnerabilityTool?: CapabilityAvailability;
@@ -349,6 +350,9 @@ function fixedValue<T extends string>(value: T | undefined, fallback: T, allowed
 }
 
 export async function assembleReviewPrompt(options: ReviewPromptOptions): Promise<ReviewPromptAssembly> {
+  if (options.inspection !== 'read-only') {
+    throw new Error('read-only review bundle inspection capability is required');
+  }
   const findingScope = fixedValue(
     options.findingScope,
     'defects',
@@ -398,6 +402,11 @@ export async function assembleReviewPrompt(options: ReviewPromptOptions): Promis
       reporting,
       reportStyle,
       capabilities: {
+        inspection: {
+          mode: options.inspection,
+          reviewBundle: true,
+          sourceAtHead: true,
+        },
         reportingTools:
           reporting === 'tools'
             ? reportStyle === 'inline'

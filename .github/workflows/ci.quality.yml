@@ -23,6 +23,16 @@ jobs:
         with:
           node-version: 24
 
+      - name: Validate review prompt assembly
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile
+          pnpm run typecheck
+          pnpm test
+
       - name: Validate image package metadata
         shell: bash
         run: |

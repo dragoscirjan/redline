@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Forge-independent pull request review core and forge-specific actions.",
   "bin": {
-    "redline-review-prompt": "dist/src/review-prompt-cli.js"
+    "redline-review-prompt": "dist/src/review-prompt-cli.js",
+    "redline-review-run": "dist/src/review-run-cli.js"
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",

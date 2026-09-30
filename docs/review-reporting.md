@@ -36,7 +36,17 @@ Pi's `--mode json` output includes assistant `text_delta` events. The host extra
 
 The pinned OpenCode CLI does not expose every text delta in its normal JSON output. The runner image therefore includes a fixed output plugin. When the host sets `REDLINE_REPORT_EVENTS=1`, the plugin tracks part types from `message.part.updated` events and forwards `message.part.delta` content only for text parts. Reasoning parts are discarded. Forwarded text uses the `REDLINE_REVIEW_TEXT_DELTA` prefix, and a text-part completion emits `REDLINE_REVIEW_TEXT_END`. The host flushes pending review text at that boundary, so a complete event does not require a trailing newline. The plugin adds no model tool and receives no GitHub credential.
 
-The host should accept events only from the selected coordinator session. Subagent collection remains deferred.
+The host accepts events only from the selected coordinator session. Subagent collection remains deferred.
+
+## Host controller
+
+`redline-review-run` connects prompt assembly, backend execution, event validation, the journal, and publication. It starts an already-created Pi or OpenCode container with a fixed `podman start` or `docker start` argument list. The command does not accept an image, arbitrary command, native backend configuration, environment map, HTTP headers, or caller-supplied prompt.
+
+The controller starts its deadline before backend launch. It reads stdout as bounded UTF-8 lines and sends those lines to `ReviewBackendOutputConsumer` in order. It drains stderr separately and retains at most 64 KiB. Stderr never becomes a review finding or a trusted finalization message.
+
+A valid completion event and a zero backend exit produce a complete result. Findings still return a successful controller result. Timeout, non-zero exit, launch failure, invalid output, missing completion, incomplete coverage, and publication failure produce an incomplete managed summary with a host-selected reason. The controller asks the container to stop on timeout or execution failure, then kills it when the grace period expires.
+
+Container creation, pull, image selection, review-data staging, and native Pi or OpenCode configuration remain outside this command. A later action step must prepare the container and pass its validated ID to the controller.
 
 ## Publication modes
 
@@ -78,8 +88,8 @@ The host can finalize without a model completion event when status is `incomplet
 
 ## Current limitations
 
-- The actual backend timeout controller is not implemented.
-- The GitHub Action does not yet invoke Pi or OpenCode, so action-level wiring remains part of the backend execution slice under #13.
+- The controller starts only an already-created container. Container creation and data staging remain tracked by #20, and immutable image selection remains tracked by #23.
+- The GitHub Action does not yet invoke Pi or OpenCode. Composite-action and reusable-workflow wiring remain tracked by #21 and #22.
 - A timeout before the first complete finding event produces no finding. The managed summary still reports an incomplete review.
 - A hard runner termination can prevent final summary publication. Inline comments published before termination remain visible.
 - Cross-workflow journal recovery is not supported.

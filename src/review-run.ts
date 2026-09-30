@@ -16,7 +16,7 @@ import {
   type FindingScope,
   type ReportStyle,
 } from './review-prompt.js';
-import { ReviewBackendOutputConsumer } from './review-stream.js';
+import { ReviewBackendOutputConsumer, type ReviewEventSink } from './review-stream.js';
 
 const MAX_TIMEOUT_MS = 2 * 60 * 60 * 1_000;
 const DEFAULT_TERMINATION_GRACE_MS = 2_000;
@@ -236,15 +236,22 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
     const running = launchOutcome.running;
     const waitPromise = running.wait();
     void waitPromise.catch(() => undefined);
+    let acceptingEvents = true;
+    const sink: ReviewEventSink = {
+      accept(event) {
+        if (!acceptingEvents) return Promise.reject(new Error('review run no longer accepts backend events'));
+        return publication.accept(event);
+      },
+    };
     let consumer: ReviewBackendOutputConsumer;
     try {
       assertReportingBackend(running, input.backend);
       consumer = running.reporting.backend === 'pi'
-        ? new ReviewBackendOutputConsumer({ backend: 'pi', sink: publication })
+        ? new ReviewBackendOutputConsumer({ backend: 'pi', sink })
         : new ReviewBackendOutputConsumer({
             backend: 'opencode',
             sessionId: running.reporting.sessionId,
-            sink: publication,
+            sink,
           });
     } catch {
       launchAbort.abort();
@@ -280,17 +287,24 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
     const terminal = await Promise.race<TerminalEvent>([deadline.promise, executionPromise]);
 
     if (terminal.kind !== 'exit') {
+      acceptingEvents = false;
       launchAbort.abort();
       await terminateBackend(running, waitPromise, terminationGraceMs);
     }
     deadline.cancel();
 
-    const settled = await Promise.allSettled([stdoutPromise, stderrPromise, waitPromise]);
+    const allSettled = Promise.allSettled([stdoutPromise, stderrPromise, waitPromise]);
+    const settled = terminal.kind === 'exit'
+      ? await allSettled
+      : await Promise.race([
+          allSettled,
+          delay(terminationGraceMs).then(() => undefined),
+        ]);
     if (terminal.kind === 'timeout') return await finalizeIncomplete(publication, 'backend-timeout');
 
-    const stdoutFailed = settled[0].status === 'rejected';
-    const stderrFailed = settled[1].status === 'rejected';
-    const waitFailed = settled[2].status === 'rejected';
+    const stdoutFailed = !settled || settled[0].status === 'rejected';
+    const stderrFailed = !settled || settled[1].status === 'rejected';
+    const waitFailed = !settled || settled[2].status === 'rejected';
     const exit = terminal.kind === 'exit' ? terminal.exit : undefined;
     const snapshot = journal.snapshot();
     if (

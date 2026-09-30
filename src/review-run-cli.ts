@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import {
   createPreparedContainerLauncher,
@@ -192,7 +193,7 @@ export async function main(
 }
 
 const invokedPath = process.argv[1];
-if (invokedPath && import.meta.url === pathToFileURL(invokedPath).href) {
+if (invokedPath && import.meta.url === pathToFileURL(realpathSync(invokedPath)).href) {
   void main().then((code) => {
     process.exitCode = code;
   });

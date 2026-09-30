@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { promisify } from 'node:util';
 import {
   collectBoundedDiagnostic,
   consumeBoundedLines,
@@ -19,6 +21,7 @@ import { OPENCODE_TEXT_DELTA_PREFIX, OPENCODE_TEXT_END_PREFIX } from '../src/rev
 
 const BASE = 'a'.repeat(40);
 const HEAD = 'b'.repeat(40);
+const executeFile = promisify(execFile);
 
 async function withBundle<T>(run: (fixture: { root: string; review: string; source: string }) => Promise<T>): Promise<T> {
   const root = await mkdtemp(join(tmpdir(), 'redline-run-'));
@@ -132,6 +135,7 @@ class FakeRunningBackend implements RunningReviewBackend {
   readonly #resolveExit: ((value: BackendExit) => void) | undefined;
   readonly #resolveStreams: (() => void) | undefined;
   readonly #stopExits: boolean;
+  readonly #killExits: boolean;
   readonly #stopFailure: Error | undefined;
 
   constructor(input: {
@@ -140,11 +144,13 @@ class FakeRunningBackend implements RunningReviewBackend {
     exit?: BackendExit;
     hang?: boolean;
     stopExits?: boolean;
+    killExits?: boolean;
     stopFailure?: Error;
     reporting?: BackendReporting;
   }) {
     this.reporting = input.reporting ?? { backend: 'pi' };
     this.#stopExits = input.stopExits ?? true;
+    this.#killExits = input.killExits ?? true;
     this.#stopFailure = input.stopFailure;
     if (input.hang) {
       const exit = deferred<BackendExit>();
@@ -173,7 +179,7 @@ class FakeRunningBackend implements RunningReviewBackend {
 
   async kill(): Promise<void> {
     this.killCalls += 1;
-    this.#finish({ code: 137, signal: 'SIGKILL' });
+    if (this.#killExits) this.#finish({ code: 137, signal: 'SIGKILL' });
   }
 
   #finish(exit: BackendExit): void {
@@ -324,13 +330,14 @@ test('preserves a finding and finalizes incomplete when the backend times out', 
   });
 });
 
-test('kills the backend when graceful timeout termination fails', async () => {
+test('returns after timeout when graceful and forced termination do not release the streams', async () => {
   await withBundle(async (fixture) => {
     const publisher = new FakePublisher();
     const running = new FakeRunningBackend({
       stdout: [],
       hang: true,
       stopFailure: new Error('stop failed'),
+      killExits: false,
     });
     const launcher = new FakeLauncher(running);
     assert.deepEqual(
@@ -449,6 +456,18 @@ test('bounds retained stderr while draining all chunks', async () => {
   const diagnostic = await collectBoundedDiagnostic(byteStream(['abcd', 'efgh']), 5);
   assert.equal(diagnostic.text, 'abcde');
   assert.equal(diagnostic.truncated, true);
+});
+
+test('runs the CLI entry point when Node receives an installed-style symlink', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'redline-cli-link-'));
+  try {
+    const link = join(root, 'redline-review-run');
+    await symlink(join(process.cwd(), 'dist/src/review-run-cli.js'), link);
+    const result = await executeFile(process.execPath, [link, '--help']);
+    assert.match(result.stdout, /^Usage: redline-review-run/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('CLI accepts only fixed prepared-container options', () => {

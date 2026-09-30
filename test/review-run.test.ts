@@ -272,6 +272,9 @@ test('completes clean and finding reviews without treating findings as failures'
       assert.deepEqual(result, { status: 'complete', outcome: scenario.outcome });
       assert.equal(launcher.starts, 1);
       assert.match(launcher.prompt, /redline-review\/v2/u);
+      assert.match(launcher.prompt, /"findingScope": "defects"/u);
+      assert.match(launcher.prompt, /"subagents": false/u);
+      assert.match(launcher.prompt, /"vulnerabilityLookupTool": null/u);
       assert.match(publisher.summaries.at(-1) as string, /Review completed/u);
       const journal = await readFile(join(fixture.root, 'journal.jsonl'), 'utf8');
       if (scenario.finding) assert.match(journal, /finding-accepted/u);

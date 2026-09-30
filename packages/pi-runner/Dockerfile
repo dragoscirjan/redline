@@ -17,4 +17,4 @@ ENV PI_SETTINGS_PATH=/etc/redline/pi/settings.json \
     PI_CODING_AGENT_DIR=/tmp/redline/pi
 USER 10001:10001
 
-ENTRYPOINT ["pi"]
+ENTRYPOINT ["node", "/opt/redline/bootstrap.js", "pi"]

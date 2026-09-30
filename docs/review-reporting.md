@@ -36,7 +36,7 @@ Pi's `--mode json` output includes assistant `text_delta` events. The host extra
 
 The pinned OpenCode CLI does not expose every text delta in its normal JSON output. The runner image therefore includes a fixed output plugin. When the host sets `REDLINE_REPORT_EVENTS=1`, the plugin tracks part types from `message.part.updated` events and forwards `message.part.delta` content only for text parts. Reasoning parts are discarded. Forwarded text uses the `REDLINE_REVIEW_TEXT_DELTA` prefix, and a text-part completion emits `REDLINE_REVIEW_TEXT_END`. The host flushes pending review text at that boundary, so a complete event does not require a trailing newline. The plugin adds no model tool and receives no GitHub credential.
 
-The host accepts events only from the selected coordinator session. Subagent collection remains deferred.
+OpenCode creates the session ID after startup. The plugin binds to the first coordinator session, ignores later session IDs, and emits the fixed host-visible ID `redline-coordinator`. The host accepts only that ID. Subagent collection remains deferred, and the generated OpenCode configuration denies every tool.
 
 ## Host controller
 
@@ -46,7 +46,7 @@ The controller starts its deadline before backend launch. It reads stdout as bou
 
 A valid completion event and a zero backend exit produce a complete result. Findings still return a successful controller result. Timeout, non-zero exit, launch failure, invalid output, missing completion, incomplete coverage, and publication failure produce an incomplete managed summary with a host-selected reason. The controller asks the container to stop on timeout or execution failure, then kills it when the grace period expires.
 
-Container creation, pull, image selection, review-data staging, and native Pi or OpenCode configuration remain outside this command. A later action step must prepare the container and pass its validated ID to the controller.
+`createContainerStagingLauncher()` implements the secure preparation path used by a later action step. It creates a digest-pinned container, copies the bounded review and source snapshots without host mounts, and streams a bootstrap envelope through stdin. The image bootstrap generates native configuration in tmpfs before it launches Pi or OpenCode. The controller still accepts the generic launcher interface and does not own image selection or native configuration.
 
 ## Publication modes
 
@@ -88,8 +88,8 @@ The host can finalize without a model completion event when status is `incomplet
 
 ## Current limitations
 
-- The controller starts only an already-created container. Container creation and data staging remain tracked by #20, and immutable image selection remains tracked by #23.
-- The GitHub Action does not yet invoke Pi or OpenCode. Composite-action and reusable-workflow wiring remain tracked by #21 and #22.
+- The GitHub Action does not yet invoke the container-staging launcher or Pi/OpenCode. Composite-action and reusable-workflow wiring remain tracked by #21 and #22.
+- Released immutable image selection remains tracked by #23.
 - A timeout before the first complete finding event produces no finding. The managed summary still reports an incomplete review.
 - A hard runner termination can prevent final summary publication. Inline comments published before termination remain visible.
 - Cross-workflow journal recovery is not supported.

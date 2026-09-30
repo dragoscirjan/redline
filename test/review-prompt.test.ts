@@ -7,6 +7,8 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import {
+  MODEL_VISIBLE_REVIEW_DIRECTORY,
+  MODEL_VISIBLE_SOURCE_DIRECTORY,
   assembleReviewPrompt as assembleReviewPromptImplementation,
   type ReviewPromptOptions,
 } from '../src/review-prompt.js';
@@ -132,6 +134,41 @@ test('keeps adversarial repository values inside the untrusted inventory', async
     assert.equal(Buffer.byteLength(match.groups.payload as string, 'utf8'), Number(match.groups.length));
     assert.ok(!(match.groups.payload as string).includes(match.groups.boundary as string));
   }, hostilePath);
+});
+
+test('uses fixed container paths without exposing host validation paths', async () => {
+  await withFixture(async ({ review, source }) => {
+    const result = await assembleReviewPrompt({
+      reviewDirectory: review,
+      sourceDirectory: source,
+      modelVisibleReviewDirectory: MODEL_VISIBLE_REVIEW_DIRECTORY,
+      modelVisibleSourceDirectory: MODEL_VISIBLE_SOURCE_DIRECTORY,
+    });
+    assert.match(result.prompt, /"reviewDirectory":"\/workspace\/review"/u);
+    assert.match(result.prompt, /"sourceDirectory":"\/workspace\/source"/u);
+    assert.match(result.prompt, /"manifestPath":"\/workspace\/review\/manifest\.json"/u);
+    assert.match(result.prompt, /"instructionsPath":"\/workspace\/review\/README\.md"/u);
+    assert.doesNotMatch(result.prompt, new RegExp(review.replaceAll('\\', '\\\\'), 'u'));
+    assert.doesNotMatch(result.prompt, new RegExp(source.replaceAll('\\', '\\\\'), 'u'));
+
+    await assert.rejects(
+      assembleReviewPrompt({
+        reviewDirectory: review,
+        sourceDirectory: source,
+        modelVisibleReviewDirectory: MODEL_VISIBLE_REVIEW_DIRECTORY,
+      }),
+      /must be configured together/u,
+    );
+    await assert.rejects(
+      assembleReviewPrompt({
+        reviewDirectory: review,
+        sourceDirectory: source,
+        modelVisibleReviewDirectory: '/other/review',
+        modelVisibleSourceDirectory: '/other/source',
+      }),
+      /directories are unsupported/u,
+    );
+  });
 });
 
 test('keeps the policy digest stable while dynamic configuration changes', async () => {

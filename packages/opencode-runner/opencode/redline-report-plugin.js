@@ -8,6 +8,12 @@ function partKey(sessionID, partID) {
 
 export const RedlineReportPlugin = async () => {
   const partTypes = new Map();
+  const coordinatorAlias = process.env.REDLINE_COORDINATOR_SESSION_ID ?? 'redline-coordinator';
+  let coordinatorSessionID;
+  const isCoordinator = (sessionID) => {
+    coordinatorSessionID ??= sessionID;
+    return sessionID === coordinatorSessionID;
+  };
 
   return {
     event: async ({ event }) => {
@@ -15,7 +21,12 @@ export const RedlineReportPlugin = async () => {
 
       if (event?.type === 'message.part.updated') {
         const part = event.properties?.part;
-        if (typeof part?.sessionID !== 'string' || typeof part?.id !== 'string' || typeof part?.type !== 'string') return;
+        if (
+          typeof part?.sessionID !== 'string' ||
+          typeof part?.id !== 'string' ||
+          typeof part?.type !== 'string' ||
+          !isCoordinator(part.sessionID)
+        ) return;
         const key = partKey(part.sessionID, part.id);
         if (!partTypes.has(key) && partTypes.size >= MAX_TRACKED_PARTS) {
           const oldest = partTypes.keys().next().value;
@@ -25,7 +36,7 @@ export const RedlineReportPlugin = async () => {
         if (part.type === 'text' && part.time?.end !== undefined) {
           const payload = {
             version: 1,
-            sessionID: part.sessionID,
+            sessionID: coordinatorAlias,
             messageID: part.messageID,
             partID: part.id,
           };
@@ -36,7 +47,11 @@ export const RedlineReportPlugin = async () => {
 
       if (event?.type === 'message.part.removed') {
         const properties = event.properties;
-        if (typeof properties?.sessionID === 'string' && typeof properties?.partID === 'string') {
+        if (
+          typeof properties?.sessionID === 'string' &&
+          typeof properties?.partID === 'string' &&
+          properties.sessionID === coordinatorSessionID
+        ) {
           partTypes.delete(partKey(properties.sessionID, properties.partID));
         }
         return;
@@ -47,6 +62,7 @@ export const RedlineReportPlugin = async () => {
       if (
         typeof properties?.sessionID !== 'string' ||
         typeof properties?.partID !== 'string' ||
+        properties.sessionID !== coordinatorSessionID ||
         properties.field !== 'text' ||
         typeof properties.delta !== 'string' ||
         partTypes.get(partKey(properties.sessionID, properties.partID)) !== 'text'
@@ -55,7 +71,7 @@ export const RedlineReportPlugin = async () => {
       }
       const payload = {
         version: 1,
-        sessionID: properties.sessionID,
+        sessionID: coordinatorAlias,
         messageID: properties.messageID,
         partID: properties.partID,
         delta: properties.delta,

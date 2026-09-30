@@ -19,4 +19,4 @@ ENV OPENCODE_CONFIG_DIR=/tmp/redline/opencode \
 
 USER 10001:10001
 
-ENTRYPOINT ["opencode"]
+ENTRYPOINT ["node", "/opt/redline/bootstrap.js", "opencode"]

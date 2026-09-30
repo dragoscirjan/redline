@@ -11,6 +11,8 @@ import { ReviewJournal, type ReviewRunScope } from './review-journal.js';
 import { ReviewPublicationService, type ReviewForgePublisher } from './review-publication.js';
 import { ReviewFindingValidator } from './review-report.js';
 import {
+  MODEL_VISIBLE_REVIEW_DIRECTORY,
+  MODEL_VISIBLE_SOURCE_DIRECTORY,
   REVIEW_PROMPT_ID,
   assembleReviewPrompt,
   type FindingScope,
@@ -174,6 +176,8 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
     assembleReviewPrompt({
       reviewDirectory: input.reviewDirectory,
       sourceDirectory: input.sourceDirectory,
+      modelVisibleReviewDirectory: MODEL_VISIBLE_REVIEW_DIRECTORY,
+      modelVisibleSourceDirectory: MODEL_VISIBLE_SOURCE_DIRECTORY,
       inspection: 'read-only',
       findingScope: input.findingScope,
       vulnerabilityChecks: 'off',

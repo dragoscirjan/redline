@@ -5,7 +5,7 @@ Build and push the shared base first, then build and push the harness image from
 ```sh
 docker buildx build --platform linux/amd64,linux/arm64 \
   -f packages/base-runner/Dockerfile \
-  --build-arg NODE_BASE=node:24-alpine \
+  --build-arg NODE_BASE=node:24-bookworm-slim \
   -t ghcr.io/OWNER/redline-base-runner:TAG \
   --push .
 
@@ -19,8 +19,10 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 Replace `OWNER` and `TAG` with the GHCR owner and matching base-image tag. Set `NODE_BASE` to an approved base image digest when producing a release. `PI_VERSION` pins the CLI package version. Verify Pi's runtime and native dependency support for both architectures in Linux CI before publishing.
 
-The image runs as UID/GID 10001. It contains no checkout or credentials. The MCP servers are installed in the shared base and configured in `pi/settings.json`; the Dockerfile copies that file to `/etc/redline/pi/settings.json`. GitNexus and CodeGraphContext use `/var/lib/redline/mcp` for persistent data. Mount the host-managed cache there, following the base runner's per-repository and per-architecture cache guidance. The mount must be writable by UID/GID 10001. The caller must provide a restricted execution environment and generate any other native Pi configuration in a private temporary directory at runtime. Disable Pi tools and project resource discovery when Redline's review policy requires it.
+The image runs as UID/GID 10001. It contains no checkout or credentials. MCP packages and the development settings file remain in the image, but the review bootstrap does not load that settings file. The bootstrap creates an empty settings file and a one-provider model file under `/tmp/redline/run`, then starts Pi with tools and project resource discovery disabled.
+
+The image entrypoint is `/opt/redline/bootstrap.js`. It accepts one bounded host-generated envelope through stdin and rejects arbitrary native configuration. The selected model credential remains out of process arguments and generated files. `GH_TOKEN` and the complete credential map never enter the container.
 
 Run reviews with Pi JSON event output. Trusted host code extracts assistant `text_delta` events and parses `redline-review-events/v1` lines. This reporting path does not add a Pi tool or expose forge credentials to the container.
 
-No image build has been run locally. Multi-platform build validation remains for Linux CI.
+A local `linux/amd64` image build and controlled fake-endpoint smoke run pass. Multi-platform build validation remains for Linux CI.

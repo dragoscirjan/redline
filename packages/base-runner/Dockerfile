@@ -8,6 +8,7 @@ ARG TARGETARCH
 COPY packages/base-runner/mcp/package.json /opt/redline/mcp/package.json
 COPY packages/base-runner/mcp/package-lock.json /opt/redline/mcp/package-lock.json
 COPY packages/base-runner/mcp/codegraphcontext-requirements.txt /opt/redline/mcp/codegraphcontext-requirements.txt
+COPY packages/runner-bootstrap/bootstrap.js /opt/redline/bootstrap.js
 RUN apt-get update \
     && apt-get install --no-install-recommends --yes python3 python3-venv build-essential curl ca-certificates \
     && case "${TARGETARCH}" in amd64) uv_arch=x86_64; uv_sha=5a360b0de092ddf4131f5313d0411b48c4e95e8107e40c3f8f2e9fcb636b3583 ;; arm64) uv_arch=aarch64; uv_sha=23003df007937dd607409c8ddf010baa82bad2673e60e254632ca5b04edcce13 ;; *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; esac \
@@ -29,7 +30,9 @@ RUN apt-get update \
     && chmod -R 0750 /var/lib/redline/mcp \
     && ln -s /opt/redline/mcp/node_modules/.bin/gitnexus /opt/redline/bin/gitnexus \
     && chown -R root:root /opt/redline/bin /opt/redline/uv-tools /opt/redline/mcp \
+    && chown root:root /opt/redline/bootstrap.js \
     && chmod -R a+rX /opt/redline/bin /opt/redline/uv-tools /opt/redline/mcp \
+    && chmod 0555 /opt/redline/bootstrap.js \
     && chown redline:redline /workspace /tmp/redline \
     && chmod 0700 /tmp/redline \
     && apt-get purge --auto-remove --yes build-essential curl \

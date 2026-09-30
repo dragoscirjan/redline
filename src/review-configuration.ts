@@ -5,7 +5,7 @@ const MAX_MODEL_CONFIG_BYTES = 16 * 1024;
 const MAX_MODEL_CREDENTIALS_BYTES = 64 * 1024;
 const MAX_SELECTED_CREDENTIAL_BYTES = 16 * 1024;
 const PROVIDER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
-const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
+const CONTROL_CHARACTER_PATTERN = /\p{Cc}/u;
 
 export interface OpenAiCompatibleModelConfiguration {
   readonly provider: string;

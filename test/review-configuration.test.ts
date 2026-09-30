@@ -99,6 +99,7 @@ test('rejects malformed, incomplete, and extensible model configuration', () => 
     }),
     JSON.stringify({ provider: 'bad provider', endpoint: 'https://example.test/v1', model: 'model' }),
     JSON.stringify({ provider: 'provider', endpoint: 'https://example.test/v1', model: '' }),
+    JSON.stringify({ provider: 'provider', endpoint: 'https://example.test/v1', model: 'model\u0085name' }),
   ]) {
     assert.throws(() => parse({ modelConfig }));
   }
@@ -144,6 +145,7 @@ test('rejects missing, empty, non-string, and oversized selected credentials', (
     JSON.stringify({ openrouter: '   ' }),
     JSON.stringify({ openrouter: { value: 'secret' } }),
     JSON.stringify({ openrouter: 'line\nbreak' }),
+    JSON.stringify({ openrouter: 'secret\u0085suffix' }),
     JSON.stringify({ openrouter: 'x'.repeat(16 * 1024 + 1) }),
   ]) {
     assert.throws(() => selectDirectModelCredential(configuration, modelCredentials));

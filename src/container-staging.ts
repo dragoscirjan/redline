@@ -23,12 +23,15 @@ export const CONTAINER_SOURCE_DIRECTORY = MODEL_VISIBLE_SOURCE_DIRECTORY;
 export const OPENCODE_COORDINATOR_SESSION_ID = 'redline-coordinator';
 
 const MAX_BOOTSTRAP_ENVELOPE_BYTES = 2 * 1024 * 1024;
-const CONTAINER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/u;
+const CONTAINER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/u;
 const OWNED_CONTAINER_ID_PATTERN = /^[a-f0-9]{12,64}$/u;
+const OWNED_VOLUME_NAME_PATTERN = /^[a-z0-9][a-z0-9_.-]{0,127}$/u;
 const OWNERSHIP_LABEL = 'io.redline.review-owner';
 const IMAGE_NAME_PATTERN = /^[a-z0-9][a-z0-9./:_-]*$/u;
 const ENGINE_COMMAND_TIMEOUT_MS = 2 * 60 * 1_000;
 const execFileAsync = promisify(execFile);
+
+type OwnedResourceKind = 'container' | 'volume';
 
 export interface ContainerEngineClient {
   execute(
@@ -112,11 +115,65 @@ function validateInput(input: ContainerStagingInput): void {
   }
 }
 
-function defaultContainerId(backend: 'pi' | 'opencode'): string {
-  return `redline-${backend}-${randomUUID().replaceAll('-', '')}`;
+function marker(): string {
+  return randomUUID().replaceAll('-', '');
 }
 
-function createArguments(containerId: string, ownershipMarker: string, image: string): string[] {
+function defaultContainerId(backend: 'pi' | 'opencode'): string {
+  return `redline-${backend}-${marker()}`;
+}
+
+function volumeCreateArguments(name: string, ownershipMarker: string): string[] {
+  return [
+    'volume',
+    'create',
+    '--label',
+    `${OWNERSHIP_LABEL}=${ownershipMarker}`,
+    name,
+  ];
+}
+
+function stagingCreateArguments(
+  containerId: string,
+  ownershipMarker: string,
+  reviewVolume: string,
+  sourceVolume: string,
+  image: string,
+): string[] {
+  return [
+    'create',
+    '--name',
+    containerId,
+    '--label',
+    `${OWNERSHIP_LABEL}=${ownershipMarker}`,
+    '--read-only',
+    '--network',
+    'none',
+    '--user',
+    '10001:10001',
+    '--workdir',
+    CONTAINER_SOURCE_DIRECTORY,
+    '--cap-drop',
+    'ALL',
+    '--security-opt',
+    'no-new-privileges',
+    '--pids-limit',
+    '64',
+    '--mount',
+    `type=volume,src=${reviewVolume},dst=${CONTAINER_REVIEW_DIRECTORY}`,
+    '--mount',
+    `type=volume,src=${sourceVolume},dst=${CONTAINER_SOURCE_DIRECTORY}`,
+    image,
+  ];
+}
+
+function runtimeCreateArguments(
+  containerId: string,
+  ownershipMarker: string,
+  reviewVolume: string,
+  sourceVolume: string,
+  image: string,
+): string[] {
   return [
     'create',
     '--name',
@@ -137,6 +194,10 @@ function createArguments(containerId: string, ownershipMarker: string, image: st
     '256',
     '--tmpfs',
     '/tmp/redline:rw,nosuid,nodev,noexec,size=64m,mode=1777',
+    '--mount',
+    `type=volume,src=${reviewVolume},dst=${CONTAINER_REVIEW_DIRECTORY},readonly`,
+    '--mount',
+    `type=volume,src=${sourceVolume},dst=${CONTAINER_SOURCE_DIRECTORY},readonly`,
     image,
   ];
 }
@@ -161,6 +222,102 @@ function serializeBootstrapEnvelope(
     throw new Error('runner bootstrap envelope exceeds its byte limit');
   }
   return serialized;
+}
+
+function listArguments(kind: OwnedResourceKind, ownershipMarker: string): string[] {
+  const filter = `label=${OWNERSHIP_LABEL}=${ownershipMarker}`;
+  return kind === 'container'
+    ? ['ps', '--all', '--quiet', '--filter', filter]
+    : ['volume', 'ls', '--quiet', '--filter', filter];
+}
+
+function removeArguments(kind: OwnedResourceKind, id: string): string[] {
+  return kind === 'container'
+    ? ['rm', '--force', id]
+    : ['volume', 'rm', '--force', id];
+}
+
+function parseOwnedResources(kind: OwnedResourceKind, output: string): string[] {
+  const pattern = kind === 'container' ? OWNED_CONTAINER_ID_PATTERN : OWNED_VOLUME_NAME_PATTERN;
+  const values = output.split(/\r?\n/u).filter((value) => value.length > 0);
+  if (values.some((value) => !pattern.test(value))) {
+    throw new Error(`owned ${kind} lookup returned invalid data`);
+  }
+  return values;
+}
+
+async function listOwnedResources(
+  client: ContainerEngineClient,
+  engine: ContainerEngine,
+  kind: OwnedResourceKind,
+  ownershipMarker: string,
+): Promise<string[]> {
+  return parseOwnedResources(
+    kind,
+    await client.execute(engine, listArguments(kind, ownershipMarker)),
+  );
+}
+
+async function reconcileFailedCreate(
+  client: ContainerEngineClient,
+  engine: ContainerEngine,
+  kind: OwnedResourceKind,
+  ownershipMarker: string,
+): Promise<void> {
+  const owned = await listOwnedResources(client, engine, kind, ownershipMarker);
+  if (owned.length === 0) return;
+  if (owned.length !== 1) {
+    throw new Error(`ambiguous ${kind} create reconciliation returned multiple owned resources`);
+  }
+  await client.execute(engine, removeArguments(kind, owned[0] as string));
+}
+
+async function createOwnedContainer(
+  client: ContainerEngineClient,
+  engine: ContainerEngine,
+  arguments_: readonly string[],
+  ownershipMarker: string,
+  signal: AbortSignal,
+): Promise<void> {
+  try {
+    await client.execute(engine, arguments_, { signal });
+  } catch (createError) {
+    try {
+      await reconcileFailedCreate(client, engine, 'container', ownershipMarker);
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [createError, cleanupError],
+        'container creation failed and ownership reconciliation was inconclusive',
+      );
+    }
+    throw createError;
+  }
+}
+
+async function createOwnedVolume(
+  client: ContainerEngineClient,
+  engine: ContainerEngine,
+  name: string,
+  ownershipMarker: string,
+  signal: AbortSignal,
+): Promise<void> {
+  try {
+    await client.execute(engine, volumeCreateArguments(name, ownershipMarker), { signal });
+    const owned = await listOwnedResources(client, engine, 'volume', ownershipMarker);
+    if (owned.length !== 1 || owned[0] !== name) {
+      throw new Error('created volume ownership could not be verified');
+    }
+  } catch (createError) {
+    try {
+      await reconcileFailedCreate(client, engine, 'volume', ownershipMarker);
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [createError, cleanupError],
+        'volume creation failed and ownership reconciliation was inconclusive',
+      );
+    }
+    throw createError;
+  }
 }
 
 function wrapRunningBackend(
@@ -219,66 +376,115 @@ export function createContainerStagingLauncher(
         checkedDirectory(input.reviewDirectory, 'review directory'),
         checkedDirectory(input.sourceDirectory, 'source directory'),
       ]);
-      const containerId = containerIdFactory();
-      if (!CONTAINER_ID_PATTERN.test(containerId)) throw new Error('generated container id is invalid');
-      const ownershipMarker = randomUUID().replaceAll('-', '');
+      const runtimeContainerId = containerIdFactory();
+      if (!CONTAINER_NAME_PATTERN.test(runtimeContainerId)) {
+        throw new Error('generated container id is invalid');
+      }
 
-      let created = false;
+      const runtimeMarker = marker();
+      const stagingMarker = marker();
+      const reviewVolumeMarker = marker();
+      const sourceVolumeMarker = marker();
+      const stagingContainerId = `redline-stage-${stagingMarker}`;
+      const reviewVolume = `redline-review-${reviewVolumeMarker}`;
+      const sourceVolume = `redline-source-${sourceVolumeMarker}`;
+
+      let runtimeCreated = false;
+      let stagingCreated = false;
+      let reviewVolumeCreated = false;
+      let sourceVolumeCreated = false;
       let removal: Promise<void> | undefined;
-      const remove = (): Promise<void> => {
-        if (!created) return Promise.resolve();
-        removal ??= engineClient.execute(input.engine, ['rm', '--force', containerId]).then(() => undefined);
-        return removal;
+
+      const removeResources = async (): Promise<void> => {
+        const errors: unknown[] = [];
+        const remove = async (
+          kind: OwnedResourceKind,
+          id: string,
+          isCreated: () => boolean,
+          markRemoved: () => void,
+        ): Promise<void> => {
+          if (!isCreated()) return;
+          try {
+            await engineClient.execute(input.engine, removeArguments(kind, id));
+            markRemoved();
+          } catch (error) {
+            errors.push(error);
+          }
+        };
+
+        await remove('container', runtimeContainerId, () => runtimeCreated, () => { runtimeCreated = false; });
+        await remove('container', stagingContainerId, () => stagingCreated, () => { stagingCreated = false; });
+        await remove('volume', reviewVolume, () => reviewVolumeCreated, () => { reviewVolumeCreated = false; });
+        await remove('volume', sourceVolume, () => sourceVolumeCreated, () => { sourceVolumeCreated = false; });
+        if (errors.length > 0) throw new AggregateError(errors, 'container staging cleanup failed');
       };
-      const reconcileAmbiguousCreate = async (): Promise<void> => {
-        const output = await engineClient.execute(input.engine, [
-          'ps',
-          '--all',
-          '--quiet',
-          '--filter',
-          `label=${OWNERSHIP_LABEL}=${ownershipMarker}`,
-        ]);
-        const ownedIds = output.split(/\r?\n/u).filter((value) => value.length > 0);
-        if (ownedIds.length === 0) return;
-        if (ownedIds.length !== 1 || !OWNED_CONTAINER_ID_PATTERN.test(ownedIds[0] as string)) {
-          throw new Error('ambiguous container create reconciliation returned invalid ownership data');
-        }
-        await engineClient.execute(input.engine, ['rm', '--force', ownedIds[0] as string]);
+      const remove = (): Promise<void> => {
+        removal ??= removeResources();
+        return removal;
       };
 
       try {
-        try {
-          await engineClient.execute(
-            input.engine,
-            createArguments(containerId, ownershipMarker, input.image),
-            { signal: launchInput.signal },
-          );
-          created = true;
-        } catch (createError) {
-          try {
-            await reconcileAmbiguousCreate();
-          } catch (cleanupError) {
-            throw new AggregateError(
-              [createError, cleanupError],
-              'container creation failed and ownership reconciliation was inconclusive',
-            );
-          }
-          throw createError;
-        }
+        await createOwnedVolume(
+          engineClient,
+          input.engine,
+          reviewVolume,
+          reviewVolumeMarker,
+          launchInput.signal,
+        );
+        reviewVolumeCreated = true;
+        await createOwnedVolume(
+          engineClient,
+          input.engine,
+          sourceVolume,
+          sourceVolumeMarker,
+          launchInput.signal,
+        );
+        sourceVolumeCreated = true;
+        await createOwnedContainer(
+          engineClient,
+          input.engine,
+          stagingCreateArguments(
+            stagingContainerId,
+            stagingMarker,
+            reviewVolume,
+            sourceVolume,
+            input.image,
+          ),
+          stagingMarker,
+          launchInput.signal,
+        );
+        stagingCreated = true;
         await engineClient.execute(
           input.engine,
-          ['cp', `${reviewDirectory}/.`, `${containerId}:${CONTAINER_REVIEW_DIRECTORY}`],
+          ['cp', `${reviewDirectory}/.`, `${stagingContainerId}:${CONTAINER_REVIEW_DIRECTORY}`],
           { signal: launchInput.signal },
         );
         await engineClient.execute(
           input.engine,
-          ['cp', `${sourceDirectory}/.`, `${containerId}:${CONTAINER_SOURCE_DIRECTORY}`],
+          ['cp', `${sourceDirectory}/.`, `${stagingContainerId}:${CONTAINER_SOURCE_DIRECTORY}`],
           { signal: launchInput.signal },
         );
+        await engineClient.execute(input.engine, removeArguments('container', stagingContainerId));
+        stagingCreated = false;
+
+        await createOwnedContainer(
+          engineClient,
+          input.engine,
+          runtimeCreateArguments(
+            runtimeContainerId,
+            runtimeMarker,
+            reviewVolume,
+            sourceVolume,
+            input.image,
+          ),
+          runtimeMarker,
+          launchInput.signal,
+        );
+        runtimeCreated = true;
 
         const container: PreparedContainer = {
           engine: input.engine,
-          id: containerId,
+          id: runtimeContainerId,
           backend: input.configuration.backend,
           ...(input.configuration.backend === 'opencode'
             ? { opencodeSessionId: OPENCODE_COORDINATOR_SESSION_ID }
@@ -290,12 +496,10 @@ export function createContainerStagingLauncher(
         });
         return wrapRunningBackend(running, remove);
       } catch (error) {
-        if (created) {
-          try {
-            await remove();
-          } catch (cleanupError) {
-            throw new AggregateError([error, cleanupError], 'container staging and cleanup failed');
-          }
+        try {
+          await remove();
+        } catch (cleanupError) {
+          throw new AggregateError([error, cleanupError], 'container staging and cleanup failed');
         }
         throw error;
       }

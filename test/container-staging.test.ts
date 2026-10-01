@@ -27,6 +27,7 @@ const IMAGE = `ghcr.io/dragoscirjan/redline-runner@sha256:${IMAGE_DIGEST}`;
 class FakeEngineClient implements ContainerEngineClient {
   readonly calls: Array<{ engine: string; arguments: string[]; aborted: boolean }> = [];
   failAt: number | undefined;
+  private readonly volumesByLabel = new Map<string, string>();
 
   async execute(
     engine: 'podman' | 'docker',
@@ -36,6 +37,18 @@ class FakeEngineClient implements ContainerEngineClient {
     const index = this.calls.length;
     this.calls.push({ engine, arguments: [...arguments_], aborted: options.signal?.aborted ?? false });
     if (index === this.failAt) throw new Error('fake engine failure');
+    if (arguments_[0] === 'volume' && arguments_[1] === 'create') {
+      this.volumesByLabel.set(arguments_[3] as string, arguments_.at(-1) as string);
+    }
+    if (arguments_[0] === 'volume' && arguments_[1] === 'ls') {
+      const key = (arguments_.at(-1) as string).replace(/^label=/u, '');
+      return `${this.volumesByLabel.get(key) ?? ''}\n`;
+    }
+    if (arguments_[0] === 'volume' && arguments_[1] === 'rm') {
+      for (const [label, name] of this.volumesByLabel) {
+        if (name === arguments_.at(-1)) this.volumesByLabel.delete(label);
+      }
+    }
     return '';
   }
 }
@@ -107,7 +120,7 @@ function preparedFactory(
   };
 }
 
-test('creates, copies, starts, and removes a locked-down container for both engines', async () => {
+test('creates, copies, starts, and removes locked-down resources for both engines', async () => {
   for (const scenario of [
     { engine: 'podman' as const, backend: 'pi' as const },
     { engine: 'docker' as const, backend: 'opencode' as const },
@@ -142,37 +155,81 @@ test('creates, copies, starts, and removes a locked-down container for both engi
 
       assert.equal(capture.starts, 1);
       assert.equal(capture.container?.engine, scenario.engine);
+      assert.equal(capture.container?.id, `redline-${scenario.backend}-test`);
       assert.equal(capture.container?.backend, scenario.backend);
       assert.equal(
         capture.container?.opencodeSessionId,
         scenario.backend === 'opencode' ? OPENCODE_COORDINATOR_SESSION_ID : undefined,
       );
-      assert.equal(engineClient.calls.length, 3);
-      const create = engineClient.calls[0]?.arguments ?? [];
-      assert.equal(create[0], 'create');
-      assert.ok(create.includes('--interactive'));
-      assert.ok(create.includes('--read-only'));
-      const labelIndex = create.indexOf('--label');
-      assert.match(create[labelIndex + 1] as string, /^io\.redline\.review-owner=[a-f0-9]{32}$/u);
-      assert.ok(create.includes('10001:10001'));
-      assert.ok(create.includes('ALL'));
-      assert.ok(create.includes('no-new-privileges'));
-      assert.ok(create.includes('/tmp/redline:rw,nosuid,nodev,noexec,size=64m,mode=1777'));
-      assert.equal(create.at(-1), IMAGE);
-      assert.ok(!create.some((value) => ['--mount', '--volume', '-v', '--privileged'].includes(value)));
 
-      const canonicalReview = await realpath(review);
-      const canonicalSource = await realpath(source);
-      assert.deepEqual(engineClient.calls[1]?.arguments, [
-        'cp',
-        `${canonicalReview}/.`,
-        `redline-${scenario.backend}-test:${CONTAINER_REVIEW_DIRECTORY}`,
+      const heads = engineClient.calls.map((call) => call.arguments[0]);
+      assert.deepEqual(heads, [
+        'volume', 'volume', 'volume', 'volume',
+        'create', 'cp', 'cp', 'rm',
+        'create',
       ]);
-      assert.deepEqual(engineClient.calls[2]?.arguments, [
+
+      const [reviewVolumeCreate, sourceVolumeCreate] = [engineClient.calls[0], engineClient.calls[2]];
+      for (const call of [reviewVolumeCreate, sourceVolumeCreate]) {
+        assert.deepEqual(call?.arguments.slice(0, 3), ['volume', 'create', '--label']);
+        assert.match(call?.arguments[3] as string, /^io\.redline\.review-owner=[a-f0-9]{32}$/u);
+        assert.match(call?.arguments.at(-1) as string, /^redline-(review|source)-[a-f0-9]{32}$/u);
+      }
+      for (const index of [1, 3]) {
+        assert.deepEqual(engineClient.calls[index]?.arguments.slice(0, 3), ['volume', 'ls', '--quiet']);
+        assert.match(
+          engineClient.calls[index]?.arguments.at(-1) as string,
+          /^label=io\.redline\.review-owner=[a-f0-9]{32}$/u,
+        );
+      }
+
+      const stagingName = engineClient.calls[4]?.arguments[engineClient.calls[4]!.arguments.indexOf('--name') + 1] as string;
+      const stagingCreate = engineClient.calls[4]?.arguments ?? [];
+      assert.equal(stagingCreate[0], 'create');
+      assert.match(stagingName, /^redline-stage-[a-f0-9]{32}$/u);
+      assert.ok(stagingCreate.includes('--read-only'));
+      assert.deepEqual(stagingCreate.slice(stagingCreate.indexOf('--network'), stagingCreate.indexOf('--network') + 2), ['--network', 'none']);
+      assert.ok(stagingCreate.includes('10001:10001'));
+      assert.ok(stagingCreate.includes('ALL'));
+      assert.ok(stagingCreate.includes('no-new-privileges'));
+      assert.ok(!stagingCreate.includes('--tmpfs'));
+      assert.equal(stagingCreate.filter((value) => value === '--mount').length, 2);
+      assert.ok(
+        stagingCreate.some((value) => /^type=volume,src=redline-review-.+,dst=\/workspace\/review$/.test(value)),
+      );
+      assert.ok(
+        stagingCreate.some((value) => /^type=volume,src=redline-source-.+,dst=\/workspace\/source$/.test(value)),
+      );
+      assert.equal(stagingCreate.at(-1), IMAGE);
+      assert.ok(!stagingCreate.some((value) => ['--volume', '-v', '--privileged'].includes(value)));
+
+      assert.deepEqual(engineClient.calls[5]?.arguments, [
         'cp',
-        `${canonicalSource}/.`,
-        `redline-${scenario.backend}-test:${CONTAINER_SOURCE_DIRECTORY}`,
+        `${await realpath(review)}/.`,
+        `${stagingName}:${CONTAINER_REVIEW_DIRECTORY}`,
       ]);
+      assert.deepEqual(engineClient.calls[6]?.arguments, [
+        'cp',
+        `${await realpath(source)}/.`,
+        `${stagingName}:${CONTAINER_SOURCE_DIRECTORY}`,
+      ]);
+      assert.deepEqual(engineClient.calls[7]?.arguments, ['rm', '--force', stagingName]);
+
+      const runtimeCreate = engineClient.calls[8]?.arguments ?? [];
+      assert.equal(runtimeCreate[0], 'create');
+      assert.ok(runtimeCreate.includes('--interactive'));
+      assert.ok(runtimeCreate.includes('--read-only'));
+      assert.equal(runtimeCreate[runtimeCreate.indexOf('--name') + 1], `redline-${scenario.backend}-test`);
+      assert.equal(runtimeCreate.at(-1), IMAGE);
+      assert.equal(runtimeCreate.filter((value) => value === '--mount').length, 2);
+      assert.ok(
+        runtimeCreate.some((value) => /^type=volume,src=redline-review-.+,dst=\/workspace\/review,readonly$/.test(value)),
+      );
+      assert.ok(
+        runtimeCreate.some((value) => /^type=volume,src=redline-source-.+,dst=\/workspace\/source,readonly$/.test(value)),
+      );
+      const tmpfsIndex = runtimeCreate.indexOf('--tmpfs');
+      assert.equal(runtimeCreate[tmpfsIndex + 1], '/tmp/redline:rw,nosuid,nodev,noexec,size=64m,mode=1777');
 
       const envelope = JSON.parse(capture.envelope as string) as Record<string, unknown>;
       assert.equal(envelope.backend, scenario.backend);
@@ -182,13 +239,192 @@ test('creates, copies, starts, and removes a locked-down container for both engi
       assert.doesNotMatch(JSON.stringify(engineClient.calls), /selected-secret|unused-secret|GH_TOKEN/u);
 
       assert.deepEqual(await running.wait(), { code: 0, signal: null });
-      assert.deepEqual(engineClient.calls[3]?.arguments, [
-        'rm',
-        '--force',
-        `redline-${scenario.backend}-test`,
-      ]);
+      const cleanup = engineClient.calls.slice(9);
+      assert.deepEqual(
+        cleanup.map((call) => call.arguments[0]),
+        ['rm', 'volume', 'volume'],
+      );
+      assert.deepEqual(cleanup[0]?.arguments, ['rm', '--force', `redline-${scenario.backend}-test`]);
+      assert.equal(cleanup.filter((call) => call.arguments[0] === 'volume' && call.arguments[1] === 'rm').length, 2);
     });
   }
+});
+
+test('removes owned resources after copy or backend-launch failure', async () => {
+  await withDirectories(async ({ review, source }) => {
+    for (const scenario of [
+      { failure: 'copy' as const, failAt: 5, cleanupStart: 6 },
+      { failure: 'launch' as const, failAt: undefined, cleanupStart: 9 },
+    ]) {
+      const engineClient = new FakeEngineClient();
+      if (scenario.failAt !== undefined) engineClient.failAt = scenario.failAt;
+      const capture = { starts: 0 } as { container?: PreparedContainer; envelope?: string; starts: number };
+      const config = configuration('pi');
+      const credential = selectDirectModelCredential(config, JSON.stringify({ 'private-provider': 'secret' }));
+      const launcher = createContainerStagingLauncher(
+        {
+          engine: 'podman',
+          image: IMAGE,
+          reviewDirectory: review,
+          sourceDirectory: source,
+          configuration: config,
+          credential,
+        },
+        {
+          engineClient,
+          containerId: () => `redline-failure-${scenario.failure}`,
+          preparedLauncher: scenario.failure === 'launch'
+            ? () => ({ start: async () => Promise.reject(new Error('launch failed')) })
+            : preparedFactory(capture),
+        },
+      );
+      await assert.rejects(
+        launcher.start({ backend: 'pi', prompt: 'prompt', signal: new AbortController().signal }),
+      );
+      assert.equal(capture.starts, 0);
+      const cleanup = engineClient.calls.slice(scenario.cleanupStart);
+      const removals = cleanup.filter((call) => call.arguments[0] === 'rm' && call.arguments[1] === '--force').map((call) => call.arguments.at(-1) as string);
+      if (scenario.failure === 'copy') {
+        assert.equal(removals.length, 1);
+        assert.match(removals[0] as string, /^redline-stage-[a-f0-9]{32}$/u);
+      } else {
+        assert.deepEqual(removals, [`redline-failure-${scenario.failure}`]);
+      }
+      assert.equal(cleanup.filter((call) => call.arguments[0] === 'volume' && call.arguments[1] === 'rm').length, 2);
+    }
+  });
+});
+
+test('never removes resources when volume creation did not succeed', async () => {
+  await withDirectories(async ({ review, source }) => {
+    const engineClient = new FakeEngineClient();
+    engineClient.failAt = 0;
+    const config = configuration('pi');
+    const credential = selectDirectModelCredential(config, JSON.stringify({ 'private-provider': 'secret' }));
+    const launcher = createContainerStagingLauncher(
+      {
+        engine: 'podman',
+        image: IMAGE,
+        reviewDirectory: review,
+        sourceDirectory: source,
+        configuration: config,
+        credential,
+      },
+      { engineClient, containerId: () => 'redline-create-failure-test' },
+    );
+
+    await assert.rejects(
+      launcher.start({ backend: 'pi', prompt: 'prompt', signal: new AbortController().signal }),
+    );
+    assert.deepEqual(
+      engineClient.calls.map((call) => `${call.arguments[0]} ${call.arguments[1] ?? ''}`.trim()),
+      ['volume create', 'volume ls'],
+    );
+    assert.equal(engineClient.calls.some((call) => call.arguments[0] === 'rm'), false);
+  });
+});
+
+test('reconciles a marker-matched volume after ambiguous volume creation', async () => {
+  await withDirectories(async ({ review, source }) => {
+    const ownedVolume = 'redline-review-abc123';
+    const calls: string[][] = [];
+    let ownershipLabel = '';
+    const engineClient: ContainerEngineClient = {
+      async execute(_engine, arguments_) {
+        const argumentsCopy = [...arguments_];
+        calls.push(argumentsCopy);
+        if (argumentsCopy[0] === 'volume' && argumentsCopy[1] === 'create') {
+          ownershipLabel = argumentsCopy[argumentsCopy.indexOf('--label') + 1] as string;
+          throw new Error('volume creation was interrupted after the engine created the volume');
+        }
+        if (argumentsCopy[0] === 'volume' && argumentsCopy[1] === 'ls') {
+          assert.equal(argumentsCopy.at(-1), `label=${ownershipLabel}`);
+          return `${ownedVolume}\n`;
+        }
+        return '';
+      },
+    };
+    const config = configuration('pi');
+    const credential = selectDirectModelCredential(config, JSON.stringify({ 'private-provider': 'secret' }));
+    const launcher = createContainerStagingLauncher(
+      {
+        engine: 'podman',
+        image: IMAGE,
+        reviewDirectory: review,
+        sourceDirectory: source,
+        configuration: config,
+        credential,
+      },
+      { engineClient, containerId: () => 'redline-ambiguous-volume-test' },
+    );
+
+    await assert.rejects(
+      launcher.start({ backend: 'pi', prompt: 'prompt', signal: new AbortController().signal }),
+      /interrupted/u,
+    );
+    assert.deepEqual(
+      calls.map((arguments_) => `${arguments_[0]} ${arguments_[1] ?? ''}`.trim()),
+      ['volume create', 'volume ls', 'volume rm'],
+    );
+    assert.deepEqual(calls[2], ['volume', 'rm', '--force', ownedVolume]);
+  });
+});
+
+test('reconciles and removes a marker-matched container after ambiguous create failure', async () => {
+  await withDirectories(async ({ review, source }) => {
+    const ownedId = 'b'.repeat(64);
+    const calls: string[][] = [];
+    let ownershipLabel = '';
+    let lastCreatedVolume = '';
+    const engineClient: ContainerEngineClient = {
+      async execute(_engine, arguments_) {
+        const argumentsCopy = [...arguments_];
+        calls.push(argumentsCopy);
+        if (argumentsCopy[0] === 'volume' && argumentsCopy[1] === 'create') {
+          lastCreatedVolume = argumentsCopy.at(-1) as string;
+          return '';
+        }
+        if (argumentsCopy[0] === 'volume' && argumentsCopy[1] === 'ls') {
+          return `${lastCreatedVolume}\n`;
+        }
+        if (argumentsCopy[0] === 'volume' && argumentsCopy[1] === 'rm') {
+          return '';
+        }
+        if (argumentsCopy[0] === 'create') {
+          ownershipLabel = argumentsCopy[argumentsCopy.indexOf('--label') + 1] as string;
+          throw new Error('create result was interrupted after the daemon created the container');
+        }
+        if (argumentsCopy[0] === 'ps') {
+          assert.equal(argumentsCopy.at(-1), `label=${ownershipLabel}`);
+          return `${ownedId}\n`;
+        }
+        return '';
+      },
+    };
+    const config = configuration('pi');
+    const credential = selectDirectModelCredential(config, JSON.stringify({ 'private-provider': 'secret' }));
+    const launcher = createContainerStagingLauncher(
+      {
+        engine: 'podman',
+        image: IMAGE,
+        reviewDirectory: review,
+        sourceDirectory: source,
+        configuration: config,
+        credential,
+      },
+      { engineClient, containerId: () => 'redline-ambiguous-create-test' },
+    );
+
+    await assert.rejects(
+      launcher.start({ backend: 'pi', prompt: 'prompt', signal: new AbortController().signal }),
+      /interrupted/u,
+    );
+    assert.deepEqual(
+      calls.map((arguments_) => arguments_[0]),
+      ['volume', 'volume', 'volume', 'volume', 'create', 'ps', 'rm', 'volume', 'volume'],
+    );
+    assert.deepEqual(calls[6], ['rm', '--force', ownedId]);
+  });
 });
 
 test('removes an owned container once after stop or kill', async () => {
@@ -224,121 +460,11 @@ test('removes an owned container once after stop or kill', async () => {
 
       assert.equal(backend.stopCalls, action === 'stop' ? 1 : 0);
       assert.equal(backend.killCalls, action === 'kill' ? 1 : 0);
-      assert.equal(engineClient.calls.length, 4);
-      assert.deepEqual(engineClient.calls.at(-1)?.arguments, [
-        'rm',
-        '--force',
-        `redline-${action}-test`,
-      ]);
-    }
-  });
-});
-
-test('does not remove a container when failed create has no ownership match', async () => {
-  await withDirectories(async ({ review, source }) => {
-    const engineClient = new FakeEngineClient();
-    engineClient.failAt = 0;
-    const config = configuration('pi');
-    const credential = selectDirectModelCredential(config, JSON.stringify({ 'private-provider': 'secret' }));
-    const launcher = createContainerStagingLauncher(
-      {
-        engine: 'podman',
-        image: IMAGE,
-        reviewDirectory: review,
-        sourceDirectory: source,
-        configuration: config,
-        credential,
-      },
-      { engineClient, containerId: () => 'redline-create-failure-test' },
-    );
-
-    await assert.rejects(
-      launcher.start({ backend: 'pi', prompt: 'prompt', signal: new AbortController().signal }),
-    );
-    assert.equal(engineClient.calls.length, 2);
-    assert.equal(engineClient.calls[0]?.arguments[0], 'create');
-    assert.deepEqual(engineClient.calls[1]?.arguments.slice(0, 4), ['ps', '--all', '--quiet', '--filter']);
-    assert.equal(engineClient.calls.some((call) => call.arguments[0] === 'rm'), false);
-  });
-});
-
-test('reconciles and removes a marker-matched container after ambiguous create failure', async () => {
-  await withDirectories(async ({ review, source }) => {
-    const ownedId = 'b'.repeat(64);
-    const calls: string[][] = [];
-    let ownershipLabel = '';
-    const engineClient: ContainerEngineClient = {
-      async execute(_engine, arguments_) {
-        const argumentsCopy = [...arguments_];
-        calls.push(argumentsCopy);
-        if (argumentsCopy[0] === 'create') {
-          ownershipLabel = argumentsCopy[argumentsCopy.indexOf('--label') + 1] as string;
-          throw new Error('create result was interrupted after the daemon created the container');
-        }
-        if (argumentsCopy[0] === 'ps') {
-          assert.equal(argumentsCopy.at(-1), `label=${ownershipLabel}`);
-          return `${ownedId}\n`;
-        }
-        return '';
-      },
-    };
-    const config = configuration('pi');
-    const credential = selectDirectModelCredential(config, JSON.stringify({ 'private-provider': 'secret' }));
-    const launcher = createContainerStagingLauncher(
-      {
-        engine: 'podman',
-        image: IMAGE,
-        reviewDirectory: review,
-        sourceDirectory: source,
-        configuration: config,
-        credential,
-      },
-      { engineClient, containerId: () => 'redline-ambiguous-create-test' },
-    );
-
-    await assert.rejects(
-      launcher.start({ backend: 'pi', prompt: 'prompt', signal: new AbortController().signal }),
-      /interrupted/u,
-    );
-    assert.deepEqual(calls.map((arguments_) => arguments_[0]), ['create', 'ps', 'rm']);
-    assert.deepEqual(calls[2], ['rm', '--force', ownedId]);
-  });
-});
-
-test('removes an owned container after copy or backend-launch failure', async () => {
-  await withDirectories(async ({ review, source }) => {
-    for (const failure of ['copy', 'launch'] as const) {
-      const engineClient = new FakeEngineClient();
-      if (failure === 'copy') engineClient.failAt = 1;
-      const capture = { starts: 0 } as { container?: PreparedContainer; envelope?: string; starts: number };
-      const config = configuration('pi');
-      const credential = selectDirectModelCredential(config, JSON.stringify({ 'private-provider': 'secret' }));
-      const launcher = createContainerStagingLauncher(
-        {
-          engine: 'podman',
-          image: IMAGE,
-          reviewDirectory: review,
-          sourceDirectory: source,
-          configuration: config,
-          credential,
-        },
-        {
-          engineClient,
-          containerId: () => `redline-failure-${failure}`,
-          preparedLauncher: failure === 'launch'
-            ? () => ({ start: async () => Promise.reject(new Error('launch failed')) })
-            : preparedFactory(capture),
-        },
+      const cleanup = engineClient.calls.slice(9);
+      assert.deepEqual(
+        cleanup.map((call) => call.arguments[0]),
+        ['rm', 'volume', 'volume'],
       );
-      await assert.rejects(
-        launcher.start({ backend: 'pi', prompt: 'prompt', signal: new AbortController().signal }),
-      );
-      assert.deepEqual(engineClient.calls.at(-1)?.arguments, [
-        'rm',
-        '--force',
-        `redline-failure-${failure}`,
-      ]);
-      assert.equal(capture.starts, 0);
     }
   });
 });

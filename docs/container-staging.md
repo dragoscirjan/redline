@@ -9,16 +9,33 @@ The GitHub Action does not call this launcher yet. Issue #21 owns that wiring.
 The launcher performs these operations with argument arrays. It never constructs a shell command.
 
 ```text
-podman|docker create <fixed restrictions> <digest-pinned image>
-podman|docker cp <review directory>/. <container>:/workspace/review
-podman|docker cp <source directory>/. <container>:/workspace/source
-podman|docker start --attach --interactive <container>
-podman|docker rm --force <container>
+podman|docker volume create --label io.redline.review-owner=<marker> <review volume>
+podman|docker volume create --label io.redline.review-owner=<marker> <source volume>
+podman|docker create <staging restrictions> --mount <review volume>:/workspace/review --mount <source volume>:/workspace/source <digest-pinned image>
+podman|docker cp <review directory>/. <staging container>:/workspace/review
+podman|docker cp <source directory>/. <staging container>:/workspace/source
+podman|docker rm --force <staging container>
+podman|docker create <runtime restrictions> --mount <volumes readonly> <digest-pinned image>
+podman|docker start --attach --interactive <runtime container>
+podman|docker rm --force <runtime container>
+podman|docker volume rm --force <review volume> <source volume>
 ```
+
+A read-only root filesystem cannot receive `cp` archives while a container is stopped. The launcher therefore populates two engine-managed named volumes through a never-started staging container, then mounts those volumes read-only in the runtime container. Neither path is a host bind mount, and the backend sees both directories as read-only.
 
 The image reference must end in a lowercase `sha256` digest. Tags are rejected. Issue #23 will own the released backend-to-digest table. The container is created with stdin open because that stream carries the one-time bootstrap envelope when the controller starts it.
 
-The create operation applies these restrictions:
+The staging container applies these restrictions:
+
+- UID and GID `10001:10001`
+- Read-only root filesystem
+- No network
+- All Linux capabilities dropped
+- `no-new-privileges`
+- A 64-process limit
+- The two review volumes as writable mounts
+
+The runtime container applies these restrictions:
 
 - UID and GID `10001:10001`
 - Read-only root filesystem
@@ -26,11 +43,12 @@ The create operation applies these restrictions:
 - `no-new-privileges`
 - A 256-process limit
 - A 64 MiB sticky tmpfs at `/tmp/redline`; the bootstrap creates its private runtime directory with mode `0700`
-- No bind mounts, volumes, devices, privileged mode, or host networking
+- The review volumes as read-only mounts
+- No bind mounts, host directories, devices, privileged mode, or host networking
 
 The container keeps normal network access so the backend can reach the configured model endpoint. Provider destination pinning and general egress restrictions are not implemented in this issue.
 
-The launcher generates the container name and a unique ownership label. It removes a successfully created container after normal exit, stop, kill, copy failure, or launch failure. If create is interrupted after the engine may have applied it, the launcher lists containers by the ownership label and removes only one valid matching container ID. No match authorizes no removal. Invalid or inconclusive ownership data fails the run instead of removing an unrelated container.
+The launcher generates every container and volume name plus a unique ownership label. It removes owned resources after normal exit, stop, kill, copy failure, or launch failure. Volume creation is verified through a label-filtered listing before use. If a create is interrupted after the engine may have applied it, the launcher lists containers or volumes by the ownership label and removes only one valid matching name. No match authorizes no removal. Invalid or inconclusive ownership data fails the run instead of removing an unrelated resource.
 
 ## Staged data
 
@@ -41,7 +59,7 @@ The stopped container receives two snapshots:
 /workspace/source
 ```
 
-The first directory contains the bounded review bundle. The second contains the exact head revision prepared as data. Redline does not mount the checkout and does not execute files from either directory.
+The first directory contains the bounded review bundle. The second contains the exact head revision prepared as data. Redline does not mount the checkout and does not execute files from either directory. The runtime container mounts both directories read-only.
 
 Prompt assembly continues to validate files through canonical host paths. The model-visible inventory uses only the two container paths above. Optional review files map by fixed names such as `/workspace/review/requirements.md`; prompt assembly does not rewrite host-path prefixes.
 

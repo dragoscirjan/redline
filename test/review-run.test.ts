@@ -275,6 +275,9 @@ test('completes clean and finding reviews without treating findings as failures'
       assert.match(launcher.prompt, /"findingScope": "defects"/u);
       assert.match(launcher.prompt, /"subagents": false/u);
       assert.match(launcher.prompt, /"vulnerabilityLookupTool": null/u);
+      assert.match(launcher.prompt, /"reviewDirectory":"\/workspace\/review"/u);
+      assert.match(launcher.prompt, /"sourceDirectory":"\/workspace\/source"/u);
+      assert.doesNotMatch(launcher.prompt, new RegExp(fixture.root.replaceAll('\\', '\\\\'), 'u'));
       assert.match(publisher.summaries.at(-1) as string, /Review completed/u);
       const journal = await readFile(join(fixture.root, 'journal.jsonl'), 'utf8');
       if (scenario.finding) assert.match(journal, /finding-accepted/u);

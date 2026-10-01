@@ -5,6 +5,8 @@ import { byteLength, checkedDirectory, loadReviewBundle, readCheckedText } from 
 export const REVIEW_PROMPT_ID = 'redline-review/v2' as const;
 export const REVIEW_PROMPT_VERSION = 2 as const;
 export const REVIEW_EVENT_PROTOCOL = 'redline-review-events/v1' as const;
+export const MODEL_VISIBLE_REVIEW_DIRECTORY = '/workspace/review' as const;
+export const MODEL_VISIBLE_SOURCE_DIRECTORY = '/workspace/source' as const;
 
 const PROMPT_MODULES = [
   'core-policy.md',
@@ -27,6 +29,8 @@ export type ReportStyle = 'single-block' | 'inline';
 export interface ReviewPromptOptions {
   reviewDirectory: string;
   sourceDirectory: string;
+  modelVisibleReviewDirectory?: string;
+  modelVisibleSourceDirectory?: string;
   inspection: 'read-only';
   findingScope?: FindingScope;
   vulnerabilityChecks?: VulnerabilityChecks;
@@ -88,6 +92,20 @@ function fixedValue<T extends string>(value: T | undefined, fallback: T, allowed
 export async function assembleReviewPrompt(options: ReviewPromptOptions): Promise<ReviewPromptAssembly> {
   if (options.inspection !== 'read-only') {
     throw new Error('read-only review bundle inspection capability is required');
+  }
+  const hasModelReviewDirectory = options.modelVisibleReviewDirectory !== undefined;
+  const hasModelSourceDirectory = options.modelVisibleSourceDirectory !== undefined;
+  if (hasModelReviewDirectory !== hasModelSourceDirectory) {
+    throw new Error('model-visible review and source directories must be configured together');
+  }
+  if (
+    hasModelReviewDirectory &&
+    (
+      options.modelVisibleReviewDirectory !== MODEL_VISIBLE_REVIEW_DIRECTORY ||
+      options.modelVisibleSourceDirectory !== MODEL_VISIBLE_SOURCE_DIRECTORY
+    )
+  ) {
+    throw new Error('model-visible review and source directories are unsupported');
   }
   const findingScope = fixedValue(
     options.findingScope,
@@ -152,18 +170,23 @@ export async function assembleReviewPrompt(options: ReviewPromptOptions): Promis
     null,
     2,
   );
+  const modelReviewDirectory = options.modelVisibleReviewDirectory ?? bundle.root;
+  const modelSourceDirectory = options.modelVisibleSourceDirectory ?? bundle.sourceRoot;
+  const modelReviewPath = (hostPath: string | undefined, name: string): string | undefined => (
+    hostPath ? `${modelReviewDirectory}/${name}` : undefined
+  );
   const inventory = JSON.stringify({
     contextVersion: 1,
     base: bundle.manifest.base,
     head: bundle.manifest.head,
-    reviewDirectory: bundle.root,
-    sourceDirectory: bundle.sourceRoot,
-    manifestPath: bundle.manifestPath,
-    revisionsPath: bundle.revisionsPath,
-    instructionsPath: bundle.instructionsPath,
-    requirementsPath: bundle.requirementsPath,
-    summaryPath: bundle.summaryPath,
-    commitsPath: bundle.commitsPath,
+    reviewDirectory: modelReviewDirectory,
+    sourceDirectory: modelSourceDirectory,
+    manifestPath: modelReviewPath(bundle.manifestPath, 'manifest.json'),
+    revisionsPath: modelReviewPath(bundle.revisionsPath, 'revisions.txt'),
+    instructionsPath: modelReviewPath(bundle.instructionsPath, 'README.md'),
+    requirementsPath: modelReviewPath(bundle.requirementsPath, 'requirements.md'),
+    summaryPath: modelReviewPath(bundle.summaryPath, 'summary.txt'),
+    commitsPath: modelReviewPath(bundle.commitsPath, 'commits.txt'),
     files: bundle.manifest.files,
   });
   const inventoryBytes = byteLength(inventory);

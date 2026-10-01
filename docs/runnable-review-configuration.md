@@ -52,7 +52,7 @@ The fixed shape prevents callers from supplying native Pi or OpenCode configurat
 
 The host selects the own property whose name equals `model-config.provider`. A missing, empty, non-string, control-character-containing, or oversized selected value fails validation. Extra entries are allowed so one secret can hold credentials for more than one provider. The selector returns only the matching entry.
 
-The selected string is the bearer token or API key expected by the configured provider. The configuration does not accept arbitrary header names. Backend-specific code added with container staging will place the selected value only in the minimum generated native configuration.
+The selected string is the bearer token or API key expected by the configured provider. The configuration does not accept arbitrary header names. The [container staging layer](container-staging.md) sends only the selected value through its private bootstrap channel. Generated native configuration refers to a fixed environment variable and does not contain the credential.
 
 ## Fixed review profile
 
@@ -77,15 +77,14 @@ Both backends use the same review controller and structured event validation. `i
 
 `direct` is a legacy escape hatch. It has no default. The caller must opt in with `credential-isolation: direct`.
 
-In direct mode, the selected provider credential will enter the backend container when container staging is implemented. Unused credentials stay in trusted host memory. This mode does not provide destination pinning or the planned host-side credential gateway. Use it only when the caller trusts the configured endpoint and the network path to it.
+In direct mode, the container staging launcher sends the selected provider credential to the fixed image bootstrap through stdin. It does not place the value in container arguments, Docker or Podman environment options, copied files, or generated configuration. Unused credentials stay in trusted host memory. This mode does not provide destination pinning or the planned host-side credential gateway. Use it only when the caller trusts the configured endpoint and the network path to it.
 
 ## Delivery boundary
 
-Issue #19 adds validation and credential selection. It does not create or start containers and does not change the GitHub Action inputs.
+Issue #19 adds validation and credential selection. Issue #20 adds read-only container preparation, tmpfs configuration, and data staging without host mounts. Neither issue changes the GitHub Action inputs.
 
-- Issue #20 owns read-only container preparation, tmpfs configuration, and data staging without host mounts.
-- Issue #21 owns GitHub Action inputs and calls this parser before container preparation.
+- Issue #21 owns GitHub Action inputs and calls this parser before it constructs the container-staging launcher.
 - Issue #22 owns the reusable workflow used by other repositories.
 - Issue #23 owns immutable runner-image selection.
 
-Until those changes land, the existing action still builds and uploads the review context but does not invoke Pi or OpenCode.
+Until #21 lands, the existing action still builds and uploads the review context but does not invoke Pi or OpenCode.

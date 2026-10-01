@@ -6,7 +6,7 @@ ARG PI_VERSION=0.87.1
 USER root
 COPY packages/pi-runner/pi/settings.json /etc/redline/pi/settings.json
 RUN apt-get update \
-    && apt-get install --no-install-recommends --yes bash ca-certificates git \
+    && apt-get install --no-install-recommends --yes bash=5.2.15-2+b13 ca-certificates=20250419~deb12u1 git=1:2.39.5-0+deb12u3 \
     && npm install --global --omit=dev "@earendil-works/pi-coding-agent@${PI_VERSION}" \
     && npm cache clean --force \
     && chown -R root:root /usr/local/lib/node_modules /usr/local/bin \
@@ -17,4 +17,4 @@ ENV PI_SETTINGS_PATH=/etc/redline/pi/settings.json \
     PI_CODING_AGENT_DIR=/tmp/redline/pi
 USER 10001:10001
 
-ENTRYPOINT ["pi"]
+ENTRYPOINT ["node", "/opt/redline/bootstrap.js", "pi"]

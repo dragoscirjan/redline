@@ -7,7 +7,7 @@ USER root
 COPY packages/opencode-runner/opencode/opencode.json /etc/redline/opencode.json
 COPY packages/opencode-runner/opencode/redline-report-plugin.js /opt/redline/opencode/redline-report-plugin.js
 RUN apt-get update \
-    && apt-get install --no-install-recommends --yes ca-certificates git \
+    && apt-get install --no-install-recommends --yes ca-certificates=20250419~deb12u1 git=1:2.39.5-0+deb12u3 \
     && npm install --global --omit=dev "opencode-ai@${OPENCODE_VERSION}" \
     && npm cache clean --force \
     && chown -R root:root /usr/local/lib/node_modules /usr/local/bin \

@@ -1,17 +1,61 @@
-name: Redline review context
+name: Redline review
 
-description: Build a review context bundle for a pull request's exact base and head commits.
+description: Build a review context bundle for a pull request's exact base and head commits and, when review inputs are supplied, run the fixed review policy in a digest-pinned container.
 author: dragoscirjan
 
+# Inputs are fixed enums/data. No input accepts free-form review instructions.
+# Review execution is enabled only when backend, model-config, and runner-image
+# are all supplied; otherwise the action keeps the context-bundle-only behavior
+# that existing callers (for example .github/workflows/code-review.yml) use.
 inputs:
+  backend:
+    description: Review backend, pi or opencode. Required together with model-config and runner-image to enable review execution.
+    required: false
+    default: ""
+  model-config:
+    description: Provider-neutral model configuration JSON (provider, endpoint, model). See docs/runnable-review-configuration.md.
+    required: false
+    default: ""
+  github-token:
+    description: GitHub publication token; bind to secrets.GH_TOKEN. Stays in host publication code and never enters the model container.
+    required: false
+    default: ""
+  model-auth:
+    description: Provider-keyed credential map (JSON); bind to secrets.MODEL_CREDENTIALS. Only the selected credential reaches the container bootstrap channel.
+    required: false
+    default: ""
+  finding-scope:
+    description: Finding scope, defects or defects-and-risks
+    required: false
+    default: defects
+  report-style:
+    description: Report style, single-block or inline
+    required: false
+    default: single-block
+  timeout:
+    description: Review deadline as a duration, for example 10m, 2h, or 1h30m. Capped at 360m; values above the cap are rejected.
+    required: false
+    default: 30m
+  credential-isolation:
+    description: Credential isolation mode. Only direct is supported.
+    required: false
+    default: direct
+  runner-image:
+    description: Digest-pinned runner image reference ending in @sha256:<hex>. Required together with backend and model-config to enable review execution.
+    required: false
+    default: ""
+  container-engine:
+    description: Container engine used by the host-side staging layer, podman or docker
+    required: false
+    default: podman
   artifact-name:
     description: Name for the downloadable review bundle artifact
     required: false
     default: redline-review-${{ github.run_id }}
   artifact-retention-days:
-    description: Number of days to retain the debug artifact, from 1 to 90
+    description: Number of days to retain debug artifacts, from 1 to 90
     required: false
-    default: "3"
+    default: "45"
 
 runs:
   using: composite
@@ -26,7 +70,7 @@ runs:
       run: |
         set -euo pipefail
         if [[ -z "$BASE_SHA" || -z "$HEAD_SHA" || -z "$HEAD_REPOSITORY" ]]; then
-          printf 'Redline review context action requires a pull_request event.\n' >&2
+          printf 'Redline review action requires a pull_request event.\n' >&2
           exit 2
         fi
         [[ "$BASE_SHA" =~ ^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$ ]]
@@ -34,6 +78,31 @@ runs:
         [[ "$HEAD_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
         [[ "$ARTIFACT_RETENTION_DAYS" =~ ^[0-9]+$ ]]
         (( ARTIFACT_RETENTION_DAYS >= 1 && ARTIFACT_RETENTION_DAYS <= 90 ))
+
+    - name: Build trusted TypeScript
+      shell: bash
+      working-directory: ${{ github.action_path }}/../
+      env:
+        REVIEW_BACKEND: ${{ inputs.backend }}
+        REVIEW_MODEL_CONFIG: ${{ inputs.model-config }}
+        REVIEW_RUNNER_IMAGE: ${{ inputs.runner-image }}
+      run: |
+        set -euo pipefail
+        # Review execution is enabled only when the full review input triple is
+        # present. Partial input must fail loudly instead of silently degrading.
+        if [[ -n "$REVIEW_BACKEND" || -n "$REVIEW_MODEL_CONFIG" || -n "$REVIEW_RUNNER_IMAGE" ]]; then
+          if [[ -z "$REVIEW_BACKEND" || -z "$REVIEW_MODEL_CONFIG" || -z "$REVIEW_RUNNER_IMAGE" ]]; then
+            printf 'Review execution requires backend, model-config, and runner-image together.\n' >&2
+            exit 2
+          fi
+        fi
+        # The action checkout is the trusted base revision for pull_request
+        # events. Pull request code is never installed, built, or executed.
+        corepack enable
+        corepack prepare pnpm@10.33.0 --activate
+        pnpm install --frozen-lockfile --ignore-scripts
+        pnpm run build
+        test -f dist/src/github-action-run-cli.js
 
     - name: Fetch pull request commits as data
       shell: bash
@@ -78,4 +147,46 @@ runs:
           source-at-head/
           review/
         if-no-files-found: error
+        retention-days: ${{ inputs.artifact-retention-days }}
+
+    - name: Run review
+      if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.runner-image != '' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REDLINE_BACKEND: ${{ inputs.backend }}
+        REDLINE_MODEL_CONFIG: ${{ inputs.model-config }}
+        REDLINE_MODEL_AUTH: ${{ inputs.model-auth }}
+        REDLINE_FINDING_SCOPE: ${{ inputs.finding-scope }}
+        REDLINE_REPORT_STYLE: ${{ inputs.report-style }}
+        REDLINE_TIMEOUT: ${{ inputs.timeout }}
+        REDLINE_CREDENTIAL_ISOLATION: ${{ inputs.credential-isolation }}
+        REDLINE_RUNNER_IMAGE: ${{ inputs.runner-image }}
+        REDLINE_CONTAINER_ENGINE: ${{ inputs.container-engine }}
+        REDLINE_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        REDLINE_ARTIFACT_RETENTION_DAYS: ${{ inputs.artifact-retention-days }}
+        REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
+        REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head
+        REDLINE_JOURNAL_PATH: ${{ github.workspace }}/redline-journal/journal.jsonl
+        REDLINE_RUN_ID: ${{ github.run_id }}
+        REDLINE_REPOSITORY: ${{ github.repository }}
+        REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
+        REDLINE_BASE: ${{ github.event.pull_request.base.sha }}
+        REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+        if [[ -z "$REDLINE_MODEL_AUTH" ]]; then
+          printf 'Review execution requires model-auth (bind secrets.MODEL_CREDENTIALS).\n' >&2
+          exit 2
+        fi
+        mkdir -p "$(dirname "$REDLINE_JOURNAL_PATH")"
+        node "${{ github.action_path }}/../dist/src/github-action-run-cli.js"
+
+    - name: Upload review journal
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}-journal
+        path: redline-journal/
+        if-no-files-found: ignore
         retention-days: ${{ inputs.artifact-retention-days }}

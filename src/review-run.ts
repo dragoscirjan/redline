@@ -20,7 +20,9 @@ import {
 } from './review-prompt.js';
 import { ReviewBackendOutputConsumer, type ReviewEventSink } from './review-stream.js';
 
-const MAX_TIMEOUT_MS = 2 * 60 * 60 * 1_000;
+// Matches the 360-minute GitHub Actions job cap so a `timeout` action input
+// accepted by validation is also honurable by the run deadline.
+const MAX_TIMEOUT_MS = 6 * 60 * 60 * 1_000;
 const DEFAULT_TERMINATION_GRACE_MS = 2_000;
 const MAX_PROTOCOL_ERRORS = 32;
 

@@ -49,14 +49,12 @@ test('parses the same first runnable profile for Pi and OpenCode', () => {
   }
 });
 
-test('allows inline reporting but rejects unsupported profile choices', () => {
+test('allows inline reporting and both finding scopes but rejects unsupported choices', () => {
   assert.equal(parse({ reportStyle: 'inline' }).reportStyle, 'inline');
+  assert.equal(parse({ findingScope: 'defects-and-risks' }).findingScope, 'defects-and-risks');
   assert.throws(() => parse({ backend: 'other' }), /backend is unsupported/u);
   assert.throws(() => parse({ reportStyle: 'thread' }), /report style is unsupported/u);
-  assert.throws(
-    () => parse({ findingScope: 'defects-and-risks' }),
-    /supports only the defects finding scope/u,
-  );
+  assert.throws(() => parse({ findingScope: 'everything' }), /finding scope is unsupported/u);
 });
 
 test('requires an explicit direct credential-isolation choice', () => {

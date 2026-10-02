@@ -7,7 +7,9 @@
 The action runs in one of two modes:
 
 - **Context bundle only.** The caller supplies no review inputs. The action validates the pull request event, builds the trusted checkout, builds the bundle, and uploads it. Existing callers such as `.github/workflows/code-review.yml` use this mode.
-- **Full review.** The caller supplies `backend`, `model-config`, and `runner-image` together. The action then also stages the runner container, runs the review backend, publishes findings, and uploads the review journal. Supplying only part of the triple fails validation with exit code 2. `model-auth` is also required in this mode.
+- **Full review.** The caller supplies `backend`, `model-config`, `model-auth`, and `runner-image` together, plus an explicit `credential-isolation: direct` and a `github-token` for publication. The action then also stages the runner container, runs the review backend, publishes findings, and uploads the review journal. Supplying only part of the review selection fails validation with exit code 2.
+
+Context-only mode never requires `github-token`; the token is needed only when findings are published.
 
 ## Inputs
 
@@ -22,7 +24,7 @@ Every input is fixed data. No input accepts free-form review instructions. TypeS
 | `finding-scope` | `defects` or `defects-and-risks` | `defects` |
 | `report-style` | `single-block` or `inline` | `single-block` |
 | `timeout` | duration string, for example `10m`, `2h`, or `1h30m` | `30m` |
-| `credential-isolation` | `direct` | `direct` |
+| `credential-isolation` | `direct`, required explicitly in review mode | none |
 | `runner-image` | image reference ending in `@sha256:` followed by 64 hex characters | none |
 | `container-engine` | `podman` or `docker` | `podman` |
 | `artifact-name` | bounded artifact name | `redline-review-<run id>` |

@@ -152,9 +152,10 @@ export function actionEnvironmentFromProcess(environment: NodeJS.ProcessEnv): Ac
 
 export function parseActionEnvironment(environment: ActionEnvironment): ParsedActionEnvironment {
   const githubTokenRaw = (environment as unknown as Record<string, unknown>).githubToken;
-  if (typeof githubTokenRaw !== 'string' || githubTokenRaw.length === 0 || githubTokenRaw.includes('\0')) {
+  if (typeof githubTokenRaw !== 'string' || githubTokenRaw.includes('\0')) {
     throw new Error('GH_TOKEN is required');
   }
+  const githubToken = githubTokenRaw;
 
   const values = new Map<string, string>();
   for (const key of ACTION_ENVIRONMENT_KEYS) {
@@ -177,8 +178,11 @@ export function parseActionEnvironment(environment: ActionEnvironment): ParsedAc
   };
 
   if (reviewMode(inputs) === 'context-only') {
+    // Publication never happens in context-only mode, so a missing token is
+    // not an error there. Existing token-less callers keep working.
     return { mode: 'context-only', inputs: parseContextOnlyInputs(inputs) };
   }
+  if (githubToken.length === 0) throw new Error('GH_TOKEN is required');
 
   const parsed = parseCompositeActionInputs(inputs);
   const pullRequest = Number(get('pullRequest'));

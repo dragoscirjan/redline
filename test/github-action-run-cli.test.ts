@@ -122,8 +122,10 @@ test('rejects partial review selections', () => {
   assert.match(message, /requires backend, model-config, model-auth, and runner-image together/u);
 });
 
-test('rejects a missing GitHub token', () => {
+test('rejects a missing GitHub token only in review mode', () => {
   assert.match(thrownMessage(() => parseActionEnvironment(validEnvironment({ githubToken: '' }))), /GH_TOKEN is required/u);
+  const parsed = parseActionEnvironment(contextOnlyEnvironment({ githubToken: '' }));
+  assert.equal(parsed.mode, 'context-only');
 });
 
 test('rejects missing or invalid action inputs with named variables', () => {
@@ -153,7 +155,10 @@ test('rejects unknown REDLINE_ environment variables but accepts known ones', ()
 });
 
 function processEnvironment(environment: ActionEnvironment): NodeJS.ProcessEnv {
+  // Keep the parent PATH so the spawned `node` binary resolves the same way it
+  // does in this process; CI installs Node outside the default search path.
   return {
+    PATH: process.env.PATH,
     GH_TOKEN: environment.githubToken,
     REDLINE_BACKEND: environment.backend,
     REDLINE_MODEL_CONFIG: environment.modelConfig,

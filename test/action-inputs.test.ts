@@ -3,8 +3,9 @@ import test from 'node:test';
 import {
   DEFAULT_ARTIFACT_RETENTION_DAYS,
   DEFAULT_TIMEOUT_INPUT,
-  MAX_TIMEOUT_MINUTES,
   parseCompositeActionInputs,
+  parseContextOnlyInputs,
+  reviewMode,
 } from '../src/action-inputs.js';
 
 const MODEL_CONFIG = JSON.stringify({
@@ -30,6 +31,79 @@ function validInputs(overrides: Partial<Parameters<typeof parseCompositeActionIn
     ...overrides,
   };
 }
+
+test('rejects unknown action inputs at runtime', () => {
+  const extended = validInputs() as Record<string, string>;
+  extended.reviewInstructions = 'untrusted-value';
+  assert.match(
+    thrownMessage(() => parseCompositeActionInputs(extended as Parameters<typeof parseCompositeActionInputs>[0])),
+    /unknown action input: reviewInstructions/u,
+  );
+});
+
+test('detects the review mode from the input selection', () => {
+  assert.equal(reviewMode(validInputs() as Record<string, unknown> & Parameters<typeof reviewMode>[0]), 'review');
+  const contextOnly = validInputs({ backend: '', modelConfig: '', modelAuth: '', runnerImage: '' }) as Record<string, unknown> &
+    Parameters<typeof reviewMode>[0];
+  assert.equal(reviewMode(contextOnly), 'context-only');
+  const partial = validInputs({ modelAuth: '' }) as Record<string, unknown> & Parameters<typeof reviewMode>[0];
+  assert.match(
+    thrownMessage(() => reviewMode(partial)),
+    /requires backend, model-config, model-auth, and runner-image together/u,
+  );
+});
+
+test('validates standalone inputs in context-only mode', () => {
+  const contextOnly = validInputs({
+    backend: '',
+    modelConfig: '',
+    modelAuth: '',
+    runnerImage: '',
+    timeout: '2h',
+    artifactRetentionDays: '10',
+  });
+  const parsed = parseContextOnlyInputs(contextOnly as Record<string, unknown> & Parameters<typeof parseContextOnlyInputs>[0]);
+  assert.equal(parsed.timeout.minutes, 120);
+  assert.equal(parsed.artifactRetentionDays, 10);
+  assert.throws(() =>
+    parseContextOnlyInputs(
+      validInputs({ backend: '', modelConfig: '', modelAuth: '', runnerImage: '', findingScope: 'everything' }) as Record<
+        string,
+        unknown
+      > & Parameters<typeof parseContextOnlyInputs>[0],
+    ),
+  );
+});
+
+test('requires an explicit credential-isolation choice in review mode', () => {
+  assert.match(
+    thrownMessage(() => parseCompositeActionInputs(validInputs({ credentialIsolation: '' }))),
+    /must be explicitly set to direct/u,
+  );
+});
+
+function contextOnlyInputs(overrides: Partial<Parameters<typeof parseContextOnlyInputs>[0]> = {}) {
+  return {
+    backend: '',
+    modelConfig: '',
+    modelAuth: '',
+    findingScope: '',
+    reportStyle: '',
+    timeout: '',
+    credentialIsolation: '',
+    runnerImage: '',
+    containerEngine: 'podman',
+    artifactName: 'redline-review-1',
+    artifactRetentionDays: '',
+    ...overrides,
+  } as Record<string, unknown> & Parameters<typeof parseContextOnlyInputs>[0];
+}
+
+test('rejects partial review selections', () => {
+  assert.throws(() => parseCompositeActionInputs(validInputs({ modelAuth: '' })));
+  assert.throws(() => parseCompositeActionInputs(validInputs({ runnerImage: '' })));
+  assert.equal(reviewMode(contextOnlyInputs()), 'context-only');
+});
 
 function thrownMessage(callback: () => unknown): string {
   let caught: unknown;
@@ -89,7 +163,10 @@ test('rejects malformed timeouts and bound violations', () => {
 });
 
 test('rejects missing model-auth and unknown credential providers', () => {
-  assert.match(thrownMessage(() => parseCompositeActionInputs(validInputs({ modelAuth: '' }))), /model-auth is required/u);
+  assert.match(
+    thrownMessage(() => parseCompositeActionInputs(validInputs({ modelAuth: '' }))),
+    /requires backend, model-config, model-auth, and runner-image together/u,
+  );
   assert.match(
     thrownMessage(() => parseCompositeActionInputs(validInputs({ modelAuth: '{}' }))),
     /model-auth has no entry for the configured provider/u,
@@ -107,7 +184,7 @@ test('rejects non-digest-pinned runner images', () => {
   }
   assert.match(
     thrownMessage(() => parseCompositeActionInputs(validInputs({ runnerImage: '' }))),
-    /runner-image is required/u,
+    /requires backend, model-config, model-auth, and runner-image together/u,
   );
 });
 

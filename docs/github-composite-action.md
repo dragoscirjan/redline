@@ -30,7 +30,9 @@ Every input is fixed data. No input accepts free-form review instructions. TypeS
 
 Validation rules:
 
-- The `timeout` parser accepts `d`, `h`, and `m` components in that order, for example `1d2h`, `2h`, `10m`, or compound `1h30m`. The parser rejects values above the 360-minute GitHub Actions job cap with a validation error. It rejects, rather than clamps, `1d`.
+- The `timeout` parser accepts `h` and `m` components in that order, for example `2h`, `10m`, or compound `1h30m`. The parser rejects values above the 360-minute GitHub Actions job cap with a validation error. Any value with a `d` component exceeds the cap, so `1d` is rejected instead of clamped. A caller who sets a job-level timeout must leave margin above the review deadline so container cleanup and artifact upload can still run.
+- `credential-isolation` requires an explicit `direct` value when review execution is enabled. There is no default, so a caller cannot enable full review without choosing the credential path deliberately.
+- Unknown inputs and unknown `REDLINE_*` environment variables are rejected. Optional inputs are validated even in context-only mode, so a typo in `finding-scope` or `timeout` fails the workflow instead of passing silently.
 - `runner-image` must be pinned by an immutable digest. Tags fail validation. Issue #23 will replace this input with a fixed backend-to-digest table.
 - `artifact-retention-days` accepts 1 through 90. The default of 45 is half of GitHub's maximum.
 - `model-config` follows the [runnable review configuration](runnable-review-configuration.md): exact JSON shape, 16 KB byte limit, absolute HTTP or HTTPS endpoint, no URL credentials or fragments.
@@ -54,12 +56,13 @@ Boundaries:
 
 ## Pipeline
 
-1. **Validate inputs.** A shell step checks that the event is a `pull_request` event and that the base and head are full object ids.
+1. **Validate inputs.** A shell step checks that the event is a `pull_request` event and that the base and head are full object ids. After the trusted build, a TypeScript validation step (`redline-github-action --validate-only`) validates every input, including optional inputs in context-only mode.
 2. **Build trusted TypeScript.** The step installs dependencies with `pnpm install --frozen-lockfile --ignore-scripts` and builds the action checkout. The checkout is the trusted base revision for `pull_request` events. Pull request code is never installed, built, or executed.
 3. **Fetch pull request commits as data.** `git fetch` retrieves the exact base and head revisions. Nothing checks out pull request content as the working tree.
 4. **Build the review context bundle.** `src/context-bundle.sh` writes the bounded bundle under the workspace.
-5. **Run the review.** When review inputs are present, the step calls `redline-github-action` (built at `dist/src/github-action-run-cli.js`). That CLI parses and validates the environment, builds the frozen configuration, selects the single provider credential, stages the container through `createContainerStagingLauncher`, and runs `runReview` with the fixed versioned prompt, journal, and publication service.
-6. **Upload artifacts.** The context bundle uploads before the review starts. The review journal uploads with `if: always()`, so backend timeouts, failures, and incomplete coverage still produce an auditable journal.
+5. **Upload the context bundle.** The bundle uploads before the review starts, so a failing review cannot erase it.
+6. **Run the review.** When review inputs are present, the step calls `redline-github-action` (built at `dist/src/github-action-run-cli.js`). That CLI parses and validates the environment, builds the frozen configuration, selects the single provider credential, stages the container through `createContainerStagingLauncher`, and runs `runReview` with the fixed versioned prompt, journal, and publication service.
+7. **Upload the review journal.** The journal uploads with `if: always()`, so backend timeouts, failures, and incomplete coverage still produce an auditable journal.
 
 ## Run results
 

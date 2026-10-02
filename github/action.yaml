@@ -37,9 +37,9 @@ inputs:
     required: false
     default: 30m
   credential-isolation:
-    description: Credential isolation mode. Only direct is supported.
+    description: Credential isolation mode. Only direct is supported; required explicitly when review execution is enabled.
     required: false
-    default: direct
+    default: ""
   runner-image:
     description: Digest-pinned runner image reference ending in @sha256:<hex>. Required together with backend and model-config to enable review execution.
     required: false
@@ -85,14 +85,15 @@ runs:
       env:
         REVIEW_BACKEND: ${{ inputs.backend }}
         REVIEW_MODEL_CONFIG: ${{ inputs.model-config }}
+        REVIEW_MODEL_AUTH: ${{ inputs.model-auth }}
         REVIEW_RUNNER_IMAGE: ${{ inputs.runner-image }}
       run: |
         set -euo pipefail
-        # Review execution is enabled only when the full review input triple is
+        # Review execution is enabled only when the full review input set is
         # present. Partial input must fail loudly instead of silently degrading.
-        if [[ -n "$REVIEW_BACKEND" || -n "$REVIEW_MODEL_CONFIG" || -n "$REVIEW_RUNNER_IMAGE" ]]; then
-          if [[ -z "$REVIEW_BACKEND" || -z "$REVIEW_MODEL_CONFIG" || -z "$REVIEW_RUNNER_IMAGE" ]]; then
-            printf 'Review execution requires backend, model-config, and runner-image together.\n' >&2
+        if [[ -n "$REVIEW_BACKEND" || -n "$REVIEW_MODEL_CONFIG" || -n "$REVIEW_MODEL_AUTH" || -n "$REVIEW_RUNNER_IMAGE" ]]; then
+          if [[ -z "$REVIEW_BACKEND" || -z "$REVIEW_MODEL_CONFIG" || -z "$REVIEW_MODEL_AUTH" || -z "$REVIEW_RUNNER_IMAGE" ]]; then
+            printf 'Review execution requires backend, model-config, model-auth, and runner-image together.\n' >&2
             exit 2
           fi
         fi
@@ -103,6 +104,37 @@ runs:
         pnpm install --frozen-lockfile --ignore-scripts
         pnpm run build
         test -f dist/src/github-action-run-cli.js
+
+    - name: Validate action inputs with trusted TypeScript
+      if: always()
+      shell: bash
+      working-directory: ${{ github.action_path }}/../
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REDLINE_BACKEND: ${{ inputs.backend }}
+        REDLINE_MODEL_CONFIG: ${{ inputs.model-config }}
+        REDLINE_MODEL_AUTH: ${{ inputs.model-auth }}
+        REDLINE_FINDING_SCOPE: ${{ inputs.finding-scope }}
+        REDLINE_REPORT_STYLE: ${{ inputs.report-style }}
+        REDLINE_TIMEOUT: ${{ inputs.timeout }}
+        REDLINE_CREDENTIAL_ISOLATION: ${{ inputs.credential-isolation }}
+        REDLINE_RUNNER_IMAGE: ${{ inputs.runner-image }}
+        REDLINE_CONTAINER_ENGINE: ${{ inputs.container-engine }}
+        REDLINE_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        REDLINE_ARTIFACT_RETENTION_DAYS: ${{ inputs.artifact-retention-days }}
+        REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
+        REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head
+        REDLINE_JOURNAL_PATH: ${{ github.workspace }}/redline-journal/journal.jsonl
+        REDLINE_RUN_ID: ${{ github.run_id }}
+        REDLINE_REPOSITORY: ${{ github.repository }}
+        REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
+        REDLINE_BASE: ${{ github.event.pull_request.base.sha }}
+        REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+        # Authoritative input validation runs even in context-only mode, so
+        # invalid optional inputs fail instead of passing silently.
+        node dist/src/github-action-run-cli.js --validate-only
 
     - name: Fetch pull request commits as data
       shell: bash
@@ -175,10 +207,6 @@ runs:
         REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
       run: |
         set -euo pipefail
-        if [[ -z "$REDLINE_MODEL_AUTH" ]]; then
-          printf 'Review execution requires model-auth (bind secrets.MODEL_CREDENTIALS).\n' >&2
-          exit 2
-        fi
         mkdir -p "$(dirname "$REDLINE_JOURNAL_PATH")"
         node "${{ github.action_path }}/../dist/src/github-action-run-cli.js"
 

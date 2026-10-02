@@ -22,7 +22,6 @@ const MODEL_CONFIG = JSON.stringify({
   endpoint: 'https://openrouter.ai/api/v1',
   model: 'provider/model-name',
 });
-const RUNNER_IMAGE = 'ghcr.io/dragoscirjan/redline-pi@sha256:' + 'a'.repeat(64);
 const executeFile = promisify(execFile);
 
 function validEnvironment(overrides: Partial<ActionEnvironment> = {}): ActionEnvironment {
@@ -35,7 +34,6 @@ function validEnvironment(overrides: Partial<ActionEnvironment> = {}): ActionEnv
     reportStyle: '',
     timeout: '',
     credentialIsolation: 'direct',
-    runnerImage: RUNNER_IMAGE,
     containerEngine: 'podman',
     artifactName: 'redline-review-1',
     artifactRetentionDays: '',
@@ -52,12 +50,11 @@ function validEnvironment(overrides: Partial<ActionEnvironment> = {}): ActionEnv
 }
 
 function contextOnlyEnvironment(overrides: Partial<ActionEnvironment> = {}): ActionEnvironment {
-  const { backend, modelConfig, modelAuth, runnerImage, ...rest } = validEnvironment(overrides);
+  const { backend, modelConfig, modelAuth, ...rest } = validEnvironment(overrides);
   void backend;
   void modelConfig;
   void modelAuth;
-  void runnerImage;
-  return { ...rest, backend: '', modelConfig: '', modelAuth: '', runnerImage: '' };
+  return { ...rest, backend: '', modelConfig: '', modelAuth: '' };
 }
 
 function thrownMessage(callback: () => unknown): string {
@@ -119,7 +116,7 @@ test('validates optional inputs in context-only mode', () => {
 test('rejects partial review selections', () => {
   const partial = { ...validEnvironment({ modelAuth: '' }) };
   const message = thrownMessage(() => parseActionEnvironment(partial));
-  assert.match(message, /requires backend, model-config, model-auth, and runner-image together/u);
+  assert.match(message, /requires backend, model-config, and model-auth together/u);
 });
 
 test('rejects a missing GitHub token only in review mode', () => {
@@ -167,7 +164,6 @@ function processEnvironment(environment: ActionEnvironment): NodeJS.ProcessEnv {
     REDLINE_REPORT_STYLE: environment.reportStyle,
     REDLINE_TIMEOUT: environment.timeout,
     REDLINE_CREDENTIAL_ISOLATION: environment.credentialIsolation,
-    REDLINE_RUNNER_IMAGE: environment.runnerImage,
     REDLINE_CONTAINER_ENGINE: environment.containerEngine,
     REDLINE_ARTIFACT_NAME: environment.artifactName,
     REDLINE_ARTIFACT_RETENTION_DAYS: environment.artifactRetentionDays,

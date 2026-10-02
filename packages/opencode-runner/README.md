@@ -26,3 +26,5 @@ The image entrypoint is `/opt/redline/bootstrap.js`. It accepts one bounded host
 The fixed `redline-report-plugin.js` output adapter forwards OpenCode `message.part.delta` text only when trusted host code sets `REDLINE_REPORT_EVENTS=1`. It binds the first coordinator session to the host-visible ID `redline-coordinator` and ignores later session IDs. It does not add a model tool, publish to a forge, or receive forge credentials. Host code parses the forwarded text through `redline-review-events/v1`.
 
 A local `linux/amd64` image build and controlled fake-endpoint smoke run pass. Multi-platform build validation remains for Linux CI.
+
+The review action consumes this image only through the digest pinned for the `opencode` backend in `src/runner-images.ts` in the Redline repository. The pinned reference is the multi-platform manifest digest pushed by CI; `latest` and tag references are never used by the action. Redline's internal dogfood pipeline may build this image from trusted source and run it by the resulting local image ID.

@@ -26,3 +26,5 @@ The image entrypoint is `/opt/redline/bootstrap.js`. It accepts one bounded host
 Run reviews with Pi JSON event output. Trusted host code extracts assistant `text_delta` events and parses `redline-review-events/v1` lines. This reporting path does not add a Pi tool or expose forge credentials to the container.
 
 A local `linux/amd64` image build and controlled fake-endpoint smoke run pass. Multi-platform build validation remains for Linux CI.
+
+The review action consumes this image only through the digest pinned for the `pi` backend in `src/runner-images.ts` in the Redline repository. The pinned reference is the multi-platform manifest digest pushed by CI; `latest` and tag references are never used by the action. Redline's internal dogfood pipeline may build this image from trusted source and run it by the resulting local image ID.

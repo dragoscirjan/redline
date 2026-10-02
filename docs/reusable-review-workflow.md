@@ -26,7 +26,6 @@ jobs:
       backend: pi
       model-config: >-
         {"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"provider/model-name"}
-      runner-image: ghcr.io/dragoscirjan/redline-pi@sha256:<64-hex-digest>
       credential-isolation: direct
     secrets:
       github-token: ${{ secrets.GH_TOKEN }}
@@ -45,18 +44,17 @@ The reusable workflow forwards the [composite action contract](github-composite-
 
 | Input | Values | Default |
 | --- | --- | --- |
-| `backend` | `pi` or `opencode` | none |
+| `backend` | `pi` or `opencode`; also selects the pinned runner image | none |
 | `model-config` | JSON object with `provider`, `endpoint`, `model` | none |
 | `finding-scope` | `defects` or `defects-and-risks` | `defects` |
 | `report-style` | `single-block` or `inline` | `single-block` |
 | `timeout` | duration string, for example `10m`, `2h`, `1h30m` | `30m` |
 | `credential-isolation` | `direct`, required explicitly in review mode | none |
-| `runner-image` | image reference ending in `@sha256:<hex>` | none |
 | `container-engine` | `podman` or `docker` | `podman` |
 | `artifact-name` | bounded artifact name | `redline-review-<run id>` |
 | `artifact-retention-days` | integer from 1 to 90 | `45` |
 
-Review execution starts when `backend`, `model-config`, `model-auth`, and `runner-image` are all supplied. Without them the workflow produces the context bundle only.
+Review execution starts when `backend`, `model-config`, and `model-auth` are all supplied. The runner image is resolved from the committed backend-to-digest table by the selected backend; callers never choose an image. Without the review inputs the workflow produces the context bundle only.
 
 ## Secrets
 
@@ -102,6 +100,5 @@ A new push to the same pull request cancels the previous review run. The review 
 
 ## Not implemented here
 
-- The runner-image digest table. Callers pin the image themselves until issue #23 lands.
 - The credential gateway. `credential-isolation: direct` remains a documented escape hatch.
 - Local model-runtime lifecycle. The workflow expects a configured remote or private model endpoint.

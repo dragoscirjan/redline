@@ -84,6 +84,6 @@ In direct mode, the container staging launcher sends the selected provider crede
 Issue #19 adds validation and credential selection. Issue #20 adds read-only container preparation, tmpfs configuration, and data staging without host mounts. Issue #21 wires this parser into the GitHub composite action, which builds the context bundle and calls `redline-github-action` before it constructs the container-staging launcher.
 
 - Issue #22 owns the reusable workflow used by other repositories.
-- Issue #23 owns immutable runner-image selection.
+- Issue #23 pins the immutable runner-image digests in the backend-to-digest table that the action consumes.
 
 The composite action still runs in a context-bundle-only mode when the caller supplies no review inputs. See the [GitHub composite action contract](github-composite-action.md).

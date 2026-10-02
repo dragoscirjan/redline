@@ -1,30 +1,88 @@
-name: Code review
+# Reusable Redline review workflow for other repositories. Call it from a
+# pull_request_target workflow so publication secrets are available.
+name: Redline pull request review
 
 on:
   workflow_call:
     inputs:
+      backend:
+        description: Review backend, pi or opencode. Required together with model-config, model-auth, and runner-image to enable review execution.
+        required: false
+        type: string
+        default: ""
+      model-config:
+        description: Provider-neutral model configuration JSON (provider, endpoint, model).
+        required: false
+        type: string
+        default: ""
+      finding-scope:
+        description: Finding scope, defects or defects-and-risks
+        required: false
+        type: string
+        default: defects
+      report-style:
+        description: Report style, single-block or inline
+        required: false
+        type: string
+        default: single-block
+      timeout:
+        description: Review deadline as a duration, for example 10m, 2h, or 1h30m. Capped at 360m.
+        required: false
+        type: string
+        default: 30m
+      credential-isolation:
+        description: Credential isolation mode. Only direct is supported; required explicitly when review execution is enabled.
+        required: false
+        type: string
+        default: ""
+      runner-image:
+        description: Digest-pinned runner image reference ending in @sha256:<hex>. Required together with backend and model-config to enable review execution.
+        required: false
+        type: string
+        default: ""
+      container-engine:
+        description: Container engine used by the host-side staging layer, podman or docker
+        required: false
+        type: string
+        default: podman
+      artifact-name:
+        description: Name for the downloadable review bundle artifact
+        required: false
+        type: string
+        default: redline-review-${{ github.run_id }}
       artifact-retention-days:
-        description: Number of days to retain the review debug artifact
+        description: Number of days to retain debug artifacts, from 1 to 90
         required: false
         type: number
-        default: 3
+        default: 45
     secrets:
       github-token:
-        description: Optional token for fetching private pull request head repositories
+        description: GitHub publication token; bound to the action's github-token input. Required for review execution.
+        required: false
+      model-auth:
+        description: Provider-keyed credential map (JSON); bind to secrets.MODEL_CREDENTIALS.
         required: false
 
 permissions: {}
 
+concurrency:
+  group: redline-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
-  context:
+  review:
+    name: Redline review
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: write
     steps:
       - name: Check out trusted workflow tooling
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository }}
+          # The base revision is trusted under pull_request_target. Pull
+          # request code is never checked out.
           ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
           fetch-depth: 0
@@ -43,8 +101,24 @@ jobs:
             printf 'PR #%s: %s\n\n%s\n\n%s\n' "$PR_NUMBER" "$PR_TITLE" "$PR_BODY" "$PR_URL"
           } > pr-requirements.md
 
-      - name: Run Redline review context action
-        uses: ./github
+      # A local ./github path would resolve against the caller repository when
+      # this reusable workflow runs elsewhere. The call must target the
+      # published Redline action at the v1 major alias maintained by the
+      # guarded release workflow. Callers requiring a permanently fixed
+      # revision should call the composite action directly with the immutable
+      # full-version tag instead.
+      - name: Run Redline review action
+        uses: dragoscirjan/redline/github@v1
         with:
-          artifact-name: pull-request-review-${{ github.event.pull_request.number }}-${{ github.run_id }}
+          backend: ${{ inputs.backend }}
+          model-config: ${{ inputs.model-config }}
+          model-auth: ${{ secrets.model-auth }}
+          github-token: ${{ secrets.github-token }}
+          finding-scope: ${{ inputs.finding-scope }}
+          report-style: ${{ inputs.report-style }}
+          timeout: ${{ inputs.timeout }}
+          credential-isolation: ${{ inputs.credential-isolation }}
+          runner-image: ${{ inputs.runner-image }}
+          container-engine: ${{ inputs.container-engine }}
+          artifact-name: ${{ inputs.artifact-name }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

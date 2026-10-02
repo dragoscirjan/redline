@@ -85,7 +85,7 @@ export class ExecFileContainerEngineClient implements ContainerEngineClient {
   }
 }
 
-function validateImage(image: string): void {
+export function validateDigestPinnedImage(image: string): void {
   const marker = '@sha256:';
   const markerIndex = image.indexOf(marker);
   if (markerIndex <= 0 || markerIndex !== image.lastIndexOf(marker)) {
@@ -109,7 +109,7 @@ function validateInput(input: ContainerStagingInput): void {
   if (input.engine !== 'podman' && input.engine !== 'docker') {
     throw new Error('container engine is unsupported');
   }
-  validateImage(input.image);
+  validateDigestPinnedImage(input.image);
   if (input.credential.provider !== input.configuration.model.provider) {
     throw new Error('selected credential does not match the configured provider');
   }

@@ -1,5 +1,5 @@
 import type { ReviewBackend } from './backend-process.js';
-import type { ReportStyle } from './review-prompt.js';
+import type { FindingScope, ReportStyle } from './review-prompt.js';
 
 const MAX_MODEL_CONFIG_BYTES = 16 * 1024;
 const MAX_MODEL_CREDENTIALS_BYTES = 64 * 1024;
@@ -17,7 +17,7 @@ export interface FirstRunnableReviewConfiguration {
   readonly backend: ReviewBackend;
   readonly model: OpenAiCompatibleModelConfiguration;
   readonly credentialIsolation: 'direct';
-  readonly findingScope: 'defects';
+  readonly findingScope: FindingScope;
   readonly reportStyle: ReportStyle;
 }
 
@@ -106,8 +106,9 @@ export function parseFirstRunnableReviewConfiguration(
   if (input.credentialIsolation !== 'direct') {
     throw new Error('credential-isolation must be explicitly set to direct');
   }
-  if ((input.findingScope ?? 'defects') !== 'defects') {
-    throw new Error('the first runnable configuration supports only the defects finding scope');
+  const findingScope = input.findingScope ?? 'defects';
+  if (findingScope !== 'defects' && findingScope !== 'defects-and-risks') {
+    throw new Error('finding scope is unsupported');
   }
   const reportStyle = input.reportStyle ?? 'single-block';
   if (reportStyle !== 'single-block' && reportStyle !== 'inline') {
@@ -118,7 +119,7 @@ export function parseFirstRunnableReviewConfiguration(
     backend: input.backend,
     model: parseModelConfig(input.modelConfig),
     credentialIsolation: 'direct',
-    findingScope: 'defects',
+    findingScope,
     reportStyle,
   });
 }
@@ -126,14 +127,15 @@ export function parseFirstRunnableReviewConfiguration(
 export function selectDirectModelCredential(
   configuration: FirstRunnableReviewConfiguration,
   modelCredentials: string,
+  mapLabel = 'model-credentials',
 ): SelectedModelCredential {
   const credentials = parseJsonObject(
     modelCredentials,
     MAX_MODEL_CREDENTIALS_BYTES,
-    'model-credentials',
+    mapLabel,
   );
   if (!Object.hasOwn(credentials, configuration.model.provider)) {
-    throw new Error('model-credentials has no entry for the configured provider');
+    throw new Error(`${mapLabel} has no entry for the configured provider`);
   }
   const value = credentials[configuration.model.provider];
   if (

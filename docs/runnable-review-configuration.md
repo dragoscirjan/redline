@@ -61,7 +61,7 @@ The first profile accepts these values:
 | Setting | Accepted value |
 | --- | --- |
 | `backend` | `pi` or `opencode` |
-| `finding-scope` | `defects`, which is also the default |
+| `finding-scope` | `defects` by default, or `defects-and-risks` |
 | `report-style` | `single-block` by default, or `inline` |
 | `credential-isolation` | Explicit `direct` only |
 
@@ -81,10 +81,9 @@ In direct mode, the container staging launcher sends the selected provider crede
 
 ## Delivery boundary
 
-Issue #19 adds validation and credential selection. Issue #20 adds read-only container preparation, tmpfs configuration, and data staging without host mounts. Neither issue changes the GitHub Action inputs.
+Issue #19 adds validation and credential selection. Issue #20 adds read-only container preparation, tmpfs configuration, and data staging without host mounts. Issue #21 wires this parser into the GitHub composite action, which builds the context bundle and calls `redline-github-action` before it constructs the container-staging launcher.
 
-- Issue #21 owns GitHub Action inputs and calls this parser before it constructs the container-staging launcher.
 - Issue #22 owns the reusable workflow used by other repositories.
 - Issue #23 owns immutable runner-image selection.
 
-Until #21 lands, the existing action still builds and uploads the review context but does not invoke Pi or OpenCode.
+The composite action still runs in a context-bundle-only mode when the caller supplies no review inputs. See the [GitHub composite action contract](github-composite-action.md).

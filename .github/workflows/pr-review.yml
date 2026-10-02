@@ -6,10 +6,14 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: redline-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   review:
     permissions:
       contents: read
-    uses: ./.github/workflows/code-review.yml
+    uses: ./.github/workflows/dogfood-review.yml
     with:
-      artifact-retention-days: 3
+      artifact-retention-days: 45

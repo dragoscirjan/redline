@@ -83,4 +83,4 @@ The calling workflow needs `contents: read` and `pull-requests: write` when the 
 - The credential gateway. `credential-isolation: direct` sends the selected credential through the bootstrap channel without destination pinning. It is a documented escape hatch.
 - Local model-runtime lifecycle. The action expects a configured remote or private endpoint.
 - Immutable runner-image selection. Callers pin the digest themselves until issue #23 lands.
-- The reusable workflow for other repositories. Issue #22 owns that wrapper and its concurrency settings.
+- The reusable workflow for other repositories. See the [reusable review workflow](reusable-review-workflow.md) contract; issue #22 owns that wrapper.

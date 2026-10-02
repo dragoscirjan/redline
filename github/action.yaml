@@ -4,12 +4,14 @@ description: Build a review context bundle for a pull request's exact base and h
 author: dragoscirjan
 
 # Inputs are fixed enums/data. No input accepts free-form review instructions.
-# Review execution is enabled only when backend, model-config, and runner-image
+# Review execution is enabled only when backend, model-config, and model-auth
 # are all supplied; otherwise the action keeps the context-bundle-only behavior
-# that existing callers (for example .github/workflows/code-review.yml) use.
+# that existing callers (for example .github/workflows/dogfood-review.yml) use.
+# The runner image is selected from the committed backend-to-digest table in
+# src/runner-images.ts; callers cannot supply their own image reference.
 inputs:
   backend:
-    description: Review backend, pi or opencode. Required together with model-config and runner-image to enable review execution.
+    description: Review backend, pi or opencode. Required together with model-config and model-auth to enable review execution. Also selects the pinned runner image.
     required: false
     default: ""
   model-config:
@@ -38,10 +40,6 @@ inputs:
     default: 30m
   credential-isolation:
     description: Credential isolation mode. Only direct is supported; required explicitly when review execution is enabled.
-    required: false
-    default: ""
-  runner-image:
-    description: Digest-pinned runner image reference ending in @sha256:<hex>. Required together with backend and model-config to enable review execution.
     required: false
     default: ""
   container-engine:
@@ -86,14 +84,13 @@ runs:
         REVIEW_BACKEND: ${{ inputs.backend }}
         REVIEW_MODEL_CONFIG: ${{ inputs.model-config }}
         REVIEW_MODEL_AUTH: ${{ inputs.model-auth }}
-        REVIEW_RUNNER_IMAGE: ${{ inputs.runner-image }}
       run: |
         set -euo pipefail
         # Review execution is enabled only when the full review input set is
         # present. Partial input must fail loudly instead of silently degrading.
-        if [[ -n "$REVIEW_BACKEND" || -n "$REVIEW_MODEL_CONFIG" || -n "$REVIEW_MODEL_AUTH" || -n "$REVIEW_RUNNER_IMAGE" ]]; then
-          if [[ -z "$REVIEW_BACKEND" || -z "$REVIEW_MODEL_CONFIG" || -z "$REVIEW_MODEL_AUTH" || -z "$REVIEW_RUNNER_IMAGE" ]]; then
-            printf 'Review execution requires backend, model-config, model-auth, and runner-image together.\n' >&2
+        if [[ -n "$REVIEW_BACKEND" || -n "$REVIEW_MODEL_CONFIG" || -n "$REVIEW_MODEL_AUTH" ]]; then
+          if [[ -z "$REVIEW_BACKEND" || -z "$REVIEW_MODEL_CONFIG" || -z "$REVIEW_MODEL_AUTH" ]]; then
+            printf 'Review execution requires backend, model-config, and model-auth together.\n' >&2
             exit 2
           fi
         fi
@@ -118,7 +115,6 @@ runs:
         REDLINE_REPORT_STYLE: ${{ inputs.report-style }}
         REDLINE_TIMEOUT: ${{ inputs.timeout }}
         REDLINE_CREDENTIAL_ISOLATION: ${{ inputs.credential-isolation }}
-        REDLINE_RUNNER_IMAGE: ${{ inputs.runner-image }}
         REDLINE_CONTAINER_ENGINE: ${{ inputs.container-engine }}
         REDLINE_ARTIFACT_NAME: ${{ inputs.artifact-name }}
         REDLINE_ARTIFACT_RETENTION_DAYS: ${{ inputs.artifact-retention-days }}
@@ -182,7 +178,7 @@ runs:
         retention-days: ${{ inputs.artifact-retention-days }}
 
     - name: Run review
-      if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.runner-image != '' }}
+      if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
@@ -193,7 +189,6 @@ runs:
         REDLINE_REPORT_STYLE: ${{ inputs.report-style }}
         REDLINE_TIMEOUT: ${{ inputs.timeout }}
         REDLINE_CREDENTIAL_ISOLATION: ${{ inputs.credential-isolation }}
-        REDLINE_RUNNER_IMAGE: ${{ inputs.runner-image }}
         REDLINE_CONTAINER_ENGINE: ${{ inputs.container-engine }}
         REDLINE_ARTIFACT_NAME: ${{ inputs.artifact-name }}
         REDLINE_ARTIFACT_RETENTION_DAYS: ${{ inputs.artifact-retention-days }}

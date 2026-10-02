@@ -7,7 +7,7 @@
 The action runs in one of two modes:
 
 - **Context bundle only.** The caller supplies no review inputs. The action validates the pull request event, builds the trusted checkout, builds the bundle, and uploads it. Existing callers such as `.github/workflows/code-review.yml` use this mode.
-- **Full review.** The caller supplies `backend`, `model-config`, `model-auth`, and `runner-image` together, plus an explicit `credential-isolation: direct` and a `github-token` for publication. The action then also stages the runner container, runs the review backend, publishes findings, and uploads the review journal. Supplying only part of the review selection fails validation with exit code 2.
+- **Full review.** The caller supplies `backend`, `model-config`, and `model-auth` together, plus an explicit `credential-isolation: direct` and a `github-token` for publication. The action resolves the runner image from the committed backend-to-digest table, stages the runner container, runs the review backend, publishes findings, and uploads the review journal. Supplying only part of the review selection fails validation with exit code 2.
 
 Context-only mode never requires `github-token`; the token is needed only when findings are published.
 
@@ -17,7 +17,7 @@ Every input is fixed data. No input accepts free-form review instructions. TypeS
 
 | Input | Values | Default |
 | --- | --- | --- |
-| `backend` | `pi` or `opencode` | none |
+| `backend` | `pi` or `opencode`; also selects the pinned runner image | none |
 | `model-config` | JSON object with `provider`, `endpoint`, `model` | none |
 | `model-auth` | JSON object mapping provider names to credential strings | none |
 | `github-token` | GitHub publication token | none |
@@ -25,7 +25,6 @@ Every input is fixed data. No input accepts free-form review instructions. TypeS
 | `report-style` | `single-block` or `inline` | `single-block` |
 | `timeout` | duration string, for example `10m`, `2h`, or `1h30m` | `30m` |
 | `credential-isolation` | `direct`, required explicitly in review mode | none |
-| `runner-image` | image reference ending in `@sha256:` followed by 64 hex characters | none |
 | `container-engine` | `podman` or `docker` | `podman` |
 | `artifact-name` | bounded artifact name | `redline-review-<run id>` |
 | `artifact-retention-days` | integer from 1 to 90 | `45` |
@@ -35,7 +34,7 @@ Validation rules:
 - The `timeout` parser accepts `h` and `m` components in that order, for example `2h`, `10m`, or compound `1h30m`. The parser rejects values above the 360-minute GitHub Actions job cap with a validation error. Any value with a `d` component exceeds the cap, so `1d` is rejected instead of clamped. A caller who sets a job-level timeout must leave margin above the review deadline so container cleanup and artifact upload can still run.
 - `credential-isolation` requires an explicit `direct` value when review execution is enabled. There is no default, so a caller cannot enable full review without choosing the credential path deliberately.
 - Unknown inputs and unknown `REDLINE_*` environment variables are rejected. Optional inputs are validated even in context-only mode, so a typo in `finding-scope` or `timeout` fails the workflow instead of passing silently.
-- `runner-image` must be pinned by an immutable digest. Tags fail validation. Issue #23 will replace this input with a fixed backend-to-digest table.
+- The runner image is selected from the committed backend-to-digest table in `src/runner-images.ts`. Callers cannot supply their own image reference; passing the removed `runner-image` input fails as an unknown input. CI publishes the images to GHCR on every merge to `main`; the operator records the pushed digest in the table through a reviewed pull request. Tag references and `:latest` are rejected by validation, so the table cannot drift into a mutable reference.
 - `artifact-retention-days` accepts 1 through 90. The default of 45 is half of GitHub's maximum.
 - `model-config` follows the [runnable review configuration](runnable-review-configuration.md): exact JSON shape, 16 KB byte limit, absolute HTTP or HTTPS endpoint, no URL credentials or fragments.
 
@@ -82,5 +81,5 @@ The calling workflow needs `contents: read` and `pull-requests: write` when the 
 
 - The credential gateway. `credential-isolation: direct` sends the selected credential through the bootstrap channel without destination pinning. It is a documented escape hatch.
 - Local model-runtime lifecycle. The action expects a configured remote or private endpoint.
-- Immutable runner-image selection. Callers pin the digest themselves until issue #23 lands.
+- Redline's internal dogfood path may build a runner image from trusted source and run it by the resulting local image ID; external callers always use the table digest.
 - The reusable workflow for other repositories. See the [reusable review workflow](reusable-review-workflow.md) contract; issue #22 owns that wrapper.

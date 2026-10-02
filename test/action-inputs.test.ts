@@ -13,8 +13,6 @@ const MODEL_CONFIG = JSON.stringify({
   endpoint: 'https://openrouter.ai/api/v1',
   model: 'provider/model-name',
 });
-const RUNNER_IMAGE = 'ghcr.io/dragoscirjan/redline-pi@sha256:' + 'a'.repeat(64);
-
 function validInputs(overrides: Partial<Parameters<typeof parseCompositeActionInputs>[0]> = {}) {
   return {
     backend: 'pi',
@@ -24,7 +22,6 @@ function validInputs(overrides: Partial<Parameters<typeof parseCompositeActionIn
     reportStyle: '',
     timeout: '',
     credentialIsolation: 'direct',
-    runnerImage: RUNNER_IMAGE,
     containerEngine: 'podman',
     artifactName: 'redline-review-1',
     artifactRetentionDays: '',
@@ -43,13 +40,13 @@ test('rejects unknown action inputs at runtime', () => {
 
 test('detects the review mode from the input selection', () => {
   assert.equal(reviewMode(validInputs() as Record<string, unknown> & Parameters<typeof reviewMode>[0]), 'review');
-  const contextOnly = validInputs({ backend: '', modelConfig: '', modelAuth: '', runnerImage: '' }) as Record<string, unknown> &
+  const contextOnly = validInputs({ backend: '', modelConfig: '', modelAuth: '' }) as Record<string, unknown> &
     Parameters<typeof reviewMode>[0];
   assert.equal(reviewMode(contextOnly), 'context-only');
   const partial = validInputs({ modelAuth: '' }) as Record<string, unknown> & Parameters<typeof reviewMode>[0];
   assert.match(
     thrownMessage(() => reviewMode(partial)),
-    /requires backend, model-config, model-auth, and runner-image together/u,
+    /requires backend, model-config, and model-auth together/u,
   );
 });
 
@@ -58,7 +55,6 @@ test('validates standalone inputs in context-only mode', () => {
     backend: '',
     modelConfig: '',
     modelAuth: '',
-    runnerImage: '',
     timeout: '2h',
     artifactRetentionDays: '10',
   });
@@ -67,7 +63,7 @@ test('validates standalone inputs in context-only mode', () => {
   assert.equal(parsed.artifactRetentionDays, 10);
   assert.throws(() =>
     parseContextOnlyInputs(
-      validInputs({ backend: '', modelConfig: '', modelAuth: '', runnerImage: '', findingScope: 'everything' }) as Record<
+      validInputs({ backend: '', modelConfig: '', modelAuth: '', findingScope: 'everything' }) as Record<
         string,
         unknown
       > & Parameters<typeof parseContextOnlyInputs>[0],
@@ -91,7 +87,6 @@ function contextOnlyInputs(overrides: Partial<Parameters<typeof parseContextOnly
     reportStyle: '',
     timeout: '',
     credentialIsolation: '',
-    runnerImage: '',
     containerEngine: 'podman',
     artifactName: 'redline-review-1',
     artifactRetentionDays: '',
@@ -101,7 +96,7 @@ function contextOnlyInputs(overrides: Partial<Parameters<typeof parseContextOnly
 
 test('rejects partial review selections', () => {
   assert.throws(() => parseCompositeActionInputs(validInputs({ modelAuth: '' })));
-  assert.throws(() => parseCompositeActionInputs(validInputs({ runnerImage: '' })));
+  assert.throws(() => parseCompositeActionInputs(validInputs({ backend: '' })));
   assert.equal(reviewMode(contextOnlyInputs()), 'context-only');
 });
 
@@ -124,7 +119,7 @@ test('parses the documented defaults', () => {
   assert.deepEqual(parsed.configuration.findingScope, 'defects');
   assert.deepEqual(parsed.configuration.reportStyle, 'single-block');
   assert.deepEqual(parsed.credential, { provider: 'openrouter', value: 'selected-secret' });
-  assert.equal(parsed.runnerImage, RUNNER_IMAGE);
+  assert.match(parsed.runnerImage, /@sha256:[a-f0-9]{64}$/u);
 });
 
 test('parses duration and enum overrides', () => {
@@ -165,7 +160,7 @@ test('rejects malformed timeouts and bound violations', () => {
 test('rejects missing model-auth and unknown credential providers', () => {
   assert.match(
     thrownMessage(() => parseCompositeActionInputs(validInputs({ modelAuth: '' }))),
-    /requires backend, model-config, model-auth, and runner-image together/u,
+    /requires backend, model-config, and model-auth together/u,
   );
   assert.match(
     thrownMessage(() => parseCompositeActionInputs(validInputs({ modelAuth: '{}' }))),
@@ -173,18 +168,12 @@ test('rejects missing model-auth and unknown credential providers', () => {
   );
 });
 
-test('rejects non-digest-pinned runner images', () => {
-  for (const runnerImage of [
-    'ghcr.io/dragoscirjan/redline-pi:latest',
-    'ghcr.io/dragoscirjan/redline-pi',
-    'ghcr.io/dragoscirjan/redline-pi@sha256:' + 'g'.repeat(64),
-    'ghcr.io/dragoscirjan/redline-pi@sha256:' + 'a'.repeat(64) + ':latest',
-  ]) {
-    assert.throws(() => parseCompositeActionInputs(validInputs({ runnerImage })));
-  }
+test('rejects the removed runner-image input', () => {
+  const extended = validInputs() as Record<string, string>;
+  extended.runnerImage = 'ghcr.io/dragoscirjan/redline-pi@sha256:' + 'a'.repeat(64);
   assert.match(
-    thrownMessage(() => parseCompositeActionInputs(validInputs({ runnerImage: '' }))),
-    /requires backend, model-config, model-auth, and runner-image together/u,
+    thrownMessage(() => parseCompositeActionInputs(extended as Parameters<typeof parseCompositeActionInputs>[0])),
+    /unknown action input: runnerImage/u,
   );
 });
 

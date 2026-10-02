@@ -6,7 +6,7 @@ on:
   workflow_call:
     inputs:
       backend:
-        description: Review backend, pi or opencode. Required together with model-config, model-auth, and runner-image to enable review execution.
+        description: Review backend, pi or opencode. Required together with model-config and model-auth to enable review execution. Also selects the pinned runner image.
         required: false
         type: string
         default: ""
@@ -32,11 +32,6 @@ on:
         default: 30m
       credential-isolation:
         description: Credential isolation mode. Only direct is supported; required explicitly when review execution is enabled.
-        required: false
-        type: string
-        default: ""
-      runner-image:
-        description: Digest-pinned runner image reference ending in @sha256:<hex>. Required together with backend and model-config to enable review execution.
         required: false
         type: string
         default: ""
@@ -118,7 +113,6 @@ jobs:
           report-style: ${{ inputs.report-style }}
           timeout: ${{ inputs.timeout }}
           credential-isolation: ${{ inputs.credential-isolation }}
-          runner-image: ${{ inputs.runner-image }}
           container-engine: ${{ inputs.container-engine }}
           artifact-name: ${{ inputs.artifact-name }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

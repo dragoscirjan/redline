@@ -33,7 +33,6 @@ export interface ActionEnvironment {
   readonly reportStyle: string;
   readonly timeout: string;
   readonly credentialIsolation: string;
-  readonly runnerImage: string;
   readonly containerEngine: string;
   readonly artifactName: string;
   readonly artifactRetentionDays: string;
@@ -66,7 +65,6 @@ const ACTION_ENVIRONMENT_KEYS = [
   'reportStyle',
   'timeout',
   'credentialIsolation',
-  'runnerImage',
   'containerEngine',
   'artifactName',
   'artifactRetentionDays',
@@ -88,7 +86,6 @@ const ACTION_ENVIRONMENT_VARIABLES: Record<(typeof ACTION_ENVIRONMENT_KEYS)[numb
   reportStyle: 'REDLINE_REPORT_STYLE',
   timeout: 'REDLINE_TIMEOUT',
   credentialIsolation: 'REDLINE_CREDENTIAL_ISOLATION',
-  runnerImage: 'REDLINE_RUNNER_IMAGE',
   containerEngine: 'REDLINE_CONTAINER_ENGINE',
   artifactName: 'REDLINE_ARTIFACT_NAME',
   artifactRetentionDays: 'REDLINE_ARTIFACT_RETENTION_DAYS',
@@ -135,7 +132,6 @@ export function actionEnvironmentFromProcess(environment: NodeJS.ProcessEnv): Ac
     reportStyle: environment.REDLINE_REPORT_STYLE ?? '',
     timeout: environment.REDLINE_TIMEOUT ?? '',
     credentialIsolation: environment.REDLINE_CREDENTIAL_ISOLATION ?? '',
-    runnerImage: environment.REDLINE_RUNNER_IMAGE ?? '',
     containerEngine: environment.REDLINE_CONTAINER_ENGINE ?? '',
     artifactName: environment.REDLINE_ARTIFACT_NAME ?? '',
     artifactRetentionDays: environment.REDLINE_ARTIFACT_RETENTION_DAYS ?? '',
@@ -171,7 +167,6 @@ export function parseActionEnvironment(environment: ActionEnvironment): ParsedAc
     reportStyle: get('reportStyle'),
     timeout: get('timeout'),
     credentialIsolation: get('credentialIsolation'),
-    runnerImage: get('runnerImage'),
     containerEngine: get('containerEngine'),
     artifactName: get('artifactName'),
     artifactRetentionDays: get('artifactRetentionDays'),

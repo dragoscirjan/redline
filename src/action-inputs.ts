@@ -1,6 +1,6 @@
-import { validateDigestPinnedImage } from './container-staging.js';
 import type { ContainerEngine } from './backend-process.js';
 import { parseDuration, type Duration } from './duration.js';
+import { resolveRunnerImage } from './runner-images.js';
 import {
   parseFirstRunnableReviewConfiguration,
   selectDirectModelCredential,
@@ -21,7 +21,6 @@ export interface CompositeActionInputs {
   readonly reportStyle: string;
   readonly timeout: string;
   readonly credentialIsolation: string;
-  readonly runnerImage: string;
   readonly containerEngine: string;
   readonly artifactName: string;
   readonly artifactRetentionDays: string;
@@ -35,13 +34,12 @@ const KNOWN_INPUT_KEYS: ReadonlySet<string> = new Set([
   'reportStyle',
   'timeout',
   'credentialIsolation',
-  'runnerImage',
   'containerEngine',
   'artifactName',
   'artifactRetentionDays',
 ]);
 
-const REVIEW_SELECTION_KEYS = ['backend', 'modelConfig', 'modelAuth', 'runnerImage'] as const;
+const REVIEW_SELECTION_KEYS = ['backend', 'modelConfig', 'modelAuth'] as const;
 
 export type ReviewMode = 'context-only' | 'review';
 
@@ -54,6 +52,8 @@ export interface ParsedCompositeActionInputs {
   readonly artifactName: string;
   readonly artifactRetentionDays: number;
 }
+// runnerImage is resolved from the committed backend-to-digest table, never
+// from caller input.
 
 export interface ParsedContextOnlyInputs {
   readonly timeout: Duration;
@@ -138,7 +138,7 @@ export function reviewMode(input: CompositeActionInputs & { readonly [key: strin
   const provided = REVIEW_SELECTION_KEYS.filter((key) => (input[key] as string).length > 0);
   if (provided.length === 0) return 'context-only';
   if (provided.length < REVIEW_SELECTION_KEYS.length) {
-    throw new Error('review execution requires backend, model-config, model-auth, and runner-image together');
+    throw new Error('review execution requires backend, model-config, and model-auth together');
   }
   return 'review';
 }
@@ -178,8 +178,9 @@ export function parseCompositeActionInputs(
     required(input.modelAuth, 'model-auth'),
     'model-auth',
   );
-  const runnerImage = required(input.runnerImage, 'runner-image');
-  validateDigestPinnedImage(runnerImage);
+  // The image is selected from the committed backend-to-digest table by the
+  // validated backend. Callers cannot supply their own image reference.
+  const runnerImage = resolveRunnerImage(configuration.backend);
 
   return Object.freeze({
     configuration,

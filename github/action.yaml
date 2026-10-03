@@ -177,6 +177,22 @@ runs:
         if-no-files-found: error
         retention-days: ${{ inputs.artifact-retention-days }}
 
+    # TEMPORARY diagnostic for the 403 publication failure; remove after #46.
+    - name: Diagnostic GitHub API check
+      if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        REPO: ${{ github.repository }}
+      run: |
+        set -x
+        api="https://api.github.com/repos/$REPO"
+        curl -sS -o /dev/null -w 'GET pulls: %{http_code}\n' -H "Authorization: Bearer $GH_TOKEN" -H "User-Agent: redline-review" "$api/pulls/$PR_NUMBER"
+        curl -sS -o /tmp/comments.json -w 'GET issue comments: %{http_code}\n' -H "Authorization: Bearer $GH_TOKEN" -H "User-Agent: redline-review" "$api/issues/$PR_NUMBER/comments"
+        curl -sS -o /tmp/post.json -w 'POST issue comment: %{http_code}\n' -X POST -H "Authorization: Bearer $GH_TOKEN" -H "User-Agent: redline-review" -H "Accept: application/vnd.github+json" "$api/issues/$PR_NUMBER/comments" -d '{"body":"redline diagnostic comment (temporary)"}'
+        head -c 400 /tmp/post.json; printf '\n'
+
     - name: Run review
       if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
       shell: bash

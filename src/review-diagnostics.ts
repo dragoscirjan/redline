@@ -25,6 +25,8 @@ export interface BackendDiagnosticEvent {
   readonly rejectedEvents?: number;
   /** Total accepted events. */
   readonly acceptedEvents?: number;
+  /** Narration (non-JSON) lines dropped by the stream parser. */
+  readonly proseLines?: number;
   /** Truncated tail of the raw backend stdout that never parsed. */
   readonly unparsedStdoutTail?: string;
   /** The stage that failed, for example launch, stream, publication. */

@@ -334,6 +334,7 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
             ...(firstRejectedLine.text !== undefined
               ? { firstRejectedEvent: firstRejectedLine.text }
               : {}),
+            proseLines: consumer.proseLineCount,
             rejectedEvents: protocolErrorCount,
             acceptedEvents: acceptedEventCount,
           };
@@ -411,6 +412,12 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
     }
     if (snapshot.publicationFailures.size > 0) {
       return await finalizeIncomplete(publication, 'publication-failure');
+    }
+
+    try {
+      await recordDiagnostic(journal);
+    } catch {
+      // Diagnostics are best-effort on the success path too.
     }
 
     await publication.finalize({ status: 'complete' });

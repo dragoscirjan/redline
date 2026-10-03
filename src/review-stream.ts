@@ -13,7 +13,10 @@ const MAX_HARNESS_EVENT_BYTES = 1024 * 1024;
 
 export type ReviewEventParseResult =
   | { ok: true; event: ReviewEvent }
-  | { ok: false; error: Error; lineText: string };
+  | { ok: false; error: Error; lineText: string; prose: boolean };
+
+/** A harness line that is not JSON at all: model narration, not a protocol violation. */
+export class ProseLineError extends Error {}
 
 export class ReviewEventStreamParser {
   #buffer = '';
@@ -65,7 +68,9 @@ export class ReviewEventStreamParser {
       try {
         decoded = JSON.parse(line) as unknown;
       } catch {
-        throw new Error('review event line is not valid JSON');
+        // Reviewing models narrate in prose between tool calls; a line that
+        // is not JSON at all is narration, not a protocol violation.
+        throw new ProseLineError('review event line is not valid JSON (treated as narration)');
       }
       const event = parseReviewEvent(decoded);
       if (event.type === 'finding') {
@@ -80,6 +85,7 @@ export class ReviewEventStreamParser {
         ok: false,
         error: error instanceof Error ? error : new Error(String(error)),
         lineText: lineText ?? line,
+        prose: error instanceof ProseLineError,
       };
     }
   }
@@ -169,6 +175,10 @@ export type ReviewBackendOutputConsumerInput =
   | { backend: 'opencode'; sink: ReviewEventSink; sessionId: string };
 
 export class ReviewBackendOutputConsumer {
+  #proseLines = 0;
+  get proseLineCount(): number {
+    return this.#proseLines;
+  }
   readonly #backend: 'pi' | 'opencode';
   readonly #sink: ReviewEventSink;
   readonly #sessionId: string | undefined;
@@ -212,6 +222,10 @@ export class ReviewBackendOutputConsumer {
     const errors: unknown[] = [];
     for (const result of results) {
       if (!result.ok) {
+        if (result.prose) {
+          this.#proseLines += 1;
+          continue;
+        }
         errors.push(new Error(`${result.error.message} [line: ${result.lineText.slice(0, 512)}]`));
         continue;
       }

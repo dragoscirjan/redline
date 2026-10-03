@@ -402,18 +402,33 @@ test('journals structured backend diagnostics with exit detail and summary detai
   });
 });
 
-test('persists valid sibling events but fails a malformed backend stream', async () => {
+test('drops narration, rejects schema violations, and persists valid siblings', async () => {
   await withBundle(async (fixture) => {
     const publisher = new FakePublisher();
     const text = [
-      '{bad}',
+      'I will now inspect the manifest.',
       JSON.stringify(findingEvent()),
       JSON.stringify(completionEvent('findings')),
     ].join('\n') + '\n';
     const launcher = new FakeLauncher(new FakeRunningBackend({ stdout: [`${piDelta(text)}\n`] }));
     const result = await runReview(runInput(fixture, publisher, launcher));
+    assert.deepEqual(result, { status: 'complete', outcome: 'findings' });
+    const journal = await readFile(join(fixture.root, 'journal.jsonl'), 'utf8');
+    assert.match(journal, /finding-accepted/u);
+    assert.match(journal, /backend-diagnostic/u);
+  });
+});
+
+test('fails the run when a line is valid JSON but violates the event schema', async () => {
+  await withBundle(async (fixture) => {
+    const publisher = new FakePublisher();
+    const text = [
+      JSON.stringify({ ...findingEvent(), bogus: true }),
+      JSON.stringify(completionEvent('findings')),
+    ].join('\n') + '\n';
+    const launcher = new FakeLauncher(new FakeRunningBackend({ stdout: [`${piDelta(text)}\n`] }));
+    const result = await runReview(runInput(fixture, publisher, launcher));
     assert.deepEqual(result, { status: 'incomplete', reason: 'backend-failure' });
-    assert.match(await readFile(join(fixture.root, 'journal.jsonl'), 'utf8'), /finding-accepted/u);
   });
 });
 

@@ -61,11 +61,24 @@ run = [
   "mise run lint:check",
   "mise run typecheck",
   "mise run test",
+  "mise run docs",
   "mise run evaluation",
   "mise run duplicate-check",
   "mise run audit",
   "mise run build",
 ]
+
+[tasks.docs]
+description = "Build the VitePress documentation site"
+run = "pnpm run docs"
+
+[tasks."docs:serve"]
+description = "Serve the VitePress documentation site locally"
+run = "pnpm run serve"
+
+[tasks."docs:preview"]
+description = "Preview the built VitePress documentation site"
+run = "pnpm run docs:preview"
 
 [tasks."deps:sync"]
 description = "Install mise tools and project dependencies"

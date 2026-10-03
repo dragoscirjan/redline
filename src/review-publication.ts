@@ -23,7 +23,10 @@ export interface ReviewForgePublisher {
   publishInline(scope: ReviewRunScope, publication: InlinePublication): Promise<number>;
 }
 
-export type EventReceipt = FindingReceipt | { accepted: true; completion: true };
+export type EventReceipt =
+  | FindingReceipt
+  | { accepted: true; completion: true }
+  | { accepted: false; rejected: true };
 
 function summaryMarker(scope: ReviewRunScope): string {
   return `<!-- redline:summary:v1 repository=${encodeURIComponent(scope.repository)} pr=${scope.pullRequest} -->`;
@@ -131,6 +134,7 @@ export function renderFinalSummary(snapshot: ReviewJournalSnapshot, completion: 
 }
 
 export class ReviewPublicationService {
+  #rejectedCount = 0;
   readonly #validator: ReviewFindingValidator;
   readonly #journal: ReviewJournal;
   readonly #publisher: ReviewForgePublisher;
@@ -168,7 +172,22 @@ export class ReviewPublicationService {
       return { accepted: true, completion: true };
     }
 
-    const finding = this.#validator.validateFinding(event.finding);
+    let finding: ValidatedFinding;
+    try {
+      finding = this.#validator.validateFinding(event.finding);
+    } catch (reason) {
+      // The coordinator contract expects host rejection of invalid findings
+      // with no retry; the run continues and the journal records why.
+      const message = reason instanceof Error ? reason.message : String(reason);
+      const candidate = event.finding as { path?: unknown; line?: unknown } | undefined;
+      const identifier =
+        typeof candidate?.path === 'string' && typeof candidate?.line === 'number'
+          ? `${candidate.path}:${candidate.line}`
+          : `unidentified-${this.#rejectedCount}`;
+      this.#rejectedCount += 1;
+      await this.#journal.recordFindingRejected(identifier, message.slice(0, 1024));
+      return { accepted: false, rejected: true };
+    }
     const receipt = await this.#journal.recordFinding(finding);
     if (!receipt.duplicate && this.#scope.reportStyle === 'inline') {
       await this.#publishInline(finding);

@@ -166,7 +166,12 @@ async function finalizeIncomplete(
       // Journal diagnostics are best-effort; the incomplete outcome matters more.
     }
   }
-  const message = detail !== undefined && detail.length > 0 ? `${fixedMessage(reason)} Detail: ${detail}` : fixedMessage(reason);
+  // The publication message is capped at 500 characters by the schema; keep
+  // the full detail on stderr and in the journal, and truncate here.
+  const message =
+    detail !== undefined && detail.length > 0
+      ? `${fixedMessage(reason)} Detail: ${[...detail].slice(0, 200).join('')}...`
+      : fixedMessage(reason);
   await publication.finalize({ status: 'incomplete', reason, message });
   return { status: 'incomplete', reason };
 }
@@ -281,13 +286,19 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
       return await finalizeIncomplete(publication, 'backend-failure');
     }
     let protocolErrorCount = 0;
+    let acceptedEventCount = 0;
     const firstProtocolError: { message?: string } = {};
+    const firstRejectedLine: { text?: string } = {};
     const consumeLine = async (line: string): Promise<void> => {
       try {
         await consumer.pushHarnessLine(line);
+        acceptedEventCount += 1;
       } catch (error) {
         if (firstProtocolError.message === undefined) {
           firstProtocolError.message = error instanceof Error ? error.message : String(error);
+        }
+        if (firstRejectedLine.text === undefined) {
+          firstRejectedLine.text = boundedDiagnosticText(line, 'rejected harness line').slice(0, 8192);
         }
         protocolErrorCount = Math.min(protocolErrorCount + 1, MAX_PROTOCOL_ERRORS);
       }
@@ -315,6 +326,11 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
             ...(firstProtocolError.message !== undefined
               ? { firstProtocolError: firstProtocolError.message }
               : {}),
+            ...(firstRejectedLine.text !== undefined
+              ? { firstRejectedEvent: firstRejectedLine.text }
+              : {}),
+            rejectedEvents: protocolErrorCount,
+            acceptedEvents: acceptedEventCount,
           };
           return journal.recordDiagnostic(event);
         })
@@ -371,7 +387,12 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
       if (firstProtocolError.message !== undefined) {
         details.push(`first protocol error: ${firstProtocolError.message}`);
       }
-      if (protocolErrorCount > 0) details.push(`protocol errors: ${protocolErrorCount}`);
+      if (protocolErrorCount > 0) {
+        details.push(`protocol errors: ${protocolErrorCount}, accepted events: ${acceptedEventCount}`);
+        if (firstRejectedLine.text !== undefined) {
+          details.push(`first rejected line: ${firstRejectedLine.text.slice(0, 400)}`);
+        }
+      }
       return await finalizeIncomplete(
         publication,
         'backend-failure',

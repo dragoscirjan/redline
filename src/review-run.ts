@@ -335,6 +335,7 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
               ? { firstRejectedEvent: firstRejectedLine.text }
               : {}),
             proseLines: consumer.proseLineCount,
+            unsupportedEvents: consumer.unsupportedLineCount,
             rejectedEvents: protocolErrorCount,
             acceptedEvents: acceptedEventCount,
           };

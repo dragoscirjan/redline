@@ -1,0 +1,8 @@
+# Supply-chain policy and dependency overrides for this single-package repo.
+minimumReleaseAge: 1440
+
+overrides:
+  # rollup 4.64.0 published inside the minimum-release-age window and broke
+  # policy-verified installs (pulled in by vitepress via vite). Pin to the
+  # newest release older than the window; bump it only with a reviewed PR.
+  rollup: 4.63.6

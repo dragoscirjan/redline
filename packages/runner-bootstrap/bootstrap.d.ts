@@ -2,9 +2,10 @@ export const MAX_BOOTSTRAP_ENVELOPE_BYTES: number;
 export const OPENCODE_COORDINATOR_SESSION_ID: 'redline-coordinator';
 
 export interface BootstrapEnvelope {
-  readonly version: 1;
+  readonly version: 2;
   readonly backend: 'pi' | 'opencode';
   readonly prompt: string;
+  readonly systemPrompt: string;
   readonly model: {
     readonly provider: string;
     readonly endpoint: string;

@@ -150,6 +150,7 @@ test('creates, copies, starts, and removes locked-down resources for both engine
       const running = await launcher.start({
         backend: scenario.backend,
         prompt: 'trusted prompt',
+        systemPrompt: 'fixed review policy',
         signal: new AbortController().signal,
       });
 
@@ -233,7 +234,9 @@ test('creates, copies, starts, and removes locked-down resources for both engine
 
       const envelope = JSON.parse(capture.envelope as string) as Record<string, unknown>;
       assert.equal(envelope.backend, scenario.backend);
+      assert.equal(envelope.version, 2);
       assert.equal(envelope.prompt, 'trusted prompt');
+      assert.equal(envelope.systemPrompt, 'fixed review policy');
       assert.match(capture.envelope as string, /selected-secret/u);
       assert.doesNotMatch(capture.envelope as string, /unused-secret|GH_TOKEN/u);
       assert.doesNotMatch(JSON.stringify(engineClient.calls), /selected-secret|unused-secret|GH_TOKEN/u);
@@ -279,7 +282,7 @@ test('removes owned resources after copy or backend-launch failure', async () =>
         },
       );
       await assert.rejects(
-        launcher.start({ backend: 'pi', prompt: 'prompt', signal: new AbortController().signal }),
+        launcher.start({ backend: 'pi', prompt: 'prompt', systemPrompt: 'fixed policy', signal: new AbortController().signal }),
       );
       assert.equal(capture.starts, 0);
       const cleanup = engineClient.calls.slice(scenario.cleanupStart);
@@ -314,7 +317,7 @@ test('never removes resources when volume creation did not succeed', async () =>
     );
 
     await assert.rejects(
-      launcher.start({ backend: 'pi', prompt: 'prompt', signal: new AbortController().signal }),
+      launcher.start({ backend: 'pi', prompt: 'prompt', systemPrompt: 'fixed policy', signal: new AbortController().signal }),
     );
     assert.deepEqual(
       engineClient.calls.map((call) => `${call.arguments[0]} ${call.arguments[1] ?? ''}`.trim()),
@@ -359,7 +362,7 @@ test('reconciles a marker-matched volume after ambiguous volume creation', async
     );
 
     await assert.rejects(
-      launcher.start({ backend: 'pi', prompt: 'prompt', signal: new AbortController().signal }),
+      launcher.start({ backend: 'pi', prompt: 'prompt', systemPrompt: 'fixed policy', signal: new AbortController().signal }),
       /interrupted/u,
     );
     assert.deepEqual(
@@ -416,7 +419,7 @@ test('reconciles and removes a marker-matched container after ambiguous create f
     );
 
     await assert.rejects(
-      launcher.start({ backend: 'pi', prompt: 'prompt', signal: new AbortController().signal }),
+      launcher.start({ backend: 'pi', prompt: 'prompt', systemPrompt: 'fixed policy', signal: new AbortController().signal }),
       /interrupted/u,
     );
     assert.deepEqual(
@@ -452,6 +455,7 @@ test('removes an owned container once after stop or kill', async () => {
       const running = await launcher.start({
         backend: 'pi',
         prompt: 'prompt',
+        systemPrompt: 'fixed policy',
         signal: new AbortController().signal,
       });
 
@@ -498,7 +502,7 @@ test('fails before engine execution for mutable images, backend mismatches, and 
       { engineClient },
     );
     await assert.rejects(
-      launcher.start({ backend: 'opencode', prompt: 'prompt', signal: new AbortController().signal }),
+      launcher.start({ backend: 'opencode', prompt: 'prompt', systemPrompt: 'fixed policy', signal: new AbortController().signal }),
       /does not match/u,
     );
     assert.equal(engineClient.calls.length, 0);
@@ -518,7 +522,7 @@ test('fails before engine execution for mutable images, backend mismatches, and 
     const abort = new AbortController();
     abort.abort();
     await assert.rejects(
-      cancelledLauncher.start({ backend: 'pi', prompt: 'prompt', signal: abort.signal }),
+      cancelledLauncher.start({ backend: 'pi', prompt: 'prompt', systemPrompt: 'fixed policy', signal: abort.signal }),
       /cancelled/u,
     );
     assert.equal(cancelledEngine.calls.length, 0);

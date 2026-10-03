@@ -242,15 +242,17 @@ class FakeRunningBackend implements RunningReviewBackend {
 class FakeLauncher implements ReviewBackendLauncher {
   starts = 0;
   prompt = '';
+  systemPrompt = '';
   readonly #running: FakeRunningBackend;
 
   constructor(running: FakeRunningBackend) {
     this.#running = running;
   }
 
-  async start(input: { prompt: string }): Promise<RunningReviewBackend> {
+  async start(input: { prompt: string; systemPrompt: string }): Promise<RunningReviewBackend> {
     this.starts += 1;
     this.prompt = input.prompt;
+    this.systemPrompt = input.systemPrompt;
     return this.#running;
   }
 }
@@ -348,9 +350,9 @@ test('executeAction runs the review with controlled publisher and launcher', asy
     assert.equal(launcher.starts, 1);
     assert.match(publisher.summaries.at(-1) as string, /Review completed with findings/u);
     assert.equal(publisher.inline.length, 1);
-    assert.match(launcher.prompt, /"findingScope": "defects"/u);
-    assert.match(launcher.prompt, /"reportStyle": "inline"/u);
-    assert.doesNotMatch(launcher.prompt, /selected-secret/u);
+    assert.match(launcher.systemPrompt, /"findingScope": "defects"/u);
+    assert.match(launcher.systemPrompt, /"reportStyle": "inline"/u);
+    assert.doesNotMatch(launcher.prompt + launcher.systemPrompt, /selected-secret|token-sentinel/u);
     const journal = await readFile(parsed.journalPath, 'utf8');
     assert.match(journal, /"type":"run"/u);
     assert.doesNotMatch(journal, /selected-secret/u);

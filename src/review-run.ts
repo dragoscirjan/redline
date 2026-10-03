@@ -218,7 +218,7 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
     policyId: REVIEW_PROMPT_ID,
     policyDigest: prompt.policyDigest,
   };
-  const validator = await ReviewFindingValidator.create(bundle, input.findingScope);
+  const validator = await ReviewFindingValidator.create(bundle, input.findingScope, prompt.omittedFileIds);
   const journal = await ReviewJournal.create(input.journalPath, scope);
   let primaryFailure = false;
 
@@ -236,6 +236,7 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
     const launchPromise = input.launcher.start({
       backend: input.backend,
       prompt: prompt.prompt,
+      systemPrompt: prompt.systemPrompt,
       signal: launchAbort.signal,
     });
     const launchOutcome = await Promise.race([
@@ -286,13 +287,13 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
       return await finalizeIncomplete(publication, 'backend-failure');
     }
     let protocolErrorCount = 0;
-    let acceptedEventCount = 0;
+    let consumedHarnessLineCount = 0;
     const firstProtocolError: { message?: string } = {};
     const firstRejectedLine: { text?: string } = {};
     const consumeLine = async (line: string): Promise<void> => {
       try {
         await consumer.pushHarnessLine(line);
-        acceptedEventCount += 1;
+        consumedHarnessLineCount += 1;
       } catch (error) {
         if (firstProtocolError.message === undefined) {
           if (error instanceof AggregateError && error.errors.length > 0) {
@@ -324,10 +325,15 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
     void stdoutPromise.catch(() => undefined);
     void stderrPromise.catch(() => undefined);
     const recordDiagnostic = (journal: ReviewJournal): Promise<void> =>
-      Promise.all([stderrPromise, stdoutPromise])
-        .then(([diagnostic]) => {
+      Promise.all([stderrPromise, stdoutPromise, waitPromise])
+        .then(([diagnostic, , exit]) => {
           const event: BackendDiagnosticEvent = {
             stderr: boundedDiagnosticText(diagnostic.text, 'backend stderr'),
+            exitCode: exit.code,
+            exitSignal: exit.signal,
+            validatedFindings: journal.snapshot().findings.length,
+            completionReceived: journal.snapshot().completion !== undefined,
+            ...(consumer.terminalFailure ? { failureReason: consumer.terminalFailure } : {}),
             ...(firstProtocolError.message !== undefined
               ? { firstProtocolError: firstProtocolError.message }
               : {}),
@@ -337,7 +343,7 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
             proseLines: consumer.proseLineCount,
             unsupportedEvents: consumer.unsupportedLineCount,
             rejectedEvents: protocolErrorCount,
-            acceptedEvents: acceptedEventCount,
+            consumedHarnessLines: consumedHarnessLineCount,
             ...(consumer.firstProseLine !== undefined
               ? { firstProseLine: consumer.firstProseLine }
               : {}),
@@ -382,6 +388,7 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
       exit.code !== 0 ||
       exit.signal !== null ||
       protocolErrorCount > 0 ||
+      consumer.terminalFailure !== undefined ||
       !snapshot.completion
     ) {
       const details: string[] = [];
@@ -394,11 +401,13 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
           `controller error: ${terminal.error instanceof Error ? terminal.error.message : String(terminal.error)}`,
         );
       }
+      if (consumer.terminalFailure !== undefined) details.push(consumer.terminalFailure);
+      if (!snapshot.completion) details.push('missing validated completion event');
       if (firstProtocolError.message !== undefined) {
         details.push(`first protocol error: ${firstProtocolError.message}`);
       }
       if (protocolErrorCount > 0) {
-        details.push(`protocol errors: ${protocolErrorCount}, accepted events: ${acceptedEventCount}`);
+        details.push(`protocol errors: ${protocolErrorCount}, consumed harness lines: ${consumedHarnessLineCount}`);
         if (firstRejectedLine.text !== undefined) {
           details.push(`first rejected line: ${firstRejectedLine.text.slice(0, 400)}`);
         }

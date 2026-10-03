@@ -271,29 +271,43 @@ export class ReviewFindingValidator {
   readonly #files: Map<string, { manifest: ReviewManifestFile; changed: ChangedLines }>;
   readonly #fileIds: Set<string>;
   readonly #findingScope: FindingScope;
+  readonly #omittedFileIds: Set<string>;
 
   private constructor(
     files: Map<string, { manifest: ReviewManifestFile; changed: ChangedLines }>,
     findingScope: FindingScope,
+    omittedFileIds: readonly string[],
   ) {
     this.#files = files;
     this.#fileIds = new Set(files.keys());
     this.#findingScope = findingScope;
+    this.#omittedFileIds = new Set([
+      ...omittedFileIds,
+      ...[...files.values()].filter((file) => file.manifest.binary).map((file) => file.manifest.id),
+    ]);
+    for (const id of this.#omittedFileIds) {
+      if (!this.#fileIds.has(id)) throw new Error('omitted evidence contains an unknown file id');
+    }
   }
 
-  static async create(bundle: ReviewBundle, findingScope: FindingScope): Promise<ReviewFindingValidator> {
+  static async create(
+    bundle: ReviewBundle,
+    findingScope: FindingScope,
+    omittedFileIds: readonly string[] = [],
+  ): Promise<ReviewFindingValidator> {
     const files = new Map<string, { manifest: ReviewManifestFile; changed: ChangedLines }>();
     for (const manifest of bundle.manifest.files) {
       const diff = await readFile(`${bundle.root}/${manifest.diffFile}`, 'utf8');
       files.set(manifest.id, { manifest, changed: parseChangedLines(diff, manifest.diffFile) });
     }
-    return new ReviewFindingValidator(files, findingScope);
+    return new ReviewFindingValidator(files, findingScope, omittedFileIds);
   }
 
   validateFinding(finding: ReviewFinding): ValidatedFinding {
     const file = this.#files.get(finding.fileId);
     if (!file) throw new Error('finding.fileId is not present in the review manifest');
     if (file.manifest.binary) throw new Error('finding cannot target a binary diff');
+    if (this.#omittedFileIds.has(finding.fileId)) throw new Error('finding diff was omitted from model-visible evidence');
     if (this.#findingScope === 'defects' && finding.classification === 'risk') {
       throw new Error('risk finding is disabled by the configured finding scope');
     }
@@ -317,6 +331,7 @@ export class ReviewFindingValidator {
     }
     for (const fileId of reviewed) {
       if (!this.#fileIds.has(fileId)) throw new Error('completion coverage contains an unknown reviewed file id');
+      if (this.#omittedFileIds.has(fileId)) throw new Error('completion claims reviewed coverage for an omitted diff');
       if (omitted.has(fileId)) throw new Error('completion coverage reviewed and omitted sets overlap');
     }
     for (const fileId of omitted) {

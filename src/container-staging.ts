@@ -57,9 +57,10 @@ interface ContainerStagingDependencies {
 }
 
 interface BootstrapEnvelope {
-  version: 1;
+  version: 2;
   backend: 'pi' | 'opencode';
   prompt: string;
+  systemPrompt: string;
   model: {
     provider: string;
     endpoint: string;
@@ -205,11 +206,13 @@ function runtimeCreateArguments(
 function serializeBootstrapEnvelope(
   input: ContainerStagingInput,
   prompt: string,
+  systemPrompt: string,
 ): string {
   const envelope: BootstrapEnvelope = {
-    version: 1,
+    version: 2,
     backend: input.configuration.backend,
     prompt,
+    systemPrompt,
     model: {
       provider: input.configuration.model.provider,
       endpoint: input.configuration.model.endpoint,
@@ -371,7 +374,7 @@ export function createContainerStagingLauncher(
       }
       if (launchInput.signal.aborted) throw new Error('container staging was cancelled');
 
-      const bootstrapEnvelope = serializeBootstrapEnvelope(input, launchInput.prompt);
+      const bootstrapEnvelope = serializeBootstrapEnvelope(input, launchInput.prompt, launchInput.systemPrompt);
       const [reviewDirectory, sourceDirectory] = await Promise.all([
         checkedDirectory(input.reviewDirectory, 'review directory'),
         checkedDirectory(input.sourceDirectory, 'source directory'),

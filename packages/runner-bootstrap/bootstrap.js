@@ -52,13 +52,16 @@ export function parseBootstrapEnvelope(serialized, expectedBackend) {
     throw new Error('bootstrap envelope must be valid JSON');
   }
   if (!isRecord(parsed)) throw new Error('bootstrap envelope must be a JSON object');
-  exactKeys(parsed, ['version', 'backend', 'prompt', 'model'], 'bootstrap envelope');
-  if (parsed.version !== 1) throw new Error('bootstrap envelope version is unsupported');
+  exactKeys(parsed, ['version', 'backend', 'prompt', 'systemPrompt', 'model'], 'bootstrap envelope');
+  if (parsed.version !== 2) throw new Error('bootstrap envelope version is unsupported');
   if ((expectedBackend !== 'pi' && expectedBackend !== 'opencode') || parsed.backend !== expectedBackend) {
     throw new Error('bootstrap backend does not match the runner image');
   }
   if (typeof parsed.prompt !== 'string' || parsed.prompt.length === 0 || parsed.prompt.includes('\0')) {
     throw new Error('bootstrap prompt is invalid');
+  }
+  if (typeof parsed.systemPrompt !== 'string' || parsed.systemPrompt.length === 0 || parsed.systemPrompt.includes('\0')) {
+    throw new Error('bootstrap system policy is invalid');
   }
   if (!isRecord(parsed.model)) throw new Error('bootstrap model must be a JSON object');
   exactKeys(parsed.model, ['provider', 'endpoint', 'model', 'credential'], 'bootstrap model');
@@ -82,9 +85,10 @@ export function parseBootstrapEnvelope(serialized, expectedBackend) {
     throw new Error('bootstrap endpoint is unsupported');
   }
   return Object.freeze({
-    version: 1,
+    version: 2,
     backend: expectedBackend,
     prompt: parsed.prompt,
+    systemPrompt: parsed.systemPrompt,
     model: Object.freeze({ provider, endpoint: endpoint.toString(), model, credential }),
   });
 }
@@ -96,6 +100,7 @@ export function buildPiRuntime(envelope) {
     directories: [agentDirectory, `${RUN_ROOT}/tmp`],
     files: [
       { path: `${agentDirectory}/settings.json`, content: '{}\n' },
+      { path: `${agentDirectory}/review-policy.txt`, content: envelope.systemPrompt },
       {
         path: `${agentDirectory}/models.json`,
         content: `${JSON.stringify({
@@ -122,6 +127,8 @@ export function buildPiRuntime(envelope) {
       '--no-themes',
       '--no-context-files',
       '--no-approve',
+      '--system-prompt',
+      `${agentDirectory}/review-policy.txt`,
       '--provider',
       envelope.model.provider,
       '--model',
@@ -178,6 +185,13 @@ export function buildOpenCodeRuntime(envelope) {
             },
           },
           permission: { '*': 'deny' },
+          agent: {
+            'redline-review': {
+              mode: 'primary',
+              prompt: envelope.systemPrompt,
+              permission: { '*': 'deny' },
+            },
+          },
         })}\n`,
       },
       {
@@ -198,6 +212,8 @@ export function buildOpenCodeRuntime(envelope) {
       '--model',
       `${envelope.model.provider}/${envelope.model.model}`,
       '--title',
+      'redline-review',
+      '--agent',
       'redline-review',
     ],
     environment: {

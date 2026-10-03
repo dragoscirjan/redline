@@ -26,6 +26,7 @@ export interface ReviewBackendLauncher {
   start(input: {
     backend: ReviewBackend;
     prompt: string;
+    systemPrompt: string;
     signal: AbortSignal;
   }): Promise<RunningReviewBackend>;
 }

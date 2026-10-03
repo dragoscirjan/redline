@@ -17,9 +17,10 @@ const {
 
 function serializedEnvelope(backend: 'pi' | 'opencode', overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
-    version: 1,
+    version: 2,
     backend,
-    prompt: 'trusted review prompt',
+    prompt: 'untrusted review evidence',
+    systemPrompt: 'fixed review system policy',
     model: {
       provider: 'private-provider',
       endpoint: 'https://models.example.test/v1',
@@ -45,6 +46,8 @@ test('builds a minimal Pi runtime for the pinned CLI contract', () => {
     '--no-themes',
     '--no-context-files',
     '--no-approve',
+    '--system-prompt',
+    '/tmp/redline/run/pi/review-policy.txt',
     '--provider',
     'private-provider',
     '--model',
@@ -54,6 +57,8 @@ test('builds a minimal Pi runtime for the pinned CLI contract', () => {
   const settings = JSON.parse(plan.files.find((file) => file.path.endsWith('/settings.json'))?.content as string);
   const models = JSON.parse(plan.files.find((file) => file.path.endsWith('/models.json'))?.content as string);
   assert.deepEqual(settings, {});
+  assert.equal(plan.files.find((file) => file.path.endsWith('/review-policy.txt'))?.content, 'fixed review system policy');
+  assert.equal(plan.prompt, 'untrusted review evidence');
   assert.deepEqual(models, {
     providers: {
       'private-provider': {
@@ -80,10 +85,15 @@ test('builds a tool-denied OpenCode runtime with the fixed report plugin', () =>
     'private-provider/review/model',
     '--title',
     'redline-review',
+    '--agent',
+    'redline-review',
   ]);
   const config = JSON.parse(plan.files[0]?.content as string);
   assert.deepEqual(config.plugin, ['file:///opt/redline/opencode/redline-report-plugin.js']);
   assert.deepEqual(config.permission, { '*': 'deny' });
+  assert.deepEqual(config.agent['redline-review'], {
+    mode: 'primary', prompt: 'fixed review system policy', permission: { '*': 'deny' },
+  });
   assert.deepEqual(config.provider, {
     'private-provider': {
       npm: '@ai-sdk/openai-compatible',
@@ -155,6 +165,12 @@ test('rejects malformed, extensible, mismatched, and control-bearing bootstrap i
     () => parseBootstrapEnvelope('x'.repeat(MAX_BOOTSTRAP_ENVELOPE_BYTES + 1), 'pi'),
     /byte limit/u,
   );
+});
+
+test('requires v2 fixed system policy and rejects legacy or missing policy envelopes', () => {
+  assert.throws(() => parseBootstrapEnvelope(serializedEnvelope('pi', { version: 1 }), 'pi'), /version is unsupported/u);
+  assert.throws(() => parseBootstrapEnvelope(serializedEnvelope('pi', { systemPrompt: '' }), 'pi'), /system policy is invalid/u);
+  assert.throws(() => parseBootstrapEnvelope(serializedEnvelope('pi', { systemPrompt: 'bad\u0000policy' }), 'pi'), /system policy is invalid/u);
 });
 
 test('runner images use the fixed bootstrap entrypoint', async () => {

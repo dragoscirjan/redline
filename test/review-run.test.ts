@@ -191,11 +191,13 @@ class FakeRunningBackend implements RunningReviewBackend {
 class FakeLauncher implements ReviewBackendLauncher {
   starts = 0;
   prompt = '';
+  systemPrompt = '';
   constructor(readonly running: FakeRunningBackend, readonly failure?: Error) {}
 
-  async start(input: { prompt: string }): Promise<RunningReviewBackend> {
+  async start(input: { prompt: string; systemPrompt: string }): Promise<RunningReviewBackend> {
     this.starts += 1;
     this.prompt = input.prompt;
+    this.systemPrompt = input.systemPrompt;
     if (this.failure) throw this.failure;
     return this.running;
   }
@@ -271,16 +273,65 @@ test('completes clean and finding reviews without treating findings as failures'
       const result = await runReview(runInput(fixture, publisher, launcher));
       assert.deepEqual(result, { status: 'complete', outcome: scenario.outcome });
       assert.equal(launcher.starts, 1);
-      assert.match(launcher.prompt, /redline-review\/v2/u);
-      assert.match(launcher.prompt, /"findingScope": "defects"/u);
-      assert.match(launcher.prompt, /"subagents": false/u);
-      assert.match(launcher.prompt, /"vulnerabilityLookupTool": null/u);
+      assert.match(launcher.systemPrompt, /redline-review\/v3/u);
+      assert.match(launcher.systemPrompt, /"findingScope": "defects"/u);
+      assert.match(launcher.systemPrompt, /"subagents": false/u);
+      assert.match(launcher.systemPrompt, /"vulnerabilityLookupTool": null/u);
+      assert.match(launcher.prompt, /\\n-old\\n\+new\\n/u);
+      assert.doesNotMatch(launcher.prompt, /# Core review policy/u);
       assert.match(launcher.prompt, /"reviewDirectory":"\/workspace\/review"/u);
       assert.match(launcher.prompt, /"sourceDirectory":"\/workspace\/source"/u);
       assert.doesNotMatch(launcher.prompt, new RegExp(fixture.root.replaceAll('\\', '\\\\'), 'u'));
       assert.match(publisher.summaries.at(-1) as string, /Review completed/u);
       const journal = await readFile(join(fixture.root, 'journal.jsonl'), 'utf8');
       if (scenario.finding) assert.match(journal, /finding-accepted/u);
+    });
+  }
+});
+
+test('fails on Pi terminal errors, aborts and length even after valid completion', async () => {
+  for (const stopReason of ['error', 'aborted', 'length', 'toolUse']) {
+    await withBundle(async (fixture) => {
+      const publisher = new FakePublisher();
+      const terminal = JSON.stringify({ type: 'message_end', message: {
+        role: 'assistant', stopReason, errorMessage: 'PROVIDER_SECRET_SENTINEL',
+      } });
+      const launcher = new FakeLauncher(new FakeRunningBackend({ stdout: [
+        ...completeOutput('findings', true), terminal + '\n',
+      ] }));
+      const result = await runReview(runInput(fixture, publisher, launcher));
+      assert.deepEqual(result, { status: 'incomplete', reason: 'backend-failure' });
+      const journal = await readFile(join(fixture.root, 'journal.jsonl'), 'utf8');
+      assert.match(journal, /Pi assistant ended with/u);
+      assert.match(journal, /"validatedFindings":1/u);
+      assert.doesNotMatch(journal + publisher.summaries.join(''), /PROVIDER_SECRET_SENTINEL/u);
+    });
+  }
+});
+
+test('accepts an explicitly successful assistant turn after a transient Pi error', async () => {
+  await withBundle(async (fixture) => {
+    const end = (stopReason: string): string => JSON.stringify({ type: 'message_end', message: { role: 'assistant', stopReason } }) + '\n';
+    const publisher = new FakePublisher();
+    const launcher = new FakeLauncher(new FakeRunningBackend({ stdout: [
+      end('error'), ...completeOutput('clean'), end('stop'),
+    ] }));
+    assert.deepEqual(await runReview(runInput(fixture, publisher, launcher)), { status: 'complete', outcome: 'clean' });
+  });
+});
+
+test('host enforces omitted evidence for findings and completion coverage', async () => {
+  for (const claimReviewed of [false, true]) {
+    await withBundle(async (fixture) => {
+      await writeFile(join(fixture.review, 'diffs/000001.diff'),
+        'diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1 +1 @@\n-old\n+new\n ' + 'x'.repeat(128 * 1024) + '\n');
+      const publisher = new FakePublisher();
+      const launcher = new FakeLauncher(new FakeRunningBackend({ stdout: completeOutput(claimReviewed ? 'clean' : 'incomplete', true) }));
+      const result = await runReview(runInput(fixture, publisher, launcher));
+      assert.deepEqual(result, { status: 'incomplete', reason: claimReviewed ? 'backend-failure' : 'coverage-incomplete' });
+      const journal = await readFile(join(fixture.root, 'journal.jsonl'), 'utf8');
+      assert.match(journal, /finding-rejected/u);
+      assert.doesNotMatch(journal, /finding-accepted/u);
     });
   }
 });

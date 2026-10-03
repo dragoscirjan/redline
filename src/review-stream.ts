@@ -202,6 +202,11 @@ export class ReviewBackendOutputConsumer {
   readonly #sink: ReviewEventSink;
   readonly #sessionId: string | undefined;
   readonly #parser = new ReviewEventStreamParser();
+  #terminalFailure: string | undefined;
+
+  get terminalFailure(): string | undefined {
+    return this.#terminalFailure;
+  }
 
   constructor(input: ReviewBackendOutputConsumerInput) {
     if (input.backend === 'opencode' && input.sessionId.length === 0) {
@@ -220,7 +225,20 @@ export class ReviewBackendOutputConsumer {
     if (this.#backend === 'pi') {
       const delta = extractPiTextDelta(line);
       if (delta !== undefined) await this.#deliver(this.#parser.push(delta));
-      else if (isPiAssistantMessageEnd(line)) await this.#deliver(this.#parser.finishSegment());
+      else if (isPiAssistantMessageEnd(line)) {
+        const event = parseHarnessEvent(line, 'Pi');
+        const message = event?.message;
+        if (isRecord(message) && typeof message.stopReason === 'string') {
+          // JSON-mode Pi may exit zero after provider failure. Retain only a
+          // fixed reason, never raw provider text that could contain a secret.
+          this.#terminalFailure = message.stopReason === 'stop'
+            ? undefined
+            : `Pi assistant ended with ${['error', 'aborted', 'length', 'toolUse'].includes(message.stopReason)
+                ? message.stopReason
+                : 'an unsupported terminal reason'}`;
+        }
+        await this.#deliver(this.#parser.finishSegment());
+      }
       return;
     }
 

@@ -80,7 +80,8 @@ async function main(): Promise<void> {
     return;
   }
   const result = await assembleReviewPrompt(options);
-  process.stdout.write(result.prompt);
+  // Human-readable preview. The controller sends these as separate roles.
+  process.stdout.write(`${result.systemPrompt}\n${result.prompt}`);
   process.stderr.write(
     `Redline review prompt: policy=${result.policyDigest} prompt=${result.promptDigest} files=${result.fileCount} base=${result.base} head=${result.head}\n`,
   );

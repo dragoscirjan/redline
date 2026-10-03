@@ -23,8 +23,11 @@ export interface BackendDiagnosticEvent {
   readonly firstRejectedEvent?: string;
   /** Total rejected events. */
   readonly rejectedEvents?: number;
-  /** Total accepted events. */
-  readonly acceptedEvents?: number;
+  /** Harness lines consumed without a protocol exception, not review findings. */
+  readonly consumedHarnessLines?: number;
+  /** Independently validated, persisted findings. */
+  readonly validatedFindings?: number;
+  readonly completionReceived?: boolean;
   /** Narration (non-JSON) lines dropped by the stream parser. */
   readonly proseLines?: number;
   /** The first dropped narration line, bounded — often the model's final prose answer. */

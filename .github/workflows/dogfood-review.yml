@@ -1,6 +1,7 @@
-# In-repo context-bundle review used before the first published release.
-# Kept separate from the reusable workflow, which requires the published
-# action tag.
+# In-repo review used by Redline's own pull requests. Review execution is
+# enabled only when the MODEL_CREDENTIALS secret is set; without it the run
+# degrades to the context bundle. Kept separate from the reusable workflow,
+# which requires the published action tag.
 name: Code review (dogfood)
 
 on:
@@ -11,6 +12,13 @@ on:
         required: false
         type: number
         default: 45
+    secrets:
+      github-token:
+        description: GitHub token used for review publication. Required only when review execution is enabled.
+        required: false
+      model-auth:
+        description: Provider-keyed credential map (JSON), bound to the MODEL_CREDENTIALS secret. Enables review execution when set.
+        required: false
 
 permissions: {}
 
@@ -19,6 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: write
     steps:
       - name: Check out trusted workflow tooling
         uses: actions/checkout@v4
@@ -45,8 +54,16 @@ jobs:
       # The local action path resolves inside Redline itself, which is exactly
       # the dogfood case. External repositories must use the reusable
       # workflow instead; ./github would resolve against their repository.
+      # Review inputs are set only when MODEL_CREDENTIALS exists, so an
+      # unconfigured repository keeps the context-only behavior.
       - name: Run Redline review context action
         uses: ./github
         with:
+          backend: ${{ secrets.model-auth != '' && 'pi' || '' }}
+          model-config: ${{ secrets.model-auth != '' && '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"provider/model-name"}' || '' }}
+          model-auth: ${{ secrets.model-auth }}
+          github-token: ${{ secrets.github-token }}
+          credential-isolation: ${{ secrets.model-auth != '' && 'direct' || '' }}
+          container-engine: docker
           artifact-name: pull-request-review-${{ github.event.pull_request.number }}-${{ github.run_id }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

@@ -151,7 +151,16 @@ function fixedMessage(reason: Extract<ReviewRunResult, { status: 'incomplete' }>
 async function finalizeIncomplete(
   publication: ReviewPublicationService,
   reason: Extract<ReviewRunResult, { status: 'incomplete' }>['reason'],
+  journal?: ReviewJournal,
+  recordDiagnostic?: (journal: ReviewJournal) => Promise<void>,
 ): Promise<ReviewRunResult> {
+  if (journal && recordDiagnostic) {
+    try {
+      await recordDiagnostic(journal);
+    } catch {
+      // Journal diagnostics are best-effort; the incomplete outcome matters more.
+    }
+  }
   await publication.finalize({ status: 'incomplete', reason, message: fixedMessage(reason) });
   return { status: 'incomplete', reason };
 }
@@ -285,6 +294,10 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
     const stderrPromise = collectBoundedDiagnostic(running.stderr);
     void stdoutPromise.catch(() => undefined);
     void stderrPromise.catch(() => undefined);
+    const recordDiagnostic = (journal: ReviewJournal): Promise<void> =>
+      stderrPromise
+        .then((diagnostic) => journal.recordDiagnostic(diagnostic.text))
+        .catch(() => undefined);
 
     const executionPromise = Promise.all([stdoutPromise, stderrPromise, waitPromise]).then(
       ([, , exit]): TerminalEvent => ({ kind: 'exit', exit }),
@@ -324,7 +337,7 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
       protocolErrorCount > 0 ||
       !snapshot.completion
     ) {
-      return await finalizeIncomplete(publication, 'backend-failure');
+      return await finalizeIncomplete(publication, 'backend-failure', journal, recordDiagnostic);
     }
     if (snapshot.completion.outcome === 'incomplete') {
       return await finalizeIncomplete(publication, 'coverage-incomplete');

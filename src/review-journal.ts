@@ -102,6 +102,15 @@ export class ReviewJournal {
     });
   }
 
+  recordDiagnostic(text: string): Promise<void> {
+    return this.#enqueue(async () => {
+      this.#assertHealthy();
+      if (byteLength(text) > 16 * 1024) throw new Error('diagnostic text exceeds its byte limit');
+      if (/\u0000/u.test(text)) throw new Error('diagnostic text contains a NUL byte');
+      await this.#append({ version: JOURNAL_VERSION, type: 'backend-diagnostic', text });
+    });
+  }
+
   recordCompletion(completion: ReviewCompletionEvent): Promise<void> {
     return this.#enqueue(async () => {
       this.#assertHealthy();

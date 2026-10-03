@@ -19,6 +19,12 @@ export interface BackendDiagnosticEvent {
   readonly exitSignal?: string | null;
   /** The first harness-protocol parse failure, if any. */
   readonly firstProtocolError?: string;
+  /** The first rejected harness event payload, bounded. */
+  readonly firstRejectedEvent?: string;
+  /** Total rejected events. */
+  readonly rejectedEvents?: number;
+  /** Total accepted events. */
+  readonly acceptedEvents?: number;
   /** Truncated tail of the raw backend stdout that never parsed. */
   readonly unparsedStdoutTail?: string;
   /** The stage that failed, for example launch, stream, publication. */

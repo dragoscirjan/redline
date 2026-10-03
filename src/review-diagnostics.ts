@@ -27,6 +27,8 @@ export interface BackendDiagnosticEvent {
   readonly acceptedEvents?: number;
   /** Narration (non-JSON) lines dropped by the stream parser. */
   readonly proseLines?: number;
+  /** Unknown event types (model chatter like progress notes) dropped. */
+  readonly unsupportedEvents?: number;
   /** Truncated tail of the raw backend stdout that never parsed. */
   readonly unparsedStdoutTail?: string;
   /** The stage that failed, for example launch, stream, publication. */

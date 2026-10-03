@@ -419,6 +419,41 @@ test('drops narration, rejects schema violations, and persists valid siblings', 
   });
 });
 
+test('drops unknown event types as chatter and completes the run', async () => {
+  await withBundle(async (fixture) => {
+    const publisher = new FakePublisher();
+    const progress = JSON.stringify({
+      version: 1,
+      type: 'progress',
+      message: 'Reading revisions.txt and manifest.json to confirm review scope.',
+    });
+    const text = [
+      progress,
+      JSON.stringify(findingEvent()),
+      JSON.stringify(completionEvent('findings')),
+    ].join('\n') + '\n';
+    const launcher = new FakeLauncher(new FakeRunningBackend({ stdout: [`${piDelta(text)}\n`] }));
+    const journalPath = join(fixture.root, 'journal.jsonl');
+    const result = await runReview(runInput(fixture, publisher, launcher, { journalPath }));
+    assert.deepEqual(result, { status: 'complete', outcome: 'findings' });
+    const journal = await readFile(journalPath, 'utf8');
+    assert.match(journal, /backend-diagnostic/u);
+    assert.match(journal, /finding-accepted/u);
+  });
+});
+
+test('a missing completion event still fails the run', async () => {
+  await withBundle(async (fixture) => {
+    const publisher = new FakePublisher();
+    const progress = JSON.stringify({ version: 1, type: 'progress', message: 'working' });
+    const typo = JSON.stringify({ version: 1, type: 'compleiton', outcome: 'findings' });
+    const text = [progress, JSON.stringify(findingEvent()), typo].join('\n') + '\n';
+    const launcher = new FakeLauncher(new FakeRunningBackend({ stdout: [`${piDelta(text)}\n`] }));
+    const result = await runReview(runInput(fixture, publisher, launcher));
+    assert.deepEqual(result, { status: 'incomplete', reason: 'backend-failure' });
+  });
+});
+
 test('drops findings that fail diff-mapping validation and completes the run', async () => {
   await withBundle(async (fixture) => {
     const publisher = new FakePublisher();

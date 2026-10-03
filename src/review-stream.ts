@@ -13,10 +13,19 @@ const MAX_HARNESS_EVENT_BYTES = 1024 * 1024;
 
 export type ReviewEventParseResult =
   | { ok: true; event: ReviewEvent }
-  | { ok: false; error: Error; lineText: string; prose: boolean };
+  | {
+      ok: false;
+      error: Error;
+      lineText: string;
+      prose: boolean;
+      unsupportedType: boolean;
+    };
 
 /** A harness line that is not JSON at all: model narration, not a protocol violation. */
 export class ProseLineError extends Error {}
+
+/** A JSON event whose type the protocol does not define: model chatter, dropped. */
+export class UnsupportedEventTypeError extends Error {}
 
 export class ReviewEventStreamParser {
   #buffer = '';
@@ -72,6 +81,15 @@ export class ReviewEventStreamParser {
         // is not JSON at all is narration, not a protocol violation.
         throw new ProseLineError('review event line is not valid JSON (treated as narration)');
       }
+      if (
+        !isRecord(decoded) ||
+        (decoded.type !== 'finding' && decoded.type !== 'completion')
+      ) {
+        // Reviewing models emit informational events (progress notes and
+        // similar) alongside the protocol; unknown types are dropped, never
+        // fatal — the completion event still gates correctness.
+        throw new UnsupportedEventTypeError('review event type is unsupported (dropped as chatter)');
+      }
       const event = parseReviewEvent(decoded);
       if (event.type === 'finding') {
         this.#findingCount += 1;
@@ -86,6 +104,7 @@ export class ReviewEventStreamParser {
         error: error instanceof Error ? error : new Error(String(error)),
         lineText: lineText ?? line,
         prose: error instanceof ProseLineError,
+        unsupportedType: error instanceof UnsupportedEventTypeError,
       };
     }
   }
@@ -218,12 +237,21 @@ export class ReviewBackendOutputConsumer {
     await this.#deliver(this.#parser.finish());
   }
 
+  #unsupportedLines = 0;
+  get unsupportedLineCount(): number {
+    return this.#unsupportedLines;
+  }
+
   async #deliver(results: readonly ReviewEventParseResult[]): Promise<void> {
     const errors: unknown[] = [];
     for (const result of results) {
       if (!result.ok) {
         if (result.prose) {
           this.#proseLines += 1;
+          continue;
+        }
+        if (result.unsupportedType) {
+          this.#unsupportedLines += 1;
           continue;
         }
         errors.push(new Error(`${result.error.message} [line: ${result.lineText.slice(0, 512)}]`));

@@ -2,7 +2,7 @@
 
 ## Development model
 
-Use GitHub Issues for defects, features, and acceptance criteria. Keep product documentation and design decisions under `docs/`, rendered with VitePress. Link implementation pull requests to relevant docs and GitHub Issues.
+Use GitHub Issues for defects, features, and acceptance criteria. Keep product documentation and design decisions under `docs/`, rendered with VitePress (`pnpm run docs` builds the site; `pnpm run serve` serves it locally during editing). Link implementation pull requests to relevant docs and GitHub Issues.
 
 The repository is in its bootstrap phase. The POC uses npm, TypeScript, esbuild, Vitest, and the shared Tempel ESLint and Prettier configurations. Mise manages tool versions and project tasks. Do not add a second package manager, task runner, formatter, or test framework without an accepted design change. Follow `package-lock.json`, `mise.toml`, and the scripts in `package.json`.
 
@@ -170,7 +170,7 @@ Update documentation in the same pull request when behavior or configuration cha
 - Keep `README.md` focused on installation, configuration, and basic use.
 - Keep contribution workflow in this file.
 - Keep instructions for coding agents in `AGENTS.md`.
-- Keep product documentation, requirements, and low-level design under `docs/`; render documentation with VitePress.
+- Keep product documentation, requirements, and low-level design under `docs/`; render documentation with VitePress. Register new pages in `docs/.vitepress/config.ts`; `pnpm run docs` runs in CI, and the site publishes under `projects/redline/` on dragoscirjan.github.io after pushes to `main`.
 - Use `.agents/skills/unslop/SKILL.md` whenever writing or editing documentation.
 - Record unsupported behavior and limitations.
 - Use concrete names, defaults, examples, and failure behavior. Avoid claims that are not backed by code or tests.

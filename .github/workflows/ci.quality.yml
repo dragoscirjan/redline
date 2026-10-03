@@ -32,6 +32,7 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm run typecheck
           pnpm test
+          pnpm run docs
 
       - name: Validate image package metadata
         shell: bash

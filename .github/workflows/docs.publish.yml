@@ -1,0 +1,57 @@
+# Builds the documentation site and publishes it under projects/redline/ in
+# the dragoscirjan.github.io repository. Copied from the neottia pattern.
+#
+# The publish job reuses the actor-owned PAT with contents:write on the pages
+# repository; a caller GITHUB_TOKEN cannot push to a different repository.
+name: Publish documentation
+
+on:
+  workflow_call: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-publish-redline
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: 24
+
+      - name: Build the documentation site
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile
+          # VitePress reads DOCS_BASE so the deployment build emits asset and
+          # navigation URLs under the pages project path; local builds keep '/'.
+          DOCS_BASE=/projects/redline/ pnpm run docs
+
+      - name: Upload the built site
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: docs-site
+          path: docs/.vitepress/dist
+
+  publish:
+    name: Publish to dragoscirjan.github.io
+    needs: build
+    uses: dragoscirjan/dragoscirjan.github.io/.github/workflows/docs.yml@main
+    with:
+      project: redline
+    secrets:
+      token: ${{ secrets.GH_TOKEN }}

@@ -8,7 +8,7 @@
 - Pi and OpenCode are supported review backends. They may use free local models or models available through OpenRouter.
 - Local model runtimes include Ollama, LM Studio, and llama.cpp. Add other runtimes through adapters.
 - Support GitHub, Forgejo, and Gitea through forge-specific action entry points and adapters. Their engines and manifest formats differ; keep shared review logic in the common core.
-- GitHub Issues hold work items and acceptance criteria. Product documentation and design documents live under `docs/` and are rendered with VitePress; use `.agents/skills/unslop/SKILL.md` whenever writing or editing documentation.
+- GitHub Issues hold work items and acceptance criteria. Product documentation and design documents live under `docs/`, rendered as a VitePress site (`docs/.vitepress/config.ts`, build with `pnpm run docs`, preview with `pnpm run serve`); register new pages in the sidebar. Use `.agents/skills/unslop/SKILL.md` whenever writing or editing documentation.
 - Read `CONTRIBUTING.md` before changing the repository.
 - Keep `AGENTS.md` and `CONTRIBUTING.md` current when the development approach changes. Before changing either file, inform the owner what needs to change and ask for permission; do not edit them until permission is granted.
 
@@ -113,5 +113,5 @@ A personal access token acts as its owner. It does not create a separate review 
 - Preserve unrelated user changes.
 - Do not merge pull requests without explicit owner approval.
 - Use Conventional Commits.
-- Update product documentation under `docs/` when behavior, security boundaries, data contracts, or adapter responsibilities change; use `.agents/skills/unslop/SKILL.md` whenever writing or editing it.
+- Update product documentation under `docs/` when behavior, security boundaries, data contracts, or adapter responsibilities change; use `.agents/skills/unslop/SKILL.md` whenever writing or editing it. New pages must be registered in `docs/.vitepress/config.ts`, and `pnpm run docs` must build before pushing.
 - State unsupported behavior and unresolved decisions directly. Do not present planned behavior as implemented behavior.

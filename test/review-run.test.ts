@@ -419,6 +419,31 @@ test('drops narration, rejects schema violations, and persists valid siblings', 
   });
 });
 
+test('drops findings that fail diff-mapping validation and completes the run', async () => {
+  await withBundle(async (fixture) => {
+    const publisher = new FakePublisher();
+    const mismatched = {
+      ...findingEvent(),
+      finding: { ...findingEvent().finding, evidence: 'totally different text' },
+    };
+    const text = [
+      JSON.stringify(mismatched),
+      JSON.stringify(findingEvent()),
+      JSON.stringify(completionEvent('findings')),
+    ].join('\n') + '\n';
+    const launcher = new FakeLauncher(new FakeRunningBackend({ stdout: [`${piDelta(text)}\n`] }));
+    const journalPath = join(fixture.root, 'journal.jsonl');
+    const result = await runReview(runInput(fixture, publisher, launcher, { journalPath }));
+    assert.deepEqual(result, { status: 'complete', outcome: 'findings' });
+    const journal = await readFile(journalPath, 'utf8');
+    assert.match(journal, /finding-rejected/u);
+    assert.match(journal, /does not match the authoritative diff line/u);
+    assert.match(journal, /finding-accepted/u);
+    // single-block style: findings publish via the summary, not inline.
+    assert.equal(publisher.inline.length, 0);
+  });
+});
+
 test('fails the run when a line is valid JSON but violates the event schema', async () => {
   await withBundle(async (fixture) => {
     const publisher = new FakePublisher();

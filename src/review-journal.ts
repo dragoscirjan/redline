@@ -42,6 +42,7 @@ export class ReviewJournal {
   readonly #findings = new Map<string, ValidatedFinding>();
   readonly #published = new Map<string, number>();
   readonly #publicationFailures = new Map<string, string>();
+  readonly #rejectedFindings = new Map<string, string>();
   #completion: ReviewCompletionEvent | undefined;
   #bytes = 0;
   #tail: Promise<void> = Promise.resolve();
@@ -114,6 +115,16 @@ export class ReviewJournal {
         if (/\u0000/u.test(String(value))) throw new Error(`diagnostic ${key} contains a NUL byte`);
       }
       await this.#append({ version: JOURNAL_VERSION, type: 'backend-diagnostic', ...event, stderr: text });
+    });
+  }
+
+  recordFindingRejected(findingId: string, reason: string): Promise<void> {
+    return this.#enqueue(async () => {
+      this.#assertHealthy();
+      if (findingId.length === 0 || byteLength(findingId) > 256) throw new Error('rejected finding id is invalid');
+      if (reason.length === 0 || byteLength(reason) > 1024) throw new Error('finding rejection reason is invalid');
+      await this.#append({ version: JOURNAL_VERSION, type: 'finding-rejected', findingId, reason });
+      this.#rejectedFindings.set(findingId, reason);
     });
   }
 

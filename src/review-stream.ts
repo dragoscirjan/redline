@@ -242,12 +242,18 @@ export class ReviewBackendOutputConsumer {
     return this.#unsupportedLines;
   }
 
+  #firstProseLine: string | undefined;
+  get firstProseLine(): string | undefined {
+    return this.#firstProseLine;
+  }
+
   async #deliver(results: readonly ReviewEventParseResult[]): Promise<void> {
     const errors: unknown[] = [];
     for (const result of results) {
       if (!result.ok) {
         if (result.prose) {
           this.#proseLines += 1;
+          this.#firstProseLine ??= result.lineText.slice(0, 2048);
           continue;
         }
         if (result.unsupportedType) {

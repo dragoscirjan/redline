@@ -27,6 +27,8 @@ export interface BackendDiagnosticEvent {
   readonly acceptedEvents?: number;
   /** Narration (non-JSON) lines dropped by the stream parser. */
   readonly proseLines?: number;
+  /** The first dropped narration line, bounded — often the model's final prose answer. */
+  readonly firstProseLine?: string;
   /** Unknown event types (model chatter like progress notes) dropped. */
   readonly unsupportedEvents?: number;
   /** Truncated tail of the raw backend stdout that never parsed. */

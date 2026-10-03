@@ -1,0 +1,15 @@
+name: Nested call test
+
+on:
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  publish:
+    name: Publish to dragoscirjan.github.io
+    uses: dragoscirjan/dragoscirjan.github.io/.github/workflows/docs.yml@main
+    with:
+      project: redline
+    secrets:
+      token: ${{ secrets.GH_TOKEN }}

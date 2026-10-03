@@ -19,7 +19,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 Replace `OWNER` and `TAG` with the GHCR owner and matching base-image tag. Set `NODE_BASE` to an approved base image digest when producing a release. `PI_VERSION` pins the CLI package version. Verify Pi's runtime and native dependency support for both architectures in Linux CI before publishing.
 
-The image runs as UID/GID 10001. It contains no checkout or credentials. MCP packages and the development settings file remain in the image, but the review bootstrap does not load that settings file. The bootstrap creates an empty settings file and a one-provider model file under `/tmp/redline/run`, then starts Pi with tools and project resource discovery disabled.
+The image runs as UID/GID 10001. It contains no checkout or credentials. MCP packages and the development settings file remain in the image, but the review bootstrap does not load that settings file. The bootstrap creates an empty settings file and a one-provider model file under `/tmp/redline/run`, then starts Pi with tools and project resource discovery disabled and project-local files ignored (`--no-approve`), because the source volume is read-only and project settings must never influence the review.
 
 The image entrypoint is `/opt/redline/bootstrap.js`. It accepts one bounded host-generated envelope through stdin and rejects arbitrary native configuration. The selected model credential remains out of process arguments and generated files. `GH_TOKEN` and the complete credential map never enter the container.
 

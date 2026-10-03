@@ -121,6 +121,7 @@ export function buildPiRuntime(envelope) {
       '--no-prompt-templates',
       '--no-themes',
       '--no-context-files',
+      '--no-approve',
       '--provider',
       envelope.model.provider,
       '--model',

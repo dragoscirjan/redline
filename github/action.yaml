@@ -177,6 +177,29 @@ runs:
         if-no-files-found: error
         retention-days: ${{ inputs.artifact-retention-days }}
 
+    # TEMPORARY diagnostic for the 403 publication failure; remove after #46.
+    - name: Diagnostic GitHub API check
+      if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        REPO: ${{ github.repository }}
+      run: |
+        api="https://api.github.com/repos/$REPO"
+        auth=(-H "Authorization: Bearer $GH_TOKEN" -H "User-Agent: redline-review" -H "Accept: application/vnd.github+json")
+        curl -sS -o /dev/null -w 'GET pulls: %{http_code}\n' "${auth[@]}" "$api/pulls/$PR_NUMBER"
+        curl -sS -o /dev/null -w 'GET issue comments: %{http_code}\n' "${auth[@]}" "$api/issues/$PR_NUMBER/comments"
+        # The POST is the failing publication call; the created diagnostic
+        # comment is deleted immediately so runs leave no residue.
+        status=$(curl -sS -o /tmp/post.json -w '%{http_code}' -X POST "${auth[@]}" "$api/issues/$PR_NUMBER/comments" -d '{"body":"redline diagnostic comment (temporary)"}')
+        printf 'POST issue comment: %s\n' "$status"
+        head -c 400 /tmp/post.json; printf '\n'
+        if [ "$status" = "201" ]; then
+          id=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("/tmp/post.json","utf8")).id)')
+          curl -sS -o /dev/null -w 'DELETE diagnostic comment: %{http_code}\n' -X DELETE "${auth[@]}" "$api/issues/comments/$id"
+        fi
+
     - name: Run review
       if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
       shell: bash

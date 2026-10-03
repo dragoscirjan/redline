@@ -75,7 +75,7 @@ The CLI writes one JSON line to stdout:
 
 ## Required permissions
 
-The calling workflow needs `contents: read` and `pull-requests: write` when the review runs, because publication posts review comments on the pull request.
+The calling workflow needs `contents: read`, `pull-requests: write`, and `issues: write` when the review runs. Publication posts the managed summary through the issue-comments endpoint and inline findings through the review-comments endpoint, so both grants are required for GITHUB_TOKEN and for personal access tokens.
 
 ## Not implemented here
 

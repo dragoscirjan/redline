@@ -20,12 +20,23 @@ interface GitHubComment {
   commit_id?: string;
 }
 
-class GitHubApiError extends Error {
-  readonly status: number;
+async function boundedErrorBody(response: Response): Promise<string | undefined> {
+  try {
+    const text = await response.text();
+    if (text.length === 0) return undefined;
+    return text.slice(0, 400).replaceAll(/[\u0000-\u001f]+/gu, ' ');
+  } catch {
+    return undefined;
+  }
+}
 
-  constructor(status: number) {
-    super(`GitHub API request failed with status ${status}`);
-    this.status = status;
+class GitHubApiError extends Error {
+  constructor(request: string, readonly status: number, detail?: string) {
+    // GitHub error bodies carry the actionable reason (for example
+    // "Resource not accessible by integration"); keep a bounded copy without
+    // risking large or irrelevant payloads.
+    const bounded = detail === undefined || detail.length === 0 ? '' : `: ${detail.slice(0, 400)}`;
+    super(`GitHub API request failed (${request}) with status ${status}${bounded}`);
   }
 }
 
@@ -215,7 +226,7 @@ export class GitHubReviewPublisher implements ReviewForgePublisher {
       response = await this.#fetch(`${API_ROOT}${path}`, { ...init, headers });
       if (expectedStatuses.includes(response.status)) break;
       if (!retrySafe || !RETRYABLE_STATUSES.has(response.status) || attempt === 2) {
-        throw new GitHubApiError(response.status);
+        throw new GitHubApiError(`${init.method ?? 'GET'} ${path}`, response.status, await boundedErrorBody(response));
       }
       const retryAfter = Number.parseInt(response.headers.get('retry-after') ?? '', 10);
       const delay = Number.isFinite(retryAfter) ? Math.min(retryAfter * 1_000, 2_000) : 100 * 2 ** attempt;

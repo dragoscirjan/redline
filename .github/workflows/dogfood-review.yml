@@ -60,7 +60,7 @@ jobs:
         uses: ./github
         with:
           backend: ${{ secrets.model-auth != '' && 'pi' || '' }}
-          model-config: ${{ secrets.model-auth != '' && '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"provider/model-name"}' || '' }}
+          model-config: ${{ secrets.model-auth != '' && '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}' || '' }}
           model-auth: ${{ secrets.model-auth }}
           github-token: ${{ secrets.github-token }}
           credential-isolation: ${{ secrets.model-auth != '' && 'direct' || '' }}

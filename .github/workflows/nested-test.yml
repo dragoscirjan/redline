@@ -6,10 +6,6 @@ on:
 permissions: {}
 
 jobs:
-  publish:
-    name: Publish to dragoscirjan.github.io
-    uses: dragoscirjan/dragoscirjan.github.io/.github/workflows/docs.yml@fde7e6f763a32a6eeef854c1f5f608b338e56821
-    with:
-      project: redline
-    secrets:
-      token: dummy-value-not-a-real-token
+  call:
+    name: Call minimal external reusable
+    uses: dragoscirjan/tmp-reusable-test/.github/workflows/minimal-reusable.yml@main

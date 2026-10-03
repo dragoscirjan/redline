@@ -44,6 +44,34 @@ function queuedFetch(expected: ExpectedRequest[]): { fetch: typeof fetch; reques
   return { fetch: implementation as typeof fetch, requests };
 }
 
+test('resolves the github-actions bot actor when /user is inaccessible', async () => {
+  const marker = '<!-- redline:summary:v1 repository=owner%2Frepository pr=14 -->';
+  const queue = queuedFetch([
+    {
+      path: '/user',
+      method: 'GET',
+      status: 403,
+      rawBody: '{"message":"Resource not accessible by integration","status":"403"}',
+    },
+    { path: '/users/github-actions%5Bbot%5D', method: 'GET', status: 200, body: { id: 41898282, login: 'github-actions[bot]' } },
+    {
+      path: '/repos/owner/repository/issues/14/comments?per_page=100&page=1',
+      method: 'GET',
+      status: 200,
+      body: [{ id: 9, body: `old\n${marker}`, user: { id: 41898282, login: 'github-actions[bot]' } }],
+    },
+    {
+      path: '/repos/owner/repository/issues/comments/9',
+      method: 'PATCH',
+      status: 200,
+      body: { id: 9, body: `summary\n${marker}`, user: { id: 41898282, login: 'github-actions[bot]' } },
+    },
+  ]);
+  const publisher = new GitHubReviewPublisher({ token: 'token', fetch: queue.fetch });
+  await publisher.upsertSummary(SCOPE, `summary\n${marker}`, marker);
+  assert.equal(queue.requests.length, 4);
+});
+
 test('updates one actor-owned managed summary', async () => {
   const marker = '<!-- redline:summary:v1 repository=owner%2Frepository pr=14 -->';
   const queue = queuedFetch([

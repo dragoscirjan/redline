@@ -376,6 +376,32 @@ test('classifies non-zero exit, missing completion, and launch failure as backen
   });
 });
 
+test('journals structured backend diagnostics with exit detail and summary detail on backend-failure', async () => {
+  await withBundle(async (fixture) => {
+    const publisher = new FakePublisher();
+    const launcher = new FakeLauncher(new FakeRunningBackend({
+      stdout: ['not a harness line\n'],
+      stderr: ['fatal: model endpoint rejected\n'],
+      exit: { code: 3, signal: null },
+    }));
+    const journalPath = join(fixture.root, 'journal.jsonl');
+    const result = await runReview(runInput(fixture, publisher, launcher, { journalPath }));
+    assert.deepEqual(result, { status: 'incomplete', reason: 'backend-failure' });
+    const journal = await readFile(journalPath, 'utf8');
+    const diagnostic = journal
+      .split('\n')
+      .filter((line) => line.length > 0)
+      .map((line) => JSON.parse(line))
+      .find((event) => event.type === 'backend-diagnostic');
+    assert.ok(diagnostic, 'journal must contain a backend-diagnostic event');
+    assert.match(diagnostic.stderr, /model endpoint rejected/u);
+    // The publication message carries the structured detail too.
+    const summary = publisher.summaries.at(-1) as string;
+    assert.match(summary, /exit code 3/u);
+    assert.match(summary, /first protocol error/u);
+  });
+});
+
 test('persists valid sibling events but fails a malformed backend stream', async () => {
   await withBundle(async (fixture) => {
     const publisher = new FakePublisher();

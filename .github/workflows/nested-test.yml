@@ -6,7 +6,10 @@ on:
 permissions: {}
 
 jobs:
-  trivial:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo ok
+  publish:
+    name: Publish to dragoscirjan.github.io
+    uses: dragoscirjan/dragoscirjan.github.io/.github/workflows/docs.yml@main
+    with:
+      project: redline
+    secrets:
+      token: dummy-value-not-a-real-token

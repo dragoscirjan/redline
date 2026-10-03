@@ -67,7 +67,7 @@ Review execution starts when `backend`, `model-config`, and `model-auth` are all
 
 The reusable workflow declares two secrets and maps them onto the composite action's secret-bound inputs:
 
-- `github-token`: the caller's publication token. Bind `secrets.GH_TOKEN`. Required when review execution is enabled; publication needs `pull-requests: write` and `issues: write` on the caller's token.
+- `github-token`: the caller's publication token. Bind `secrets.GH_TOKEN`. Required when review execution is enabled; publication needs `pull-requests: write` and `issues: write` on the caller's token. A `GITHUB_TOKEN` also works: the publisher resolves comment ownership through the `github-actions[bot]` identity when `GET /user` is inaccessible to an installation token.
 - `model-auth`: the provider-keyed credential map. Bind `secrets.MODEL_CREDENTIALS`. The full map stays host-side; only the selected provider credential reaches the container bootstrap channel.
 
 ## Version pinning

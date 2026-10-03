@@ -190,10 +190,33 @@ export class GitHubReviewPublisher implements ReviewForgePublisher {
   }
 
   async #actor(): Promise<GitHubActor> {
-    this.#actorPromise ??= this.#requestJson('/user', { method: 'GET' }, [200]).then((value) =>
-      parseActor(value, 'GitHub authenticated actor'),
-    );
+    this.#actorPromise ??= this.#resolveActor();
     return this.#actorPromise;
+  }
+
+  /**
+   * GITHUB_TOKEN is a GitHub App installation token with no user behind it:
+   * `GET /user` answers 403 with "Resource not accessible by
+   * integration". Comments it posts are authored by the github-actions[bot]
+   * identity, which resolves through the public users endpoint.
+   */
+  async #resolveActor(): Promise<GitHubActor> {
+    let userError: GitHubApiError | undefined;
+    try {
+      return await this.#requestJson('/user', { method: 'GET' }, [200]).then((value) =>
+        parseActor(value, 'GitHub authenticated actor'),
+      );
+    } catch (error) {
+      if (!(error instanceof GitHubApiError) || error.status !== 403) throw error;
+      userError = error;
+    }
+    try {
+      return await this.#requestJson('/users/github-actions%5Bbot%5D', { method: 'GET' }, [200]).then((value) =>
+        parseActor(value, 'github-actions bot actor'),
+      );
+    } catch (error) {
+      throw userError;
+    }
   }
 
   async #listComments(scope: ReviewRunScope, kind: 'issues' | 'pulls'): Promise<GitHubComment[]> {

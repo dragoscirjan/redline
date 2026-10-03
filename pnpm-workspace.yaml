@@ -7,8 +7,5 @@ overrides:
   # newest release older than the window; bump it only with a reviewed PR.
   rollup: 4.63.6
 
-ignoredBuiltDependencies:
-  # esbuild's postinstall only validates the binary version; the binary ships
-  # through the @esbuild/<platform> optional dependencies, so the script is
-  # unnecessary here. Executing it adds supply-chain surface for no benefit.
-  - esbuild
+allowBuilds:
+  esbuild: false

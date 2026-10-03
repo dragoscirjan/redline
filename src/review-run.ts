@@ -19,6 +19,7 @@ import {
   type ReportStyle,
 } from './review-prompt.js';
 import { ReviewBackendOutputConsumer, type ReviewEventSink } from './review-stream.js';
+import { boundedDiagnosticText, type BackendDiagnosticEvent } from './review-diagnostics.js';
 
 // Matches the 360-minute GitHub Actions job cap so a `timeout` action input
 // accepted by validation is also honurable by the run deadline.
@@ -153,7 +154,11 @@ async function finalizeIncomplete(
   reason: Extract<ReviewRunResult, { status: 'incomplete' }>['reason'],
   journal?: ReviewJournal,
   recordDiagnostic?: (journal: ReviewJournal) => Promise<void>,
+  detail?: string,
 ): Promise<ReviewRunResult> {
+  if (detail !== undefined && detail.length > 0) {
+    process.stderr.write(`review incomplete (${reason}): ${detail}\n`);
+  }
   if (journal && recordDiagnostic) {
     try {
       await recordDiagnostic(journal);
@@ -161,7 +166,8 @@ async function finalizeIncomplete(
       // Journal diagnostics are best-effort; the incomplete outcome matters more.
     }
   }
-  await publication.finalize({ status: 'incomplete', reason, message: fixedMessage(reason) });
+  const message = detail !== undefined && detail.length > 0 ? `${fixedMessage(reason)} Detail: ${detail}` : fixedMessage(reason);
+  await publication.finalize({ status: 'incomplete', reason, message });
   return { status: 'incomplete', reason };
 }
 
@@ -275,10 +281,14 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
       return await finalizeIncomplete(publication, 'backend-failure');
     }
     let protocolErrorCount = 0;
+    const firstProtocolError: { message?: string } = {};
     const consumeLine = async (line: string): Promise<void> => {
       try {
         await consumer.pushHarnessLine(line);
-      } catch {
+      } catch (error) {
+        if (firstProtocolError.message === undefined) {
+          firstProtocolError.message = error instanceof Error ? error.message : String(error);
+        }
         protocolErrorCount = Math.min(protocolErrorCount + 1, MAX_PROTOCOL_ERRORS);
       }
     };
@@ -287,7 +297,10 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
       await consumeBoundedLines(running.stdout, consumeLine);
       try {
         await consumer.finish();
-      } catch {
+      } catch (error) {
+        if (firstProtocolError.message === undefined) {
+          firstProtocolError.message = error instanceof Error ? error.message : String(error);
+        }
         protocolErrorCount = Math.min(protocolErrorCount + 1, MAX_PROTOCOL_ERRORS);
       }
     })();
@@ -295,8 +308,16 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
     void stdoutPromise.catch(() => undefined);
     void stderrPromise.catch(() => undefined);
     const recordDiagnostic = (journal: ReviewJournal): Promise<void> =>
-      stderrPromise
-        .then((diagnostic) => journal.recordDiagnostic(diagnostic.text))
+      Promise.all([stderrPromise, stdoutPromise])
+        .then(([diagnostic]) => {
+          const event: BackendDiagnosticEvent = {
+            stderr: boundedDiagnosticText(diagnostic.text, 'backend stderr'),
+            ...(firstProtocolError.message !== undefined
+              ? { firstProtocolError: firstProtocolError.message }
+              : {}),
+          };
+          return journal.recordDiagnostic(event);
+        })
         .catch(() => undefined);
 
     const executionPromise = Promise.all([stdoutPromise, stderrPromise, waitPromise]).then(
@@ -337,7 +358,27 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
       protocolErrorCount > 0 ||
       !snapshot.completion
     ) {
-      return await finalizeIncomplete(publication, 'backend-failure', journal, recordDiagnostic);
+      const details: string[] = [];
+      if (exit) {
+        if (exit.code !== null) details.push(`exit code ${exit.code}`);
+        if (exit.signal !== null) details.push(`signal ${exit.signal}`);
+      }
+      if (terminal.kind === 'execution-failure') {
+        details.push(
+          `controller error: ${terminal.error instanceof Error ? terminal.error.message : String(terminal.error)}`,
+        );
+      }
+      if (firstProtocolError.message !== undefined) {
+        details.push(`first protocol error: ${firstProtocolError.message}`);
+      }
+      if (protocolErrorCount > 0) details.push(`protocol errors: ${protocolErrorCount}`);
+      return await finalizeIncomplete(
+        publication,
+        'backend-failure',
+        journal,
+        recordDiagnostic,
+        details.join('; ') || undefined,
+      );
     }
     if (snapshot.completion.outcome === 'incomplete') {
       return await finalizeIncomplete(publication, 'coverage-incomplete');

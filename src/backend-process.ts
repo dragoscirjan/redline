@@ -39,7 +39,7 @@ export interface PreparedContainer {
 
 export const MAX_BACKEND_OUTPUT_LINE_BYTES = 1024 * 1024;
 export const MAX_BACKEND_STDOUT_BYTES = 8 * 1024 * 1024;
-export const MAX_BACKEND_STDERR_BYTES = 64 * 1024;
+export const MAX_BACKEND_STDERR_BYTES = 256 * 1024;
 
 const CONTAINER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/u;
 const SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}$/u;

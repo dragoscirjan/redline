@@ -5,6 +5,7 @@ import {
   type ReviewCompletionEvent,
   type ValidatedFinding,
 } from './review-report.js';
+import type { BackendDiagnosticEvent } from './review-diagnostics.js';
 import type { ReportStyle } from './review-prompt.js';
 
 const JOURNAL_VERSION = 1 as const;
@@ -102,12 +103,17 @@ export class ReviewJournal {
     });
   }
 
-  recordDiagnostic(text: string): Promise<void> {
+  recordDiagnostic(event: BackendDiagnosticEvent): Promise<void> {
     return this.#enqueue(async () => {
       this.#assertHealthy();
-      if (byteLength(text) > 16 * 1024) throw new Error('diagnostic text exceeds its byte limit');
-      if (/\u0000/u.test(text)) throw new Error('diagnostic text contains a NUL byte');
-      await this.#append({ version: JOURNAL_VERSION, type: 'backend-diagnostic', text });
+      const text = event.stderr ?? '';
+      for (const key of Object.keys(event) as Array<keyof BackendDiagnosticEvent>) {
+        const value = event[key];
+        if (value === undefined) continue;
+        if (byteLength(String(value)) > 256 * 1024) throw new Error(`diagnostic ${key} exceeds its byte limit`);
+        if (/\u0000/u.test(String(value))) throw new Error(`diagnostic ${key} contains a NUL byte`);
+      }
+      await this.#append({ version: JOURNAL_VERSION, type: 'backend-diagnostic', ...event, stderr: text });
     });
   }
 

@@ -22,6 +22,13 @@ concurrency:
 jobs:
   review:
     uses: dragoscirjan/redline/.github/workflows/code-review.yml@v1
+    # The called workflow cannot elevate this token, so the publication
+    # grants must be declared here: the managed summary posts through the
+    # issue-comments endpoint and inline findings through review comments.
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
     with:
       backend: pi
       model-config: >-

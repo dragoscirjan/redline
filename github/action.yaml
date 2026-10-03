@@ -186,12 +186,19 @@ runs:
         PR_NUMBER: ${{ github.event.pull_request.number }}
         REPO: ${{ github.repository }}
       run: |
-        set -x
         api="https://api.github.com/repos/$REPO"
-        curl -sS -o /dev/null -w 'GET pulls: %{http_code}\n' -H "Authorization: Bearer $GH_TOKEN" -H "User-Agent: redline-review" "$api/pulls/$PR_NUMBER"
-        curl -sS -o /tmp/comments.json -w 'GET issue comments: %{http_code}\n' -H "Authorization: Bearer $GH_TOKEN" -H "User-Agent: redline-review" "$api/issues/$PR_NUMBER/comments"
-        curl -sS -o /tmp/post.json -w 'POST issue comment: %{http_code}\n' -X POST -H "Authorization: Bearer $GH_TOKEN" -H "User-Agent: redline-review" -H "Accept: application/vnd.github+json" "$api/issues/$PR_NUMBER/comments" -d '{"body":"redline diagnostic comment (temporary)"}'
+        auth=(-H "Authorization: Bearer $GH_TOKEN" -H "User-Agent: redline-review" -H "Accept: application/vnd.github+json")
+        curl -sS -o /dev/null -w 'GET pulls: %{http_code}\n' "${auth[@]}" "$api/pulls/$PR_NUMBER"
+        curl -sS -o /dev/null -w 'GET issue comments: %{http_code}\n' "${auth[@]}" "$api/issues/$PR_NUMBER/comments"
+        # The POST is the failing publication call; the created diagnostic
+        # comment is deleted immediately so runs leave no residue.
+        status=$(curl -sS -o /tmp/post.json -w '%{http_code}' -X POST "${auth[@]}" "$api/issues/$PR_NUMBER/comments" -d '{"body":"redline diagnostic comment (temporary)"}')
+        printf 'POST issue comment: %s\n' "$status"
         head -c 400 /tmp/post.json; printf '\n'
+        if [ "$status" = "201" ]; then
+          id=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("/tmp/post.json","utf8")).id)')
+          curl -sS -o /dev/null -w 'DELETE diagnostic comment: %{http_code}\n' -X DELETE "${auth[@]}" "$api/issues/comments/$id"
+        fi
 
     - name: Run review
       if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}

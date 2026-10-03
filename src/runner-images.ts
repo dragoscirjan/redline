@@ -17,11 +17,11 @@ export interface RunnerImageTable {
 }
 
 export const RUNNER_IMAGES: Readonly<RunnerImageTable> = Object.freeze({
-  // Published by CI "CI » Publish runner images" from main 9683954
-  // (PR #65 merge). Index digests verified via the registry manifest header.
-  pi: 'ghcr.io/dragoscirjan/redline-pi-runner@sha256:2d92c32981d01e584d3b30b3b9a304b520aa5d2acec006e35a04730048be652e',
+  // Published by CI "CI » Publish runner images" from main ca15f2d
+  // (PR #67 merge). Index digests verified via the registry manifest header.
+  pi: 'ghcr.io/dragoscirjan/redline-pi-runner@sha256:9d0abe6b6e32324766031e4c472e0bcc17c0776f399704dd5273a1320c003555',
   opencode:
-    'ghcr.io/dragoscirjan/redline-opencode-runner@sha256:13d0694533453f22981d757718edb6c724fb3acef5eb6044d6a904e6cb674155',
+    'ghcr.io/dragoscirjan/redline-opencode-runner@sha256:420c52a5e1ae2f8b906cd227b8f6937b86b6dfb72ccf83780c17d90e89832fc7',
 });
 
 export function resolveRunnerImage(backend: ReviewBackend): string {

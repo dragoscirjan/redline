@@ -338,6 +338,9 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
             unsupportedEvents: consumer.unsupportedLineCount,
             rejectedEvents: protocolErrorCount,
             acceptedEvents: acceptedEventCount,
+            ...(consumer.firstProseLine !== undefined
+              ? { firstProseLine: consumer.firstProseLine }
+              : {}),
           };
           return journal.recordDiagnostic(event);
         })

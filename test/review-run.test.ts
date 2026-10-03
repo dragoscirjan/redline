@@ -416,6 +416,8 @@ test('drops narration, rejects schema violations, and persists valid siblings', 
     const journal = await readFile(join(fixture.root, 'journal.jsonl'), 'utf8');
     assert.match(journal, /finding-accepted/u);
     assert.match(journal, /backend-diagnostic/u);
+    // The dropped narration line's content is captured in the diagnostic.
+    assert.match(journal, /I will now inspect the manifest/u);
   });
 });
 

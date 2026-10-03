@@ -295,7 +295,12 @@ export async function runReview(input: ReviewRunInput): Promise<ReviewRunResult>
         acceptedEventCount += 1;
       } catch (error) {
         if (firstProtocolError.message === undefined) {
-          firstProtocolError.message = error instanceof Error ? error.message : String(error);
+          if (error instanceof AggregateError && error.errors.length > 0) {
+            const inner = error.errors[0];
+            firstProtocolError.message = inner instanceof Error ? inner.message : String(inner);
+          } else {
+            firstProtocolError.message = error instanceof Error ? error.message : String(error);
+          }
         }
         if (firstRejectedLine.text === undefined) {
           firstRejectedLine.text = boundedDiagnosticText(line, 'rejected harness line').slice(0, 8192);

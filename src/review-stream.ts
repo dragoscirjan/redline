@@ -13,7 +13,7 @@ const MAX_HARNESS_EVENT_BYTES = 1024 * 1024;
 
 export type ReviewEventParseResult =
   | { ok: true; event: ReviewEvent }
-  | { ok: false; error: Error };
+  | { ok: false; error: Error; lineText: string };
 
 export class ReviewEventStreamParser {
   #buffer = '';
@@ -40,7 +40,7 @@ export class ReviewEventStreamParser {
       const line = this.#buffer.slice(0, newline).replace(/\r$/u, '');
       this.#buffer = this.#buffer.slice(newline + 1);
       if (line.length === 0) continue;
-      results.push(this.#parseLine(line));
+      results.push(this.#parseLine(line, line));
     }
     return results;
   }
@@ -50,14 +50,14 @@ export class ReviewEventStreamParser {
     const line = this.#buffer.replace(/\r$/u, '');
     this.#buffer = '';
     if (line.length === 0) return [];
-    return [this.#parseLine(line)];
+    return [this.#parseLine(line, line)];
   }
 
   finish(): ReviewEventParseResult[] {
     return this.finishSegment();
   }
 
-  #parseLine(line: string): ReviewEventParseResult {
+  #parseLine(line: string, lineText?: string): ReviewEventParseResult {
     try {
       if (byteLength(line) > MAX_REVIEW_EVENT_LINE_BYTES) throw new Error('review event line exceeds its byte limit');
       if (this.#completed) throw new Error('review event appears after completion');
@@ -76,7 +76,11 @@ export class ReviewEventStreamParser {
       }
       return { ok: true, event };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error : new Error(String(error)) };
+      return {
+        ok: false,
+        error: error instanceof Error ? error : new Error(String(error)),
+        lineText: lineText ?? line,
+      };
     }
   }
 }
@@ -208,7 +212,7 @@ export class ReviewBackendOutputConsumer {
     const errors: unknown[] = [];
     for (const result of results) {
       if (!result.ok) {
-        errors.push(result.error);
+        errors.push(new Error(`${result.error.message} [line: ${result.lineText.slice(0, 512)}]`));
         continue;
       }
       try {

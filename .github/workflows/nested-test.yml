@@ -6,6 +6,6 @@ on:
 permissions: {}
 
 jobs:
-  call:
-    name: Call minimal external reusable
-    uses: dragoscirjan/tmp-reusable-test/.github/workflows/minimal-reusable.yml@main
+  call-local:
+    name: Call local reusable
+    uses: ./.github/workflows/dogfood-review.yml

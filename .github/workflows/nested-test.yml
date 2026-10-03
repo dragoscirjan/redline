@@ -6,10 +6,7 @@ on:
 permissions: {}
 
 jobs:
-  publish:
-    name: Publish to dragoscirjan.github.io
-    uses: dragoscirjan/dragoscirjan.github.io/.github/workflows/docs.yml@main
-    with:
-      project: redline
-    secrets:
-      token: ${{ secrets.GH_TOKEN }}
+  trivial:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok

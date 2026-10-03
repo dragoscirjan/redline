@@ -288,11 +288,18 @@ test('flushes Pi message and OpenCode text-part boundaries without trailing newl
   }
 });
 
-test('returns malformed, repeated, and post-completion lines as parse failures', () => {
+test('classifies narration as prose and keeps schema violations as failures', () => {
   const parser = new ReviewEventStreamParser();
-  const malformed = parser.push('{bad}\n')[0];
-  assert.equal(malformed?.ok, false);
-  if (!malformed?.ok) assert.match(malformed?.error.message ?? '', /not valid JSON/u);
+  const prose = parser.push('I will read the manifest first.\n')[0];
+  assert.equal(prose?.ok, false);
+  assert.equal(prose?.prose, true);
+
+  // '{bad}' is also narration by this rule: only lines that parse as JSON
+  // but violate the event schema are protocol failures.
+  const malformedJson = parser.push('{bad}\n')[0];
+  assert.equal(malformedJson?.ok, false);
+  assert.equal(malformedJson?.prose, true);
+  if (!malformedJson?.ok) assert.match(malformedJson?.error.message ?? '', /not valid JSON/u);
 
   const completed = new ReviewEventStreamParser();
   completed.push(`${JSON.stringify(completionEvent('clean'))}\n`);

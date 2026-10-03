@@ -44,6 +44,7 @@ test('builds a minimal Pi runtime for the pinned CLI contract', () => {
     '--no-prompt-templates',
     '--no-themes',
     '--no-context-files',
+    '--no-approve',
     '--provider',
     'private-provider',
     '--model',

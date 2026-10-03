@@ -33,3 +33,6 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/docs.publish.yml
+    # The publish job inside docs.publish.yml references the actor-owned PAT;
+    # without inherited secrets the nested call cannot resolve GH_TOKEN.
+    secrets: inherit

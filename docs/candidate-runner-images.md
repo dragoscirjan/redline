@@ -4,7 +4,9 @@ Issue [#77](https://github.com/dragoscirjan/redline/issues/77) adds a separate m
 
 ## Current status
 
-The draft implementation has not landed on `main` or run against GHCR. Independent patch review, explicit owner merge approval, environment setup, and separate dispatch approval are still required. Registry authorization and real multi-platform publication remain untested. Draft PR [#76](https://github.com/dragoscirjan/redline/pull/76) remains deployment-blocked because current production pins reject its bootstrap envelope v2.
+Infrastructure PR [#78](https://github.com/dragoscirjan/redline/pull/78) merged with owner approval. Owner-approved [run 37219185669](https://github.com/dragoscirjan/redline/actions/runs/37219185669) published base, Pi, and OpenCode candidates from reviewed source `62067e8b4204ab03cd118451a199631a954308ca`. Its provenance verifies both architectures, source bootstrap bytes, Pi 0.87.1, and OpenCode 1.18.32. Independent registry inspection matched all recorded architecture descriptors, and all ten source-file hashes matched that commit.
+
+PR [#76](https://github.com/dragoscirjan/redline/pull/76) proposes the verified immutable backend digests. The real published Pi image passes the controlled native model-contract test without a source-bootstrap override. Native OpenCode model-contract integration and complete live GLM review remain unverified. Publication and these checks do not authorize merging #76.
 
 ## Approval and supported scope
 
@@ -56,7 +58,7 @@ A successful version probe does not prove the model contract or live review qual
 
 ## Dispatch and recovery
 
-Do not dispatch this draft. After the infrastructure PR is independently reviewed and explicitly approved for merge, create the environment and obtain separate owner approval for the exact source SHA. The future Actions entry is **Publish approved candidate runner images**. Select `main`, supply the reviewed PR number and SHA, complete the manual checklist, and approve the environment job.
+Obtain separate owner approval for the exact source SHA before each dispatch. The Actions entry is **Publish approved candidate runner images**. Select `main`, supply the reviewed PR number and SHA, complete the manual checklist, and approve the `candidate-images` environment job. The environment must already exist with the protections described above.
 
 Combined build-and-push steps can finish for the approved SHA if the branch moves during a long build. There is no atomic transaction across the three images or between GitHub and GHCR. A later backend or verification failure can leave published candidates behind. Provenance retains captured digests even when verification fails. An interrupted push may leave a published manifest without a captured digest; the report states that limitation rather than claiming nothing was published.
 
@@ -66,4 +68,6 @@ Inspect partial results before retrying. A rerun needs the owner identity and an
 
 Deterministic credential-free tests cover dispatch and rerun identity, stale and foreign heads, environment protection, metadata bounds, unsafe Git modes and paths, supported copy syntax, blob identity, SHA-bound head movement, digest-bound tag movement, partial verification, and secret-safe failures. Local test, typecheck, and docs results belong in the infrastructure PR.
 
-The local `mise run validate` gate runs TypeScript checking, compilation with the Node/Bats tests, and the VitePress build. It does not run formatting, linting, duplication analysis, vulnerability audits, or recorded review-quality evaluation. Issue #79 removes the former references to missing scripts and pins pnpm 10.33.0 for the existing dependency policy. See [Contributing](https://github.com/dragoscirjan/redline/blob/main/CONTRIBUTING.md) for setup and the gate's limits. No local test authorizes dispatch, proves GHCR access, or proves published-image compatibility or live GLM success.
+The local `mise run validate` gate runs TypeScript checking, compilation with the Node/Bats tests, and the VitePress build. It does not run formatting, linting, duplication analysis, vulnerability audits, or recorded review-quality evaluation. Issue #79 removes the former references to missing scripts and pins pnpm 10.33.0 for the existing dependency policy. See [Contributing](https://github.com/dragoscirjan/redline/blob/main/CONTRIBUTING.md) for setup and the gate's limits.
+
+The successful owner-approved candidate run proves publication and image inspection for its exact source, not future registry access or live GLM review quality. Local tests do not authorize another dispatch or merge.

@@ -25,11 +25,11 @@ test('exposes a pinned image for every supported backend', () => {
 test('resolves stable digest references', () => {
   assert.equal(
     resolveRunnerImage('pi'),
-    'ghcr.io/dragoscirjan/redline-pi-runner@sha256:b5be3e089d62e0c3cb0bed74ee57ab8f8e1f2598d68aee771a19c236b1acdaa5',
+    'ghcr.io/dragoscirjan/redline-pi-runner@sha256:eb16ec08c3b96b81f105d386f9dcea44bc6f9c61a00647947b61abc8aaef7a3e',
   );
   assert.equal(
     resolveRunnerImage('opencode'),
-    'ghcr.io/dragoscirjan/redline-opencode-runner@sha256:68921649c13dfc3f5f174a4d4e09e86db4680d857e69af8329605c8d9ee28792',
+    'ghcr.io/dragoscirjan/redline-opencode-runner@sha256:5b94a4cf739f79e9d9bd5a612e38e6cc733b0dc0584264b876de9b4b371c8a7d',
   );
 });
 

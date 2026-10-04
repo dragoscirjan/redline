@@ -31,6 +31,7 @@ export default defineConfig({
           { text: 'Runnable review configuration', link: '/runnable-review-configuration' },
           { text: 'Container staging', link: '/container-staging' },
           { text: 'Review reporting', link: '/review-reporting' },
+          { text: 'Candidate runner images', link: '/candidate-runner-images' },
         ],
       },
     ],

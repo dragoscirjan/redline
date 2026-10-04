@@ -98,6 +98,18 @@ A change requires explicit security review when it:
 
 Never include real tokens, GitHub App private keys, webhook secrets, or model credentials in fixtures, logs, snapshots, prompts, or issue comments.
 
+## Candidate runner images
+
+Candidate publication is owner-approved maintenance, not an automated PR review. The infrastructure change must pass independent security review and receive separate merge approval before it can run from `main`. Dispatch and later production pin changes each require explicit owner approval. Never merge an incompatible host contract merely to trigger the existing main image publisher.
+
+Before dispatch, review the exact open same-repository PR head and configure the protected `candidate-images` environment. Require only the personal repository owner as reviewer, allow that single owner to approve their own dispatch, restrict deployments to the exact `main` branch, and disable administrative bypass. The workflow checks exposed reviewer and branch-policy fields. Administrative bypass and source review remain manual attestations, not API-verified facts.
+
+Approval authorizes the exact source SHA. The workflow rejects stale heads before building. If the PR moves during an approved build, publication remains bound to the original SHA. Cancel the run to revoke in-flight approval. A candidate tag can move on rerun; use captured immutable digests and provenance instead of tag names. Verify both architectures, bootstrap hashes, and native versions, then independently review pin changes against the approved source-file hashes. Changed runner files require a new approved build.
+
+The publisher may execute reviewed Dockerfile build steps only after the maintenance approval. Preflight must not import or execute selected-source scripts, install its dependencies, check out that head, or forward host configuration or credentials into the exact allowlisted context. This exception does not relax the ban on executing PR code in review workflows. Report partial publication explicitly. Do not prune packages, move `latest` or stable tags, update pins automatically, or merge automatically.
+
+See [Candidate runner images](docs/candidate-runner-images.md) for setup, unsupported cases, digest verification, and recovery. Local checks do not prove registry authorization, published-image compatibility, or live GLM review success. Record baseline `mise run validate` failures rather than claiming the full gate passed.
+
 ## Releasing the action
 
 The supported consumer references are immutable `vMAJOR.MINOR.PATCH` tags and the moving compatibility tag for that major, such as `v1.0.0` and `v1`. Branch names, pull request refs, and arbitrary commit references are not supported release channels. Never create, move, or delete release tags by hand.

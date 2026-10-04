@@ -18,6 +18,8 @@
 - Check out that branch in a dedicated worktree at `../redline--workspaces/<branch-name>` and perform all work there. Do not implement the change in the primary checkout.
 - Commit the completed change, push the branch, and open a pull request linked to the issue and relevant Wiki pages.
 - Never merge a pull request unless the owner explicitly instructs you to merge it. Approval, task completion, or a successful review is not permission to merge.
+- Candidate runner publication is a separate maintenance operation, not a review workflow. Obtain explicit owner approval for the exact reviewed source SHA before dispatch. Require the protected `candidate-images` environment, owner-only initial and rerun actors, exact `main` definition, and both architectures. Never run PR scripts during preflight, forward host credentials into the build context, change production tags or pins, or merge to obtain compatible images.
+- Candidate tags are mutable locators. Verify captured image digests, both platform descriptors, approved bootstrap bytes, and native versions before proposing pin changes. Keep incompatible host contracts unmerged until matching images and pin changes pass independent review. See `docs/candidate-runner-images.md` for API-verifiable gates, manually attested checks, partial publication, and SHA-bound approval.
 
 ## Current POC constraints
 

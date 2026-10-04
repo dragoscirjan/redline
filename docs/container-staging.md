@@ -116,15 +116,17 @@ opencode run --format json --model <provider>/<model> --title redline-review
 
 OpenCode creates its session ID at runtime. The fixed report plugin accepts the first coordinator session, ignores later session IDs, and emits the stable host-visible ID `redline-coordinator`. The host event consumer continues to reject output for any other session ID.
 
-## Controlled native Pi test
+## Controlled native backend tests
 
-The default test suite does not start containers or contact a model. The opt-in native test uses the selected digest-pinned Pi image, inert temporary source data, a fake credential sentinel, and a trusted mock provider in an isolated `network:none` container. The backend shares that container's loopback namespace. It never contacts OpenRouter or GitHub. Production staging, event validation, the journal, and an in-memory publisher remain in the test path.
+The default test suite does not start containers or contact a model. The opt-in native tests use the selected digest-pinned Pi or OpenCode image, inert temporary source data, a fake credential sentinel, and a trusted mock provider in an isolated `network:none` container. The backend shares that container's loopback namespace. It never contacts OpenRouter or GitHub. Production staging, event validation, the journal, and an in-memory publisher remain in the test path.
 
 After the matching image digest is pinned, run:
 
 ```bash
-REDLINE_TEST_PINNED_PI=1 pnpm test
+REDLINE_TEST_PINNED_PI=1 REDLINE_TEST_PINNED_OPENCODE=1 pnpm test
 ```
+
+Set only one flag to test that backend alone. Both tests select the same GLM model identifier against the mock endpoint, not a live OpenRouter or free-model service.
 
 Before the new image is published, the following development-only mode runs the corrected trusted bootstrap from the review volume inside the existing pinned harness image:
 
@@ -132,7 +134,7 @@ Before the new image is published, the following development-only mode runs the 
 REDLINE_TEST_PINNED_PI=1 REDLINE_TEST_REVIEWED_BOOTSTRAP=1 pnpm test
 ```
 
-That override tests the proposed bootstrap and real Pi binary. It does not prove the production image contains the corrected bootstrap. The normal test without the override must pass against the published digest before claiming deployment compatibility. The test checks system/user roles, exact diff visibility, no exposed tools, native credential interpolation, validated findings and managed summary publication. It also checks provider failure and token-limit termination after apparent completion, including Pi's zero-exit JSON-mode behavior. Its synthetic responses do not measure live GLM review quality.
+That override tests the proposed bootstrap and real Pi binary. It does not prove the production image contains the corrected bootstrap. The normal test without the override must pass against the published digest before claiming deployment compatibility. The test checks system/user roles, exact diff visibility, no exposed tools, native credential interpolation, validated findings and managed summary publication. It also checks provider failure and token-limit termination after apparent completion, including Pi's zero-exit JSON-mode behavior. Its synthetic responses do not measure live GLM review quality. OpenCode's native `step_finish` terminal state is bound to coordinator-forwarded assistant message IDs. Token-limit or other non-stop reasons force an incomplete review even if the model already emitted a valid completion and the CLI exits zero. Unrelated child-message terminals cannot clear that failure; retained reasons are fixed strings, never raw provider text.
 
 ## Credential boundaries
 

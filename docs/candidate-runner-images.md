@@ -6,7 +6,7 @@ Issue [#77](https://github.com/dragoscirjan/redline/issues/77) adds a separate m
 
 Infrastructure PR [#78](https://github.com/dragoscirjan/redline/pull/78) merged with owner approval. Owner-approved [run 37219185669](https://github.com/dragoscirjan/redline/actions/runs/37219185669) published base, Pi, and OpenCode candidates from reviewed source `62067e8b4204ab03cd118451a199631a954308ca`. Its provenance verifies both architectures, source bootstrap bytes, Pi 0.87.1, and OpenCode 1.18.32. Independent registry inspection matched all recorded architecture descriptors, and all ten source-file hashes matched that commit.
 
-PR [#76](https://github.com/dragoscirjan/redline/pull/76) proposes the verified immutable backend digests. The real published Pi image passes the controlled native model-contract test without a source-bootstrap override. Native OpenCode model-contract integration and complete live GLM review remain unverified. Publication and these checks do not authorize merging #76.
+PR [#76](https://github.com/dragoscirjan/redline/pull/76) proposes the verified immutable backend digests. The real published Pi and OpenCode images pass controlled native model-contract tests without a source-bootstrap override. OpenCode testing exposed a host-side token-limit handling defect, and the host correction now rejects apparent completion after that failure. The runner build-context files are unchanged. Complete live GLM review remains unverified. Publication and these checks do not authorize merging #76.
 
 ## Approval and supported scope
 

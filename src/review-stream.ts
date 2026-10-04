@@ -203,6 +203,9 @@ export class ReviewBackendOutputConsumer {
   readonly #sessionId: string | undefined;
   readonly #parser = new ReviewEventStreamParser();
   #terminalFailure: string | undefined;
+  readonly #openCodeCoordinatorMessages = new Set<string>();
+  readonly #openCodeTerminals = new Map<string, { reason: string; sequence: number }>();
+  #openCodeTerminalSequence = 0;
 
   get terminalFailure(): string | undefined {
     return this.#terminalFailure;
@@ -245,10 +248,55 @@ export class ReviewBackendOutputConsumer {
     const sessionId = this.#sessionId as string;
     if (line.startsWith(OPENCODE_TEXT_DELTA_PREFIX)) {
       const delta = extractOpenCodeTextDelta(line, sessionId);
-      if (delta !== undefined) await this.#deliver(this.#parser.push(delta));
+      if (delta !== undefined) {
+        this.#observeOpenCodeCoordinator(line, OPENCODE_TEXT_DELTA_PREFIX);
+        await this.#deliver(this.#parser.push(delta));
+      }
     } else if (isOpenCodeTextEnd(line, sessionId)) {
+      this.#observeOpenCodeCoordinator(line, OPENCODE_TEXT_END_PREFIX);
       await this.#deliver(this.#parser.finishSegment());
+    } else if (!line.startsWith(OPENCODE_TEXT_END_PREFIX)) {
+      const event = parseHarnessEvent(line, 'OpenCode');
+      if (event?.type === 'step_finish') {
+        const part = event.part;
+        if (!isRecord(part) || typeof part.messageID !== 'string' ||
+            part.messageID.length === 0 || part.messageID.length > 256 ||
+            typeof part.reason !== 'string') throw new Error('OpenCode terminal event is malformed');
+        if (!this.#openCodeTerminals.has(part.messageID) && this.#openCodeTerminals.size >= 1024) {
+          throw new Error('OpenCode terminal message limit exceeded');
+        }
+        // The plugin reports a fixed coordinator alias, while native CLI events
+        // use a generated session ID. Bind their terminal state by the original
+        // assistant message ID, never by the first unrelated native session.
+        const reason = ['stop', 'length', 'error', 'tool-calls', 'content-filter'].includes(part.reason)
+          ? part.reason : 'an unsupported terminal reason';
+        this.#openCodeTerminals.set(part.messageID, { reason, sequence: ++this.#openCodeTerminalSequence });
+        this.#updateOpenCodeTerminal();
+      }
     }
+  }
+
+  #observeOpenCodeCoordinator(line: string, prefix: string): void {
+    const forwarded = parseOpenCodeForwarded(line, prefix, 'OpenCode coordinator message');
+    if (forwarded.messageID === undefined) return;
+    if (typeof forwarded.messageID !== 'string' || forwarded.messageID.length === 0 || forwarded.messageID.length > 256) {
+      throw new Error('OpenCode coordinator message identity is malformed');
+    }
+    if (!this.#openCodeCoordinatorMessages.has(forwarded.messageID) && this.#openCodeCoordinatorMessages.size >= 1024) {
+      throw new Error('OpenCode coordinator message limit exceeded');
+    }
+    this.#openCodeCoordinatorMessages.add(forwarded.messageID);
+    this.#updateOpenCodeTerminal();
+  }
+
+  #updateOpenCodeTerminal(): void {
+    let latest: { reason: string; sequence: number } | undefined;
+    for (const messageID of this.#openCodeCoordinatorMessages) {
+      const terminal = this.#openCodeTerminals.get(messageID);
+      if (terminal && (!latest || terminal.sequence > latest.sequence)) latest = terminal;
+    }
+    if (latest) this.#terminalFailure = latest.reason === 'stop'
+      ? undefined : `OpenCode assistant ended with ${latest.reason}`;
   }
 
   async finish(): Promise<void> {

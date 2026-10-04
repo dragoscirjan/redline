@@ -1,0 +1,184 @@
+name: Publish approved candidate runner images
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Open same-repository PR containing the reviewed runner source
+        required: true
+        type: string
+      source_sha:
+        description: Exact reviewed head SHA; approval remains SHA-bound if the PR later moves
+        required: true
+        type: string
+      approval:
+        description: Attest source review and manually disabled environment admin bypass
+        required: true
+        type: choice
+        options:
+          - publish-reviewed-sha-and-confirm-admin-bypass-disabled
+
+permissions: {}
+
+concurrency:
+  group: candidate-runner-images
+  cancel-in-progress: false
+
+env:
+  CANDIDATE_INPUTS: ${{ toJSON(inputs) }}
+  CANDIDATE_WORKFLOW_REF: ${{ github.workflow_ref }}
+  CANDIDATE_WORKFLOW_SHA: ${{ github.workflow_sha }}
+  CANDIDATE_OWNER_TYPE: ${{ github.event.repository.owner.type }}
+  CANDIDATE_REPOSITORY_PRIVATE: ${{ toJSON(github.event.repository.private) }}
+
+jobs:
+  preflight:
+    if: >-
+      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' &&
+      github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    outputs:
+      source_sha: ${{ steps.validate.outputs.source_sha }}
+      pull_request: ${{ steps.validate.outputs.pull_request }}
+      owner: ${{ steps.validate.outputs.owner }}
+    steps:
+      - name: Check out captured trusted workflow source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Set up trusted Node runtime
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: 24
+      - name: Validate source approval and existing environment gate
+        id: validate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node --experimental-strip-types src/candidate-runner-images.ts preflight
+
+  publish:
+    needs: preflight
+    name: Approve candidate PR${{ needs.preflight.outputs.pull_request }} source ${{ needs.preflight.outputs.source_sha }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: candidate-images
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+      packages: write
+    steps:
+      - name: Check out captured trusted workflow source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Set up trusted Node runtime
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: 24
+      - name: Recheck approval and materialize validated source blobs
+        id: prepare
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node --experimental-strip-types src/candidate-runner-images.ts prepare
+      - name: Set up pinned ARM64 QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        with:
+          image: tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
+      - name: Set up pinned isolated BuildKit without insecure entitlements
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+        with:
+          version: v0.31.1
+          driver-opts: image=moby/buildkit@sha256:a095b3d11ce1a9a05b6064ef515dfca0291ec5bcf2ea8178da8f6461924294e1
+          buildkitd-flags: --oci-worker-gc=true
+          cleanup: true
+      - name: Authenticate trusted registry client
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          logout: true
+      - name: Recheck inspectable gates before base publication
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node --experimental-strip-types src/candidate-runner-images.ts gate
+      - name: Build and publish approved candidate base
+        id: base
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ${{ steps.prepare.outputs.context }}
+          file: ${{ steps.prepare.outputs.context }}/packages/base-runner/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ needs.preflight.outputs.owner }}/redline-base-runner:candidate-${{ needs.preflight.outputs.source_sha }}
+          labels: org.opencontainers.image.revision=${{ needs.preflight.outputs.source_sha }}
+          github-token: ''
+          provenance: mode=max
+      - name: Validate captured immutable base digest
+        id: reference
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_BASE_DIGEST: ${{ steps.base.outputs.digest }}
+        run: node --experimental-strip-types src/candidate-runner-images.ts base-reference
+      - name: Recheck inspectable gates before Pi publication
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node --experimental-strip-types src/candidate-runner-images.ts gate
+      - name: Build and publish approved candidate Pi
+        id: pi
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ${{ steps.prepare.outputs.context }}
+          file: ${{ steps.prepare.outputs.context }}/packages/pi-runner/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: RUNNER_BASE=${{ steps.reference.outputs.base_reference }}
+          tags: ghcr.io/${{ needs.preflight.outputs.owner }}/redline-pi-runner:candidate-${{ needs.preflight.outputs.source_sha }}
+          labels: org.opencontainers.image.revision=${{ needs.preflight.outputs.source_sha }}
+          github-token: ''
+          provenance: mode=max
+      - name: Recheck inspectable gates before OpenCode publication
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node --experimental-strip-types src/candidate-runner-images.ts gate
+      - name: Build and publish approved candidate OpenCode
+        id: opencode
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ${{ steps.prepare.outputs.context }}
+          file: ${{ steps.prepare.outputs.context }}/packages/opencode-runner/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: RUNNER_BASE=${{ steps.reference.outputs.base_reference }}
+          tags: ghcr.io/${{ needs.preflight.outputs.owner }}/redline-opencode-runner:candidate-${{ needs.preflight.outputs.source_sha }}
+          labels: org.opencontainers.image.revision=${{ needs.preflight.outputs.source_sha }}
+          github-token: ''
+          provenance: mode=max
+      - name: Verify captured digests and report partial publication
+        if: always() && steps.prepare.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_BASE_DIGEST: ${{ steps.base.outputs.digest }}
+          CANDIDATE_PI_DIGEST: ${{ steps.pi.outputs.digest }}
+          CANDIDATE_OPENCODE_DIGEST: ${{ steps.opencode.outputs.digest }}
+          CANDIDATE_JOB_STATUS: ${{ job.status }}
+        run: node --experimental-strip-types src/candidate-runner-images.ts collect
+      - name: Upload bounded source proof and provenance
+        if: always() && steps.prepare.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: candidate-provenance-${{ needs.preflight.outputs.source_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/candidate-source-proof.json
+            ${{ runner.temp }}/candidate-provenance.json
+          if-no-files-found: error
+          retention-days: 45

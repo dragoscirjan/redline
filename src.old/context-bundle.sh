@@ -66,32 +66,6 @@ def path(raw):
 def run(args):
     return subprocess.run(['git', '-C', repo, *args], check=True, stdout=subprocess.PIPE).stdout
 
-# Deterministic review-selection rules. The review tool runs its harness
-# without tools, so reviewed flags are computed here, never by the model.
-# Lock files, vendored dependencies, and build output are excluded; binary
-# files are marked unreviewed and the review tool records them as omitted.
-LOCK_FILES = frozenset({
-    'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lockb', 'bun.lock',
-    'Cargo.lock', 'poetry.lock', 'go.sum', 'composer.lock', 'Gemfile.lock',
-    'Podfile.lock', 'flake.lock', 'uv.lock', 'Pipfile.lock',
-})
-GENERATED_PREFIXES = (
-    'node_modules/', 'dist/', 'build/', 'out/', 'vendor/', 'coverage/',
-)
-
-def reviewed_file(binary, paths):
-    if binary:
-        return False
-    for candidate in paths:
-        if candidate is None:
-            continue
-        if candidate in LOCK_FILES:
-            return False
-        for prefix in GENERATED_PREFIXES:
-            if candidate.startswith(prefix):
-                return False
-    return True
-
 files = []
 i = 0
 j = 0
@@ -138,12 +112,10 @@ while i < len(name_status):
             with open(os.path.join(output, base_file), 'wb') as f: f.write(old.stdout)
         else:
             base_file = None
-    review_paths = [old_path, new_path]
     files.append({'id': entry_id, 'status': status[0], 'oldPath': old_path if status.startswith(('D', 'R', 'C')) else None,
                   'newPath': new_path if not status.startswith('D') else None, 'similarity': similarity,
                   'additions': additions, 'deletions': deletions, 'binary': binary,
-                  'diffFile': diff_file, 'baseFile': base_file,
-                  'reviewed': reviewed_file(binary, review_paths)})
+                  'diffFile': diff_file, 'baseFile': base_file, 'reviewed': False})
 if j != len(numstat): raise SystemExit('Unmatched numstat records')
 manifest = {'version': 1, 'base': base, 'head': head, 'files': files}
 with open(os.path.join(output, 'manifest.json'), 'w', encoding='utf-8', newline='\n') as f:
@@ -160,7 +132,7 @@ PY
 cat > "$output/README.md" <<EOF
 # Pull request review bundle
 
-Review the final base-to-head change. Commit history describes intent; the source checkout at HEAD provides file context. The reviewed flag in manifest.json is precomputed deterministically: lock files, vendored dependencies, build output, and binary files are excluded from review.
+Review the final base-to-head change. Use commit history to understand intent, inspect the source checkout at HEAD for context, and mark each reviewed manifest entry with reviewed=true.
 
 Base: $base
 Head: $head

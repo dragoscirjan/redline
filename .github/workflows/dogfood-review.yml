@@ -8,14 +8,11 @@ on:
   workflow_call:
     inputs:
       artifact-retention-days:
-        description: Number of days to retain the review debug artifact
+        description: Number of days to retain the review artifacts
         required: false
         type: number
         default: 45
     secrets:
-      github-token:
-        description: GitHub token used for review publication. Required only when review execution is enabled.
-        required: false
       model-auth:
         description: Provider-keyed credential map (JSON), bound to the MODEL_CREDENTIALS secret. Enables review execution when set.
         required: false
@@ -27,11 +24,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write
-      pull-requests: write
     steps:
       - name: Check out trusted workflow tooling
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
         with:
           repository: ${{ github.repository }}
           ref: ${{ github.event.pull_request.base.sha }}
@@ -57,14 +52,11 @@ jobs:
       # workflow instead; ./github would resolve against their repository.
       # Review inputs are set only when MODEL_CREDENTIALS exists, so an
       # unconfigured repository keeps the context-only behavior.
-      - name: Run Redline review context action
+      - name: Run Redline review action
         uses: ./github
         with:
           backend: ${{ secrets.model-auth != '' && 'pi' || '' }}
           model-config: ${{ secrets.model-auth != '' && '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}' || '' }}
           model-auth: ${{ secrets.model-auth }}
-          github-token: ${{ secrets.github-token }}
-          credential-isolation: ${{ secrets.model-auth != '' && 'direct' || '' }}
-          container-engine: docker
           artifact-name: pull-request-review-${{ github.event.pull_request.number }}-${{ github.run_id }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

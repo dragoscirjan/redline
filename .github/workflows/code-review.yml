@@ -1,12 +1,12 @@
 # Reusable Redline review workflow for other repositories. Call it from a
-# pull_request_target workflow so publication secrets are available.
+# pull_request_target workflow so review secrets are available.
 name: Redline pull request review
 
 on:
   workflow_call:
     inputs:
       backend:
-        description: Review backend, pi or opencode. Required together with model-config and model-auth to enable review execution. Also selects the pinned runner image.
+        description: Review harness, pi, opencode, or the deterministic echo harness. Required together with model-config and model-auth to enable review execution.
         required: false
         type: string
         default: ""
@@ -20,40 +20,22 @@ on:
         required: false
         type: string
         default: defects
-      report-style:
-        description: Report style, single-block or inline
-        required: false
-        type: string
-        default: single-block
       timeout:
         description: Review deadline as a duration, for example 10m, 2h, or 1h30m. Capped at 360m.
         required: false
         type: string
         default: 30m
-      credential-isolation:
-        description: Credential isolation mode. Only direct is supported; required explicitly when review execution is enabled.
-        required: false
-        type: string
-        default: ""
-      container-engine:
-        description: Container engine used by the host-side staging layer, podman or docker
-        required: false
-        type: string
-        default: podman
       artifact-name:
-        description: Name for the downloadable review bundle artifact
+        description: Base name for the downloadable review artifacts
         required: false
         type: string
         default: redline-review-${{ github.run_id }}
       artifact-retention-days:
-        description: Number of days to retain debug artifacts, from 1 to 90
+        description: Number of days to retain review artifacts, from 1 to 90
         required: false
         type: number
         default: 45
     secrets:
-      github-token:
-        description: GitHub publication token; bound to the action's github-token input. Required for review execution.
-        required: false
       model-auth:
         description: Provider-keyed credential map (JSON); bind to secrets.MODEL_CREDENTIALS.
         required: false
@@ -70,11 +52,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write
-      pull-requests: write
     steps:
       - name: Check out trusted workflow tooling
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
         with:
           repository: ${{ github.repository }}
           # The base revision is trusted under pull_request_target. Pull
@@ -109,11 +89,7 @@ jobs:
           backend: ${{ inputs.backend }}
           model-config: ${{ inputs.model-config }}
           model-auth: ${{ secrets.model-auth }}
-          github-token: ${{ secrets.github-token }}
           finding-scope: ${{ inputs.finding-scope }}
-          report-style: ${{ inputs.report-style }}
           timeout: ${{ inputs.timeout }}
-          credential-isolation: ${{ inputs.credential-isolation }}
-          container-engine: ${{ inputs.container-engine }}
           artifact-name: ${{ inputs.artifact-name }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

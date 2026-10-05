@@ -4,7 +4,7 @@ setup() {
   ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
 }
 
-@test "validation runs typecheck, built Node/Bats tests, and docs in order" {
+@test "validation runs typecheck, vitest and bats tests, and docs in order" {
   run python3 - "$ROOT" <<'PY'
 import json
 from pathlib import Path
@@ -18,8 +18,10 @@ assert config['tasks']['validate']['run'] == [
     'mise run typecheck', 'mise run test', 'mise run docs',
 ]
 assert scripts['test'].split('&&')[0].strip() == 'pnpm run build'
-assert 'node --test dist/test/*.test.js' in scripts['test']
+assert 'vitest run' in scripts['test']
 assert 'bats test/*.bats' in scripts['test']
+assert scripts['typecheck'].strip() == 'tsc --noEmit -p tsconfig.json'
+assert scripts['build'].strip() == 'rm -rf dist && tsc -p tsconfig.json'
 PY
   printf '%s\n' "$output"
   [ "$status" -eq 0 ]
@@ -65,6 +67,43 @@ locked = tomllib.loads((root / 'mise.lock').read_text())['tools']['pnpm']
 assert len(locked) == 1 and locked[0]['version'] == version
 assert 'platforms.linux-x64' in locked[0]
 assert 'platforms.linux-arm64' in locked[0]
+PY
+  printf '%s\n' "$output"
+  [ "$status" -eq 0 ]
+}
+
+@test "test stack is vitest plus bats and tests only live in test/" {
+  run python3 - "$ROOT" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+package = json.loads((root / 'package.json').read_text())
+assert package['devDependencies']['vitest'].startswith('^'), 'vitest must be a pinned dev dependency'
+assert package['devDependencies']['bats'].startswith('^'), 'bats must be a pinned dev dependency'
+tsconfig = json.loads((root / 'tsconfig.json').read_text())
+assert tsconfig['include'] == ['src/**/*.ts', 'test/**/*.ts'], \
+    'compiled sources and tests must stay inside src/ and test/'
+vitest = (root / 'vitest.config.ts').read_text()
+assert "include: ['test/**/*.test.ts']" in vitest, \
+    'vitest must only collect test/**/*.test.ts so src.old stays inert'
+PY
+  printf '%s\n' "$output"
+  [ "$status" -eq 0 ]
+}
+
+@test "the review CLI is the published bin entry" {
+  run python3 - "$ROOT" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+package = json.loads((root / 'package.json').read_text())
+assert package['bin'] == {'redline-review': 'dist/src/review/cli.js'}
+assert (root / 'src' / 'review' / 'cli.ts').is_file()
+assert (root / 'src' / 'context-bundle.sh').is_file()
 PY
   printf '%s\n' "$output"
   [ "$status" -eq 0 ]

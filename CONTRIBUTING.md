@@ -4,20 +4,20 @@
 
 Use GitHub Issues for defects, features, and acceptance criteria. Keep product documentation and design decisions under `docs/`, rendered with VitePress (`pnpm run docs` builds the site; `pnpm run serve` serves it locally during editing). Link implementation pull requests to relevant docs and GitHub Issues.
 
-The repository is in its bootstrap phase. The POC uses npm, TypeScript, esbuild, Vitest, and the shared Tempel ESLint and Prettier configurations. Mise manages tool versions and project tasks. Do not add a second package manager, task runner, formatter, or test framework without an accepted design change. Follow `package-lock.json`, `mise.toml`, and the scripts in `package.json`.
+The repository is in its bootstrap phase. The POC uses pnpm, TypeScript, Node's test runner, Bats, and VitePress. Mise manages tool versions and project tasks. Do not add a second package manager, task runner, formatter, or test framework without an accepted design change. Follow `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `mise.toml`, and the scripts in `package.json`.
 
 The current milestone supports forge-specific GitHub, Forgejo, and Gitea action entry points developed in parallel, OpenCode and Pi, configured existing model endpoints, hosted runners, and forge-appropriate publication credentials. `model-config` selects an explicitly permitted remote/private provider endpoint and model; `model-credentials` supplies separate named bearer or API-key credentials. See the provider-neutral model configuration documentation under `docs/` and its tracking issue. Both backends run in the fixed container sandbox without checkout, host mounts, or GitHub credentials. Generate native harness configuration inside the container and pass only the selected provider credential. Reject arbitrary native config, commands, headers, and ambient environment references. Podman is the default and Docker is the only fallback. Managed local-runtime lifecycle, enforced-egress gateway, and self-hosted runner support remain separate work.
 
 ## Set up the repository
 
-Mise installs Node.js 24 and Python 3.12, and npm is the only supported package manager.
+Mise installs Node.js 24, Python 3.12, and pnpm 10.33.0. Use pnpm for dependency installation. The pinned pnpm version supports the existing minimum-release-age, overrides, and ignored-esbuild-installer policy in `pnpm-workspace.yaml`. Do not enable esbuild's installer or change that policy to make setup pass.
 
 ```bash
 mise trust
 mise run deps:sync
 ```
 
-Run `mise tasks` to list the available tasks. Use `mise run <task>` when a task exists. Dependency installation also configures Husky hooks: staged files are linted and formatted before commits, and the test suite runs before pushes.
+Run `mise tasks` to list the available tasks. Use `mise run <task>` when a task exists. Dependency installation does not configure Git hooks. Run the validation gate yourself before pushing.
 
 ## Before starting
 
@@ -72,13 +72,21 @@ Use these test levels:
 
 Tests must use temporary directories and repositories. They must not modify the contributor's checkout. Network tests must be opt-in and clearly named.
 
-The required `npm run evaluation` quality gate is deterministic, recorded, offline, and credential-free. Seed fixtures are inert JSON data and must never be imported or executed. The specialist gate must replay recorded per-dimension outputs (synthesized into one all-dimension shard output per case) and merge-pass recordings through the production orchestrator and compare forced-sharded and auto results with the single-pass baseline. Repository review memory remains disabled in the protected quality corpus so suppression cannot improve measured precision, recall, mapping, or clean accuracy; focused synthetic tests cover exact-base regular-file acquisition, matching, protected selectors, preference-only inline ordering, and post-validation accounting separately. Repository-declared memory authors are reviewed file content, never authenticated forge identities; review the exact-base memory change and its provenance reference as code. Changes to the protected corpus, specialist recordings, shard/selector/merge-pass semantics, memory semantics, matching semantics, or either threshold file require explicit owner review. `npm run evaluation:live` is an opt-in observational run only; it must not become a required CI gate or receive a GitHub publication token.
-
-Before pushing, run every formatting, type-checking, linting, evaluation, and test command defined by the repository:
+Before pushing, run the implemented validation gate:
 
 ```bash
 mise run validate
 ```
+
+The gate runs these tasks in order and stops on the first failure:
+
+1. `mise run typecheck` checks TypeScript without emitting files.
+2. `mise run test` compiles the sources and tests, then runs the Node and Bats suites. The compilation is the gate's build check.
+3. `mise run docs` builds the VitePress site.
+
+Formatting, linting, duplication analysis, dependency vulnerability audits, recorded review-quality evaluation, and Git hooks are not implemented in this POC. The former Mise task references and contribution-guide claims did not provide those checks. Issue #79 aligns the gate with the checks that exist; it does not certify the missing checks. Adding them requires a separate reviewed change, not passing no-op scripts. Future review-quality corpora and thresholds require explicit owner review. Live model evaluation must remain opt-in and must not receive a GitHub publication token.
+
+The Bats validation-gate tests check task/script references, gate order, build coverage, and the pnpm tool pin. A passing local gate does not prove native backend compatibility, live model quality, image publication, or forge comment publication.
 
 ## Security review
 
@@ -108,7 +116,7 @@ Approval authorizes the exact source SHA. The workflow rejects stale heads befor
 
 The publisher may execute reviewed Dockerfile build steps only after the maintenance approval. Preflight must not import or execute selected-source scripts, install its dependencies, check out that head, or forward host configuration or credentials into the exact allowlisted context. This exception does not relax the ban on executing PR code in review workflows. Report partial publication explicitly. Do not prune packages, move `latest` or stable tags, update pins automatically, or merge automatically.
 
-See [Candidate runner images](docs/candidate-runner-images.md) for setup, unsupported cases, digest verification, and recovery. Local checks do not prove registry authorization, published-image compatibility, or live GLM review success. Record baseline `mise run validate` failures rather than claiming the full gate passed.
+See [Candidate runner images](docs/candidate-runner-images.md) for setup, unsupported cases, digest verification, and recovery. Local checks do not prove registry authorization, published-image compatibility, or live GLM review success. Report the exact validation gate and results; do not treat its implemented scope as the missing quality checks.
 
 ## Releasing the action
 
@@ -189,7 +197,7 @@ Update documentation in the same pull request when behavior or configuration cha
 
 ## Commits
 
-Use Conventional Commits with the linked GitHub issue number as the scope. The Husky `commit-msg` hook enforces this format:
+Use Conventional Commits with the linked GitHub issue number as the scope. No installed hook enforces this format; check it before committing:
 
 ```text
 feat(#21): add GitHub App credential provider

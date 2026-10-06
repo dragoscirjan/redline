@@ -27,10 +27,10 @@ inputs:
     required: false
     default: ""
   github-app-id:
-    description: Redline GitHub App id; together with github-app-private-key, an installation token is generated for publication. Preferred over github-token.
+    description: Redline GitHub App id; together with github-app-key, an installation token is generated for publication. Preferred over github-token.
     required: false
     default: ""
-  github-app-private-key:
+  github-app-key:
     description: Redline GitHub App private key (PEM). Bind to a secret.
     required: false
     default: ""
@@ -102,13 +102,17 @@ runs:
         pnpm run build
         test -f dist/src/review/cli.js
 
-    - name: Generate Redline App token
-      id: app-token
-      if: ${{ inputs.github-app-id != '' && inputs.github-app-private-key != '' }}
+    # Two-phase token flow: token 1 exists for the review-start (and
+    # failure) notifications minted while the review data is collected;
+    # token 2 is minted after the review completes and covers only the
+    # publication itself. The review step runs token-free.
+    - name: Generate Redline App token for review start
+      id: app-token-start
+      if: ${{ inputs.github-app-id != '' && inputs.github-app-key != '' }}
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
       with:
         app-id: ${{ inputs.github-app-id }}
-        private-key: ${{ inputs.github-app-private-key }}
+        private-key: ${{ inputs.github-app-key }}
         owner: ${{ github.repository_owner }}
 
     - name: Validate action inputs with trusted TypeScript
@@ -129,10 +133,10 @@ runs:
         # repository, pull request, and head only count as provided when a
         # publication token is present. The App installation token is
         # preferred over the PAT fallback.
-        REDLINE_PUBLISH_TOKEN: ${{ steps.app-token.outputs.token || inputs.github-token }}
-        REDLINE_REPOSITORY: ${{ (steps.app-token.outputs.token || inputs.github-token) != '' && github.repository || '' }}
-        REDLINE_PULL_REQUEST: ${{ (steps.app-token.outputs.token || inputs.github-token) != '' && github.event.pull_request.number || '' }}
-        REDLINE_HEAD: ${{ (steps.app-token.outputs.token || inputs.github-token) != '' && github.event.pull_request.head.sha || '' }}
+        REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-start.outputs.token || inputs.github-token }}
+        REDLINE_REPOSITORY: ${{ (steps.app-token-start.outputs.token || inputs.github-token) != '' && github.repository || '' }}
+        REDLINE_PULL_REQUEST: ${{ (steps.app-token-start.outputs.token || inputs.github-token) != '' && github.event.pull_request.number || '' }}
+        REDLINE_HEAD: ${{ (steps.app-token-start.outputs.token || inputs.github-token) != '' && github.event.pull_request.head.sha || '' }}
       run: |
         set -euo pipefail
         # Authoritative input validation runs even in context-only mode, so
@@ -205,6 +209,25 @@ runs:
           opencode) command -v opencode >/dev/null 2>&1 || npm install -g opencode-ai@1.18.34 ;;
         esac
 
+    - name: Announce review start
+      if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' && (steps.app-token-start.outputs.token != '' || inputs.github-token != '') }}
+      continue-on-error: true
+      shell: bash
+      working-directory: ${{ github.action_path }}/../
+      env:
+        REDLINE_HARNESS: ${{ inputs.backend }}
+        REDLINE_MODEL_CONFIG: ${{ inputs.model-config }}
+        REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-start.outputs.token || inputs.github-token }}
+        REDLINE_REPOSITORY: ${{ github.repository }}
+        REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
+        REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+        # The "review in progress" comment goes out before the review: a
+        # run can take tens of minutes and the PR must not look abandoned.
+        # A failed announcement is logged and the review continues.
+        node "${{ github.action_path }}/../dist/src/review/cli.js" --announce-only
+
     - name: Run harness review
       if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
       shell: bash
@@ -219,15 +242,59 @@ runs:
         REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
         REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head
         REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
-        # Publication runs after the artifacts are written; the token never
-        # reaches the harness (it runs in its own constructed environment).
-        REDLINE_PUBLISH_TOKEN: ${{ steps.app-token.outputs.token || inputs.github-token }}
-        REDLINE_REPOSITORY: ${{ (steps.app-token.outputs.token || inputs.github-token) != '' && github.repository || '' }}
-        REDLINE_PULL_REQUEST: ${{ (steps.app-token.outputs.token || inputs.github-token) != '' && github.event.pull_request.number || '' }}
-        REDLINE_HEAD: ${{ (steps.app-token.outputs.token || inputs.github-token) != '' && github.event.pull_request.head.sha || '' }}
       run: |
         set -euo pipefail
+        # Token-free by design: the review process carries no publication
+        # credential at all. Publication happens in its own step with a
+        # freshly minted token, so the token lifetime never bounds the
+        # review duration.
         node "${{ github.action_path }}/../dist/src/review/cli.js"
+
+    - name: Generate Redline App token for publication
+      id: app-token-publish
+      if: ${{ !cancelled() && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' && inputs.github-app-id != '' && inputs.github-app-key != '' }}
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ inputs.github-app-id }}
+        private-key: ${{ inputs.github-app-key }}
+        owner: ${{ github.repository_owner }}
+
+    - name: Publish review
+      if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' && (steps.app-token-publish.outputs.token != '' || inputs.github-token != '') }}
+      shell: bash
+      working-directory: ${{ github.action_path }}/../
+      env:
+        REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
+        REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-publish.outputs.token || inputs.github-token }}
+        REDLINE_REPOSITORY: ${{ github.repository }}
+        REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
+        REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+        # Fresh token, seconds-old: loads the written records and summary
+        # from the output directory and publishes them. Fails when every
+        # requested file review failed, or when the PR moved past the
+        # reviewed head.
+        node "${{ github.action_path }}/../dist/src/review/cli.js" --publish-only
+
+    - name: Notify review failure
+      if: ${{ failure() && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' && (steps.app-token-start.outputs.token != '' || inputs.github-token != '') }}
+      continue-on-error: true
+      shell: bash
+      working-directory: ${{ github.action_path }}/../
+      env:
+        REDLINE_HARNESS: ${{ inputs.backend }}
+        REDLINE_MODEL_CONFIG: ${{ inputs.model-config }}
+        REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-start.outputs.token || inputs.github-token }}
+        REDLINE_REPOSITORY: ${{ github.repository }}
+        REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
+        REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
+        REDLINE_FAILURE_REASON: The review run failed; see the run log and artifacts for diagnostics.
+      run: |
+        set -euo pipefail
+        # Replaces the "review in progress" comment with the failure state
+        # so it never stays at running. Best effort.
+        node "${{ github.action_path }}/../dist/src/review/cli.js" --announce-failure
 
     - name: Upload review output artifact
       if: ${{ always() && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}

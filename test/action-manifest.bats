@@ -20,7 +20,7 @@ inputs = action['inputs']
 assert set(inputs) == {
     'backend', 'model-config', 'model-auth', 'finding-scope',
     'timeout', 'verbosity', 'artifact-name', 'artifact-retention-days',
-    'github-token', 'github-app-id', 'github-app-private-key',
+    'github-token', 'github-app-id', 'github-app-key',
 }, f'unexpected input surface: {sorted(inputs)}'
 assert inputs['finding-scope']['default'] == 'defects'
 assert inputs['timeout']['default'] == '30m'
@@ -32,7 +32,11 @@ assert runs['using'] == 'composite'
 steps = [step.get('name', '') for step in runs['steps']]
 for expected in [
     'Validate action inputs',
-    'Generate Redline App token',
+    'Generate Redline App token for review start',
+    'Announce review start',
+    'Generate Redline App token for publication',
+    'Publish review',
+    'Notify review failure',
     'Build trusted TypeScript',
     'Validate action inputs with trusted TypeScript',
     'Fetch pull request commits as data',
@@ -74,17 +78,21 @@ PY
   [ "$count" -eq 2 ]
 }
 
-@test "action generates the App installation token and prefers it" {
+@test "action generates two App tokens and prefers them" {
   grep -Fq 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0' "$ACTION"
-  count=$(grep -cF 'REDLINE_PUBLISH_TOKEN: ${{ steps.app-token.outputs.token || inputs.github-token }}' "$ACTION")
-  [ "$count" -eq 2 ]
+  # Token 1: review start (and failure notifications). Token 2: publication.
+  grep -Fq 'id: app-token-start' "$ACTION"
+  grep -Fq 'id: app-token-publish' "$ACTION"
+  grep -Fq 'private-key: ${{ inputs.github-app-key }}' "$ACTION"
 }
 
-@test "action maps the publication environment from the publication token" {
-  grep -Fq "REDLINE_REPOSITORY: \${{ (steps.app-token.outputs.token || inputs.github-token) != '' && github.repository || '' }}" "$ACTION"
-  grep -Fq "REDLINE_REPOSITORY: \${{ (steps.app-token.outputs.token || inputs.github-token) != '' && github.repository || '' }}" "$ACTION"
-  grep -Fq "REDLINE_PULL_REQUEST: \${{ (steps.app-token.outputs.token || inputs.github-token) != '' && github.event.pull_request.number || '' }}" "$ACTION"
-  grep -Fq "REDLINE_HEAD: \${{ (steps.app-token.outputs.token || inputs.github-token) != '' && github.event.pull_request.head.sha || '' }}" "$ACTION"
+@test "action runs the review token-free and publishes in its own step" {
+  grep -Fq 'dist/src/review/cli.js" --announce-only' "$ACTION"
+  grep -Fq 'dist/src/review/cli.js" --publish-only' "$ACTION"
+  grep -Fq 'dist/src/review/cli.js" --announce-failure' "$ACTION"
+  grep -Fq 'REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-publish.outputs.token || inputs.github-token }}' "$ACTION"
+  count=$(grep -cF 'REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-start.outputs.token || inputs.github-token }}' "$ACTION")
+  [ "$count" -ge 3 ]
 }
 
 @test "action keeps container and legacy inputs out of the surface" {

@@ -17,8 +17,8 @@ Inputs are fixed enums and data. No input accepts free-form review instructions.
 | `artifact-name` | name | Base name for artifacts. Default `redline-review-<run id>`. |
 | `artifact-retention-days` | 1–90 | Default `45`. |
 | `github-token` | secret | Fallback publication token (PAT), used when the App inputs are unset. An installation token generated outside the workflow is also accepted. Publication never uses the Actions `GITHUB_TOKEN`. Empty keeps artifact-only mode. |
-| `github-app-id` | secret | Redline GitHub App id; with `github-app-private-key`, an installation token is generated for publication and preferred over the fallback. |
-| `github-app-private-key` | secret | Redline GitHub App private key (PEM). |
+| `github-app-id` | secret | Redline GitHub App id; with `github-app-key`, installation tokens are generated for the publication phases and preferred over the fallback. |
+| `github-app-key` | secret | Redline GitHub App private key (PEM). |
 
 Review execution is enabled only when `backend`, `model-config`, and `model-auth` are all supplied. Without them the action keeps the context-bundle-only behavior.
 
@@ -26,7 +26,7 @@ Review execution is enabled only when `backend`, `model-config`, and `model-auth
 
 When `github-token` is supplied together with review execution, the action publishes the review to GitHub after writing the artifacts:
 
-- One review per file with validated findings, bound to the reviewed head through `commit_id`, with one inline comment per finding. Each comment carries the issue explanation, an apply-able `suggestion` block when the model proposed a concrete change, and the fix prompt for a coding agent.
+- One review per file with validated findings, bound to the reviewed head through `commit_id`, with one inline comment per finding. Publication runs as its own step with a freshly minted token after the review completes. Each comment carries the issue explanation, an apply-able `suggestion` block when the model proposed a concrete change, and the fix prompt for a coding agent.
 - One managed summary comment with run counts and per-file outcomes, updated in place on re-runs. A "review in progress" body is published when the run starts — the review runs one prompt per reviewed file and can take a while — and is replaced by the run summary (or the failure state) when the run completes. Publication context (repository, pull request, head) arrives together with the token; a partial selection fails validation.
 - Every managed object carries a machine-readable marker. Updating or creating one requires both the marker and the expected author, so the action never touches another author's content. The author is resolved from the token: a PAT through `GET /user`; a GitHub App installation token has no user behind `/user`, so the publisher learns its actor from the first object the token creates (authoritative response) and, across runs, recognizes its managed objects by marker plus the `## Redline review` heading — adopting the single marker-managed summary in place, failing closed on ambiguity, and never touching a marker comment without the managed heading. An explicit bot login (`botLogin`) remains an optional identity override.
 - Before publishing, the action re-reads the pull request head and aborts when the PR has moved past the reviewed commit.
@@ -38,15 +38,19 @@ Re-runs on the same head are idempotent: an existing actor-owned review with the
 ## Pipeline
 
 1. **Validate action inputs** — the event must be a `pull_request` with full base and head commit identifiers; the artifact settings and the all-or-nothing review-input rule are enforced.
-2. **Generate Redline App token** — when the App inputs are set, an installation token is generated for publication (pinned `actions/create-github-app-token`); the publication token falls back to `github-token` otherwise.
+2. **Generate Redline App token for review start** — token 1, minted while the review data is collected; the publication token falls back to `github-token` when the App inputs are unset.
 3. **Build trusted TypeScript** — the action checkout (the trusted base revision for `pull_request` events) is installed and built; pull request code is never installed, built, or executed.
 4. **Validate action inputs with trusted TypeScript** — the review CLI runs `--validate-only` against the `REDLINE_*` environment contract; invalid optional inputs fail even in context-only mode.
 5. **Fetch pull request commits as data** — base and head commits are fetched as Git objects and verified.
 6. **Build review context bundle** — `src/context-bundle.sh` produces the manifest, diffs, base files, and a source-at-head export; a PR requirements file is folded in when present.
 7. **Upload review context artifact** — `<artifact-name>-context` with `source-at-head/` and `review/`.
 8. **Ensure harness binary** — installs the selected harness's fixed npm package when review execution is enabled and the binary is not already present (`pi` or `opencode`; `echo` needs nothing). This is trusted workflow tooling, never pull request code.
-9. **Run harness review** — the review CLI loads the bundle, runs one prompt per reviewed file through the harness, validates every finding, and writes per-file review records.
-10. **Upload review output artifact** — `<artifact-name>-reviews` with the per-file JSON and Markdown records and the run summary.
+9. **Announce review start** — publishes the "review in progress" comment (continue-on-error; a failed notification never blocks the review). Token 1 covers this and the failure notification.
+10. **Run harness review** — token-free by design: the review process carries no publication credential. The CLI loads the bundle, runs one prompt per reviewed file through the harness, validates every finding, and writes per-file review records.
+11. **Upload review output artifact** — `<artifact-name>-reviews` with the per-file JSON and Markdown records and the run summary.
+12. **Generate Redline App token for publication** — token 2, minted after the review completes; it covers only the publication itself, so the token lifetime never bounds the review duration.
+13. **Publish review** — `--publish-only` re-reads the written records and summary from the output directory and publishes them (stale-head guard, caps, per-file failure accounting).
+14. **Notify review failure** — when the review run failed, replaces the "review in progress" comment with the failure state (continue-on-error).
 
 ## Boundaries
 

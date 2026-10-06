@@ -60,21 +60,21 @@ jobs:
       # carries the previous design while this branch is open. That
       # revision's review mode runs the replaced containerized pipeline,
       # which fails silently (empty backend diagnostic, exit 0) on this
-      # branch's large restart diff, so review execution stays disabled here
-      # and the current pipeline's live behavior is validated by the CI
-      # harness matrix instead (echo, pi, opencode against the mock model
-      # endpoint). Re-enable backend/model-config once this design is the
-      # base revision. The github-token, credential-isolation, and
-      # container-engine inputs are then required by the previous action
-      # and ignored by the current one, so they stay wired below.
+      # branch's large restart diff, so review execution stays disabled
+      # here and the current pipeline's live behavior is validated by the
+      # CI harness matrix instead (echo, pi, opencode against the mock
+      # model endpoint). Re-enable backend/model-config/model-auth once
+      # this design is the base revision; the github-token secret stays
+      # wired for that flip. Only inputs the current action declares are
+      # passed: the previous action's legacy surface (github-token,
+      # credential-isolation, container-engine) is rejected by actionlint
+      # against this action manifest and is not needed in context-only
+      # mode.
       - name: Run Redline review action
         uses: ./github
         with:
           backend: ''
           model-config: ''
           model-auth: ''
-          github-token: ${{ secrets.github-token }}
-          credential-isolation: ''
-          container-engine: docker
           artifact-name: pull-request-review-${{ github.event.pull_request.number }}-${{ github.run_id }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

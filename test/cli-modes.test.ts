@@ -113,4 +113,29 @@ describe('single-purpose CLI modes', () => {
     );
     expect(exit).toBe(1);
   });
+
+  it('rejects a saved run that belongs to another head', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const reviewEnv = cleanReviewEnvironment(fixture, 'echo');
+      expect(await main([], reviewEnv)).toBe(0);
+      const { publisher, calls } = fakePublisher();
+      const exit = await main(
+        ['--publish-only'],
+        {
+          REDLINE_OUTPUT_DIR: reviewEnv.REDLINE_OUTPUT_DIR ?? '',
+          REDLINE_PUBLISH_TOKEN: 'gh-token',
+          REDLINE_REPOSITORY: 'owner/repository',
+          REDLINE_PULL_REQUEST: '14',
+          REDLINE_HEAD: 'c'.repeat(40), // Not the run's head.
+        },
+        { publisher },
+      );
+      expect(exit).toBe(1);
+      expect(calls.upsertSummary).toBe(0);
+      expect(calls.publishFileReview).toBe(0);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
 });

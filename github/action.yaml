@@ -229,6 +229,7 @@ runs:
         node "${{ github.action_path }}/../dist/src/review/cli.js" --announce-only
 
     - name: Run harness review
+      id: review
       if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
       shell: bash
       working-directory: ${{ github.action_path }}/../
@@ -278,14 +279,17 @@ runs:
         node "${{ github.action_path }}/../dist/src/review/cli.js" --publish-only
 
     - name: Notify review failure
-      if: ${{ failure() && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' && (steps.app-token-start.outputs.token != '' || inputs.github-token != '') }}
+      if: ${{ failure() && steps.review.conclusion == 'failure' && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
       continue-on-error: true
       shell: bash
       working-directory: ${{ github.action_path }}/../
       env:
         REDLINE_HARNESS: ${{ inputs.backend }}
         REDLINE_MODEL_CONFIG: ${{ inputs.model-config }}
-        REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-start.outputs.token || inputs.github-token }}
+        # Prefer the freshly minted publication token: a failure after one
+        # hour leaves the start token expired, while the publication token
+        # is seconds old. The start token covers earlier failures.
+        REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-publish.outputs.token || steps.app-token-start.outputs.token || inputs.github-token }}
         REDLINE_REPOSITORY: ${{ github.repository }}
         REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
         REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}

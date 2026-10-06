@@ -38,8 +38,8 @@ Re-runs on the same head are idempotent: an existing actor-owned review with the
 ## Pipeline
 
 1. **Validate action inputs** — the event must be a `pull_request` with full base and head commit identifiers; the artifact settings and the all-or-nothing review-input rule are enforced.
-2. **Generate Redline App token for review start** — token 1, minted while the review data is collected; the publication token falls back to `github-token` when the App inputs are unset.
-3. **Build trusted TypeScript** — the action checkout (the trusted base revision for `pull_request` events) is installed and built; pull request code is never installed, built, or executed.
+2. **Build trusted TypeScript** — the action checkout (the trusted base revision for `pull_request` events) is installed and built; pull request code is never installed, built, or executed.
+3. **Generate Redline App token for review start** — token 1, used by the announce and failure-notification steps; the publication token falls back to `github-token` when the App inputs are unset.
 4. **Validate action inputs with trusted TypeScript** — the review CLI runs `--validate-only` against the `REDLINE_*` environment contract; invalid optional inputs fail even in context-only mode.
 5. **Fetch pull request commits as data** — base and head commits are fetched as Git objects and verified.
 6. **Build review context bundle** — `src/context-bundle.sh` produces the manifest, diffs, base files, and a source-at-head export; a PR requirements file is folded in when present.
@@ -47,10 +47,10 @@ Re-runs on the same head are idempotent: an existing actor-owned review with the
 8. **Ensure harness binary** — installs the selected harness's fixed npm package when review execution is enabled and the binary is not already present (`pi` or `opencode`; `echo` needs nothing). This is trusted workflow tooling, never pull request code.
 9. **Announce review start** — publishes the "review in progress" comment (continue-on-error; a failed notification never blocks the review). Token 1 covers this and the failure notification.
 10. **Run harness review** — token-free by design: the review process carries no publication credential. The CLI loads the bundle, runs one prompt per reviewed file through the harness, validates every finding, and writes per-file review records.
-11. **Upload review output artifact** — `<artifact-name>-reviews` with the per-file JSON and Markdown records and the run summary.
-12. **Generate Redline App token for publication** — token 2, minted after the review completes; it covers only the publication itself, so the token lifetime never bounds the review duration.
-13. **Publish review** — `--publish-only` re-reads the written records and summary from the output directory and publishes them (stale-head guard, caps, per-file failure accounting).
-14. **Notify review failure** — when the review run failed, replaces the "review in progress" comment with the failure state (continue-on-error).
+11. **Generate Redline App token for publication** — token 2, minted after the review completes; it covers only the publication itself, so the token lifetime never bounds the review duration.
+12. **Publish review** — `--publish-only` re-reads the written records and summary from the output directory and publishes them (stale-head guard, run-to-head match, caps, per-file failure accounting).
+13. **Notify review failure** — when the harness review step failed, replaces the "review in progress" comment with the failure state (continue-on-error); prefers the fresh publication token when one was minted.
+14. **Upload review output artifact** — `<artifact-name>-reviews` with the per-file JSON and Markdown records and the run summary.
 
 ## Boundaries
 

@@ -105,6 +105,15 @@ async function runSinglePurposeMode(
       const parsed = parsePublishOnlyEnvironment(environment);
       const publisher = dependencies.publisher ?? new GitHubReviewPublisher({ token: parsed.publication.token });
       const run = await loadPublishedRun(parsed.outputDirectory);
+      // The saved run must be the run for THIS publication head: an output
+      // directory left over from an earlier attempt would otherwise pass
+      // the PR stale-head check while publishing another commit's
+      // findings.
+      if (run.summary.head !== parsed.publication.head) {
+        throw new Error(
+          `review output belongs to head ${run.summary.head.slice(0, 12)}, not the publication head ${parsed.publication.head.slice(0, 12)}`,
+        );
+      }
       const outcome = await publishRecords({
         records: run.records,
         summary: run.summary,

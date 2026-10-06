@@ -92,7 +92,9 @@ PY
   grep -Fq 'dist/src/review/cli.js" --announce-failure' "$ACTION"
   grep -Fq 'REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-publish.outputs.token || inputs.github-token }}' "$ACTION"
   count=$(grep -cF 'REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-start.outputs.token || inputs.github-token }}' "$ACTION")
-  [ "$count" -ge 3 ]
+  [ "$count" -eq 2 ]
+  # The failure notice prefers the fresh publication token when one exists.
+  grep -Fq 'REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-publish.outputs.token || steps.app-token-start.outputs.token || inputs.github-token }}' "$ACTION"
 }
 
 @test "action keeps container and legacy inputs out of the surface" {

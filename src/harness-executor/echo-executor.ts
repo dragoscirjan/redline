@@ -9,6 +9,7 @@
  */
 
 import type {
+  HarnessExecuteOptions,
   HarnessExecutor,
   HarnessPrompt,
   HarnessRun,
@@ -33,7 +34,11 @@ export class EchoHarnessExecutor implements HarnessExecutor {
     });
   }
 
-  async execute(_prepared: PreparedEcho, prompt: HarnessPrompt): Promise<HarnessRun> {
+  async execute(
+    _prepared: PreparedEcho,
+    prompt: HarnessPrompt,
+    _options?: HarnessExecuteOptions,
+  ): Promise<HarnessRun> {
     const fileId = FILE_ID_PATTERN.exec(prompt.user)?.[1] ?? '000000';
     const text = JSON.stringify({ version: 2, fileId, outcome: 'clean', findings: [] });
     return {

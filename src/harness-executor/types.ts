@@ -65,8 +65,18 @@ export interface PreparedHarness {
   readonly description: string;
 }
 
+export interface HarnessOutputLine {
+  readonly stream: 'stdout' | 'stderr';
+  readonly line: string;
+}
+
+export interface HarnessExecuteOptions {
+  /** Live per-line harness output tap for progress logging; optional. */
+  readonly onOutputLine?: (output: HarnessOutputLine) => void;
+}
+
 export interface HarnessExecutor {
   readonly harness: HarnessName;
   prepare(settings: HarnessSettings): Promise<PreparedHarness>;
-  execute(prepared: PreparedHarness, prompt: HarnessPrompt): Promise<HarnessRun>;
+  execute(prepared: PreparedHarness, prompt: HarnessPrompt, options?: HarnessExecuteOptions): Promise<HarnessRun>;
 }

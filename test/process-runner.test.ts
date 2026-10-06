@@ -53,6 +53,24 @@ describe('runBoundedProcess', () => {
     expect(result.code).toBe(3);
   });
 
+  it('taps output lines live while collection stays unchanged', async () => {
+    const tapped: string[] = [];
+    const result = await runBoundedProcess(nodeProcessSpawner, {
+      command: process.execPath,
+      // Multibyte characters split across chunk boundaries must not
+      // corrupt either the tapped lines or the collected text.
+      args: ['-e', 'process.stdout.write("\\u03b1\\n\\u03b2\\n\\u03b3"); process.stderr.write("diag\\n");'],
+      timeoutMs: 10_000,
+      onOutputLine: (stream, line) => tapped.push(`${stream}:${line}`),
+    });
+    expect(result.stdout).toBe('α\nβ\nγ');
+    expect(result.stderr).toBe('diag\n');
+    // Two independent pipes: per-stream order is guaranteed, cross-stream
+    // order is not.
+    expect(tapped.filter((line) => line.startsWith('stdout:'))).toEqual(['stdout:α', 'stdout:β', 'stdout:γ']);
+    expect(tapped.filter((line) => line.startsWith('stderr:'))).toEqual(['stderr:diag']);
+  });
+
   it('kills a process that exceeds the timeout', async () => {
     const result = await runBoundedProcess(nodeProcessSpawner, {
       command: process.execPath,

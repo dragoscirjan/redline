@@ -41,6 +41,28 @@ function reviewDocument(value: object): string {
 }
 
 describe('runFileReviews', () => {
+  it('reports progress after each completed file', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      executor.script([
+        { text: reviewDocument({ version: 2, fileId: '000001', outcome: 'clean', findings: [] }) },
+      ]);
+      const progress: string[] = [];
+      const result = await runFileReviews({
+        environment: environment.review!,
+        executor,
+        onFileDone: (record) => progress.push(`${record.path}: ${record.outcome}`),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(progress).toEqual(['src/example.ts: clean']);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('runs one prompt per reviewed file and writes records and summary', async () => {
     const fixture = await createBundleFixture();
     try {

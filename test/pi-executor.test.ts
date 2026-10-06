@@ -143,4 +143,37 @@ describe('extractPiAssistantText', () => {
     expect(extractPiAssistantText('{"type":"session"}\n')).toBeUndefined();
     expect(extractPiAssistantText('')).toBeUndefined();
   });
+
+  it('forwards heartbeat event boundaries, never event content', async () => {
+    const settings = await createSettings();
+    try {
+      const spawner = new RecordingSpawner();
+      const executor = createPiExecutor({ command: 'pi-fake', spawner });
+      const prepared = await executor.prepare(settings);
+      const stdout = [
+        '{"type":"session"}',
+        '{"type":"message_update","assistantMessageEvent":{"content":"untrusted quoted content"}}',
+        '{"type":"message_end"}',
+        '{"type":"turn_end"}',
+        '{"type":"agent_end"}',
+        '',
+      ].join('\n');
+      spawner.script(stdout, 0);
+      const tapped: string[] = [];
+      await executor.execute(prepared, { system: 'SYS', user: 'USER' }, {
+        onOutputLine: (output) => tapped.push(`${output.stream}:${output.line}`),
+      });
+
+      // Only event boundaries pass through; the message_update content —
+      // which can quote pull request data — is dropped, as is the session
+      // noise.
+      expect(tapped).toEqual([
+        'stdout:pi event: message_end',
+        'stdout:pi event: turn_end',
+        'stdout:pi event: agent_end',
+      ]);
+    } finally {
+      await settings.cleanup();
+    }
+  });
 });

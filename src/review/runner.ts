@@ -15,7 +15,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHarnessExecutor } from '../harness-executor/registry.js';
-import type { HarnessExecutor } from '../harness-executor/types.js';
+import type { HarnessExecutor, HarnessOutputLine } from '../harness-executor/types.js';
 import { loadReviewBundle, type ReviewBundle, type ReviewManifestFile } from './bundle.js';
 import type { ReviewEnvironment } from './environment.js';
 import { buildFileReviewPrompt, type FileReviewPrompt } from './prompt.js';
@@ -36,6 +36,18 @@ export interface ReviewRunInput {
   readonly environment: ReviewEnvironment;
   /** Executor override for tests; defaults to the registry for the harness. */
   readonly executor?: HarnessExecutor;
+  /**
+   * Called after each reviewed file completes, for live progress in the
+   * run log — a long sequential run must stay distinguishable from a
+   * hang. Absent in tests unless they assert progress.
+   */
+  readonly onFileDone?: (record: FileReviewRecord) => void;
+  /**
+   * Live harness output tap while a file's prompt runs. Harnesses forward
+   * bounded heartbeat lines (event boundaries for pi, stderr for
+   * opencode), never model or pull request content.
+   */
+  readonly onHarnessOutput?: (output: HarnessOutputLine) => void;
 }
 
 export interface ReviewRunResult {
@@ -72,6 +84,7 @@ async function reviewOneFile(
   environment: ReviewEnvironment,
   bundle: ReviewBundle,
   file: ReviewManifestFile,
+  onHarnessOutput?: (output: HarnessOutputLine) => void,
 ): Promise<FileReviewRecord & { rawModelOutput?: string | undefined }> {
   const redact = (value: string): string => redactCredential(value, environment.credential);
   const described = {
@@ -111,7 +124,11 @@ async function reviewOneFile(
     };
   }
 
-  const run = await executor.execute(prepared, prompt);
+  const run = await executor.execute(
+    prepared,
+    prompt,
+    onHarnessOutput === undefined ? undefined : { onOutputLine: onHarnessOutput },
+  );
 
   if (run.status !== 'succeeded') {
     return {
@@ -230,11 +247,13 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
         };
         records.push(binaryRecord);
         await writer.writeFileReview(binaryRecord);
+        input.onFileDone?.(binaryRecord);
         continue;
       }
-      const record = await reviewOneFile(executor, prepared, environment, bundle, file);
+      const record = await reviewOneFile(executor, prepared, environment, bundle, file, input.onHarnessOutput);
       records.push(record);
       await writer.writeFileReview(record);
+      input.onFileDone?.(record);
     }
 
     const summary: ReviewRunSummary = {

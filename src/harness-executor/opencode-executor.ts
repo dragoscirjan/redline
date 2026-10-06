@@ -26,7 +26,9 @@ import {
   type ProcessSpawner,
 } from './process-runner.js';
 import type {
+  HarnessExecuteOptions,
   HarnessExecutor,
+  HarnessOutputLine,
   HarnessPrompt,
   HarnessRun,
   HarnessSettings,
@@ -217,7 +219,11 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
         modelConfig,
       });
     },
-    async execute(prepared: PreparedHarness, prompt: HarnessPrompt): Promise<HarnessRun> {
+    async execute(
+      prepared: PreparedHarness,
+      prompt: HarnessPrompt,
+      options?: HarnessExecuteOptions,
+    ): Promise<HarnessRun> {
       const state = prepared as PreparedOpenCode;
       // Every `opencode run` is a fresh process, so the agent system prompt
       // (the fixed review policy) is rewritten before each invocation.
@@ -229,6 +235,15 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
         cwd: state.cwd,
         env: state.env,
         timeoutMs: state.timeoutMs,
+        // `opencode run --format json` prints once at the end, so there is
+        // nothing to heartbeat on stdout; stderr diagnostics forward live.
+        ...(options?.onOutputLine !== undefined
+          ? {
+              onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {
+                if (stream === 'stderr') options.onOutputLine?.({ stream, line });
+              },
+            }
+          : {}),
       });
       return toHarnessRun(result);
     },

@@ -22,12 +22,16 @@ import {
   type ProcessSpawner,
 } from './process-runner.js';
 import type {
+  HarnessExecuteOptions,
   HarnessExecutor,
   HarnessPrompt,
   HarnessRun,
   HarnessSettings,
   PreparedHarness,
 } from './types.js';
+
+/** Event boundaries forwarded as heartbeat lines; event content never is. */
+const PI_HEARTBEAT_EVENTS = new Set(['message_end', 'turn_end', 'agent_end']);
 
 /** Environment variable `models.json` interpolates for the provider credential. */
 export const PI_CREDENTIAL_ENV_NAME = 'REDLINE_MODEL_API_KEY' as const;
@@ -163,7 +167,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         timeoutMs: settings.timeoutMs,
       });
     },
-    async execute(prepared: PreparedHarness, prompt: HarnessPrompt): Promise<HarnessRun> {
+    async execute(prepared: PreparedHarness, prompt: HarnessPrompt, options?: HarnessExecuteOptions): Promise<HarnessRun> {
       const state = prepared as PreparedPi;
       const args = [...state.args, '--system-prompt', prompt.system, '--', prompt.user];
       const result = await runBoundedProcess(spawner, {
@@ -172,6 +176,24 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         cwd: state.cwd,
         env: state.env,
         timeoutMs: state.timeoutMs,
+        // Live heartbeat: pi streams newline-delimited JSON events. Only
+        // event boundaries are forwarded — never event content, which can
+        // quote pull request data — so the run log shows progress without
+        // dumping the model stream.
+        ...(options?.onOutputLine !== undefined
+          ? {
+              onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {
+                if (stream === 'stderr') {
+                  options.onOutputLine?.({ stream, line });
+                  return;
+                }
+                const type = /^\s*\{"type":"([a-z_]+)"/u.exec(line)?.[1];
+                if (type !== undefined && PI_HEARTBEAT_EVENTS.has(type)) {
+                  options.onOutputLine?.({ stream, line: `pi event: ${type}` });
+                }
+              },
+            }
+          : {}),
       });
       return toHarnessRun(result);
     },

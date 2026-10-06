@@ -19,7 +19,7 @@ action = yaml.safe_load(Path(sys.argv[1]).read_text())
 inputs = action['inputs']
 assert set(inputs) == {
     'backend', 'model-config', 'model-auth', 'finding-scope',
-    'timeout', 'artifact-name', 'artifact-retention-days', 'github-token',
+    'timeout', 'verbosity', 'artifact-name', 'artifact-retention-days', 'github-token',
 }, f'unexpected input surface: {sorted(inputs)}'
 assert inputs['finding-scope']['default'] == 'defects'
 assert inputs['timeout']['default'] == '30m'

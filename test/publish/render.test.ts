@@ -71,13 +71,16 @@ describe('markers', () => {
 });
 
 describe('renderFindingComment', () => {
-  it('renders explanation, suggestion block, fix prompt, and the finding marker', () => {
+  it('renders explanation, GitHub-format suggestion block, fix prompt, and the marker', () => {
     const body = renderFindingComment(SCOPE, 'src/example.ts', finding());
     expect(body).toContain('**high defect (correctness)** — `src/example.ts:3-5` (side RIGHT), confidence 0.9');
     expect(body).toContain('- **Evidence (line 3):** `const value = compute(input);`');
     expect(body).toContain('- **Impact:** Wrong value returned.');
     expect(body).toContain('**Suggested change** (apply-able):');
-    expect(body).toContain('```suggestion\n-const value = compute(input);\n+const value = guarded(input);\n```');
+    // GitHub suggestion blocks replace the anchored span with the block
+    // content verbatim: only the replacement lines, no `-`/`+` markers.
+    expect(body).toContain('```suggestion\nconst value = guarded(input);\n```');
+    expect(body).not.toContain('-const value = compute(input);\n+');
     expect(body).toContain('<details><summary>Fix prompt for a coding agent</summary>');
     expect(body).toContain('```text\nFix one code-review finding.');
     expect(body.trimEnd().split('\n').at(-1)).toBe(findingMarker(SCOPE, 'f-abc123'));
@@ -87,6 +90,23 @@ describe('renderFindingComment', () => {
     const body = renderFindingComment(SCOPE, 'src/example.ts', finding({ suggestion: undefined }));
     expect(body).not.toContain('```suggestion');
     expect(body).toContain('Fix prompt');
+  });
+
+  it('keeps delete-only proposals as a diff quote instead of an apply-able block', () => {
+    const body = renderFindingComment(SCOPE, 'src/example.ts', finding({ suggestion: '-const value = compute(input);' }));
+    expect(body).toContain('**Suggested change** (delete-only; apply manually):');
+    expect(body).toContain('```diff\n-const value = compute(input);\n```');
+    expect(body).not.toContain('suggestion');
+  });
+
+  it('extends the fence when the content contains triple backticks', () => {
+    const body = renderFindingComment(
+      SCOPE,
+      'docs/example.md',
+      finding({ fixPrompt: 'Fix one code-review finding.\n\nContext:\n```\ninline code fence\n```' }),
+    );
+    expect(body).toContain('````text\nFix one code-review finding.');
+    expect(body).toContain('````\n\n</details>');
   });
 });
 

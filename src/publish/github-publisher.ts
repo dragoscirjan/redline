@@ -4,11 +4,12 @@
  * Ports the mechanics of the previous design's `github-review-publisher.ts`:
  * injectable fetch for contract tests, Bearer auth with pinned API version
  * headers, bounded response bodies, retry with backoff on transient
- * statuses, actor resolution (including the `github-actions[bot]` fallback
- * for integration tokens), pagination caps, marker-plus-author ownership
- * checks that fail closed on ambiguity, and POST-reconcile on uncertain
- * creation. New in this design: a file's review is published as one PR
- * review (`POST /pulls/{n}/reviews`) with its findings as inline comments.
+ * statuses, explicit actor resolution (PAT through `/user`; App
+ * installation tokens through a configured bot login — nothing assumed),
+ * pagination caps, marker-plus-author ownership checks that fail closed on
+ * ambiguity, and POST-reconcile on uncertain creation. New in this design:
+ * a file's review is published as one PR review (`POST /pulls/{n}/reviews`)
+ * with its findings as inline comments.
  */
 
 import { byteLength, isRecord } from '../review/bundle.js';
@@ -114,12 +115,20 @@ export interface GitHubReviewPublisherOptions {
   /** Injectable fetch; contract tests queue scripted responses. */
   readonly fetch?: typeof fetch;
   readonly sleep?: (milliseconds: number) => Promise<void>;
+  /**
+   * Bot login for GitHub App installation tokens, which have no user
+   * behind `GET /user` and post as `<app-slug>[bot]`. When `/user` is
+   * inaccessible, resolution uses this login and fails closed without
+   * it — no built-in identity is assumed. A plain PAT never needs this.
+   */
+  readonly botLogin?: string;
 }
 
 export class GitHubReviewPublisher implements ReviewPublisher {
   readonly #token: string;
   readonly #fetch: typeof fetch;
   readonly #sleep: (milliseconds: number) => Promise<void>;
+  readonly #botLogin: string | undefined;
   #actorPromise: Promise<GitHubActor> | undefined;
 
   constructor(options: GitHubReviewPublisherOptions) {
@@ -127,6 +136,7 @@ export class GitHubReviewPublisher implements ReviewPublisher {
     this.#token = options.token;
     this.#fetch = options.fetch ?? globalThis.fetch;
     this.#sleep = options.sleep ?? ((milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+    this.#botLogin = options.botLogin;
   }
 
   async currentHead(scope: ReviewScope): Promise<string> {
@@ -190,25 +200,38 @@ export class GitHubReviewPublisher implements ReviewPublisher {
     };
     const existing = await findExisting();
     if (existing) return existing.id;
-    const value = await this.#requestJson(
-      `/repos/${owner}/${name}/pulls/${scope.pullRequest}/reviews`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          commit_id: scope.head,
-          body: publication.body,
-          event: 'COMMENT',
-          comments: publication.comments.map((comment) => ({
-            path: comment.path,
-            side: comment.side,
-            line: comment.line,
-            body: comment.body,
-          })),
-        }),
-      },
-      [200],
-    );
-    return parseReview(value, 'GitHub file review').id;
+    try {
+      const value = await this.#requestJson(
+        `/repos/${owner}/${name}/pulls/${scope.pullRequest}/reviews`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            commit_id: scope.head,
+            body: publication.body,
+            event: 'COMMENT',
+            comments: publication.comments.map((comment) => ({
+              path: comment.path,
+              side: comment.side,
+              line: comment.line,
+              ...(comment.startLine !== undefined ? { start_line: comment.startLine } : {}),
+              ...(comment.startSide !== undefined ? { start_side: comment.startSide } : {}),
+              body: comment.body,
+            })),
+          }),
+        },
+        [200],
+      );
+      return parseReview(value, 'GitHub file review').id;
+    } catch (error) {
+      // POSTs are never retried at transport level: a 502/504 may have
+      // created the review before the response was lost. Reconcile like
+      // upsertSummary before reporting the failure.
+      if (!(error instanceof GitHubApiError) || !RETRYABLE_STATUSES.has(error.status)) throw error;
+      await this.#sleep(200);
+      const reconciled = await findExisting();
+      if (reconciled) return reconciled.id;
+      throw error;
+    }
   }
 
   async #actor(): Promise<GitHubActor> {
@@ -218,9 +241,10 @@ export class GitHubReviewPublisher implements ReviewPublisher {
 
   /**
    * A GitHub App installation token has no user behind it: `GET /user`
-   * answers 403 with "Resource not accessible by integration". Comments it
-   * posts are authored by the app's bot identity, which resolves through
-   * the public users endpoint. A plain PAT resolves through `/user`.
+   * answers 403 with "Resource not accessible by integration". Comments
+   * it posts are authored by the app's bot identity, so the caller must
+   * configure that login explicitly (`botLogin`); nothing is assumed.
+   * A plain PAT resolves through `/user`.
    */
   async #resolveActor(): Promise<GitHubActor> {
     let userError: GitHubApiError | undefined;
@@ -232,13 +256,11 @@ export class GitHubReviewPublisher implements ReviewPublisher {
       if (!(error instanceof GitHubApiError) || error.status !== 403) throw error;
       userError = error;
     }
-    try {
-      return await this.#requestJson('/users/github-actions%5Bbot%5D', { method: 'GET' }, [200]).then((value) =>
-        parseActor(value, 'github-actions bot actor'),
-      );
-    } catch (error) {
-      throw userError;
-    }
+    const botLogin = this.#botLogin;
+    if (botLogin === undefined) throw userError;
+    return await this.#requestJson(`/users/${encodeURIComponent(botLogin)}`, { method: 'GET' }, [200]).then((value) =>
+      parseActor(value, 'configured bot actor'),
+    );
   }
 
   async #listComments(scope: ReviewScope, kind: 'issues' | 'pulls'): Promise<GitHubComment[]> {

@@ -170,9 +170,16 @@ runs:
         # and the backend is a validated enum. The guard keeps a binary
         # installed by the calling workflow (for example the CI matrix)
         # instead of reinstalling it.
+        #
+        # EXCEPTION: opencode-ai's postinstall script links its platform
+        # binary, so --ignore-scripts would break it. The version is
+        # pinned instead, because this action later runs with model and
+        # publication credentials and a compromised package script could
+        # alter the CLI before it runs. pi installs with scripts disabled;
+        # it has none.
         case "${{ inputs.backend }}" in
           pi) command -v pi >/dev/null 2>&1 || npm install -g --ignore-scripts @earendil-works/pi-coding-agent ;;
-          opencode) command -v opencode >/dev/null 2>&1 || npm install -g opencode-ai ;;
+          opencode) command -v opencode >/dev/null 2>&1 || npm install -g opencode-ai@1.18.34 ;;
         esac
 
     - name: Run harness review

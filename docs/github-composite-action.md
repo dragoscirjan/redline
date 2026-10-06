@@ -15,7 +15,7 @@ Inputs are fixed enums and data. No input accepts free-form review instructions.
 | `timeout` | duration | Review deadline per run, for example `10m` or `2h`. Capped at 360m. Default `30m`. |
 | `artifact-name` | name | Base name for artifacts. Default `redline-review-<run id>`. |
 | `artifact-retention-days` | 1–90 | Default `45`. |
-| `github-token` | secret | GitHub publication token; bind to `secrets.GH_TOKEN`. A PAT or a GitHub App installation token generated outside the workflow — consumed identically. Publication never uses the Actions `GITHUB_TOKEN`. Empty keeps artifact-only mode. |
+| `github-token` | secret | GitHub publication token; bind to `secrets.GH_TOKEN`. A PAT or a GitHub App installation token generated outside the workflow. Publication never uses the Actions `GITHUB_TOKEN`. Empty keeps artifact-only mode. |
 
 Review execution is enabled only when `backend`, `model-config`, and `model-auth` are all supplied. Without them the action keeps the context-bundle-only behavior.
 
@@ -25,7 +25,7 @@ When `github-token` is supplied together with review execution, the action publi
 
 - One review per file with validated findings, bound to the reviewed head through `commit_id`, with one inline comment per finding. Each comment carries the issue explanation, an apply-able `suggestion` block when the model proposed a concrete change, and the fix prompt for a coding agent.
 - One managed summary comment with run counts and per-file outcomes, updated in place on re-runs. Publication context (repository, pull request, head) arrives together with the token; a partial selection fails validation.
-- Every managed object carries a machine-readable marker. Updating or creating one requires both the marker and the expected author, so the action never touches another author's content.
+- Every managed object carries a machine-readable marker. Updating or creating one requires both the marker and the expected author, so the action never touches another author's content. The author is resolved from the token: a PAT through `GET /user`; a GitHub App installation token has no user behind `/user` and posts as `<app-slug>[bot]`, so a caller that uses one must configure the app's bot login on the publisher (`botLogin`) — no identity is assumed, and resolution fails closed without it.
 - Before publishing, the action re-reads the pull request head and aborts when the PR has moved past the reviewed commit.
 - Caps bound publication: at most 25 file reviews and 100 inline comments per run. Files and findings beyond the caps appear only in the summary.
 - Per-file publication failures never abort the run; failures are counted and reported in the summary. The action fails only when publication was requested and no requested file review succeeded.

@@ -27,6 +27,30 @@ function escapeBackticks(value: string): string {
 }
 
 /**
+ * Chooses a fence longer than any backtick run inside the content, so
+ * model text or reviewed file content containing triple backticks cannot
+ * close the fence early and break the comment structure.
+ */
+function fenceFor(content: string): string {
+  const longestRun = Math.max(0, ...(content.match(/`+/gu) ?? []).map((run) => run.length));
+  return '`'.repeat(Math.max(3, longestRun + 1));
+}
+
+/**
+ * GitHub suggestion blocks replace the anchored span lines with the block
+ * content verbatim, so the block carries only the replacement lines — the
+ * unified `-`/`+` markers from the record's suggestion are stripped here.
+ * A delete-only proposal (no replacement lines) cannot be expressed as an
+ * apply-able block; it stays a `diff` quote instead.
+ */
+function replacementLines(suggestion: string): string[] {
+  return suggestion
+    .split('\n')
+    .filter((line) => line.startsWith('+'))
+    .map((line) => line.slice(1));
+}
+
+/**
  * Renders one finding's inline comment: the explanation, the native
  * apply-able suggestion block, and the fix prompt in a collapsed details
  * section — the two remediation fields of the published record.
@@ -45,15 +69,25 @@ export function renderFindingComment(
     `- **Fix:** ${finding.fix}`,
   ];
   if (finding.suggestion !== undefined) {
-    lines.push('', '**Suggested change** (apply-able):', '');
-    lines.push('```suggestion');
-    lines.push(finding.suggestion);
-    lines.push('```');
+    const replacement = replacementLines(finding.suggestion);
+    if (replacement.length > 0) {
+      const block = replacement.join('\n');
+      lines.push('', '**Suggested change** (apply-able):', '');
+      lines.push(`${fenceFor(block)}suggestion`);
+      lines.push(block);
+      lines.push(fenceFor(block));
+    } else {
+      lines.push('', '**Suggested change** (delete-only; apply manually):', '');
+      const diffFence = fenceFor(finding.suggestion);
+      lines.push(`${diffFence}diff`);
+      lines.push(finding.suggestion);
+      lines.push(diffFence);
+    }
   }
   lines.push('', '<details><summary>Fix prompt for a coding agent</summary>', '');
-  lines.push('```text');
+  lines.push(`${fenceFor(finding.fixPrompt)}text`);
   lines.push(finding.fixPrompt);
-  lines.push('```');
+  lines.push(fenceFor(finding.fixPrompt));
   lines.push('', '</details>');
   lines.push('', findingMarker(scope, finding.id));
   return lines.join('\n');

@@ -21,7 +21,12 @@ export interface InlineReviewComment {
   readonly path: string;
   /** `LEFT` for removed lines, `RIGHT` for added lines — GitHub's semantics. */
   readonly side: 'LEFT' | 'RIGHT';
+  /** The last line of the comment's span; `startLine` anchors the first. */
   readonly line: number;
+  /** First line of a multi-line span; omitted for single-line comments. */
+  readonly startLine?: number | undefined;
+  /** Side of `startLine`; omitted for single-line comments. */
+  readonly startSide?: 'LEFT' | 'RIGHT' | undefined;
   readonly body: string;
 }
 

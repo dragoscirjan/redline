@@ -46,7 +46,7 @@ In context-only mode the workflow uploads only the `<artifact-name>-context` art
 ## Secrets
 
 - `model-auth` — the provider-keyed credential map, normally bound to repository secret `MODEL_CREDENTIALS`. Only the selected provider's credential reaches the harness; it never appears in prompts, logs, or persisted output.
-- `github-token` — bound to `secrets.GH_TOKEN`. The current action uses it for publication (one review per file with findings plus a managed summary); supply it whenever reviews should be published, not only as artifacts. A GitHub App installation token generated outside the workflow is consumed identically; publication never uses the Actions `GITHUB_TOKEN`.
+- `github-token` — bound to `secrets.GH_TOKEN`. The current action uses it for publication (one review per file with findings plus a managed summary); supply it whenever reviews should be published, not only as artifacts. A PAT works as-is; a GitHub App installation token posts as `<app-slug>[bot]` and its bot login must be configured on the publisher. Publication never uses the Actions `GITHUB_TOKEN`.
 
 ## What the run produces
 

@@ -71,7 +71,12 @@ export class PublicationService {
       comments: record.findings.slice(0, budget).map((finding) => ({
         path: record.path,
         side: finding.side,
-        line: finding.startLine,
+        // The comment anchors the full finding span so an apply-able
+        // suggestion replaces every span line, not just one.
+        line: finding.endLine,
+        ...(finding.startLine < finding.endLine
+          ? { startLine: finding.startLine, startSide: finding.side }
+          : {}),
         body: renderFindingComment(this.#scope, record.path, finding),
       })),
     };

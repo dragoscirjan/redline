@@ -15,8 +15,22 @@ Inputs are fixed enums and data. No input accepts free-form review instructions.
 | `timeout` | duration | Review deadline per run, for example `10m` or `2h`. Capped at 360m. Default `30m`. |
 | `artifact-name` | name | Base name for artifacts. Default `redline-review-<run id>`. |
 | `artifact-retention-days` | 1–90 | Default `45`. |
+| `github-token` | secret | GitHub publication token; bind to `secrets.GH_TOKEN`. A PAT or a GitHub App installation token generated outside the workflow. Publication never uses the Actions `GITHUB_TOKEN`. Empty keeps artifact-only mode. |
 
 Review execution is enabled only when `backend`, `model-config`, and `model-auth` are all supplied. Without them the action keeps the context-bundle-only behavior.
+
+## Publication
+
+When `github-token` is supplied together with review execution, the action publishes the review to GitHub after writing the artifacts:
+
+- One review per file with validated findings, bound to the reviewed head through `commit_id`, with one inline comment per finding. Each comment carries the issue explanation, an apply-able `suggestion` block when the model proposed a concrete change, and the fix prompt for a coding agent.
+- One managed summary comment with run counts and per-file outcomes, updated in place on re-runs. Publication context (repository, pull request, head) arrives together with the token; a partial selection fails validation.
+- Every managed object carries a machine-readable marker. Updating or creating one requires both the marker and the expected author, so the action never touches another author's content. The author is resolved from the token: a PAT through `GET /user`; a GitHub App installation token has no user behind `/user` and posts as `<app-slug>[bot]`, so a caller that uses one must configure the app's bot login on the publisher (`botLogin`) — no identity is assumed, and resolution fails closed without it.
+- Before publishing, the action re-reads the pull request head and aborts when the PR has moved past the reviewed commit.
+- Caps bound publication: at most 25 file reviews and 100 inline comments per run. Files and findings beyond the caps appear only in the summary.
+- Per-file publication failures never abort the run; failures are counted and reported in the summary. The action fails only when publication was requested and no requested file review succeeded.
+
+Re-runs on the same head are idempotent: an existing actor-owned review with the same marker is skipped, and the summary is updated in place. Reviews on earlier heads are outdated automatically by GitHub.
 
 ## Pipeline
 
@@ -26,13 +40,14 @@ Review execution is enabled only when `backend`, `model-config`, and `model-auth
 4. **Fetch pull request commits as data** — base and head commits are fetched as Git objects and verified.
 5. **Build review context bundle** — `src/context-bundle.sh` produces the manifest, diffs, base files, and a source-at-head export; a PR requirements file is folded in when present.
 6. **Upload review context artifact** — `<artifact-name>-context` with `source-at-head/` and `review/`.
-7. **Run harness review** — the review CLI loads the bundle, runs one prompt per reviewed file through the harness, validates every finding, and writes per-file review records.
-8. **Upload review output artifact** — `<artifact-name>-reviews` with the per-file JSON and Markdown records and the run summary.
+7. **Ensure harness binary** — installs the selected harness's fixed npm package when review execution is enabled and the binary is not already present (`pi` or `opencode`; `echo` needs nothing). This is trusted workflow tooling, never pull request code.
+8. **Run harness review** — the review CLI loads the bundle, runs one prompt per reviewed file through the harness, validates every finding, and writes per-file review records.
+9. **Upload review output artifact** — `<artifact-name>-reviews` with the per-file JSON and Markdown records and the run summary.
 
 ## Boundaries
 
 - Pull request content is untrusted data. The harness receives it only inside a delimited context block with an explicit untrusted-data framing; it never alters the fixed policy.
-- The harness runs with tools disabled and a constructed environment; no GitHub token or ambient credentials reach it.
+- The harness runs with tools disabled and a constructed environment; no GitHub token or ambient credentials reach it. The publication token is consumed only by the publication layer after the review artifacts are written.
 - Model output must validate against the authoritative diff — path, side, line, and byte-identical evidence — or the finding is rejected. Persisted reasons and raw model output are redacted against the selected credential before artifacts are written.
 - In context-only mode (review inputs empty) the action uploads only `<artifact-name>-context`; the `<artifact-name>-reviews` artifact is produced only when review execution is enabled.
 - Release tags must contain the built `dist/` output of the exact reviewed source; the action verifies it exists and builds nothing from pull request revisions.

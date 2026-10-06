@@ -9,6 +9,8 @@
  */
 
 import { pathToFileURL } from 'node:url';
+import { publishRecords, type PublicationOutcome } from '../publish/index.js';
+import type { ReviewPublisher } from '../publish/index.js';
 import { parseReviewEnvironment } from './environment.js';
 import { runFileReviews } from './runner.js';
 
@@ -19,9 +21,15 @@ function writeLine(stream: NodeJS.WriteStream, value: string): void {
   stream.write(`${value}\n`);
 }
 
+export interface CliDependencies {
+  /** Publisher override for tests; defaults to the GitHub adapter. */
+  readonly publisher?: ReviewPublisher;
+}
+
 export async function main(
   arguments_: readonly string[] = process.argv.slice(2),
   environment: NodeJS.ProcessEnv = process.env,
+  dependencies: CliDependencies = {},
 ): Promise<number> {
   const validateOnly = arguments_.includes('--validate-only');
   if (arguments_.some((argument) => argument !== '--validate-only')) {
@@ -42,7 +50,12 @@ export async function main(
       process.stdout,
       JSON.stringify(
         parsed.mode === 'review'
-          ? { mode: 'review', harness: parsed.review?.harness, timeoutMinutes: parsed.timeout.minutes }
+          ? {
+              mode: 'review',
+              harness: parsed.review?.harness,
+              publication: parsed.publication !== undefined,
+              timeoutMinutes: parsed.timeout.minutes,
+            }
           : { mode: 'context-only', timeoutMinutes: parsed.timeout.minutes },
       ),
     );
@@ -57,11 +70,49 @@ export async function main(
   try {
     const result = await runFileReviews({ environment: parsed.review as NonNullable<typeof parsed.review> });
     writeLine(process.stdout, JSON.stringify(result.summary));
-    return result.exitCode;
+
+    let exitCode = result.exitCode;
+    if (parsed.publication !== undefined) {
+      try {
+        const publication = await publishRecords({
+          records: result.records,
+          summary: result.summary,
+          publication: parsed.publication,
+          ...(dependencies.publisher !== undefined ? { publisher: dependencies.publisher } : {}),
+        });
+        writeLine(process.stdout, JSON.stringify(publicationReport(publication)));
+        const requested = publication.files.length;
+        if (requested > 0 && publication.publishedFileReviews === 0 && publication.failedFileReviews > 0) {
+          exitCode = RUN_FAILURE_EXIT;
+        }
+      } catch (error) {
+        writeLine(
+          process.stderr,
+          `redline-review: publication failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        exitCode = RUN_FAILURE_EXIT;
+      }
+    }
+    return exitCode;
   } catch (error) {
     writeLine(process.stderr, `redline-review: ${error instanceof Error ? error.message : String(error)}`);
     return RUN_FAILURE_EXIT;
   }
+}
+
+function publicationReport(publication: PublicationOutcome): Record<string, unknown> {
+  return {
+    summaryCommentId: publication.summaryCommentId,
+    publishedFileReviews: publication.publishedFileReviews,
+    failedFileReviews: publication.failedFileReviews,
+    failedInlineComments: publication.failedInlineComments,
+    files: publication.files.map((file) => ({
+      fileId: file.fileId,
+      path: file.path,
+      status: file.status,
+      ...(file.reviewId !== undefined ? { reviewId: file.reviewId } : {}),
+    })),
+  };
 }
 
 const invokedDirectly =

@@ -19,10 +19,12 @@ action = yaml.safe_load(Path(sys.argv[1]).read_text())
 inputs = action['inputs']
 assert set(inputs) == {
     'backend', 'model-config', 'model-auth', 'finding-scope',
-    'timeout', 'artifact-name', 'artifact-retention-days',
+    'timeout', 'artifact-name', 'artifact-retention-days', 'github-token',
 }, f'unexpected input surface: {sorted(inputs)}'
 assert inputs['finding-scope']['default'] == 'defects'
 assert inputs['timeout']['default'] == '30m'
+assert inputs['github-token']['default'] == ''
+assert inputs['github-token']['required'] is False
 runs = action['runs']
 assert runs['using'] == 'composite'
 steps = [step.get('name', '') for step in runs['steps']]
@@ -33,6 +35,7 @@ for expected in [
     'Fetch pull request commits as data',
     'Build review context bundle',
     'Upload review context artifact',
+    'Ensure harness binary',
     'Run harness review',
     'Upload review output artifact',
 ]:
@@ -63,8 +66,15 @@ PY
   grep -Fq "if: \${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}" "$ACTION"
 }
 
-@test "action never passes a publication token or container inputs" {
-  ! grep -Eq 'github-token|credential-isolation|container-engine|report-style' "$ACTION"
+@test "action maps the publication environment from the github-token input" {
+  grep -Fq 'REDLINE_PUBLISH_TOKEN: ${{ inputs.github-token }}' "$ACTION"
+  grep -Fq "REDLINE_REPOSITORY: \${{ inputs.github-token != '' && github.repository || '' }}" "$ACTION"
+  grep -Fq "REDLINE_PULL_REQUEST: \${{ inputs.github-token != '' && github.event.pull_request.number || '' }}" "$ACTION"
+  grep -Fq "REDLINE_HEAD: \${{ inputs.github-token != '' && github.event.pull_request.head.sha || '' }}" "$ACTION"
+}
+
+@test "action keeps container and legacy inputs out of the surface" {
+  ! grep -Eq 'credential-isolation|container-engine|report-style' "$ACTION"
 }
 
 @test "action builds trusted TypeScript from the action checkout" {

@@ -22,6 +22,10 @@ export const REDLINE_ENV_KEYS = [
   'REDLINE_MODEL_AUTH',
   'REDLINE_FINDING_SCOPE',
   'REDLINE_TIMEOUT',
+  'REDLINE_PUBLISH_TOKEN',
+  'REDLINE_REPOSITORY',
+  'REDLINE_PULL_REQUEST',
+  'REDLINE_HEAD',
 ] as const;
 
 export const DEFAULT_TIMEOUT_INPUT = `${DEFAULT_TIMEOUT_MINUTES}m`;
@@ -56,10 +60,23 @@ export interface ReviewEnvironment {
   readonly timeout: Duration;
 }
 
+/**
+ * Publication context. The token is normally the GH_TOKEN PAT; a GitHub App
+ * installation token generated outside the workflow is consumed
+ * identically. Absent means artifact-only mode.
+ */
+export interface PublicationEnvironment {
+  readonly token: string;
+  readonly repository: string;
+  readonly pullRequest: number;
+  readonly head: string;
+}
+
 export interface ParsedReviewEnvironment {
   readonly mode: ReviewMode;
   readonly timeout: Duration;
   readonly review: ReviewEnvironment | undefined;
+  readonly publication: PublicationEnvironment | undefined;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -170,17 +187,59 @@ const REVIEW_REQUIRED_KEYS = [
   'REDLINE_MODEL_AUTH',
 ] as const;
 
+const PUBLICATION_REQUIRED_KEYS = [
+  'REDLINE_PUBLISH_TOKEN',
+  'REDLINE_REPOSITORY',
+  'REDLINE_PULL_REQUEST',
+  'REDLINE_HEAD',
+] as const;
+
+const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
+const COMMIT_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
+
+/**
+ * Parses the publication context. All four variables must arrive together;
+ * a partial selection fails instead of degrading to artifact-only mode.
+ */
+function optionalPublication(environment: NodeJS.ProcessEnv): PublicationEnvironment | undefined {
+  const values = PUBLICATION_REQUIRED_KEYS.map((key) => environment[key] ?? '');
+  const provided = PUBLICATION_REQUIRED_KEYS.filter((_key, index) => (values[index] ?? '').length > 0);
+  if (provided.length === 0) return undefined;
+  if (provided.length < PUBLICATION_REQUIRED_KEYS.length) {
+    const missing = PUBLICATION_REQUIRED_KEYS.filter((key) => !provided.includes(key));
+    throw new Error(
+      `publication requires ${PUBLICATION_REQUIRED_KEYS.join(', ')} together; missing: ${missing.join(', ')}`,
+    );
+  }
+  const token = values[0] ?? '';
+  if (token !== token.trim() || /\p{Cc}/u.test(token)) throw new Error('publication token is invalid');
+  const repository = values[1] ?? '';
+  if (!REPOSITORY_PATTERN.test(repository)) throw new Error('REDLINE_REPOSITORY must use owner/name syntax');
+  const pullRequestRaw = values[2] ?? '';
+  if (!/^[1-9][0-9]*$/u.test(pullRequestRaw)) throw new Error('REDLINE_PULL_REQUEST must be a pull request number');
+  const head = values[3] ?? '';
+  if (!COMMIT_PATTERN.test(head)) throw new Error('REDLINE_HEAD must be a full commit identifier');
+  return Object.freeze({
+    token,
+    repository,
+    pullRequest: Number.parseInt(pullRequestRaw, 10),
+    head,
+  });
+}
+
 export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedReviewEnvironment {
   assertKnownEnvironment(environment);
 
   // Optional values are validated in both modes so typos fail loudly.
   const findingScope = optionalFindingScope(environment.REDLINE_FINDING_SCOPE);
   const timeout = optionalTimeout(environment.REDLINE_TIMEOUT);
+  const publication = optionalPublication(environment);
 
   const values = REVIEW_REQUIRED_KEYS.map((key) => environment[key] ?? '');
   const provided = REVIEW_REQUIRED_KEYS.filter((_key, index) => (values[index] ?? '').length > 0);
   if (provided.length === 0) {
-    return Object.freeze({ mode: 'context-only', timeout, review: undefined });
+    if (publication !== undefined) throw new Error('publication requires review execution');
+    return Object.freeze({ mode: 'context-only', timeout, review: undefined, publication: undefined });
   }
   if (provided.length < REVIEW_REQUIRED_KEYS.length) {
     const missing = REVIEW_REQUIRED_KEYS.filter((key) => !provided.includes(key));
@@ -204,5 +263,5 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
     findingScope,
     timeout,
   });
-  return Object.freeze({ mode: 'review', timeout, review });
+  return Object.freeze({ mode: 'review', timeout, review, publication });
 }

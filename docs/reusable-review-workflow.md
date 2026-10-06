@@ -41,16 +41,16 @@ In context-only mode the workflow uploads only the `<artifact-name>-context` art
 | `timeout` | duration | Default `30m`, capped at `360m`. |
 | `artifact-name` | name | Default `redline-review-<run id>`. |
 | `artifact-retention-days` | 1–90 | Default `45`. |
-| `report-style`, `credential-isolation`, `container-engine` | legacy | Surface kept while the published `v1` tag still carries the previous action design, whose review mode requires `credential-isolation: direct`, a `container-engine`, and a `github-token` secret. The current action ignores them. |
+| `report-style`, `credential-isolation`, `container-engine` | legacy | Surface kept while the published `v1` tag still carries the previous action design, whose review mode requires `credential-isolation: direct` and a `container-engine`. The current action ignores them. |
 
 ## Secrets
 
 - `model-auth` — the provider-keyed credential map, normally bound to repository secret `MODEL_CREDENTIALS`. Only the selected provider's credential reaches the harness; it never appears in prompts, logs, or persisted output.
-- `github-token` — bound to `secrets.GH_TOKEN`; required by the previously published action's publication path and ignored by the current one.
+- `github-token` — bound to `secrets.GH_TOKEN`. The current action uses it for publication (one review per file with findings plus a managed summary); supply it whenever reviews should be published, not only as artifacts. A PAT works as-is; a GitHub App installation token posts as `<app-slug>[bot]` and its bot login must be configured on the publisher. Publication never uses the Actions `GITHUB_TOKEN`.
 
 ## What the run produces
 
-Two artifacts: `<artifact-name>-context` with the review context bundle and source-at-head export, and `<artifact-name>-reviews` with the per-file review records and run summary described in [review output](/review-reporting) (the latter only when review execution is enabled).
+Two artifacts: `<artifact-name>-context` with the review context bundle and source-at-head export, and `<artifact-name>-reviews` with the per-file review records and run summary described in [review output](/review-reporting) (the latter only when review execution is enabled). When `github-token` is supplied, publication adds one review per file with findings and a managed summary comment to the pull request; see [publication](/github-composite-action#publication).
 
 ## Calling within Redline itself
 

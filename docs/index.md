@@ -5,7 +5,7 @@ description: Automated pull request review for GitHub
 
 # Redline
 
-Automated pull request review, smaller and self-hosted. A GitHub Action reviews a pull request's changed files with a fixed review policy through a harness executor (Pi or OpenCode), validates every finding against the diff, and publishes the review output as artifacts.
+Automated pull request review, smaller and self-hosted. A GitHub Action reviews a pull request's changed files with a fixed review policy through a harness executor (Pi or OpenCode), validates every finding against the diff, and publishes the review output as artifacts — or as GitHub reviews and comments when a publication token is supplied.
 
 ## How a review runs
 
@@ -24,4 +24,4 @@ The action fetches the pull request's base and head commits as Git data, builds 
 
 ## Status
 
-The GitHub entry point with artifact output is complete. GitHub comment publication, the container sandbox, managed local model runtimes, and Forgejo/Gitea entry points are planned sequenced milestones. See [CONTRIBUTING.md](https://github.com/dragoscirjan/redline/blob/main/CONTRIBUTING.md) for the development workflow and the GitHub issue tracker for open work.
+The GitHub entry point with artifact output and per-file GitHub publication is complete. The container sandbox, managed local model runtimes, and Forgejo/Gitea entry points are planned sequenced milestones. See [CONTRIBUTING.md](https://github.com/dragoscirjan/redline/blob/main/CONTRIBUTING.md) for the development workflow and the GitHub issue tracker for open work.

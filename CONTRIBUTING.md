@@ -15,7 +15,7 @@ Run `mise tasks` to list the available tasks. Use `mise run <task>` when a task 
 
 Use GitHub Issues for defects, features, and acceptance criteria. Keep product documentation and design decisions under `docs/`, rendered as a VitePress site (`pnpm run docs` builds it; `pnpm run serve` serves it during editing). Link implementation pull requests to the relevant docs and issues.
 
-The repository is in a restart phase: the current implementation is the leaner harness-executor design described in `AGENTS.md`. Improvements continue in sequenced milestones — GitHub comment publication, container sandboxing, managed local model runtimes, and Forgejo/Gitea entry points are planned follow-ups, not present behavior. `src.old/` and `github/action.yaml.old` keep the earlier design as reference material; do not import from them.
+The repository is in a restart phase: the current implementation is the leaner harness-executor design described in `AGENTS.md`. Improvements continue in sequenced milestones — container sandboxing, managed local model runtimes, and Forgejo/Gitea entry points are planned follow-ups, not present behavior. GitHub publication (one review per file plus a managed summary, dogfood auto-review on this repository) is implemented. `src.old/` and `github/action.yaml.old` keep the earlier design as reference material; do not import from them.
 
 The stack is pnpm, TypeScript, Node, vitest, bats, and VitePress. Do not add a second package manager, task runner, formatter, or test framework without an accepted design change. Follow `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `mise.toml`, and the scripts in `package.json`.
 

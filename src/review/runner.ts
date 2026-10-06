@@ -40,6 +40,8 @@ export interface ReviewRunInput {
 
 export interface ReviewRunResult {
   readonly summary: ReviewRunSummary;
+  /** The per-file records as written, consumed by the publication layer. */
+  readonly records: readonly FileReviewRecord[];
   readonly outputDirectory: string;
   readonly exitCode: number;
 }
@@ -263,6 +265,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
     ).length;
     return {
       summary,
+      records,
       outputDirectory: environment.outputDirectory,
       exitCode: validatedReviews > 0 || records.length === 0 ? 0 : 1,
     };

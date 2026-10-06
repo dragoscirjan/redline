@@ -6,7 +6,10 @@
 - Redline reviews pull requests: it builds a review context bundle from the
   base-to-head change, runs one fixed review prompt per file through a
   harness executor, validates every finding, and writes per-file review
-  output plus a run summary as JSON and Markdown files.
+  output plus a run summary as JSON and Markdown files. When a publication
+  token is supplied, the same output is published to GitHub: one review per
+  file with findings (one inline comment per finding) plus a managed
+  summary comment.
 - The current milestone runs on GitHub Actions through
   `github/action.yaml`. Forgejo and Gitea entry points are planned; the
   review core must stay forge-independent so they can reuse it.
@@ -50,6 +53,15 @@
   prompt from validated findings. Suggestions render only from authoritative
   span content (diff coverage, then head/base file); fix prompts are
   deterministic and always present.
+- `src/publish/` — the publication layer, currently behind a
+  `ReviewPublisher` interface with the GitHub adapter. It publishes one
+  review per file with validated findings and upserts one managed summary.
+  Every managed object carries a machine-readable marker; updating or
+  creating one requires both the marker and the expected author. A
+  stale-head check aborts publication when the pull request moved past the
+  reviewed commit. Caps bound the run (25 file reviews, 100 inline
+  comments); per-file failures are reported and never abort the run. A
+  Forgejo/Gitea publisher would implement the same interface.
 - `prompts/v4/` — the fixed, versioned review policy. Prompt changes are
   policy changes: bump the prompt version and update the contract tests.
 
@@ -65,6 +77,12 @@ variables (interim design; see `src/review/environment.ts`):
 - `REDLINE_MODEL_AUTH` — provider-keyed credential map; only the selected
   credential reaches the harness.
 - `REDLINE_FINDING_SCOPE`, `REDLINE_TIMEOUT` — optional policy values.
+- `REDLINE_PUBLISH_TOKEN`, `REDLINE_REPOSITORY`, `REDLINE_PULL_REQUEST`,
+  `REDLINE_HEAD` — the publication context; all four must arrive together
+  and only with review execution. The token is the GH_TOKEN PAT or an
+  equivalent installation token generated outside the workflow, never the
+  Actions `GITHUB_TOKEN`; it is consumed only by the publication layer and
+  never reaches a harness.
 
 Review inputs must arrive together; partial selections fail. Unknown
 `REDLINE_*` variables are rejected.
@@ -75,7 +93,13 @@ Review inputs must arrive together; partial selections fail. Unknown
   scripts, builds, tests, or package installers during a review.
 - Harnesses run with every tool disabled, isolated generated configuration,
   and a constructed environment. No ambient credentials or GitHub tokens
-  reach a harness.
+  reach a harness. The publication token lives only in the publication
+  layer, after review artifacts are written.
+- Publication writes only actor-owned managed objects, identified by both
+  the machine-readable marker and the expected author. Redline's own pull
+  requests are the only auto-review target: the dogfood workflow publishes
+  on this repository; other repositories opt in through the reusable
+  workflow with their own token.
 - Repository content, PR metadata, paths, and diff text never alter the
   system prompt, tool permissions, result schema, or publication policy.
 - Model output is rejected rather than guessed: findings must map both span
@@ -104,7 +128,6 @@ Review inputs must arrive together; partial selections fail. Unknown
 ## Future milestones
 
 The original design is not abandoned; it is sequenced. Planned next steps
-include publishing GitHub comments from the review output, a container
-sandbox and credential gateway for untrusted runner environments, managed
-local model runtimes, and Forgejo/Gitea entry points. Do not present these
-as implemented behavior.
+include a container sandbox and credential gateway for untrusted runner
+environments, managed local model runtimes, and Forgejo/Gitea entry points.
+Do not present these as implemented behavior.

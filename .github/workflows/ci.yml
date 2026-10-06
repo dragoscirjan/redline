@@ -95,7 +95,7 @@ jobs:
             # install scripts; opencode-ai links its platform binary in a
             # postinstall script, so --ignore-scripts would break it.
             pi) npm install -g --ignore-scripts @earendil-works/pi-coding-agent ;;
-            opencode) npm install -g opencode-ai ;;
+            opencode) npm install -g opencode-ai@1.18.34 ;;
             *) printf 'unsupported harness: %s\n' "$HARNESS" >&2; exit 2 ;;
           esac
 

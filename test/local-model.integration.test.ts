@@ -37,7 +37,7 @@ async function binaryAvailable(command: string): Promise<boolean> {
 async function endpointAlive(endpoint: string): Promise<boolean> {
   if (endpoint.length === 0) return false;
   return new Promise((resolve) => {
-    const probe = spawn('curl', ['-s', '-m', '3', `${endpoint}/v1/models`], { stdio: 'ignore' });
+    const probe = spawn('curl', ['-s', '--fail', '-m', '3', `${endpoint}/v1/models`], { stdio: 'ignore' });
     probe.on('error', () => resolve(false));
     probe.on('close', (code) => resolve(code === 0));
   });
@@ -65,6 +65,9 @@ describe.skipIf(!ENABLED)('local model runner integration', () => {
       for (const record of result.records) {
         expect(['clean', 'findings', 'omitted']).toContain(record.outcome);
       }
+      // A green signal means the model actually reviewed something: an
+      // all-omitted run (unparseable output, wrong endpoint) must fail here.
+      expect(result.summary.reviewedFiles).toBeGreaterThan(0);
       console.log(
         `local model review: ${result.summary.reviewedFiles} reviewed, ${result.summary.findings} findings, ` +
           `${result.summary.omittedFiles} omitted ` +

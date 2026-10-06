@@ -60,6 +60,8 @@ assert 'HARNESS_MATRIX_OUTPUT_DIR: ${{ runner.temp }}/harness-reviews' in ci, \
     'matrix jobs must redirect the review output out of the throwaway fixture'
 assert re.search(r'name: harness-\$\{\{ matrix\.harness \}\}-reviews-', ci), \
     'matrix jobs must upload a per-harness review artifact'
+assert "if: ${{ !cancelled() }}" in ci, \
+    'the artifact upload must also run when the review run fails'
 assert 'if-no-files-found: error' in ci, 'matrix artifact upload must fail when empty'
 assert 'actions/upload-artifact@' in ci and '# v7.0.1' in ci, \
     'upload-artifact must stay version-pinned by SHA'

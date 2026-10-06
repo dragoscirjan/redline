@@ -49,32 +49,42 @@ describe.skipIf(!ENABLED)('local model runner integration', () => {
     expect(await binaryAvailable(HARNESS_BIN)).toBe(true);
     expect(await endpointAlive(MODEL_ENDPOINT)).toBe(true);
 
-    const fixture = await createBundleFixture();
-    try {
-      const environment = {
-        ...cleanReviewEnvironment(fixture, HARNESS_BIN),
-        REDLINE_MODEL_CONFIG: MODEL_CONFIG,
-        REDLINE_MODEL_AUTH: '',
-        REDLINE_FINDING_SCOPE: 'defects',
-      };
-      const parsed = parseReviewEnvironment(environment);
-      expect(parsed.mode).toBe('review');
-      expect(parsed.review?.credential).toBeUndefined();
-      const result = await runFileReviews({ environment: parsed.review as NonNullable<typeof parsed.review> });
-      expect(result.records.length).toBeGreaterThan(0);
-      for (const record of result.records) {
-        expect(['clean', 'findings', 'omitted']).toContain(record.outcome);
+    // Small local models judge nondeterministically; a run where the model
+    // omits the file is a model judgment, not a plumbing failure. Retry so
+    // the test proves the profile CAN produce a real review end to end.
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const fixture = await createBundleFixture();
+      try {
+        const environment = {
+          ...cleanReviewEnvironment(fixture, HARNESS_BIN),
+          REDLINE_MODEL_CONFIG: MODEL_CONFIG,
+          REDLINE_MODEL_AUTH: '',
+          REDLINE_FINDING_SCOPE: 'defects',
+        };
+        const parsed = parseReviewEnvironment(environment);
+        expect(parsed.mode).toBe('review');
+        expect(parsed.review?.credential).toBeUndefined();
+        const result = await runFileReviews({ environment: parsed.review as NonNullable<typeof parsed.review> });
+        expect(result.records.length).toBeGreaterThan(0);
+        for (const record of result.records) {
+          expect(['clean', 'findings', 'omitted']).toContain(record.outcome);
+        }
+        // A green signal means the model actually reviewed something: an
+        // all-omitted run (unparseable output, wrong endpoint) must fail
+        // here. reviewedFiles counts attempts, so successful reviews are
+        // attempts minus omissions.
+        if (result.summary.reviewedFiles - result.summary.omittedFiles > 0) {
+          console.log(
+            `local model review (attempt ${attempt}): ${result.summary.reviewedFiles} reviewed, ${result.summary.findings} findings, ` +
+              `${result.summary.omittedFiles} omitted ` +
+              `(${JSON.stringify(result.summary.files.map((file) => `${file.path}: ${file.outcome}${file.errorKind === undefined ? '' : ` (${file.errorKind})`}`))})`,
+          );
+          return;
+        }
+      } finally {
+        await fixture.cleanup();
       }
-      // A green signal means the model actually reviewed something: an
-      // all-omitted run (unparseable output, wrong endpoint) must fail here.
-      expect(result.summary.reviewedFiles).toBeGreaterThan(0);
-      console.log(
-        `local model review: ${result.summary.reviewedFiles} reviewed, ${result.summary.findings} findings, ` +
-          `${result.summary.omittedFiles} omitted ` +
-          `(${JSON.stringify(result.summary.files.map((file) => `${file.path}: ${file.outcome}${file.errorKind === undefined ? '' : ` (${file.errorKind})`}`))})`,
-      );
-    } finally {
-      await fixture.cleanup();
     }
+    throw new Error('local model never produced a review in 3 attempts');
   }, 900_000);
 });

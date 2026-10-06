@@ -20,6 +20,11 @@ on:
         required: false
         type: string
         default: defects
+      verbosity:
+        description: Live model stream in the run log - silent, progress (dots), or full-output. Default progress.
+        required: false
+        type: string
+        default: progress
       report-style:
         description: Report style, single-block or inline. Legacy input kept for the previously published action; the current action ignores it.
         required: false
@@ -116,6 +121,7 @@ jobs:
           model-auth: ${{ secrets.model-auth }}
           github-token: ${{ secrets.github-token }}
           finding-scope: ${{ inputs.finding-scope }}
+          verbosity: ${{ inputs.verbosity }}
           report-style: ${{ inputs.report-style }}
           timeout: ${{ inputs.timeout }}
           credential-isolation: ${{ inputs.credential-isolation }}

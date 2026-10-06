@@ -195,6 +195,8 @@ describe('extractPiAssistantText', () => {
         '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"chunk one"}}',
         '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"chunk two"}}',
         '{"type":"message_update","assistantMessageEvent":{"type":"text_end","content":"full"}}',
+        '{"type":"message_end"}',
+        '{"type":"turn_end"}',
         '',
       ].join('\n');
       spawner.script(stdout, 0);

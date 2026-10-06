@@ -259,6 +259,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         ...(options?.onOutputLine !== undefined
           ? {
               onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {
+                if (streamMode === 'off') return;
                 if (stream === 'stderr') {
                   options.onOutputLine?.({ stream, kind: 'line', line });
                   return;

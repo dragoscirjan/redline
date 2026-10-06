@@ -34,8 +34,20 @@ function progressLine(record: FileReviewRecord): void {
   writeLine(process.stderr, `redline-review: ${record.path}: ${record.outcome}${error}`);
 }
 
-/** Bounded live harness heartbeat, also on stderr. */
+/** Marks the start of a file's review in the run log. */
+function fileStartLine(file: { readonly path: string }): void {
+  writeLine(process.stderr, `redline-review: reviewing ${file.path}…`);
+}
+
+/** Bounded live harness output on stderr. */
 function harnessLine(output: HarnessOutputLine): void {
+  if (output.kind === 'text') {
+    // Raw fragments of the model's streaming text; written unprefixed so
+    // consecutive fragments read as continuous output. Already redacted
+    // and sanitized by the harness layer.
+    process.stderr.write(output.line);
+    return;
+  }
   writeLine(process.stderr, `redline-review: harness ${output.stream}: ${output.line.slice(0, 200)}`);
 }
 
@@ -114,7 +126,12 @@ export async function main(
 
       let result;
       try {
-        result = await runFileReviews({ environment: review, onFileDone: progressLine, onHarnessOutput: harnessLine });
+        result = await runFileReviews({
+          environment: review,
+          onFileStart: fileStartLine,
+          onFileDone: progressLine,
+          onHarnessOutput: harnessLine,
+        });
       } catch (error) {
         // Defense in depth: the failure text is published, so the
         // publication token must never appear in it.
@@ -151,7 +168,12 @@ export async function main(
       return exitCode;
     }
 
-    const result = await runFileReviews({ environment: review, onFileDone: progressLine, onHarnessOutput: harnessLine });
+    const result = await runFileReviews({
+      environment: review,
+      onFileStart: fileStartLine,
+      onFileDone: progressLine,
+      onHarnessOutput: harnessLine,
+    });
     writeLine(process.stdout, JSON.stringify(result.summary));
     return result.exitCode;
   } catch (error) {

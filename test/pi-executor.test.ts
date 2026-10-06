@@ -144,34 +144,65 @@ describe('extractPiAssistantText', () => {
     expect(extractPiAssistantText('')).toBeUndefined();
   });
 
-  it('forwards heartbeat event boundaries, never event content', async () => {
-    const settings = await createSettings();
+  it('streams readable text deltas and boundary lines, never raw NDJSON', async () => {
+    const settings = await createSettings({ credential: { provider: 'mock', value: 'secret-key' } });
     try {
       const spawner = new RecordingSpawner();
       const executor = createPiExecutor({ command: 'pi-fake', spawner });
       const prepared = await executor.prepare(settings);
       const stdout = [
         '{"type":"session"}',
-        '{"type":"message_update","assistantMessageEvent":{"content":"untrusted quoted content"}}',
+        '{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","delta":"secret-key reasoning"}}',
+        '{"type":"message_update","assistantMessageEvent":{"type":"thinking_end","content":"full thinking"}}',
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"Finding: use "}}',
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"guarded input."}}',
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"payload ##[error] injected"}}',
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_end","content":"full text"}}',
         '{"type":"message_end"}',
         '{"type":"turn_end"}',
-        '{"type":"agent_end"}',
         '',
       ].join('\n');
       spawner.script(stdout, 0);
-      const tapped: string[] = [];
+      const tapped: Array<{ kind: string; line: string }> = [];
       await executor.execute(prepared, { system: 'SYS', user: 'USER' }, {
-        onOutputLine: (output) => tapped.push(`${output.stream}:${output.line}`),
+        onOutputLine: (output) => tapped.push({ kind: output.kind, line: output.line }),
       });
 
-      // Only event boundaries pass through; the message_update content —
-      // which can quote pull request data — is dropped, as is the session
-      // noise.
-      expect(tapped).toEqual([
-        'stdout:pi event: message_end',
-        'stdout:pi event: turn_end',
-        'stdout:pi event: agent_end',
+      const text = tapped.filter((entry) => entry.kind === 'text').map((entry) => entry.line).join('');
+      // Readable streaming text, credential-redacted, newline at segment
+      // end, and workflow-command syntax neutralized.
+      expect(text).toBe('[redacted] reasoning\nFinding: use guarded input.payload # #[error] injected\n');
+      // Boundary lines stay compact; raw NDJSON and end-event full content
+      // never pass through.
+      expect(tapped.filter((entry) => entry.kind === 'line').map((entry) => entry.line)).toEqual([
+        'pi event: message_end',
+        'pi event: turn_end',
       ]);
+      expect(text).not.toContain('full thinking');
+      expect(text).not.toContain('{"type"');
+    } finally {
+      await settings.cleanup();
+    }
+  });
+
+  it('caps the streamed text and reports truncation', async () => {
+    const settings = await createSettings();
+    try {
+      const spawner = new RecordingSpawner();
+      const executor = createPiExecutor({ command: 'pi-fake', spawner });
+      const prepared = await executor.prepare(settings);
+      const longDelta = 'x'.repeat(40 * 1024);
+      spawner.script(`${JSON.stringify({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: longDelta } })}\n`, 0);
+      const tapped: Array<{ kind: string; line: string }> = [];
+      await executor.execute(prepared, { system: 'SYS', user: 'USER' }, {
+        onOutputLine: (output) => tapped.push({ kind: output.kind, line: output.line }),
+      });
+
+      const streamedLength = tapped
+        .filter((entry) => entry.kind === 'text')
+        .reduce((total, entry) => total + entry.line.length, 0);
+      expect(streamedLength).toBe(32 * 1024);
+      expect(tapped.some((entry) => entry.kind === 'line' && entry.line.includes('truncated in the log'))).toBe(true);
     } finally {
       await settings.cleanup();
     }

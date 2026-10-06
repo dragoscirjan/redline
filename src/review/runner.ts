@@ -43,9 +43,14 @@ export interface ReviewRunInput {
    */
   readonly onFileDone?: (record: FileReviewRecord) => void;
   /**
+   * Called before a file's prompt runs; pairs with `onFileDone` for the
+   * per-file progress narrative in the run log.
+   */
+  readonly onFileStart?: (record: { readonly path: string }) => void;
+  /**
    * Live harness output tap while a file's prompt runs. Harnesses forward
-   * bounded heartbeat lines (event boundaries for pi, stderr for
-   * opencode), never model or pull request content.
+   * bounded heartbeat lines and readable text fragments (redacted and
+   * capped), never unbounded raw output.
    */
   readonly onHarnessOutput?: (output: HarnessOutputLine) => void;
 }
@@ -250,6 +255,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
         input.onFileDone?.(binaryRecord);
         continue;
       }
+      input.onFileStart?.({ path: fileReviewPath(file) });
       const record = await reviewOneFile(executor, prepared, environment, bundle, file, input.onHarnessOutput);
       records.push(record);
       await writer.writeFileReview(record);

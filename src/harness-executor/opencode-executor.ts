@@ -240,7 +240,7 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
         ...(options?.onOutputLine !== undefined
           ? {
               onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {
-                if (stream === 'stderr') options.onOutputLine?.({ stream, line });
+                if (stream === 'stderr') options.onOutputLine?.({ stream, kind: 'line', line });
               },
             }
           : {}),

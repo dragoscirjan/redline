@@ -19,7 +19,8 @@ action = yaml.safe_load(Path(sys.argv[1]).read_text())
 inputs = action['inputs']
 assert set(inputs) == {
     'backend', 'model-config', 'model-auth', 'finding-scope',
-    'timeout', 'verbosity', 'artifact-name', 'artifact-retention-days', 'github-token',
+    'timeout', 'verbosity', 'artifact-name', 'artifact-retention-days',
+    'github-token', 'github-app-id', 'github-app-private-key',
 }, f'unexpected input surface: {sorted(inputs)}'
 assert inputs['finding-scope']['default'] == 'defects'
 assert inputs['timeout']['default'] == '30m'
@@ -31,6 +32,7 @@ assert runs['using'] == 'composite'
 steps = [step.get('name', '') for step in runs['steps']]
 for expected in [
     'Validate action inputs',
+    'Generate Redline App token',
     'Build trusted TypeScript',
     'Validate action inputs with trusted TypeScript',
     'Fetch pull request commits as data',
@@ -72,11 +74,17 @@ PY
   [ "$count" -eq 2 ]
 }
 
-@test "action maps the publication environment from the github-token input" {
-  grep -Fq 'REDLINE_PUBLISH_TOKEN: ${{ inputs.github-token }}' "$ACTION"
-  grep -Fq "REDLINE_REPOSITORY: \${{ inputs.github-token != '' && github.repository || '' }}" "$ACTION"
-  grep -Fq "REDLINE_PULL_REQUEST: \${{ inputs.github-token != '' && github.event.pull_request.number || '' }}" "$ACTION"
-  grep -Fq "REDLINE_HEAD: \${{ inputs.github-token != '' && github.event.pull_request.head.sha || '' }}" "$ACTION"
+@test "action generates the App installation token and prefers it" {
+  grep -Fq 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0' "$ACTION"
+  count=$(grep -cF 'REDLINE_PUBLISH_TOKEN: ${{ steps.app-token.outputs.token || inputs.github-token }}' "$ACTION")
+  [ "$count" -eq 2 ]
+}
+
+@test "action maps the publication environment from the publication token" {
+  grep -Fq "REDLINE_REPOSITORY: \${{ (steps.app-token.outputs.token || inputs.github-token) != '' && github.repository || '' }}" "$ACTION"
+  grep -Fq "REDLINE_REPOSITORY: \${{ (steps.app-token.outputs.token || inputs.github-token) != '' && github.repository || '' }}" "$ACTION"
+  grep -Fq "REDLINE_PULL_REQUEST: \${{ (steps.app-token.outputs.token || inputs.github-token) != '' && github.event.pull_request.number || '' }}" "$ACTION"
+  grep -Fq "REDLINE_HEAD: \${{ (steps.app-token.outputs.token || inputs.github-token) != '' && github.event.pull_request.head.sha || '' }}" "$ACTION"
 }
 
 @test "action keeps container and legacy inputs out of the surface" {

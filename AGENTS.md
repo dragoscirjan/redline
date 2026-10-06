@@ -79,10 +79,10 @@ variables (interim design; see `src/review/environment.ts`):
 - `REDLINE_FINDING_SCOPE`, `REDLINE_TIMEOUT` — optional policy values.
 - `REDLINE_PUBLISH_TOKEN`, `REDLINE_REPOSITORY`, `REDLINE_PULL_REQUEST`,
   `REDLINE_HEAD` — the publication context; all four must arrive together
-  and only with review execution. The token is the GH_TOKEN PAT or an
-  equivalent installation token generated outside the workflow, never the
-  Actions `GITHUB_TOKEN`; it is consumed only by the publication layer and
-  never reaches a harness.
+  and only with review execution. The token is the Redline GitHub App
+  installation token generated in the action, or an outside-provided PAT
+  as fallback — never the Actions `GITHUB_TOKEN`; it is consumed only by
+  the publication layer and never reaches a harness.
 
 Review inputs must arrive together; partial selections fail. Unknown
 `REDLINE_*` variables are rejected.
@@ -95,11 +95,14 @@ Review inputs must arrive together; partial selections fail. Unknown
   and a constructed environment. No ambient credentials or GitHub tokens
   reach a harness. The publication token lives only in the publication
   layer, after review artifacts are written.
-- Publication writes only actor-owned managed objects, identified by both
-  the machine-readable marker and the expected author. Redline's own pull
-  requests are the only auto-review target: the dogfood workflow publishes
-  on this repository; other repositories opt in through the reusable
-  workflow with their own token.
+- Publication writes only managed objects: identified by marker plus the
+  expected author when the token's actor is known, or by marker plus the
+  managed heading when an App installation token has no resolvable
+  identity (the actor is then learned from the first created object;
+  ambiguity fails closed). Redline's own pull requests are the only
+  auto-review target: the dogfood workflow publishes on this repository;
+  other repositories opt in through the reusable workflow with their own
+  token or App.
 - Repository content, PR metadata, paths, and diff text never alter the
   system prompt, tool permissions, result schema, or publication policy.
 - Model output is rejected rather than guessed: findings must map both span

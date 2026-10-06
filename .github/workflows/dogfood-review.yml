@@ -14,7 +14,13 @@ on:
         default: 45
     secrets:
       github-token:
-        description: GitHub token bound to secrets.GH_TOKEN. Required by the base-revision publication path while the previous action design is checked out; the current action ignores it.
+        description: Fallback publication token (PAT) used while the Redline App secrets are not configured.
+        required: false
+      redline-app-id:
+        description: Redline GitHub App id, bound to secrets.REDLINE_APP_ID. Preferred over the PAT fallback.
+        required: false
+      redline-app-private-key:
+        description: Redline GitHub App private key, bound to secrets.REDLINE_APP_PRIVATE_KEY.
         required: false
       model-auth:
         description: Provider-keyed credential map (JSON), bound to the MODEL_CREDENTIALS secret. Enables review execution when set.
@@ -56,9 +62,12 @@ jobs:
       # The checkout above is the trusted base revision: pull request code is
       # never installed, built, or executed.
       #
-      # Auto-review on this repository's own pull requests: pi runs the real
-      # model review and publishes one review per file plus a managed
-      # summary, through the GH_TOKEN PAT (never the Actions GITHUB_TOKEN).
+      # Auto-review on this repository's own pull requests: pi runs the
+      # real model review and publishes one review per file plus a managed
+      # summary. Publication goes through the Redline GitHub App
+      # installation token when the App secrets are configured (the action
+      # generates it); the PAT (GH_TOKEN) is only the fallback until then
+      # — never the Actions GITHUB_TOKEN.
       # While a base revision still lacks an input declared here, the extra
       # input is ignored, so this call stays green across transitions.
       # TRANSITION: the base revision's action does not yet install the
@@ -77,5 +86,7 @@ jobs:
           model-config: '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}'
           model-auth: ${{ secrets.model-auth }}
           github-token: ${{ secrets.github-token }}
+          github-app-id: ${{ secrets.redline-app-id }}
+          github-app-private-key: ${{ secrets.redline-app-private-key }}
           artifact-name: pull-request-review-${{ github.event.pull_request.number }}-${{ github.run_id }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

@@ -4,12 +4,13 @@
  * Ports the mechanics of the previous design's `github-review-publisher.ts`:
  * injectable fetch for contract tests, Bearer auth with pinned API version
  * headers, bounded response bodies, retry with backoff on transient
- * statuses, explicit actor resolution (PAT through `/user`; App
- * installation tokens through a configured bot login — nothing assumed),
- * pagination caps, marker-plus-author ownership checks that fail closed on
- * ambiguity, and POST-reconcile on uncertain creation. New in this design:
- * a file's review is published as one PR review (`POST /pulls/{n}/reviews`)
- * with its findings as inline comments.
+ * statuses, actor resolution (PAT through `/user`; App installation
+ * tokens through a configured bot login or learned from the first object
+ * the token creates — nothing assumed), pagination caps,
+ * marker-plus-author ownership checks that fail closed on ambiguity, and
+ * POST-reconcile on uncertain creation. A file's review is published as
+ * one PR review (`POST /pulls/{n}/reviews`) with its findings as inline
+ * comments.
  */
 
 import { byteLength, isRecord } from '../review/bundle.js';
@@ -61,6 +62,17 @@ export class GitHubApiError extends Error {
 
 function trailingMarker(body: string, marker: string): boolean {
   return body.trimEnd().split(/\r?\n/u).at(-1) === marker;
+}
+
+/**
+ * Every managed body opens with a `## Redline review…` heading. When the
+ * actor is unknown, marker plus this heading is the adoption contract —
+ * a comment that carries the marker but no managed heading is never
+ * touched.
+ */
+function isManagedHeading(body: string): boolean {
+  const first = body.split(/\r?\n/u).find((line) => line.trim().length > 0) ?? '';
+  return first.startsWith('## Redline review');
 }
 
 function parseActor(value: unknown, label: string): GitHubActor {
@@ -116,10 +128,12 @@ export interface GitHubReviewPublisherOptions {
   readonly fetch?: typeof fetch;
   readonly sleep?: (milliseconds: number) => Promise<void>;
   /**
-   * Bot login for GitHub App installation tokens, which have no user
-   * behind `GET /user` and post as `<app-slug>[bot]`. When `/user` is
-   * inaccessible, resolution uses this login and fails closed without
-   * it — no built-in identity is assumed. A plain PAT never needs this.
+   * Optional bot login for GitHub App installation tokens, which have no
+   * user behind `GET /user` and post as `<app-slug>[bot]`. Without it,
+   * the publisher runs without an identity and learns the actor from the
+   * first object the token creates; ownership for already-published
+   * objects falls to marker plus managed heading. A plain PAT never
+   * needs this.
    */
   readonly botLogin?: string;
 }
@@ -129,7 +143,7 @@ export class GitHubReviewPublisher implements ReviewPublisher {
   readonly #fetch: typeof fetch;
   readonly #sleep: (milliseconds: number) => Promise<void>;
   readonly #botLogin: string | undefined;
-  #actorPromise: Promise<GitHubActor> | undefined;
+  #actorPromise: Promise<GitHubActor | undefined> | undefined;
 
   constructor(options: GitHubReviewPublisherOptions) {
     if (options.token.length === 0) throw new Error('GitHub publisher requires a token');
@@ -150,11 +164,19 @@ export class GitHubReviewPublisher implements ReviewPublisher {
 
   async upsertSummary(scope: ReviewScope, body: string, marker: string): Promise<number> {
     validateBody(body);
-    const actor = await this.#actor();
     const { owner, name } = repositoryParts(scope.repository);
     const findExisting = async (): Promise<GitHubComment | undefined> => {
+      // Ownership is author plus marker when the actor is known. An App
+      // installation token has no upfront identity, so the marker plus the
+      // managed heading identifies its objects; ambiguity still fails
+      // closed.
+      const actor = await this.#actor();
       const comments = await this.#listComments(scope, 'issues');
-      const matches = comments.filter((comment) => comment.user.id === actor.id && trailingMarker(comment.body, marker));
+      const matches = comments.filter(
+        (comment) =>
+          trailingMarker(comment.body, marker) &&
+          (actor === undefined ? isManagedHeading(comment.body) : comment.user.id === actor.id),
+      );
       if (matches.length > 1) throw new Error('managed summary ownership is ambiguous');
       return matches[0];
     };
@@ -174,7 +196,11 @@ export class GitHubReviewPublisher implements ReviewPublisher {
           { method: 'POST', body: JSON.stringify({ body }) },
           [201],
         );
-        return parseComment(value, 'GitHub managed summary').id;
+        const comment = parseComment(value, 'GitHub managed summary');
+        // The created object's author is authoritative: from here on the
+        // run filters by it.
+        await this.#learnActor(comment.user);
+        return comment.id;
       } catch (error) {
         if (error instanceof GitHubApiError && !RETRYABLE_STATUSES.has(error.status)) throw error;
         await this.#sleep(100 * 2 ** attempt);
@@ -190,11 +216,15 @@ export class GitHubReviewPublisher implements ReviewPublisher {
     validateBody(publication.body);
     if (publication.comments.length === 0) throw new Error('file review publication requires at least one inline comment');
     for (const comment of publication.comments) validateBody(comment.body);
-    const actor = await this.#actor();
     const { owner, name } = repositoryParts(scope.repository);
     const findExisting = async (): Promise<GitHubReview | undefined> => {
+      const actor = await this.#actor();
       const reviews = await this.#listReviews(scope);
-      const matches = reviews.filter((review) => review.user.id === actor.id && trailingMarker(review.body, publication.marker));
+      const matches = reviews.filter(
+        (review) =>
+          trailingMarker(review.body, publication.marker) &&
+          (actor === undefined ? isManagedHeading(review.body) : review.user.id === actor.id),
+      );
       if (matches.length > 1) throw new Error('managed file review ownership is ambiguous');
       return matches[0];
     };
@@ -221,7 +251,9 @@ export class GitHubReviewPublisher implements ReviewPublisher {
         },
         [200],
       );
-      return parseReview(value, 'GitHub file review').id;
+      const review = parseReview(value, 'GitHub file review');
+      await this.#learnActor(review.user);
+      return review.id;
     } catch (error) {
       // POSTs are never retried at transport level: a 502/504 may have
       // created the review before the response was lost. Reconcile like
@@ -234,19 +266,25 @@ export class GitHubReviewPublisher implements ReviewPublisher {
     }
   }
 
-  async #actor(): Promise<GitHubActor> {
+  async #actor(): Promise<GitHubActor | undefined> {
     this.#actorPromise ??= this.#resolveActor();
     return this.#actorPromise;
   }
 
+  /** Learns the actor from a created object's authoritative author. */
+  async #learnActor(actor: GitHubActor): Promise<void> {
+    if ((await this.#actor()) === undefined) this.#actorPromise = Promise.resolve(actor);
+  }
+
   /**
-   * A GitHub App installation token has no user behind it: `GET /user`
-   * answers 403 with "Resource not accessible by integration". Comments
-   * it posts are authored by the app's bot identity, so the caller must
-   * configure that login explicitly (`botLogin`); nothing is assumed.
-   * A plain PAT resolves through `/user`.
+   * Actor resolution: a plain PAT resolves through `GET /user`; a GitHub
+   * App installation token has no user behind it (403 "Resource not
+   * accessible by integration"), so either the caller configures the
+   * app's bot login explicitly (`botLogin`) or the publisher runs without
+   * an identity and learns it from the first object it creates. Nothing
+   * is assumed.
    */
-  async #resolveActor(): Promise<GitHubActor> {
+  async #resolveActor(): Promise<GitHubActor | undefined> {
     let userError: GitHubApiError | undefined;
     try {
       return await this.#requestJson('/user', { method: 'GET' }, [200]).then((value) =>
@@ -257,7 +295,7 @@ export class GitHubReviewPublisher implements ReviewPublisher {
       userError = error;
     }
     const botLogin = this.#botLogin;
-    if (botLogin === undefined) throw userError;
+    if (botLogin === undefined) return undefined;
     return await this.#requestJson(`/users/${encodeURIComponent(botLogin)}`, { method: 'GET' }, [200]).then((value) =>
       parseActor(value, 'configured bot actor'),
     );

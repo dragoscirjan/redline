@@ -162,7 +162,7 @@ describe('GitHubReviewPublisher', () => {
     expect(queue.requests.length).toBe(4);
   });
 
-  it('fails closed on an inaccessible /user without a configured bot login', async () => {
+  it('learns the actor from the first created object without an identity', async () => {
     const queue = queuedFetch([
       {
         path: '/user',
@@ -170,11 +170,133 @@ describe('GitHubReviewPublisher', () => {
         status: 403,
         body: { message: 'Resource not accessible by integration', status: '403' },
       },
+      { path: '/repos/owner/repository/issues/14/comments?per_page=100&page=1', method: 'GET', status: 200, body: [] },
+      {
+        path: '/repos/owner/repository/issues/14/comments',
+        method: 'POST',
+        status: 201,
+        body: { id: 9, body: 'summary', user: { id: 901, login: 'my-app[bot]' } },
+      },
+      // A second upsert in the same run now filters by the learned actor.
+      {
+        path: '/repos/owner/repository/issues/14/comments?per_page=100&page=1',
+        method: 'GET',
+        status: 200,
+        body: [{ id: 9, body: `old\n${SUMMARY_MARKER}`, user: { id: 901, login: 'my-app[bot]' } }],
+      },
+      {
+        path: '/repos/owner/repository/issues/comments/9',
+        method: 'PATCH',
+        status: 200,
+        body: { id: 9, body: 'summary', user: { id: 901, login: 'my-app[bot]' } },
+      },
+    ]);
+    const publisher = new GitHubReviewPublisher({ token: 'token', fetch: queue.fetch });
+    await expect(publisher.upsertSummary(SCOPE, `summary\n${SUMMARY_MARKER}`, SUMMARY_MARKER)).resolves.toBe(9);
+    await expect(publisher.upsertSummary(SCOPE, `summary\n${SUMMARY_MARKER}`, SUMMARY_MARKER)).resolves.toBe(9);
+  });
+
+  it('adopts a marker-managed summary across runs without an identity', async () => {
+    const queue = queuedFetch([
+      {
+        path: '/user',
+        method: 'GET',
+        status: 403,
+        body: { message: 'Resource not accessible by integration', status: '403' },
+      },
+      {
+        path: '/repos/owner/repository/issues/14/comments?per_page=100&page=1',
+        method: 'GET',
+        status: 200,
+        body: [
+          // An earlier run's managed summary: managed heading + marker,
+          // authored by the app bot (whose id this run cannot resolve).
+          { id: 9, body: `## Redline review in progress\n\n${SUMMARY_MARKER}`, user: { id: 901, login: 'my-app[bot]' } },
+        ],
+      },
+      {
+        path: '/repos/owner/repository/issues/comments/9',
+        method: 'PATCH',
+        status: 200,
+        body: { id: 9, body: 'summary', user: { id: 901, login: 'my-app[bot]' } },
+      },
+    ]);
+    const publisher = new GitHubReviewPublisher({ token: 'token', fetch: queue.fetch });
+    await expect(publisher.upsertSummary(SCOPE, `summary\n${SUMMARY_MARKER}`, SUMMARY_MARKER)).resolves.toBe(9);
+    expect(queue.requests.length).toBe(3); // No duplicate POST.
+  });
+
+  it('never adopts a marker comment without the managed heading', async () => {
+    const queue = queuedFetch([
+      {
+        path: '/user',
+        method: 'GET',
+        status: 403,
+        body: { message: 'Resource not accessible by integration', status: '403' },
+      },
+      {
+        path: '/repos/owner/repository/issues/14/comments?per_page=100&page=1',
+        method: 'GET',
+        status: 200,
+        body: [{ id: 55, body: `attacker text\n${SUMMARY_MARKER}`, user: { id: 666, login: 'attacker' } }],
+      },
+      {
+        path: '/repos/owner/repository/issues/14/comments',
+        method: 'POST',
+        status: 201,
+        body: { id: 9, body: 'summary', user: { id: 901, login: 'my-app[bot]' } },
+      },
+    ]);
+    const publisher = new GitHubReviewPublisher({ token: 'token', fetch: queue.fetch });
+    // The foreign marker comment is ignored: a fresh managed summary is
+    // created instead of hijacking someone else's comment.
+    await expect(publisher.upsertSummary(SCOPE, `summary\n${SUMMARY_MARKER}`, SUMMARY_MARKER)).resolves.toBe(9);
+  });
+
+  it('fails closed when several marker-managed summaries exist without an identity', async () => {
+    const queue = queuedFetch([
+      {
+        path: '/user',
+        method: 'GET',
+        status: 403,
+        body: { message: 'Resource not accessible by integration', status: '403' },
+      },
+      {
+        path: '/repos/owner/repository/issues/14/comments?per_page=100&page=1',
+        method: 'GET',
+        status: 200,
+        body: [
+          { id: 1, body: `## Redline review in progress\n\n${SUMMARY_MARKER}`, user: { id: 901, login: 'my-app[bot]' } },
+          { id: 2, body: `## Redline review in progress\n\n${SUMMARY_MARKER}`, user: { id: 901, login: 'my-app[bot]' } },
+        ],
+      },
     ]);
     const publisher = new GitHubReviewPublisher({ token: 'token', fetch: queue.fetch });
     await expect(publisher.upsertSummary(SCOPE, `summary\n${SUMMARY_MARKER}`, SUMMARY_MARKER)).rejects.toThrow(
-      /status 403/u,
+      /ownership is ambiguous/u,
     );
+  });
+
+  it('skips an existing managed file review without an identity', async () => {
+    const queue = queuedFetch([
+      {
+        path: '/user',
+        method: 'GET',
+        status: 403,
+        body: { message: 'Resource not accessible by integration', status: '403' },
+      },
+      {
+        path: '/repos/owner/repository/pulls/14/reviews?per_page=100&page=1',
+        method: 'GET',
+        status: 200,
+        body: [
+          { id: 31, body: `## Redline review: src/example.ts\n\n${FILE_MARKER}`, user: { id: 901, login: 'my-app[bot]' } },
+        ],
+      },
+    ]);
+    const publisher = new GitHubReviewPublisher({ token: 'token', fetch: queue.fetch });
+    await expect(publisher.publishFileReview(SCOPE, filePublication())).resolves.toBe(31);
+    expect(queue.requests.length).toBe(2);
   });
 
   it('fails closed when summary ownership is ambiguous', async () => {

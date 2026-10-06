@@ -91,8 +91,11 @@ jobs:
           set -euo pipefail
           case "$HARNESS" in
             echo) ;;
+            # pi ships its bundle through prepublishOnly and needs no
+            # install scripts; opencode-ai links its platform binary in a
+            # postinstall script, so --ignore-scripts would break it.
             pi) npm install -g --ignore-scripts @earendil-works/pi-coding-agent ;;
-            opencode) npm install -g --ignore-scripts opencode-ai ;;
+            opencode) npm install -g opencode-ai ;;
             *) printf 'unsupported harness: %s\n' "$HARNESS" >&2; exit 2 ;;
           esac
 

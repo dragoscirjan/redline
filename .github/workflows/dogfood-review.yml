@@ -54,21 +54,27 @@ jobs:
       # the dogfood case. External repositories must use the reusable
       # workflow instead; ./github would resolve against their repository.
       # The checkout above is the trusted base revision: pull request code is
-      # never installed, built, or executed. While a pull request's base
-      # still carries the previous action design, that revision's review mode
-      # requires the legacy github-token, credential-isolation, and
-      # container-engine inputs. The current action ignores them; both
-      # surfaces stay until the transition to this design completes on main.
-      # Review inputs are set only when MODEL_CREDENTIALS exists, so an
-      # unconfigured repository keeps the context-only behavior.
+      # never installed, built, or executed.
+      #
+      # TRANSITION: the action runs from the base revision, which still
+      # carries the previous design while this branch is open. That
+      # revision's review mode runs the replaced containerized pipeline,
+      # which fails silently (empty backend diagnostic, exit 0) on this
+      # branch's large restart diff, so review execution stays disabled here
+      # and the current pipeline's live behavior is validated by the CI
+      # harness matrix instead (echo, pi, opencode against the mock model
+      # endpoint). Re-enable backend/model-config once this design is the
+      # base revision. The github-token, credential-isolation, and
+      # container-engine inputs are then required by the previous action
+      # and ignored by the current one, so they stay wired below.
       - name: Run Redline review action
         uses: ./github
         with:
-          backend: ${{ secrets.model-auth != '' && 'pi' || '' }}
-          model-config: ${{ secrets.model-auth != '' && '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}' || '' }}
-          model-auth: ${{ secrets.model-auth }}
+          backend: ''
+          model-config: ''
+          model-auth: ''
           github-token: ${{ secrets.github-token }}
-          credential-isolation: ${{ secrets.model-auth != '' && 'direct' || '' }}
+          credential-isolation: ''
           container-engine: docker
           artifact-name: pull-request-review-${{ github.event.pull_request.number }}-${{ github.run_id }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

@@ -61,6 +61,15 @@ jobs:
       # summary, through the GH_TOKEN PAT (never the Actions GITHUB_TOKEN).
       # While a base revision still lacks an input declared here, the extra
       # input is ignored, so this call stays green across transitions.
+      # TRANSITION: the base revision's action does not yet install the
+      # harness binary (this branch's action does); install it here so the
+      # pi review works while this branch is open. Drop this step once the
+      # base revision carries the action-level install.
+      - name: Install pi harness binary
+        run: |
+          set -euo pipefail
+          command -v pi >/dev/null 2>&1 || npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+
       - name: Run Redline review action
         uses: ./github
         with:

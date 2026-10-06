@@ -35,6 +35,7 @@ for expected in [
     'Fetch pull request commits as data',
     'Build review context bundle',
     'Upload review context artifact',
+    'Ensure harness binary',
     'Run harness review',
     'Upload review output artifact',
 ]:

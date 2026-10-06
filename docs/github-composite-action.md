@@ -40,8 +40,9 @@ Re-runs on the same head are idempotent: an existing actor-owned review with the
 4. **Fetch pull request commits as data** — base and head commits are fetched as Git objects and verified.
 5. **Build review context bundle** — `src/context-bundle.sh` produces the manifest, diffs, base files, and a source-at-head export; a PR requirements file is folded in when present.
 6. **Upload review context artifact** — `<artifact-name>-context` with `source-at-head/` and `review/`.
-7. **Run harness review** — the review CLI loads the bundle, runs one prompt per reviewed file through the harness, validates every finding, and writes per-file review records.
-8. **Upload review output artifact** — `<artifact-name>-reviews` with the per-file JSON and Markdown records and the run summary.
+7. **Ensure harness binary** — installs the selected harness's fixed npm package when review execution is enabled and the binary is not already present (`pi` or `opencode`; `echo` needs nothing). This is trusted workflow tooling, never pull request code.
+8. **Run harness review** — the review CLI loads the bundle, runs one prompt per reviewed file through the harness, validates every finding, and writes per-file review records.
+9. **Upload review output artifact** — `<artifact-name>-reviews` with the per-file JSON and Markdown records and the run summary.
 
 ## Boundaries
 

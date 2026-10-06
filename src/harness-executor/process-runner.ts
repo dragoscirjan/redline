@@ -143,6 +143,51 @@ export async function readBounded(
 
 export interface BoundedRunRequest extends SpawnRequest {
   readonly timeoutMs: number;
+  /**
+   * Live per-line tap of the child's streams while it runs. Lines are
+   * decoded incrementally and bounded by the caller; stream collection
+   * for the run result is unchanged.
+   */
+  readonly onOutputLine?: (stream: 'stdout' | 'stderr', line: string) => void;
+}
+
+/**
+ * Pass-through async iterable that emits every complete line it sees while
+ * the bounded reader consumes the bytes underneath. The trailing
+ * unterminated line is emitted at stream end.
+ */
+function tappedStream(
+  source: AsyncIterable<Uint8Array>,
+  emit: (line: string) => void,
+): AsyncIterable<Uint8Array> {
+  let buffer = '';
+  const decoder = new TextDecoder();
+  const drain = (): void => {
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) emit(line.replace(/\r$/u, ''));
+  };
+  return {
+    [Symbol.asyncIterator]() {
+      const iterator = source[Symbol.asyncIterator]();
+      return {
+        async next(): Promise<IteratorResult<Uint8Array>> {
+          const next = await iterator.next();
+          if (next.done) {
+            drain();
+            if (buffer.length > 0) {
+              emit(buffer.replace(/\r$/u, ''));
+              buffer = '';
+            }
+            return next;
+          }
+          buffer += decoder.decode(next.value, { stream: true });
+          drain();
+          return next;
+        },
+      };
+    },
+  };
 }
 
 export interface BoundedRunResult {
@@ -165,8 +210,15 @@ export async function runBoundedProcess(
   }
   const startedAt = Date.now();
   const child = spawner.spawn(request);
-  const stdoutReader = createBoundedReader(child.stdout, MAX_OUTPUT_BYTES);
-  const stderrReader = createBoundedReader(child.stderr, MAX_DIAGNOSTIC_BYTES);
+  const tap = request.onOutputLine;
+  const stdoutReader = createBoundedReader(
+    tap ? tappedStream(child.stdout, (line) => tap('stdout', line)) : child.stdout,
+    MAX_OUTPUT_BYTES,
+  );
+  const stderrReader = createBoundedReader(
+    tap ? tappedStream(child.stderr, (line) => tap('stderr', line)) : child.stderr,
+    MAX_DIAGNOSTIC_BYTES,
+  );
 
   let timedOut = false;
   let timer: NodeJS.Timeout | undefined;

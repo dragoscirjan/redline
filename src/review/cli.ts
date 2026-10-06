@@ -9,6 +9,7 @@
  */
 
 import { pathToFileURL } from 'node:url';
+import type { HarnessOutputLine } from '../harness-executor/types.js';
 import {
   GitHubReviewPublisher,
   PublicationService,
@@ -16,6 +17,7 @@ import {
   type RunningSummaryInfo,
 } from '../publish/index.js';
 import type { ReviewPublisher } from '../publish/index.js';
+import type { FileReviewRecord } from './types.js';
 import { parseReviewEnvironment } from './environment.js';
 import { runFileReviews } from './runner.js';
 
@@ -24,6 +26,17 @@ const RUN_FAILURE_EXIT = 1;
 
 function writeLine(stream: NodeJS.WriteStream, value: string): void {
   stream.write(`${value}\n`);
+}
+
+/** One bounded stderr line per completed file: live progress in the run log. */
+function progressLine(record: FileReviewRecord): void {
+  const error = record.errorKind !== undefined ? ` (${record.errorKind})` : '';
+  writeLine(process.stderr, `redline-review: ${record.path}: ${record.outcome}${error}`);
+}
+
+/** Bounded live harness heartbeat, also on stderr. */
+function harnessLine(output: HarnessOutputLine): void {
+  writeLine(process.stderr, `redline-review: harness ${output.stream}: ${output.line.slice(0, 200)}`);
 }
 
 export interface CliDependencies {
@@ -101,7 +114,7 @@ export async function main(
 
       let result;
       try {
-        result = await runFileReviews({ environment: review });
+        result = await runFileReviews({ environment: review, onFileDone: progressLine, onHarnessOutput: harnessLine });
       } catch (error) {
         // Defense in depth: the failure text is published, so the
         // publication token must never appear in it.
@@ -138,7 +151,7 @@ export async function main(
       return exitCode;
     }
 
-    const result = await runFileReviews({ environment: review });
+    const result = await runFileReviews({ environment: review, onFileDone: progressLine, onHarnessOutput: harnessLine });
     writeLine(process.stdout, JSON.stringify(result.summary));
     return result.exitCode;
   } catch (error) {

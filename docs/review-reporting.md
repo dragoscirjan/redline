@@ -1,97 +1,109 @@
-# Review reporting
+# Review output
 
-Redline keeps model output separate from forge publication. Pi and OpenCode emit versioned review events. Trusted host code validates each event against the context bundle before it stores or publishes a finding.
+The review tool writes per-file records and a run summary into `REDLINE_OUTPUT_DIR` under `reviews/`. The JSON records are the machine-readable contract for later GitHub comment publication; the Markdown records are the human-readable counterpart. Nothing is published to GitHub in the current milestone — the output travels as the `<artifact-name>-reviews` artifact.
 
-## Data flow
+## Presenting findings: `file:x-y` spans
 
-1. The host creates a private per-run journal and posts the managed running summary.
-2. A backend output adapter extracts assistant text from Pi or OpenCode events.
-3. `ReviewEventStreamParser` parses complete `redline-review-events/v1` JSON lines.
-4. `ReviewFindingValidator` checks the schema, configured finding scope, manifest path, diff side, changed line, and exact evidence.
-5. `ReviewJournal` appends and syncs the accepted finding before publication starts.
-6. Inline mode publishes the finding through the forge adapter. Single-block mode waits for finalization.
-7. The host renders the final summary from journal state rather than model-supplied Markdown.
+A file with multiple issues carries multiple findings, one span each. Every finding identifies its affected region as a line span — presented as `src/example.ts:3-5` throughout the output (a single line renders as `src/example.ts:3`). The span endpoints must both be changed lines of the claimed side; the span may include unchanged lines between them.
 
-The journal is an ephemeral host file with mode `0600`. It is bounded to ten findings and 512 KiB. The model container does not receive or mount it.
+## Per-file record
 
-## Review event protocol
-
-The model emits one finding per line:
+`reviews/<fileId>.json` and `reviews/<fileId>.md`:
 
 ```json
-{"version":1,"type":"finding","finding":{"category":"correctness","classification":"defect","severity":"high","confidence":0.9,"fileId":"000001","path":"src/example.ts","side":"RIGHT","line":12,"evidence":"return staleValue","impact":"The endpoint returns data from the previous request.","fix":"Return the value created for the current request."}}
-```
-
-It emits one completion event last:
-
-```json
-{"version":1,"type":"completion","outcome":"findings","coverage":{"reviewedFileIds":["000001"],"omitted":[],"capabilityFailures":[]}}
-```
-
-The parser rejects malformed JSON, unknown fields, unsupported versions, oversized lines, more than ten findings, repeated completion, and events after completion. It does not repair model output. A malformed line does not discard valid sibling lines that arrived in the same output chunk. The host delivers every parsed sibling before it reports the collected protocol or validation errors.
-
-## Backend adapters
-
-Pi's `--mode json` output includes assistant `text_delta` events. The host extracts only those deltas and flushes pending review text at each assistant `message_end` boundary.
-
-The pinned OpenCode CLI does not expose every text delta in its normal JSON output. The runner image therefore includes a fixed output plugin. When the host sets `REDLINE_REPORT_EVENTS=1`, the plugin tracks part types from `message.part.updated` events and forwards `message.part.delta` content only for text parts. Reasoning parts are discarded. Forwarded text uses the `REDLINE_REVIEW_TEXT_DELTA` prefix, and a text-part completion emits `REDLINE_REVIEW_TEXT_END`. The host flushes pending review text at that boundary, so a complete event does not require a trailing newline. The plugin adds no model tool and receives no GitHub credential.
-
-OpenCode creates the session ID after startup. The plugin binds to the first coordinator session, ignores later session IDs, and emits the fixed host-visible ID `redline-coordinator`. The host accepts only that ID. Subagent collection remains deferred, and the generated OpenCode configuration denies every tool.
-
-## Host controller
-
-`redline-review-run` connects prompt assembly, backend execution, event validation, the journal, and publication. It starts an already-created Pi or OpenCode container with a fixed `podman start` or `docker start` argument list. The command does not accept an image, arbitrary command, native backend configuration, environment map, HTTP headers, or caller-supplied prompt.
-
-The controller starts its deadline before backend launch. It reads stdout as bounded UTF-8 lines and sends those lines to `ReviewBackendOutputConsumer` in order. It drains stderr separately and retains at most 64 KiB. Stderr never becomes a review finding or a trusted finalization message.
-
-A valid completion event and a zero backend exit produce a complete result. Findings still return a successful controller result. Timeout, non-zero exit, launch failure, invalid output, missing completion, incomplete coverage, and publication failure produce an incomplete managed summary with a host-selected reason. The controller asks the container to stop on timeout or execution failure, then kills it when the grace period expires.
-
-`createContainerStagingLauncher()` implements the secure preparation path used by a later action step. It creates a digest-pinned container, copies the bounded review and source snapshots without host mounts, and streams a bootstrap envelope through stdin. The image bootstrap generates native configuration in tmpfs before it launches Pi or OpenCode. The controller still accepts the generic launcher interface and does not own image selection or native configuration.
-
-## Publication modes
-
-The trusted workflow selects one mode before backend execution.
-
-### Single-block
-
-The running summary is updated only at finalization. The final body contains all accepted findings stored in the journal.
-
-### Inline
-
-The host publishes accepted findings one at a time, up to the ten-finding run limit. Each inline comment has a stable hidden marker based on the finding ID and reviewed head revision. The final managed summary reports counts and coverage without repeating the inline comments.
-
-A progressive set of at most ten comments is one bounded publication set for the review run.
-
-## GitHub ownership and retries
-
-`GitHubReviewPublisher` derives the expected actor from the supplied token through `GET /user`. It updates a managed summary only when both the actor and trailing Redline marker match. Multiple matches are an error.
-
-Before each inline publication and finalization, the reporting service verifies the current pull request head. Stable finding markers make a later inline retry idempotent after an uncertain API result. The adapter retries safe HTTP requests after 429, 502, 503, and 504 responses at most twice. It does not retry a comment-creation request in place because GitHub may have created the comment before returning an error.
-
-The GitHub token is a constructor dependency of the host adapter. It is not included in model configuration, prompts, journal records, rendered comments, or errors.
-
-## Incomplete reports
-
-Finalization accepts this host-owned value:
-
-```ts
-interface ReviewCompletion {
-  status: "complete" | "incomplete";
-  reason?: "backend-timeout" | "backend-failure" | "coverage-incomplete" | "publication-failure";
-  message?: string;
+{
+  "version": 2,
+  "fileId": "000001",
+  "path": "src/example.ts",
+  "status": "M",
+  "harness": "pi",
+  "model": "z-ai/glm-5.3-flash",
+  "outcome": "findings",
+  "errorKind": null,
+  "reason": null,
+  "findings": [
+    {
+      "id": "f-3f9a…",
+      "category": "correctness",
+      "classification": "defect",
+      "severity": "high",
+      "confidence": 0.9,
+      "side": "RIGHT",
+      "startLine": 3,
+      "endLine": 5,
+      "evidence": "const value = compute(input);",
+      "impact": "Returns the wrong value for empty input.",
+      "fix": "Restore the empty-input guard.",
+      "suggestion": "-const value = compute(input);\n-context\n+const value = guarded(input);",
+      "fixPrompt": "Fix one code-review finding.\n…"
+    }
+  ],
+  "durationMs": 4210,
+  "rawModelOutput": "{ … the model's review document … }"
 }
 ```
 
-An incomplete completion requires a reason. Its optional message is plain text limited to 500 characters. Repository content and model output cannot set this message.
+- `outcome` is `clean`, `findings`, or `omitted`. A file is `omitted` when it cannot be fully reviewed: binary content, a harness failure or timeout, model output that failed validation, or a preparation failure (an unreadable diff or a prompt that exceeds its byte limit).
+- `errorKind` distinguishes `harness-failed`, `harness-timeout`, `invalid-output`, and `preparation-failed` when present.
+- `side` is `LEFT` for removed lines (old file) and `RIGHT` for added lines (new file); `startLine`/`endLine` are line numbers on that side.
+- `evidence` is the exact content of `startLine` on that side, without its diff marker.
+- `id` is a stable hash of the finding's normalized fields, used for deduplication.
+- `rawModelOutput` keeps the bounded model document for debugging; it is not published.
 
-The host can finalize without a model completion event when status is `incomplete`. The report includes findings already persisted and states that coverage was not finalized. A complete finalization requires a valid model completion event.
+## Change suggestions
 
-## Current limitations
+Each finding may carry a `suggestion`: a unified-diff-style block — `-` the current span lines, `+` the proposed replacement — rendered from authoritative content. The span content comes from the review diff itself (its changed and context lines) or, when the span reaches beyond it, from the head file (RIGHT side) or the captured base file (LEFT side). Suggestions are produced only when the model proposed a concrete replacement in its review document and the replacement actually changes the span; a proposal identical to the current content is dropped. Humans can apply the suggestion directly; coding agents can consume it verbatim, and a future GitHub publisher can convert it into a `suggestion`-format comment because the path, side, and span travel with the finding.
 
-- The GitHub Action does not yet invoke the container-staging launcher or Pi/OpenCode. Composite-action and reusable-workflow wiring remain tracked by #21 and #22.
-- Released immutable image selection remains tracked by #23.
-- A timeout before the first complete finding event produces no finding. The managed summary still reports an incomplete review.
-- A hard runner termination can prevent final summary publication. Inline comments published before termination remain visible.
-- Cross-workflow journal recovery is not supported.
-- Forgejo and Gitea publication adapters are not implemented.
-- Subagent candidate persistence and promotion are not implemented.
+## Fix prompts
+
+Each finding also carries a `fixPrompt`: a deterministic, ready-to-use prompt for a coding LLM that applies the fix. It embeds the `file:x-y` span, the finding's evidence, impact, and fix guidance, the current span content when resolvable, and the proposed change when present, followed by rules that keep the change minimal. The finding text is quoted data: the prompt instructs the agent to verify it against the cited lines before changing anything. Spans longer than 200 lines or 16 KiB are cited but not embedded.
+
+## Findings
+
+A finding is accepted only after validation against the authoritative diff:
+
+- the file is not binary;
+- the classification respects the configured finding scope (`risk` requires `defects-and-risks`);
+- both `startLine` and `endLine` are changed lines on the claimed side, with `startLine <= endLine`;
+- `evidence` is byte-identical to the `startLine` content on that side;
+- at most 10 findings per file, deduplicated by their stable id.
+
+Model output that fails schema or diff validation marks the file `invalid-output`/`omitted`; unvalidated findings are never written. All persisted model-derived text — reasons, diagnostics, raw output, suggestions, and fix prompts — is redacted against the selected credential before artifacts are written.
+
+## Run summary
+
+`reviews/summary.json` and `reviews/summary.md`:
+
+```json
+{
+  "version": 2,
+  "harness": "pi",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "openrouter",
+  "findingScope": "defects",
+  "base": "…40-hex…",
+  "head": "…40-hex…",
+  "manifestFiles": 12,
+  "reviewedFiles": 10,
+  "omittedFiles": 2,
+  "findings": 3,
+  "files": [
+    {
+      "fileId": "000001",
+      "path": "src/example.ts",
+      "outcome": "findings",
+      "findingCount": 1,
+      "findingSpans": ["3-5"]
+    }
+  ]
+}
+```
+
+The summary counts every manifest file; `findingSpans` lists each published finding's span. Files the bundle excluded from review are absent from `files`; `manifestFiles - reviewedFiles` is that excluded count.
+
+## Schema versions
+
+- Review document (harness output): version 2 — introduced spans (`startLine`/`endLine`) and `suggestedChange`.
+- Per-file record: version 2 — findings carry spans, rendered `suggestion`, and `fixPrompt`.
+- Run summary: version 2 — `findingSpans` added.
+- Review policy: `redline-file-review/v2`, hosted in `prompts/v4/`. The directory number tracks the repository's policy lineage (v1–v3 are prior designs); the policy ID tracks the per-file review contract.

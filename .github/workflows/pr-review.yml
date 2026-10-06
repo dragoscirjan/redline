@@ -14,8 +14,6 @@ jobs:
   review:
     permissions:
       contents: read
-      issues: write
-      pull-requests: write
     uses: ./.github/workflows/dogfood-review.yml
     with:
       artifact-retention-days: 45

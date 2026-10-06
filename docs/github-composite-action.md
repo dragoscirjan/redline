@@ -1,85 +1,40 @@
-# GitHub composite action contract
+# GitHub composite action
 
-`github/action.yaml` builds a review context bundle for a pull request's exact base and head commits. When the caller also supplies the review inputs, it runs the full review in a digest-pinned container and publishes findings on the pull request. The action orchestrates composite steps; the review core lives in TypeScript under `src/`.
-
-## Modes
-
-The action runs in one of two modes:
-
-- **Context bundle only.** The caller supplies no review inputs. The action validates the pull request event, builds the trusted checkout, builds the bundle, and uploads it. Existing callers such as `.github/workflows/code-review.yml` use this mode.
-- **Full review.** The caller supplies `backend`, `model-config`, and `model-auth` together, plus an explicit `credential-isolation: direct` and a `github-token` for publication. The action resolves the runner image from the committed backend-to-digest table, stages the runner container, runs the review backend, publishes findings, and uploads the review journal. Supplying only part of the review selection fails validation with exit code 2.
-
-Context-only mode never requires `github-token`; the token is needed only when findings are published.
+`github/action.yaml` is a composite action. It builds the review context bundle for a pull request's exact base and head commits and, when review inputs are supplied, runs the harness review and uploads its output as artifacts.
 
 ## Inputs
 
-Every input is fixed data. No input accepts free-form review instructions. TypeScript validation in `src/action-inputs.ts` is authoritative; the shell step only checks event context.
+Inputs are fixed enums and data. No input accepts free-form review instructions.
 
-| Input | Values | Default |
+| Input | Values | Notes |
 | --- | --- | --- |
-| `backend` | `pi` or `opencode`; also selects the pinned runner image | none |
-| `model-config` | JSON object with `provider`, `endpoint`, `model` | none |
-| `model-auth` | JSON object mapping provider names to credential strings | none |
-| `github-token` | GitHub publication token | none |
-| `finding-scope` | `defects` or `defects-and-risks` | `defects` |
-| `report-style` | `single-block` or `inline` | `single-block` |
-| `timeout` | duration string, for example `10m`, `2h`, or `1h30m` | `30m` |
-| `credential-isolation` | `direct`, required explicitly in review mode | none |
-| `container-engine` | `podman` or `docker` | `podman` |
-| `artifact-name` | bounded artifact name | `redline-review-<run id>` |
-| `artifact-retention-days` | integer from 1 to 90 | `45` |
+| `backend` | `pi`, `opencode`, `echo` | The review harness. `echo` is the deterministic test harness. Required together with `model-config` and `model-auth` to enable review execution. |
+| `model-config` | JSON | Provider-neutral model configuration: `provider`, `endpoint`, `model`. See [runnable review configuration](/runnable-review-configuration). |
+| `model-auth` | JSON secret | Provider-keyed credential map; bind to `secrets.MODEL_CREDENTIALS`. Only the selected provider's credential reaches the harness. |
+| `finding-scope` | `defects`, `defects-and-risks` | Default `defects`. |
+| `timeout` | duration | Review deadline per run, for example `10m` or `2h`. Capped at 360m. Default `30m`. |
+| `artifact-name` | name | Base name for artifacts. Default `redline-review-<run id>`. |
+| `artifact-retention-days` | 1–90 | Default `45`. |
 
-Validation rules:
-
-- The `timeout` parser accepts `h` and `m` components in that order, for example `2h`, `10m`, or compound `1h30m`. The parser rejects values above the 360-minute GitHub Actions job cap with a validation error. Any value with a `d` component exceeds the cap, so `1d` is rejected instead of clamped. A caller who sets a job-level timeout must leave margin above the review deadline so container cleanup and artifact upload can still run.
-- `credential-isolation` requires an explicit `direct` value when review execution is enabled. There is no default, so a caller cannot enable full review without choosing the credential path deliberately.
-- Unknown inputs and unknown `REDLINE_*` environment variables are rejected. Optional inputs are validated even in context-only mode, so a typo in `finding-scope` or `timeout` fails the workflow instead of passing silently.
-- The runner image is selected from the committed backend-to-digest table in `src/runner-images.ts`. Callers cannot supply their own image reference; passing the removed `runner-image` input fails as an unknown input. CI publishes the images to GHCR on every merge to `main`; the operator records the pushed digest in the table through a reviewed pull request. Tag references and `:latest` are rejected by validation, so the table cannot drift into a mutable reference.
-- `artifact-retention-days` accepts 1 through 90. The default of 45 is half of GitHub's maximum.
-- `model-config` follows the [runnable review configuration](runnable-review-configuration.md): exact JSON shape, 16 KB byte limit, absolute HTTP or HTTPS endpoint, no URL credentials or fragments.
-
-## Secrets
-
-The caller binds secrets to inputs because composite actions cannot read the `secrets` context:
-
-```yaml
-uses: dragoscirjan/redline/github@<immutable-ref>
-with:
-  github-token: ${{ secrets.GH_TOKEN }}
-  model-auth: ${{ secrets.MODEL_CREDENTIALS }}
-  # remaining review inputs
-```
-
-Boundaries:
-
-- `github-token` stays in host publication code. It never enters the model container, the context bundle, or the prompt.
-- The full `model-auth` map stays host-side. The container staging layer sends only the selected provider credential through the stdin bootstrap channel. Unused map entries never leave the host.
+Review execution is enabled only when `backend`, `model-config`, and `model-auth` are all supplied. Without them the action keeps the context-bundle-only behavior.
 
 ## Pipeline
 
-1. **Validate inputs.** A shell step checks that the event is a `pull_request` event and that the base and head are full object ids. After the trusted build, a TypeScript validation step (`redline-github-action --validate-only`) validates every input, including optional inputs in context-only mode.
-2. **Build trusted TypeScript.** The step installs dependencies with `pnpm install --frozen-lockfile --ignore-scripts` and builds the action checkout. The checkout is the trusted base revision for `pull_request` events. Pull request code is never installed, built, or executed.
-3. **Fetch pull request commits as data.** `git fetch` retrieves the exact base and head revisions. Nothing checks out pull request content as the working tree.
-4. **Build the review context bundle.** `src/context-bundle.sh` writes the bounded bundle under the workspace.
-5. **Upload the context bundle.** The bundle uploads before the review starts, so a failing review cannot erase it.
-6. **Run the review.** When review inputs are present, the step calls `redline-github-action` (built at `dist/src/github-action-run-cli.js`). That CLI parses and validates the environment, builds the frozen configuration, selects the single provider credential, stages the container through `createContainerStagingLauncher`, and runs `runReview` with the fixed versioned prompt, journal, and publication service.
-7. **Upload the review journal.** The journal uploads with `if: always()`, so backend timeouts, failures, and incomplete coverage still produce an auditable journal.
+1. **Validate action inputs** — the event must be a `pull_request` with full base and head commit identifiers; the artifact settings and the all-or-nothing review-input rule are enforced.
+2. **Build trusted TypeScript** — the action checkout (the trusted base revision for `pull_request` events) is installed and built; pull request code is never installed, built, or executed.
+3. **Validate action inputs with trusted TypeScript** — the review CLI runs `--validate-only` against the `REDLINE_*` environment contract; invalid optional inputs fail even in context-only mode.
+4. **Fetch pull request commits as data** — base and head commits are fetched as Git objects and verified.
+5. **Build review context bundle** — `src/context-bundle.sh` produces the manifest, diffs, base files, and a source-at-head export; a PR requirements file is folded in when present.
+6. **Upload review context artifact** — `<artifact-name>-context` with `source-at-head/` and `review/`.
+7. **Run harness review** — the review CLI loads the bundle, runs one prompt per reviewed file through the harness, validates every finding, and writes per-file review records.
+8. **Upload review output artifact** — `<artifact-name>-reviews` with the per-file JSON and Markdown records and the run summary.
 
-## Run results
+## Boundaries
 
-The CLI writes one JSON line to stdout:
+- Pull request content is untrusted data. The harness receives it only inside a delimited context block with an explicit untrusted-data framing; it never alters the fixed policy.
+- The harness runs with tools disabled and a constructed environment; no GitHub token or ambient credentials reach it.
+- Model output must validate against the authoritative diff — path, side, line, and byte-identical evidence — or the finding is rejected. Persisted reasons and raw model output are redacted against the selected credential before artifacts are written.
+- In context-only mode (review inputs empty) the action uploads only `<artifact-name>-context`; the `<artifact-name>-reviews` artifact is produced only when review execution is enabled.
+- Release tags must contain the built `dist/` output of the exact reviewed source; the action verifies it exists and builds nothing from pull request revisions.
 
-- `{ "status": "complete", "outcome": "clean" }` or `{ "status": "complete", "outcome": "findings" }` on a finished review, exit code 0.
-- `{ "status": "incomplete", "reason": "..." }` on timeouts, backend failures, incomplete coverage, or publication failures, exit code 1.
-- Validation errors exit with code 2 and print a message on stderr.
-
-## Required permissions
-
-The calling workflow needs `contents: read`, `pull-requests: write`, and `issues: write` when the review runs. Publication posts the managed summary through the issue-comments endpoint and inline findings through the review-comments endpoint, so both grants are required for GITHUB_TOKEN and for personal access tokens.
-
-## Not implemented here
-
-- The credential gateway. `credential-isolation: direct` sends the selected credential through the bootstrap channel without destination pinning. It is a documented escape hatch.
-- Local model-runtime lifecycle. The action expects a configured remote or private endpoint.
-- Redline's internal dogfood path may build a runner image from trusted source and run it by the resulting local image ID; external callers always use the table digest.
-- The reusable workflow for other repositories. See the [reusable review workflow](reusable-review-workflow.md) contract; issue #22 owns that wrapper.
+See [runnable review configuration](/runnable-review-configuration) for the environment contract, [harness executor](/harness-executor) for harness specifics, and [review output](/review-reporting) for the record schema.

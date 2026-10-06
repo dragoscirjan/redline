@@ -1,5 +1,5 @@
 /**
- * Parses the composite action's `timeout` input.
+ * Parses the review timeout configuration.
  *
  * GitHub Actions caps a job at 360 minutes, so the parser enforces that cap
  * instead of accepting a value it cannot honor. `1d` is therefore rejected

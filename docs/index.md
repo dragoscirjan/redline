@@ -1,15 +1,15 @@
 ---
 title: Redline
-description: Automated pull request review for GitHub, Forgejo, and Gitea
+description: Automated pull request review for GitHub
 ---
 
 # Redline
 
-Automated pull request review, smaller and self-hosted. A GitHub Action reviews a pull request's diff with a fixed review policy and publishes one managed summary plus bounded inline comments on GitHub.
+Automated pull request review, smaller and self-hosted. A GitHub Action reviews a pull request's changed files with a fixed review policy through a harness executor (Pi or OpenCode), validates every finding against the diff, and publishes the review output as artifacts.
 
 ## How a review runs
 
-The action fetches the pull request's base and head commits as Git data, builds a bounded context bundle, and runs the Pi or OpenCode backend inside a digest-pinned container. Findings are schema-validated, mapped to the reviewed diff, and published by host-side code. Pull request code is never checked out or executed, and the full credential map never enters the container.
+The action fetches the pull request's base and head commits as Git data, builds a bounded context bundle, and runs one fixed review prompt per eligible changed file through the selected harness. Lock files, vendored and generated directories (for example `node_modules/` or `dist/`), and binary files are excluded from review and recorded as unreviewed, so their changes stay identifiable in the manifest. The harness runs with every tool disabled and isolated generated configuration; no ambient credentials reach it. Each model finding must map its span (`file:x-y`) to changed lines of the authoritative diff with matching evidence, or it is rejected; validated findings carry a change suggestion and a fix prompt for coding agents. Pull request code is never executed.
 
 ## Start here
 
@@ -18,10 +18,10 @@ The action fetches the pull request's base and head commits as Git data, builds 
 
 ## How it works under the hood
 
-- [Runnable review configuration](/runnable-review-configuration) — the `model-config` and `model-auth` contract.
-- [Container staging](/container-staging) — how the sandbox is staged without host mounts.
-- [Review reporting](/review-reporting) — publication, validation, and the managed summary.
+- [Runnable review configuration](/runnable-review-configuration) — the environment contract, `model-config`, and `model-auth`.
+- [Harness executor](/harness-executor) — how Pi and OpenCode are configured and driven, and how to add a harness.
+- [Review output](/review-reporting) — per-file review records, validation, and the run summary.
 
 ## Status
 
-The GitHub entry point is complete. Forgejo and Gitea entry points are planned under the same review core. See [CONTRIBUTING.md](https://github.com/dragoscirjan/redline/blob/main/CONTRIBUTING.md) for the development workflow and the GitHub issue tracker for open work.
+The GitHub entry point with artifact output is complete. GitHub comment publication, the container sandbox, managed local model runtimes, and Forgejo/Gitea entry points are planned sequenced milestones. See [CONTRIBUTING.md](https://github.com/dragoscirjan/redline/blob/main/CONTRIBUTING.md) for the development workflow and the GitHub issue tracker for open work.

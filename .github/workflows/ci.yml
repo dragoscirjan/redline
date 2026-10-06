@@ -15,20 +15,120 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  quality:
-    name: Validate image definitions
-    uses: ./.github/workflows/ci.quality.yml
-
-  release:
-    needs: quality
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  validate:
+    name: Validate (typecheck, build, test, docs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
-      packages: write
-    uses: ./.github/workflows/ci.release.yml
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Typecheck, build, and test
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm run typecheck
+          pnpm test
+          pnpm run docs
+
+      - name: Check workflow syntax
+        uses: rhysd/actionlint@03d0035246f3e81f36aed592ffb4bebf33a03106 # v1.7.7
+
+  # The PR test matrix runs every available harness end to end against a
+  # local mock model endpoint: the deterministic echo harness, real Pi, and
+  # real OpenCode. No secrets or network model access are required.
+  harness-matrix:
+    name: Harness matrix (${{ matrix.harness }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        harness: [echo, pi, opencode]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Install harness binary
+        shell: bash
+        env:
+          HARNESS: ${{ matrix.harness }}
+        run: |
+          set -euo pipefail
+          case "$HARNESS" in
+            echo) ;;
+            # pi ships its bundle through prepublishOnly and needs no
+            # install scripts; opencode-ai links its platform binary in a
+            # postinstall script, so --ignore-scripts would break it.
+            pi) npm install -g --ignore-scripts @earendil-works/pi-coding-agent ;;
+            opencode) npm install -g opencode-ai ;;
+            *) printf 'unsupported harness: %s\n' "$HARNESS" >&2; exit 2 ;;
+          esac
+
+      - name: Build
+        shell: bash
+        run: pnpm run build
+
+      # Runs the full review pipeline per harness against the local mock
+      # model endpoint and keeps the review output for the artifact below.
+      - name: Run harness review end to end
+        shell: bash
+        env:
+          HARNESS: ${{ matrix.harness }}
+          HARNESS_MATRIX_OUTPUT_DIR: ${{ runner.temp }}/harness-reviews
+        run: bash test/harness-matrix-run.sh "$HARNESS"
+
+      # The per-harness review findings artifact: per-file JSON/Markdown
+      # records and the run summary exactly as the review tool wrote them.
+      # The name carries run id and attempt so workflow re-runs do not
+      # collide with the immutable-artifact policy of upload-artifact v4+.
+      # The upload must not depend on the review run succeeding: the partial
+      # records of a failed run are exactly what the failure inspection needs.
+      - name: Upload harness review artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: harness-${{ matrix.harness }}-reviews-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: ${{ runner.temp }}/harness-reviews/
+          if-no-files-found: error
+          retention-days: 14
 
   docs:
-    needs: quality
+    needs: [validate, harness-matrix]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read

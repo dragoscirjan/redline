@@ -1,12 +1,12 @@
 # Reusable Redline review workflow for other repositories. Call it from a
-# pull_request_target workflow so publication secrets are available.
+# pull_request_target workflow so review secrets are available.
 name: Redline pull request review
 
 on:
   workflow_call:
     inputs:
       backend:
-        description: Review backend, pi or opencode. Required together with model-config and model-auth to enable review execution. Also selects the pinned runner image.
+        description: Review harness, pi, opencode, or the deterministic echo harness. Required together with model-config and model-auth to enable review execution.
         required: false
         type: string
         default: ""
@@ -21,7 +21,7 @@ on:
         type: string
         default: defects
       report-style:
-        description: Report style, single-block or inline
+        description: Report style, single-block or inline. Legacy input kept for the previously published action; the current action ignores it.
         required: false
         type: string
         default: single-block
@@ -31,28 +31,28 @@ on:
         type: string
         default: 30m
       credential-isolation:
-        description: Credential isolation mode. Only direct is supported; required explicitly when review execution is enabled.
+        description: Credential isolation mode. Only direct is supported; required explicitly when review execution is enabled against the previously published action.
         required: false
         type: string
         default: ""
       container-engine:
-        description: Container engine used by the host-side staging layer, podman or docker
+        description: Container engine used by the previously published action's staging layer, podman or docker. The current action ignores it.
         required: false
         type: string
-        default: podman
+        default: docker
       artifact-name:
-        description: Name for the downloadable review bundle artifact
+        description: Base name for the downloadable review artifacts
         required: false
         type: string
         default: redline-review-${{ github.run_id }}
       artifact-retention-days:
-        description: Number of days to retain debug artifacts, from 1 to 90
+        description: Number of days to retain review artifacts, from 1 to 90
         required: false
         type: number
         default: 45
     secrets:
       github-token:
-        description: GitHub publication token; bound to the action's github-token input. Required for review execution.
+        description: GitHub publication token; bind to secrets.GH_TOKEN. Required by the previously published action's review mode; the current action ignores it.
         required: false
       model-auth:
         description: Provider-keyed credential map (JSON); bind to secrets.MODEL_CREDENTIALS.
@@ -70,11 +70,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write
-      pull-requests: write
     steps:
       - name: Check out trusted workflow tooling
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
         with:
           repository: ${{ github.repository }}
           # The base revision is trusted under pull_request_target. Pull
@@ -103,6 +101,13 @@ jobs:
       # guarded release workflow. Callers requiring a permanently fixed
       # revision should call the composite action directly with the immutable
       # full-version tag instead.
+      #
+      # The github-token, credential-isolation, container-engine, and
+      # report-style inputs are legacy surface kept while the published v1
+      # tag still carries the previous action design, whose review mode
+      # requires them. The current action ignores them. Leave backend,
+      # model-config, and the model-auth secret empty together for
+      # context-only mode; a partial set is rejected.
       - name: Run Redline review action
         uses: dragoscirjan/redline/github@v1
         with:

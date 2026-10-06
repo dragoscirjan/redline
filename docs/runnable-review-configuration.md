@@ -1,89 +1,64 @@
-# First runnable review configuration
+# Runnable review configuration
 
-Issue #19 defines the configuration accepted by the first runnable Redline review. The contract lives in `src/review-configuration.ts`. It is host-side code. The review prompt, journal, publication service, and backend container do not receive the full input or credential map.
+The GitHub Action passes every value to the review tool through environment variables. This is the interim contract; the parsing in `src/review/environment.ts` is authoritative.
 
-## Host integration
+## Environment contract
 
-The host uses the module before it prepares a backend container:
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `REDLINE_HARNESS` | review mode | `echo`, `pi`, or `opencode`. |
+| `REDLINE_REVIEW_DIR` | review mode | Directory holding the context bundle (`manifest.json`, `diffs/`, `base-files/`, …). |
+| `REDLINE_SOURCE_DIR` | review mode | Source-at-head export used for head-file context. |
+| `REDLINE_OUTPUT_DIR` | review mode | Destination for per-file review records and the summary. |
+| `REDLINE_MODEL_CONFIG` | review mode | Model configuration JSON (below). |
+| `REDLINE_MODEL_AUTH` | review mode | Provider-keyed credential map JSON (below). |
+| `REDLINE_FINDING_SCOPE` | optional | `defects` (default) or `defects-and-risks`. |
+| `REDLINE_TIMEOUT` | optional | Duration like `10m`, `2h`, `1h30m`. Default `30m`, capped at `360m`. |
 
-```ts
-const configuration = parseFirstRunnableReviewConfiguration({
-  backend,
-  modelConfig,
-  credentialIsolation,
-  findingScope,
-  reportStyle,
-});
-const credential = selectDirectModelCredential(configuration, modelCredentials);
-```
+Rules enforced by the parser:
 
-The later container-staging work uses `configuration.model` to generate the minimum native Pi or OpenCode settings. It receives only `credential`, which contains the configured provider name and its selected value. The host must discard the original `modelCredentials` string after selection.
-
-Do not log either credential input or the selected value. Do not put them in prompts, journals, diagnostics, artifacts, or forge comments.
+- Review inputs must arrive together. A partial selection fails instead of degrading to context-only mode.
+- Unknown `REDLINE_*` variables are rejected, so typos fail loudly.
+- Optional values are validated even without review execution.
+- No variable accepts free-form review instructions.
 
 ## Model configuration
 
-`model-config` is an exact JSON object:
+`REDLINE_MODEL_CONFIG` is provider-neutral JSON with exactly three fields:
 
 ```json
 {
   "provider": "openrouter",
   "endpoint": "https://openrouter.ai/api/v1",
-  "model": "provider/model-name"
+  "model": "z-ai/glm-5.3-flash"
 }
 ```
 
-All three fields are required. The parser rejects unknown fields, malformed JSON, empty values, control characters, oversized input, and invalid provider names.
+- `provider` — a short identifier, `[A-Za-z0-9._-]`, at most 64 characters. It keys the credential map and names the provider inside harness configuration.
+- `endpoint` — absolute `http` or `https` URL of an OpenAI-compatible API. Loopback endpoints are permitted for local model servers and the CI mock endpoint.
+- `model` — the model identifier understood by the endpoint, at most 256 characters.
 
-`endpoint` must be an absolute HTTP or HTTPS URL. Private and loopback HTTP endpoints are allowed because this profile supports existing private model services. The parser rejects URL credentials, fragments, local file URLs, and other schemes. It checks syntax only. It does not contact the endpoint, authorize the destination, resolve DNS, or start a model server.
+There is no fixed-model allowlist and no provider-specific credential input.
 
-The fixed shape prevents callers from supplying native Pi or OpenCode configuration, headers, commands, executable paths, server arguments, or file references.
+## Credential map
 
-## Credential selection
-
-`model-credentials` is a JSON object that maps provider names to credential strings:
+`REDLINE_MODEL_AUTH` maps provider names to credential values:
 
 ```json
 {
-  "openrouter": "credential-used-for-this-run",
-  "private-backup": "credential-that-remains-host-side"
+  "openrouter": "sk-or-v1-…"
 }
 ```
 
-The host selects the own property whose name equals `model-config.provider`. A missing, empty, non-string, control-character-containing, or oversized selected value fails validation. Extra entries are allowed so one secret can hold credentials for more than one provider. The selector returns only the matching entry.
+Only the entry for the configured provider is selected; everything else stays host-side. The selected credential reaches the harness through the mechanism documented in [harness executor](/harness-executor) — an environment variable for Pi, a mode-0600 generated config file for OpenCode — and never appears in prompts, logs, diagnostics, or published output.
 
-The selected string is the bearer token or API key expected by the configured provider. The configuration does not accept arbitrary header names. The [container staging layer](container-staging.md) sends only the selected value through its private bootstrap channel. Generated native configuration refers to a fixed environment variable and does not contain the credential.
+## CLI usage
 
-## Fixed review profile
+The same contract drives the standalone CLI:
 
-The first profile accepts these values:
+```bash
+node dist/src/review/cli.js --validate-only   # validate the environment only
+node dist/src/review/cli.js                   # run the review
+```
 
-| Setting | Accepted value |
-| --- | --- |
-| `backend` | `pi` or `opencode` |
-| `finding-scope` | `defects` by default, or `defects-and-risks` |
-| `report-style` | `single-block` by default, or `inline` |
-| `credential-isolation` | Explicit `direct` only |
-
-The executable controller fixes these capabilities off:
-
-- Subagents
-- Vulnerability lookup
-- Managed model-runtime lifecycle
-
-Both backends use the same review controller and structured event validation. `inline` changes publication only. It does not let the backend publish findings directly.
-
-## Direct credential isolation
-
-`direct` is a legacy escape hatch. It has no default. The caller must opt in with `credential-isolation: direct`.
-
-In direct mode, the container staging launcher sends the selected provider credential to the fixed image bootstrap through stdin. It does not place the value in container arguments, Docker or Podman environment options, copied files, or generated configuration. Unused credentials stay in trusted host memory. This mode does not provide destination pinning or the planned host-side credential gateway. Use it only when the caller trusts the configured endpoint and the network path to it.
-
-## Delivery boundary
-
-Issue #19 adds validation and credential selection. Issue #20 adds read-only container preparation, tmpfs configuration, and data staging without host mounts. Issue #21 wires this parser into the GitHub composite action, which builds the context bundle and calls `redline-github-action` before it constructs the container-staging launcher.
-
-- Issue #22 owns the reusable workflow used by other repositories.
-- Issue #23 pins the immutable runner-image digests in the backend-to-digest table that the action consumes.
-
-The composite action still runs in a context-bundle-only mode when the caller supplies no review inputs. See the [GitHub composite action contract](github-composite-action.md).
+Exit codes: `0` success (context-only or completed review), `1` review or bundle failure, `2` usage or validation failure. A review run exits `1` when no reviewed file produced a validated review — every file failed, timed out, or produced invalid output.

@@ -8,13 +8,13 @@ on:
   workflow_call:
     inputs:
       artifact-retention-days:
-        description: Number of days to retain the review debug artifact
+        description: Number of days to retain the review artifacts
         required: false
         type: number
         default: 45
     secrets:
       github-token:
-        description: GitHub token used for review publication. Required only when review execution is enabled.
+        description: GitHub token bound to secrets.GH_TOKEN. Required by the base-revision publication path while the previous action design is checked out; the current action ignores it.
         required: false
       model-auth:
         description: Provider-keyed credential map (JSON), bound to the MODEL_CREDENTIALS secret. Enables review execution when set.
@@ -27,11 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write
-      pull-requests: write
     steps:
       - name: Check out trusted workflow tooling
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
         with:
           repository: ${{ github.repository }}
           ref: ${{ github.event.pull_request.base.sha }}
@@ -55,16 +53,28 @@ jobs:
       # The local action path resolves inside Redline itself, which is exactly
       # the dogfood case. External repositories must use the reusable
       # workflow instead; ./github would resolve against their repository.
-      # Review inputs are set only when MODEL_CREDENTIALS exists, so an
-      # unconfigured repository keeps the context-only behavior.
-      - name: Run Redline review context action
+      # The checkout above is the trusted base revision: pull request code is
+      # never installed, built, or executed.
+      #
+      # TRANSITION: the action runs from the base revision, which still
+      # carries the previous design while this branch is open. That
+      # revision's review mode runs the replaced containerized pipeline,
+      # which fails silently (empty backend diagnostic, exit 0) on this
+      # branch's large restart diff, so review execution stays disabled
+      # here and the current pipeline's live behavior is validated by the
+      # CI harness matrix instead (echo, pi, opencode against the mock
+      # model endpoint). Re-enable backend/model-config/model-auth once
+      # this design is the base revision; the github-token secret stays
+      # wired for that flip. Only inputs the current action declares are
+      # passed: the previous action's legacy surface (github-token,
+      # credential-isolation, container-engine) is rejected by actionlint
+      # against this action manifest and is not needed in context-only
+      # mode.
+      - name: Run Redline review action
         uses: ./github
         with:
-          backend: ${{ secrets.model-auth != '' && 'pi' || '' }}
-          model-config: ${{ secrets.model-auth != '' && '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}' || '' }}
-          model-auth: ${{ secrets.model-auth }}
-          github-token: ${{ secrets.github-token }}
-          credential-isolation: ${{ secrets.model-auth != '' && 'direct' || '' }}
-          container-engine: docker
+          backend: ''
+          model-config: ''
+          model-auth: ''
           artifact-name: pull-request-review-${{ github.event.pull_request.number }}-${{ github.run_id }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

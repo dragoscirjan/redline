@@ -7,7 +7,7 @@ const base = process.env.DOCS_BASE ?? '/';
 // pipeline behind it.
 export default defineConfig({
   title: 'Redline',
-  description: 'Automated pull request review for GitHub, Forgejo, and Gitea',
+  description: 'Automated pull request review for GitHub',
   base,
   cleanUrls: true,
   lastUpdated: true,
@@ -29,9 +29,8 @@ export default defineConfig({
         items: [
           { text: 'GitHub composite action', link: '/github-composite-action' },
           { text: 'Runnable review configuration', link: '/runnable-review-configuration' },
-          { text: 'Container staging', link: '/container-staging' },
-          { text: 'Review reporting', link: '/review-reporting' },
-          { text: 'Candidate runner images', link: '/candidate-runner-images' },
+          { text: 'Harness executor', link: '/harness-executor' },
+          { text: 'Review output', link: '/review-reporting' },
         ],
       },
     ],

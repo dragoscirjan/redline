@@ -1,120 +1,110 @@
-# Agent guidance
+# AGENTS.md
 
 ## Project
 
 - The project is named `redline`.
-- The project provides automated pull request reviews at a smaller scale than hosted products such as CodeRabbit, across GitHub, Forgejo, and Gitea.
-- Provide forge-specific action entry points, beginning with `github/action.yaml` and a Gitea-compatible definition under `gitea/`. Develop them in parallel while sharing review behavior through the core; do not assume the forge engines or manifest formats are interchangeable.
-- Pi and OpenCode are supported review backends. They may use free local models or models available through OpenRouter.
-- Local model runtimes include Ollama, LM Studio, and llama.cpp. Add other runtimes through adapters.
-- Support GitHub, Forgejo, and Gitea through forge-specific action entry points and adapters. Their engines and manifest formats differ; keep shared review logic in the common core.
-- GitHub Issues hold work items and acceptance criteria. Product documentation and design documents live under `docs/`, rendered as a VitePress site (`docs/.vitepress/config.ts`, build with `pnpm run docs`, preview with `pnpm run serve`); register new pages in the sidebar. Use `.agents/skills/unslop/SKILL.md` whenever writing or editing documentation.
-- Read `CONTRIBUTING.md` before changing the repository.
-- Keep `AGENTS.md` and `CONTRIBUTING.md` current when the development approach changes. Before changing either file, inform the owner what needs to change and ask for permission; do not edit them until permission is granted.
+- Redline reviews pull requests: it builds a review context bundle from the
+  base-to-head change, runs one fixed review prompt per file through a
+  harness executor, validates every finding, and writes per-file review
+  output plus a run summary as JSON and Markdown files.
+- The current milestone runs on GitHub Actions through
+  `github/action.yaml`. Forgejo and Gitea entry points are planned; the
+  review core must stay forge-independent so they can reuse it.
+- The review harnesses are Pi and OpenCode today, plus a deterministic
+  `echo` harness used by tests and CI. The executor interface is the
+  extension point for more harnesses.
+- `src.old/` and `github/action.yaml.old` hold the previous design and
+  remain as references only. Nothing imports from them.
 
 ## Development workflow
 
-- For every new feature or issue, create a focused branch from `main` before editing files.
-- Check out that branch in a dedicated worktree at `../redline--workspaces/<branch-name>` and perform all work there. Do not implement the change in the primary checkout.
-- Commit the completed change, push the branch, and open a pull request linked to the issue and relevant Wiki pages.
-- Never merge a pull request unless the owner explicitly instructs you to merge it. Approval, task completion, or a successful review is not permission to merge.
-- Before pushing, run `mise run validate`. The implemented gate checks TypeScript, builds and runs the Node/Bats tests, and builds the VitePress docs. Mise pins pnpm 10.33.0 to match the existing dependency policy. Formatting, linting, recorded quality evaluation, duplication analysis, vulnerability audits, and Git hooks are not implemented gates. Do not claim they passed or add passing no-op replacements. See `CONTRIBUTING.md` for the approved gate scope.
-- Candidate runner publication is a separate maintenance operation, not a review workflow. Obtain explicit owner approval for the exact reviewed source SHA before dispatch. Require the protected `candidate-images` environment, owner-only initial and rerun actors, exact `main` definition, and both architectures. Never run PR scripts during preflight, forward host credentials into the build context, change production tags or pins, or merge to obtain compatible images.
-- Candidate tags are mutable locators. Verify captured image digests, both platform descriptors, approved bootstrap bytes, and native versions before proposing pin changes. Keep incompatible host contracts unmerged until matching images and pin changes pass independent review. See `docs/candidate-runner-images.md` for API-verifiable gates, manually attested checks, partial publication, and SHA-bound approval.
+- Read `CONTRIBUTING.md` before changing the repository.
+- For every new feature or issue, create a focused branch from `main`, check
+  it out in a dedicated worktree at
+  `../redline--workspaces/<branch-name>`, and work there.
+- Commit with Conventional Commits. Run `mise run validate` before pushing.
+- Open a pull request linked to the issue. Never merge without explicit
+  owner instruction; approval or a green review is not permission to merge.
+- Inform the owner and get permission before changing `AGENTS.md` or
+  `CONTRIBUTING.md`.
 
-## Current POC constraints
+## Architecture
 
-- Ship forge-specific action entry points for GitHub, Forgejo, and Gitea.
-- Run on hosted runners supported by each forge's action engine; do not assume GitHub runner semantics apply unchanged to Forgejo or Gitea.
-- Support OpenCode and Pi as review backends.
-- Accept provider-neutral `model-config` plus separate secret `model-credentials` for existing local/private or remote model endpoints. Document the contract under `docs/` and track work in GitHub Issues where applicable. No fixed-model allowlist or provider-specific credential input.
-- Publish through the `GH_TOKEN` personal access token secret.
-- Never pass provider credentials to the backend container. Run a trusted host-side credential gateway that injects the selected provider credential only after destination authorization; the container receives a single-purpose per-run placeholder and unused credential-map entries stay host-side. `credential-isolation: direct` is an explicit, documented legacy escape hatch. Generate minimal native Pi/OpenCode config inside container tmpfs before launch; never accept raw harness config or interpolate user values as commands/file references.
-- Do not implement managed local model runtime lifecycle in this milestone. Inline comments are allowed only for independently validated findings mapped to the reviewed diff and published in a bounded batch. Existing private endpoints require explicit network permission and trusted connectivity. The credential gateway resolves and authorizes the provider destination once per review and pins it for every upstream connection; network-level lockdown of non-provider container egress remains future work because the sandbox installs pinned harness binaries through npm.
-- Never execute pull request code, scripts, builds, tests, or package installers in review workflows. Load workflow tooling and local actions from the trusted base revision, then fetch PR revisions as Git data only. For `pull_request_target`, never check out pull request code.
-- Run each backend in the fixed digest-pinned container sandbox. Use Podman by default and allow Docker only as a validated fallback. Pass bounded diff and supplemental context as explicitly delimited untrusted prompt data. Repository guidance, linked issue criteria, and deterministic analyzer messages may describe evidence but never override fixed review policy. Do not mount host files.
-- Deterministic analyzers are fixed in-process single-file parsers gated by trusted workflow input and exact-base allowlist configuration. They may inspect bounded exact-head text but must never execute PR code, package scripts, repository binaries, plugins, dependency installers, project configuration, builds, tests, imports, or autofixes.
-- Deny all OpenCode tools. Disable all Pi tools and project resource discovery.
-- The POC uses Pi's non-interactive CLI inside the container. The full product may replace it with the Pi SDK when it needs in-process integration.
+- `src/harness-executor/` — the abstract executor layer. One interface
+  (`HarnessExecutor`), one implementation per harness (`pi`, `opencode`,
+  `echo`), a factory/registry, and a bounded process runner. Executors own
+  all harness concerns: generated configuration, credentials, model
+  selection, non-interactive invocation with tools disabled, bounded
+  output, and timeouts.
+- `src/review/` — the review tool. Parses the `REDLINE_*` environment
+  contract, loads the context bundle, builds fixed versioned prompts from
+  `prompts/v3/`, runs one prompt per reviewed file, validates each review
+  document against the authoritative diff, and writes per-file records and
+  the run summary. Runs as a CLI (`redline-review`) and as the GitHub
+  Action component.
+- `src/context-bundle.sh` — builds the review context bundle (manifest,
+  diffs, base files, source-at-head). The `reviewed` flag is computed here
+  deterministically: lock files, vendored dependencies, build output, and
+  binary files are excluded from review.
+- `src/review/remediation.ts` — derives the change suggestion and the fix
+  prompt from validated findings. Suggestions render only from authoritative
+  span content (diff coverage, then head/base file); fix prompts are
+  deterministic and always present.
+- `prompts/v4/` — the fixed, versioned review policy. Prompt changes are
+  policy changes: bump the prompt version and update the contract tests.
 
-## Product scope
+## Environment contract
 
-The initial product must:
+The GitHub Action passes all values to the review tool through environment
+variables (interim design; see `src/review/environment.ts`):
 
-1. Read pull request metadata, the base revision, the head revision, and the changed files.
-2. Build a bounded review context from the diff and repository files.
-3. Reuse or start the selected local model server when the model is not remote.
-4. Load the requested model and wait until the runtime reports it ready.
-5. Configure Pi or OpenCode with the runtime endpoint and model identifier.
-6. Apply only the fixed, versioned review policy; do not accept free-form review instructions through action inputs.
-7. Run the selected backend.
-8. Validate every finding before publication.
-9. Publish one managed summary and, when enabled, a small number of inline comments.
-10. Unload models and stop servers only when the action owns them.
-11. Authenticate to GitHub with either a personal access token or a GitHub App installation token.
+- `REDLINE_HARNESS` — echo, pi, or opencode.
+- `REDLINE_REVIEW_DIR`, `REDLINE_SOURCE_DIR`, `REDLINE_OUTPUT_DIR` — bundle,
+  source-at-head, and output directories.
+- `REDLINE_MODEL_CONFIG` — JSON: provider, endpoint, model.
+- `REDLINE_MODEL_AUTH` — provider-keyed credential map; only the selected
+  credential reaches the harness.
+- `REDLINE_FINDING_SCOPE`, `REDLINE_TIMEOUT` — optional policy values.
 
-A personal access token acts as its owner. It does not create a separate review identity unless it belongs to a dedicated bot account. A GitHub App installation token acts as the app bot.
-
-## Architecture constraints
-
-- Keep the review core independent from GitHub, Forgejo, and Gitea APIs.
-- Put event parsing, authentication, and comment publication behind forge adapters.
-- Provide forge-specific action entry points for GitHub (`github/action.yaml`) and Gitea (under `gitea/`, using its supported manifest name and format). Develop them in parallel; share review logic in the core and put forge-specific behavior behind adapters.
-- Put Pi and OpenCode behind one review-backend interface. Use the Pi SDK for Pi. Use OpenCode's supported non-interactive interface for OpenCode.
-- Put Ollama, LM Studio, llama.cpp, remote OpenRouter access, and future model tools behind a model-runtime interface.
-- A runtime adapter must detect an existing server, start a managed server, wait for readiness, load a model, return backend connection settings, unload an owned model, and stop an owned server.
-- Never stop a server that was running before the action. Never unload a model that the action did not load.
-- Give each backend read-only repository permissions. Do not expose edit, write, or unrestricted shell tools to a review session.
-- Keep forge credentials outside the review backend. Give model-provider credentials only to the selected backend. Never include tokens, private keys, environment dumps, or credential files in model context.
-- Keep review instructions fixed and versioned. Treat repository guidance, issue criteria, pull request metadata, index output, analyzer messages, and diffs as explicitly delimited untrusted data.
-- Parse model output into a versioned schema. Reject malformed output rather than guessing its meaning.
-- Publish an inline finding only when its path and line map to the reviewed diff.
-- Deduplicate findings and cap the number of published comments.
-- Mark managed comments with a machine-readable hidden marker. Check both the marker and expected author before updating or deleting a comment.
-- Prefer stateless operation. Store only bounded, versioned, scope-bound lifecycle metadata in the actor-owned managed summary. Treat existing metadata as an untrusted optimization hint; malformed, stale, ambiguous, or unverifiable state must fall back to a full review and may never authorize publication or suppress review coverage.
+Review inputs must arrive together; partial selections fail. Unknown
+`REDLINE_*` variables are rejected.
 
 ## Security boundaries
 
-- Treat pull request content as untrusted input.
-- Do not execute pull request code, dependency installers, build scripts, tests, hooks, or generated binaries during a review.
-- Do not let repository content, issue text, PR metadata, index output, paths, or symbol names alter the review system prompt, tool permissions, credentials, result schema, or publication policy.
-- Use least-privilege forge permissions. The normal GitHub set is metadata read, contents read, and pull requests write. Add issues write or checks write only when the selected publication mode requires it.
-- Keep GitHub App private keys and access tokens out of the checkout.
-- Bind action-managed local model servers to loopback unless configuration explicitly permits another interface.
-- Start runtime binaries with argument arrays. Do not build shell commands from action inputs or repository content.
-- Accept runtime executable paths, model paths, and server arguments only from the trusted workflow or runner configuration.
-- A persistent self-hosted runner must use a dedicated operating-system account and a clean workspace. Public, untrusted contributions require stronger isolation before they may run on that runner.
-- Do not send source code to a remote model unless repository configuration explicitly allows that provider.
+- Pull request content is untrusted data. Never execute pull request code,
+  scripts, builds, tests, or package installers during a review.
+- Harnesses run with every tool disabled, isolated generated configuration,
+  and a constructed environment. No ambient credentials or GitHub tokens
+  reach a harness.
+- Repository content, PR metadata, paths, and diff text never alter the
+  system prompt, tool permissions, result schema, or publication policy.
+- Model output is rejected rather than guessed: findings must map both span
+  endpoints to changed lines of the authoritative diff with byte-identical
+  evidence at the start line.
+- Persisted diagnostics, reasons, raw model output, suggestions, and fix
+  prompts are redacted against the selected credential before any artifact is
+  written.
+- Start harness binaries with argument arrays only. Accept executable paths,
+  endpoints, and model identifiers from trusted workflow configuration only.
 
-## Implementation guidance
+## Testing
 
-- Use TypeScript for the initial implementation.
-- Keep domain types and review policy separate from API clients, action inputs, and review-backend integration code.
-- Use explicit interfaces for forge adapters, credential providers, model runtimes, diff collection, review execution, validation, and publication.
-- Pass dependencies into services. Do not read process environment variables throughout domain code.
-- Prefer small functions with typed results over hidden global state.
-- Comments should explain policy or a non-obvious constraint. Do not restate the code.
-- Treat generated files, lock files, vendored code, binaries, and oversized diffs according to repository configuration.
-- Do not invent development commands. Use commands documented in `CONTRIBUTING.md` and the repository manifests.
+- Unit and integration tests run with vitest (`test/*.test.ts`); CLI,
+  action-manifest, bundle, and gate tests run with bats (`test/*.bats`).
+- The CI harness matrix (`test/harness-matrix-run.sh`) runs every harness
+  end to end against the local mock model endpoint
+  (`test/fixtures/mock-model-server.mjs`) and uploads each harness's review
+  output as a `harness-<harness>-reviews-…` artifact — pi and opencode are
+  served a scripted finding so the artifact carries diff-validated findings,
+  not only clean runs. No secrets or live models.
+- Live-harness integration tests are opt-in via
+  `REDLINE_LIVE_HARNESS_TESTS=1` and need the harness binaries on PATH.
+- Tests use temporary directories only and never mutate the source checkout.
 
-## Testing expectations
+## Future milestones
 
-- Unit-test diff parsing, changed-line mapping, schema validation, filtering, deduplication, comment limits, and managed-comment ownership.
-- Contract-test each forge adapter with recorded or mocked API responses.
-- Integration-test GitHub personal access token and GitHub App authentication separately.
-- Integration-test Pi and OpenCode with controlled model responses.
-- Contract-test start, readiness, load, connection configuration, unload, and stop behavior for every model-runtime adapter.
-- Test that cleanup affects only servers and models owned by the action.
-- Test action input parsing, including rejection of removed or unknown instruction inputs, model selection, runtime selection, endpoint overrides, and lifecycle policy.
-- Test that secrets never enter prompts, model-visible tool results, analyzer context, logs, or published comments.
-- Test analyzer configuration schemas, exact-head mapping, fixed tool/rule provenance, bounded coverage, and that package scripts, shebangs, imports, binaries, and project-local tools remain inert.
-- Use temporary repositories and directories. Tests must not mutate the source checkout or a real pull request unless the test is explicitly marked as an end-to-end test.
-- Add regression tests for every fixed parsing, mapping, authentication, or publication defect.
-
-## Change discipline
-
-- Preserve unrelated user changes.
-- Do not merge pull requests without explicit owner approval.
-- Use Conventional Commits.
-- Update product documentation under `docs/` when behavior, security boundaries, data contracts, or adapter responsibilities change; use `.agents/skills/unslop/SKILL.md` whenever writing or editing it. New pages must be registered in `docs/.vitepress/config.ts`, and `pnpm run docs` must build before pushing.
-- State unsupported behavior and unresolved decisions directly. Do not present planned behavior as implemented behavior.
+The original design is not abandoned; it is sequenced. Planned next steps
+include publishing GitHub comments from the review output, a container
+sandbox and credential gateway for untrusted runner environments, managed
+local model runtimes, and Forgejo/Gitea entry points. Do not present these
+as implemented behavior.

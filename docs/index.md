@@ -9,7 +9,7 @@ Automated pull request review, smaller and self-hosted. A GitHub Action reviews 
 
 ## How a review runs
 
-The action fetches the pull request's base and head commits as Git data, builds a bounded context bundle, and runs one fixed review prompt per eligible changed file through the selected harness. Lock files, vendored and generated directories (for example `node_modules/` or `dist/`), and binary files are excluded from review and recorded as unreviewed, so their changes stay identifiable in the manifest. The harness runs with every tool disabled and isolated generated configuration; no ambient credentials reach it. Each model finding must map to a changed line of the authoritative diff with matching evidence, or it is rejected. Pull request code is never executed.
+The action fetches the pull request's base and head commits as Git data, builds a bounded context bundle, and runs one fixed review prompt per eligible changed file through the selected harness. Lock files, vendored and generated directories (for example `node_modules/` or `dist/`), and binary files are excluded from review and recorded as unreviewed, so their changes stay identifiable in the manifest. The harness runs with every tool disabled and isolated generated configuration; no ambient credentials reach it. Each model finding must map its span (`file:x-y`) to changed lines of the authoritative diff with matching evidence, or it is rejected; validated findings carry a change suggestion and a fix prompt for coding agents. Pull request code is never executed.
 
 ## Start here
 

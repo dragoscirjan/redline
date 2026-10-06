@@ -23,8 +23,8 @@ import {
 } from './bundle.js';
 import type { FindingScope } from './types.js';
 
-export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v1' as const;
-export const FILE_REVIEW_PROMPT_VERSION = 1 as const;
+export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v2' as const;
+export const FILE_REVIEW_PROMPT_VERSION = 2 as const;
 
 const PROMPT_MODULES = ['core-policy.md', 'review-phases.md', 'file-reporting.md'] as const;
 
@@ -35,11 +35,11 @@ const PROMPT_MODULES = ['core-policy.md', 'review-phases.md', 'file-reporting.md
  */
 function defaultPromptRoot(): string {
   const moduleDirectory = fileURLToPath(new URL('.', import.meta.url));
-  for (const candidate of ['../../prompts/v3/', '../../../prompts/v3/']) {
+  for (const candidate of ['../../prompts/v4/', '../../../prompts/v4/']) {
     const path = resolve(moduleDirectory, candidate);
     if (existsSync(path)) return path;
   }
-  return resolve(moduleDirectory, '../../prompts/v3/');
+  return resolve(moduleDirectory, '../../prompts/v4/');
 }
 const DEFAULT_PROMPT_ROOT = defaultPromptRoot();
 const MAX_PROMPT_MODULE_BYTES = 64 * 1024;

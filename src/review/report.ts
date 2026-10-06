@@ -3,10 +3,11 @@
  *
  * Model output is untrusted and rejected rather than guessed: the document
  * must match the exact schema, target the file under review, and every
- * finding must map to a changed line of the authoritative diff with
- * byte-identical evidence. Findings that fail validation invalidate the
- * whole document (the caller records an invalid-output outcome instead of
- * publishing an unvalidated finding).
+ * finding must anchor to changed lines of the authoritative diff — both
+ * span endpoints must be changed lines and the evidence must be
+ * byte-identical to the start line. Findings that fail validation
+ * invalidate the whole document (the caller records an invalid-output
+ * outcome instead of publishing an unvalidated finding).
  */
 
 import { createHash } from 'node:crypto';
@@ -21,8 +22,9 @@ import type {
   ValidatedFinding,
 } from './types.js';
 
-export const FILE_REVIEW_DOCUMENT_VERSION = 1 as const;
+export const FILE_REVIEW_DOCUMENT_VERSION = 2 as const;
 export const MAX_FILE_FINDINGS = 10;
+export const MAX_SUGGESTED_CHANGE_CHARS = 8 * 1024;
 
 const CATEGORIES = ['correctness', 'security', 'regression', 'testing', 'operational', 'maintainability'] as const;
 const CLASSIFICATIONS = ['defect', 'risk'] as const;
@@ -61,7 +63,19 @@ function parseFinding(value: unknown): ReviewFinding {
   if (!isRecord(value)) throw new Error('finding must be an object');
   assertOnlyKeys(
     value,
-    ['category', 'classification', 'severity', 'confidence', 'side', 'line', 'evidence', 'impact', 'fix'],
+    [
+      'category',
+      'classification',
+      'severity',
+      'confidence',
+      'side',
+      'startLine',
+      'endLine',
+      'evidence',
+      'impact',
+      'fix',
+      'suggestedChange',
+    ],
     'finding',
   );
   if (typeof value.confidence !== 'number' || !Number.isFinite(value.confidence)) {
@@ -70,16 +84,27 @@ function parseFinding(value: unknown): ReviewFinding {
   if (value.confidence < 0 || value.confidence > 1) {
     throw new Error('finding.confidence must be between 0 and 1');
   }
+  const startLine = positiveInteger(value.startLine, 'finding.startLine');
+  const endLine = positiveInteger(value.endLine, 'finding.endLine');
+  if (startLine > endLine) {
+    throw new Error('finding.startLine must not exceed finding.endLine');
+  }
+  const suggestedChange =
+    value.suggestedChange === undefined
+      ? undefined
+      : boundedString(value.suggestedChange, 'finding.suggestedChange', MAX_SUGGESTED_CHANGE_CHARS);
   return {
     category: enumValue(value.category, CATEGORIES, 'finding.category'),
     classification: enumValue(value.classification, CLASSIFICATIONS, 'finding.classification'),
     severity: enumValue(value.severity, SEVERITIES, 'finding.severity'),
     confidence: value.confidence,
     side: enumValue(value.side, SIDES, 'finding.side'),
-    line: positiveInteger(value.line, 'finding.line'),
+    startLine,
+    endLine,
     evidence: boundedString(value.evidence, 'finding.evidence', 4_096),
     impact: boundedString(value.impact, 'finding.impact', 4_096),
     fix: boundedString(value.fix, 'finding.fix', 4_096),
+    ...(suggestedChange !== undefined ? { suggestedChange } : {}),
   };
 }
 
@@ -120,19 +145,28 @@ export function parseFileReviewDocument(raw: string): FileReviewDocument {
   return Object.freeze({ version: FILE_REVIEW_DOCUMENT_VERSION, fileId, outcome, reason, findings });
 }
 
-interface ChangedLines {
-  readonly left: Map<number, string>;
-  readonly right: Map<number, string>;
+/**
+ * A unified diff mapped to its lines: `left` holds removed lines keyed by
+ * old-file line number, `right` holds added lines keyed by new-file line
+ * number, and the context maps hold the unchanged lines each side carries
+ * inside hunks, keyed per side (context lines sit at different numbers on
+ * the two sides when a hunk adds or removes lines above them).
+ */
+export interface ChangedLines {
+  readonly left: ReadonlyMap<number, string>;
+  readonly right: ReadonlyMap<number, string>;
+  readonly contextLeft: ReadonlyMap<number, string>;
+  readonly contextRight: ReadonlyMap<number, string>;
 }
 
 /**
- * Maps a unified diff to its changed lines: `left` holds removed lines keyed
- * by old-file line number, `right` holds added lines keyed by new-file line
- * number.
+ * Maps a unified diff to its changed lines and hunk context lines.
  */
 export function parseChangedLines(diff: string, label: string): ChangedLines {
   const left = new Map<number, string>();
   const right = new Map<number, string>();
+  const contextLeft = new Map<number, string>();
+  const contextRight = new Map<number, string>();
   let oldLine = 0;
   let newLine = 0;
   let inHunk = false;
@@ -150,6 +184,8 @@ export function parseChangedLines(diff: string, label: string): ChangedLines {
     const marker = rawLine[0];
     const content = rawLine.slice(1);
     if (marker === ' ') {
+      contextLeft.set(oldLine, content);
+      contextRight.set(newLine, content);
       oldLine += 1;
       newLine += 1;
     } else if (marker === '-') {
@@ -165,7 +201,7 @@ export function parseChangedLines(diff: string, label: string): ChangedLines {
     }
   }
 
-  return { left, right };
+  return { left, right, contextLeft, contextRight };
 }
 
 function stableFindingId(finding: ReviewFinding, manifestFile: ReviewManifestFile): string {
@@ -177,7 +213,8 @@ function stableFindingId(finding: ReviewFinding, manifestFile: ReviewManifestFil
     fileId: manifestFile.id,
     path: manifestFile.newPath ?? manifestFile.oldPath,
     side: finding.side,
-    line: finding.line,
+    startLine: finding.startLine,
+    endLine: finding.endLine,
     evidence: finding.evidence,
     impact: finding.impact,
     fix: finding.fix,
@@ -187,18 +224,18 @@ function stableFindingId(finding: ReviewFinding, manifestFile: ReviewManifestFil
 
 /**
  * Validates findings for one file against its manifest entry and the
- * authoritative diff. A finding is accepted only when its side resolves to
- * the matching repository path and its line and byte-identical evidence
- * appear in the changed lines of that side.
+ * authoritative diff. A finding is accepted only when both span endpoints
+ * resolve to changed lines on the claimed side and its evidence is
+ * byte-identical to the start line of that side.
  */
 export class FileReviewValidator {
+  readonly changed: ChangedLines;
   readonly #manifestFile: ReviewManifestFile;
-  readonly #changed: ChangedLines;
   readonly #findingScope: FindingScope;
 
   constructor(manifestFile: ReviewManifestFile, diff: string, findingScope: FindingScope) {
     this.#manifestFile = manifestFile;
-    this.#changed = parseChangedLines(diff, manifestFile.diffFile);
+    this.changed = parseChangedLines(diff, manifestFile.diffFile);
     this.#findingScope = findingScope;
   }
 
@@ -212,12 +249,15 @@ export class FileReviewValidator {
     if (this.#findingScope === 'defects' && finding.classification === 'risk') {
       throw new Error('risk finding is disabled by the configured finding scope');
     }
-    const changed = finding.side === 'RIGHT' ? this.#changed.right : this.#changed.left;
-    const evidence = changed.get(finding.line);
-    if (evidence === undefined) {
-      throw new Error('finding line is not a changed line in the authoritative diff');
+    const changed = finding.side === 'RIGHT' ? this.changed.right : this.changed.left;
+    const startEvidence = changed.get(finding.startLine);
+    if (startEvidence === undefined) {
+      throw new Error('finding startLine is not a changed line in the authoritative diff');
     }
-    if (finding.evidence !== evidence) {
+    if (changed.get(finding.endLine) === undefined) {
+      throw new Error('finding endLine is not a changed line in the authoritative diff');
+    }
+    if (finding.evidence !== startEvidence) {
       throw new Error('finding evidence does not match the authoritative diff line');
     }
     return { ...finding, id: stableFindingId(finding, manifestFile) };

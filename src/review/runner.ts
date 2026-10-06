@@ -20,8 +20,10 @@ import { loadReviewBundle, type ReviewBundle, type ReviewManifestFile } from './
 import type { ReviewEnvironment } from './environment.js';
 import { buildFileReviewPrompt, type FileReviewPrompt } from './prompt.js';
 import { FileReviewValidator, parseFileReviewDocument } from './report.js';
+import { buildRemediation, formatSpan } from './remediation.js';
 import type {
   FileReviewRecord,
+  PublishedFinding,
   ReviewRunSummary,
   ReviewRunSummaryFile,
   ValidatedFinding,
@@ -71,7 +73,7 @@ async function reviewOneFile(
 ): Promise<FileReviewRecord & { rawModelOutput?: string | undefined }> {
   const redact = (value: string): string => redactCredential(value, environment.credential);
   const described = {
-    version: 1 as const,
+    version: 2 as const,
     fileId: file.id,
     path: fileReviewPath(file),
     status: file.status,
@@ -163,12 +165,28 @@ async function reviewOneFile(
     };
   }
 
-  const outcome = document.outcome === 'omitted' ? 'omitted' : findings.length > 0 ? 'findings' : 'clean';
+  // Each validated finding is enriched for publication: the rendered
+  // change suggestion (when resolvable) and the fix prompt. Both embed
+  // model-derived text, so both are redacted against the credential.
+  const published: PublishedFinding[] = [];
+  for (const finding of findings) {
+    const remediation = await buildRemediation(bundle, file, finding, validator.changed);
+    const { suggestedChange: _modelProposal, ...core } = finding;
+    published.push({
+      ...core,
+      ...(remediation.suggestion !== undefined
+        ? { suggestion: redact(remediation.suggestion) }
+        : {}),
+      fixPrompt: redact(remediation.fixPrompt),
+    });
+  }
+
+  const outcome = document.outcome === 'omitted' ? 'omitted' : published.length > 0 ? 'findings' : 'clean';
   return {
     ...described,
     outcome,
     reason: document.reason !== undefined ? boundedReason(redact(document.reason)) : undefined,
-    findings,
+    findings: published,
     durationMs: run.durationMs,
     rawModelOutput: redact(run.text),
   };
@@ -197,7 +215,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       if (!file.reviewed) continue;
       if (file.binary) {
         const binaryRecord: FileReviewRecord & { rawModelOutput?: string | undefined } = {
-          version: 1,
+          version: 2,
           fileId: file.id,
           path: fileReviewPath(file),
           status: file.status,
@@ -218,7 +236,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
     }
 
     const summary: ReviewRunSummary = {
-      version: 1,
+      version: 2,
       harness: environment.harness,
       model: environment.model.model,
       provider: environment.model.provider,
@@ -235,6 +253,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
         outcome: record.outcome,
         errorKind: record.errorKind,
         findingCount: record.findings.length,
+        findingSpans: record.findings.map((finding) => formatSpan(finding.startLine, finding.endLine)),
       })),
     };
     await writer.writeSummary(summary);

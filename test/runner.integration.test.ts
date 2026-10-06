@@ -48,7 +48,7 @@ describe('runFileReviews', () => {
       const executor = new ScriptedExecutor();
       executor.script([
         {
-          text: reviewDocument({ version: 1, fileId: '000001', outcome: 'clean', findings: [] }),
+          text: reviewDocument({ version: 2, fileId: '000001', outcome: 'clean', findings: [] }),
         },
       ]);
       const result = await runFileReviews({ environment: environment.review!, executor });
@@ -61,7 +61,8 @@ describe('runFileReviews', () => {
 
       const record = JSON.parse(
         await readFile(join(fixture.output, 'reviews', '000001.json'), 'utf8'),
-      ) as { outcome: string; rawModelOutput?: string };
+      ) as { version: number; outcome: string; rawModelOutput?: string };
+      expect(record.version).toBe(2);
       expect(record.outcome).toBe('clean');
       expect(record.rawModelOutput).toBeDefined();
       await expect(readFile(join(fixture.output, 'reviews', '000001.md'), 'utf8')).resolves.toContain(
@@ -79,7 +80,7 @@ describe('runFileReviews', () => {
     }
   });
 
-  it('validates findings and writes them with stable ids', async () => {
+  it('validates findings, renders their spans, and derives suggestions and fix prompts', async () => {
     const fixture = await createBundleFixture({
       diff: 'diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1 +1 @@\n-old\n+new line\n',
       headContent: 'new line\n',
@@ -90,7 +91,7 @@ describe('runFileReviews', () => {
       executor.script([
         {
           text: reviewDocument({
-            version: 1,
+            version: 2,
             fileId: '000001',
             outcome: 'findings',
             findings: [
@@ -100,10 +101,12 @@ describe('runFileReviews', () => {
                 severity: 'high',
                 confidence: 0.9,
                 side: 'RIGHT',
-                line: 1,
+                startLine: 1,
+                endLine: 1,
                 evidence: 'new line',
                 impact: 'Wrong result.',
                 fix: 'Restore the check.',
+                suggestedChange: 'guarded line',
               },
             ],
           }),
@@ -113,12 +116,38 @@ describe('runFileReviews', () => {
       expect(result.exitCode).toBe(0);
       expect(result.summary.findings).toBe(1);
       expect(result.summary.files[0]?.outcome).toBe('findings');
+      expect(result.summary.files[0]?.findingSpans).toEqual(['1']);
 
       const record = JSON.parse(
         await readFile(join(fixture.output, 'reviews', '000001.json'), 'utf8'),
-      ) as { outcome: string; findings: Array<{ id: string }> };
+      ) as {
+        outcome: string;
+        findings: Array<{
+          id: string;
+          startLine: number;
+          endLine: number;
+          suggestion?: string;
+          fixPrompt: string;
+          suggestedChange?: unknown;
+        }>;
+      };
       expect(record.outcome).toBe('findings');
-      expect(record.findings[0]?.id).toMatch(/^f-[0-9a-f]{24}$/u);
+      const finding = record.findings[0]!;
+      expect(finding.id).toMatch(/^f-[0-9a-f]{24}$/u);
+      expect(finding.startLine).toBe(1);
+      expect(finding.endLine).toBe(1);
+      expect(finding.suggestion).toBe('-new line\n+guarded line');
+      expect(finding.fixPrompt).toContain('Fix one code-review finding.');
+      expect(finding.fixPrompt).toContain('Location: src/example.ts:1 (side RIGHT: the new version of the file)');
+      expect(finding.fixPrompt).toContain('  1 | new line');
+      expect(finding.suggestedChange).toBeUndefined();
+
+      const markdown = await readFile(join(fixture.output, 'reviews', '000001.md'), 'utf8');
+      expect(markdown).toContain('— src/example.ts:1');
+      expect(markdown).toContain('-new line');
+      expect(markdown).toContain('+guarded line');
+      const summaryMarkdown = await readFile(join(fixture.output, 'reviews', 'summary.md'), 'utf8');
+      expect(summaryMarkdown).toContain('| src/example.ts | findings | 1 (1) |');
     } finally {
       await fixture.cleanup();
     }
@@ -243,8 +272,8 @@ describe('runFileReviews', () => {
       const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
       const executor = new ScriptedExecutor();
       executor.script([
-        { text: reviewDocument({ version: 1, fileId: '000001', outcome: 'clean', findings: [] }) },
-        { text: reviewDocument({ version: 1, fileId: '000002', outcome: 'clean', findings: [] }) },
+        { text: reviewDocument({ version: 2, fileId: '000001', outcome: 'clean', findings: [] }) },
+        { text: reviewDocument({ version: 2, fileId: '000002', outcome: 'clean', findings: [] }) },
       ]);
       const result = await runFileReviews({ environment: environment.review!, executor });
 
@@ -284,7 +313,6 @@ describe('runFileReviews', () => {
       await runFileReviews({ environment: environment.review!, executor });
       const record = JSON.parse(await readFile(join(fixture.output, 'reviews', '000001.json'), 'utf8')) as {
         reason?: string;
-        rawModelOutput?: string;
       };
       expect(record.reason).toBeDefined();
       expect(record.reason).not.toContain('test-key');
@@ -308,6 +336,51 @@ describe('runFileReviews', () => {
       expect(record.rawModelOutput).toBeDefined();
       expect(record.rawModelOutput).not.toContain('test-key');
       expect(record.rawModelOutput).toContain('[redacted]');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('redacts the selected credential from derived suggestions and fix prompts', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      // A finding whose model-proposed replacement echoes the credential.
+      executor.script([
+        {
+          text: reviewDocument({
+            version: 2,
+            fileId: '000001',
+            outcome: 'findings',
+            findings: [
+              {
+                category: 'correctness',
+                classification: 'defect',
+                severity: 'high',
+                confidence: 0.9,
+                side: 'RIGHT',
+                startLine: 1,
+                endLine: 1,
+                evidence: 'new',
+                impact: 'Wrong result.',
+                fix: 'Restore the check with test-key.',
+                suggestedChange: 'guarded using test-key',
+              },
+            ],
+          }),
+        },
+      ]);
+      await runFileReviews({ environment: environment.review!, executor });
+      const record = JSON.parse(await readFile(join(fixture.output, 'reviews', '000001.json'), 'utf8')) as {
+        findings: Array<{ suggestion?: string; fixPrompt: string }>;
+      };
+      const finding = record.findings[0]!;
+      expect(finding.suggestion).toBeDefined();
+      expect(finding.suggestion).not.toContain('test-key');
+      expect(finding.suggestion).toContain('[redacted]');
+      expect(finding.fixPrompt).not.toContain('test-key');
+      expect(finding.fixPrompt).toContain('[redacted]');
     } finally {
       await fixture.cleanup();
     }

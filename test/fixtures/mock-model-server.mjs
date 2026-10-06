@@ -24,7 +24,7 @@ function replyFor(body) {
   if (FIXED_REPLY !== null) return FIXED_REPLY;
   const match = FILE_ID_PATTERN.exec(body);
   const fileId = match === null ? '000000' : match[1];
-  return JSON.stringify({ version: 1, fileId, outcome: 'clean', findings: [] });
+  return JSON.stringify({ version: 2, fileId, outcome: 'clean', findings: [] });
 }
 
 function chunkString(value, size) {

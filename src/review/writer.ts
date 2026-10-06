@@ -2,12 +2,14 @@
  * Persists per-file review records and the run summary as JSON and Markdown
  * files in the output directory. The JSON files are the machine-readable
  * contract for later comment publication; the Markdown files are the
- * human-readable counterpart.
+ * human-readable counterpart, presenting findings as `path:x-y` spans with
+ * their change suggestions and fix prompts.
  */
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { FileReviewRecord, ReviewRunSummary, ValidatedFinding } from './types.js';
+import { spanLocation } from './remediation.js';
+import type { FileReviewRecord, PublishedFinding, ReviewRunSummary } from './types.js';
 
 export const MAX_RAW_MODEL_OUTPUT_BYTES = 16 * 1024;
 
@@ -15,17 +17,34 @@ interface FileReviewRecordWithRaw extends FileReviewRecord {
   readonly rawModelOutput?: string | undefined;
 }
 
-function renderFindingMarkdown(finding: ValidatedFinding, index: number): string {
-  return [
-    `### Finding ${index + 1}: ${finding.severity} ${finding.classification} (${finding.category})`,
+/** Uses a fence that cannot occur inside the fenced content. */
+function fenceFor(content: string): string {
+  return content.includes('```') ? '````' : '```';
+}
+
+function renderFindingMarkdown(finding: PublishedFinding, index: number, path: string): string {
+  const location = spanLocation(path, finding.startLine, finding.endLine);
+  const lines = [
+    `### Finding ${index + 1}: ${finding.severity} ${finding.classification} (${finding.category}) — ${location}`,
     '',
-    `- **Location:** ${finding.side} line ${finding.line}`,
+    `- **Location:** ${location} (side ${finding.side})`,
     `- **Confidence:** ${finding.confidence}`,
-    `- **Evidence:** \`${finding.evidence.replace(/`/gu, '\\`')}\``,
+    `- **Evidence (line ${finding.startLine}):** \`${finding.evidence.replace(/`/gu, '\\`')}\``,
     `- **Impact:** ${finding.impact}`,
     `- **Fix:** ${finding.fix}`,
-    '',
-  ].join('\n');
+  ];
+  if (finding.suggestion !== undefined) {
+    lines.push('', `**Suggested change** for ${location} (side ${finding.side}):`, '');
+    lines.push(`\`\`\`diff`);
+    lines.push(finding.suggestion);
+    lines.push('```');
+  }
+  lines.push('', '**Fix prompt** for a coding agent:', '');
+  lines.push(fenceFor(finding.fixPrompt) === '```' ? '```text' : '````text');
+  lines.push(finding.fixPrompt);
+  lines.push(fenceFor(finding.fixPrompt) === '```' ? '```' : '````');
+  lines.push('');
+  return lines.join('\n');
 }
 
 function renderRecordMarkdown(record: FileReviewRecord): string {
@@ -46,7 +65,7 @@ function renderRecordMarkdown(record: FileReviewRecord): string {
   } else {
     lines.push(`## Findings (${record.findings.length})`, '');
     record.findings.forEach((finding, index) => {
-      lines.push(renderFindingMarkdown(finding, index));
+      lines.push(renderFindingMarkdown(finding, index, record.path));
     });
   }
   return `${lines.join('\n')}\n`;
@@ -70,7 +89,11 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
     '| --- | --- | --- |',
   ];
   for (const file of summary.files) {
-    lines.push(`| ${file.path} | ${file.outcome} | ${file.findingCount} |`);
+    const spans =
+      file.findingCount > 0 && file.findingSpans.length > 0
+        ? ` (${file.findingSpans.join(', ')})`
+        : '';
+    lines.push(`| ${file.path} | ${file.outcome} | ${file.findingCount}${spans} |`);
   }
   return `${lines.join('\n')}\n`;
 }
@@ -114,3 +137,4 @@ export function createReviewWriter(outputDirectory: string): ReviewWriter {
     },
   };
 }
+

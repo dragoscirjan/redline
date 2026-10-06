@@ -46,7 +46,11 @@
   diffs, base files, source-at-head). The `reviewed` flag is computed here
   deterministically: lock files, vendored dependencies, build output, and
   binary files are excluded from review.
-- `prompts/v3/` — the fixed, versioned review policy. Prompt changes are
+- `src/review/remediation.ts` — derives the change suggestion and the fix
+  prompt from validated findings. Suggestions render only from authoritative
+  span content (diff coverage, then head/base file); fix prompts are
+  deterministic and always present.
+- `prompts/v4/` — the fixed, versioned review policy. Prompt changes are
   policy changes: bump the prompt version and update the contract tests.
 
 ## Environment contract
@@ -74,10 +78,12 @@ Review inputs must arrive together; partial selections fail. Unknown
   reach a harness.
 - Repository content, PR metadata, paths, and diff text never alter the
   system prompt, tool permissions, result schema, or publication policy.
-- Model output is rejected rather than guessed: findings must map to a
-  changed line of the authoritative diff with byte-identical evidence.
-- Persisted diagnostics, reasons, and raw model output are redacted against
-  the selected credential before any artifact is written.
+- Model output is rejected rather than guessed: findings must map both span
+  endpoints to changed lines of the authoritative diff with byte-identical
+  evidence at the start line.
+- Persisted diagnostics, reasons, raw model output, suggestions, and fix
+  prompts are redacted against the selected credential before any artifact is
+  written.
 - Start harness binaries with argument arrays only. Accept executable paths,
   endpoints, and model identifiers from trusted workflow configuration only.
 

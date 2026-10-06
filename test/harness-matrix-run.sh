@@ -64,9 +64,11 @@ git -C "$REPO" worktree add --detach "$TMP/source" "$HEAD_SHA" >/dev/null 2>&1
 
 PORT=""
 if [[ "$HARNESS" != "echo" ]]; then
-  # Scripted finding document for the fixture diff: RIGHT line 1 is "new".
-  # The runner must accept it through schema and diff-evidence validation.
-  MOCK_RESPONSE_TEXT='{"version":1,"fileId":"000001","outcome":"findings","findings":[{"category":"correctness","classification":"defect","severity":"high","confidence":0.9,"side":"RIGHT","line":1,"evidence":"new","impact":"The changed line breaks the fixture contract for this review.","fix":"Restore the previous value or update the contract."}]}' \
+  # Scripted finding document for the fixture diff: RIGHT span 1-1 is "new".
+  # The runner must accept it through schema and diff-evidence validation,
+  # derive a change suggestion from the proposed replacement, and attach a
+  # fix prompt for a coding agent.
+  MOCK_RESPONSE_TEXT='{"version":2,"fileId":"000001","outcome":"findings","findings":[{"category":"correctness","classification":"defect","severity":"high","confidence":0.9,"side":"RIGHT","startLine":1,"endLine":1,"evidence":"new","impact":"The changed line breaks the fixture contract for this review.","fix":"Restore the previous value or update the contract.","suggestedChange":"old"}]}' \
     node "$ROOT/test/fixtures/mock-model-server.mjs" 0 > "$TMP/mock-port.json" &
   MOCK_PID=$!
   for _ in $(seq 1 50); do
@@ -116,8 +118,14 @@ if (expectFindings) {
     failures.push('finding missing from record');
   } else {
     if (!/^f-[0-9a-f]{24}$/u.test(finding.id)) failures.push(`finding id=${finding.id} is not a stable id`);
-    if (finding.side !== 'RIGHT' || finding.line !== 1 || finding.evidence !== 'new') {
-      failures.push(`finding mapping=${finding.side}:${finding.line} "${finding.evidence}" is not RIGHT:1 "new"`);
+    if (finding.side !== 'RIGHT' || finding.startLine !== 1 || finding.endLine !== 1 || finding.evidence !== 'new') {
+      failures.push(`finding mapping=${finding.side}:${finding.startLine}-${finding.endLine} "${finding.evidence}" is not RIGHT:1-1 "new"`);
+    }
+    if (finding.suggestion !== '-new\n+old') {
+      failures.push(`suggestion=${JSON.stringify(finding.suggestion)} is not the diff-anchored -new/+old change`);
+    }
+    if (typeof finding.fixPrompt !== 'string' || !finding.fixPrompt.includes('Fix one code-review finding.') || !finding.fixPrompt.includes('src/example.ts:1')) {
+      failures.push('fixPrompt is missing or does not cite the file span');
     }
   }
 }

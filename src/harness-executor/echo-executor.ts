@@ -35,7 +35,7 @@ export class EchoHarnessExecutor implements HarnessExecutor {
 
   async execute(_prepared: PreparedEcho, prompt: HarnessPrompt): Promise<HarnessRun> {
     const fileId = FILE_ID_PATTERN.exec(prompt.user)?.[1] ?? '000000';
-    const text = JSON.stringify({ version: 1, fileId, outcome: 'clean', findings: [] });
+    const text = JSON.stringify({ version: 2, fileId, outcome: 'clean', findings: [] });
     return {
       status: 'succeeded',
       harness: 'echo',

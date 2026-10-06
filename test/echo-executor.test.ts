@@ -22,13 +22,13 @@ describe('EchoHarnessExecutor', () => {
     });
     expect(run.status).toBe('succeeded');
     expect(run.exitCode).toBe(0);
-    expect(JSON.parse(run.text)).toEqual({ version: 1, fileId: '000042', outcome: 'clean', findings: [] });
+    expect(JSON.parse(run.text)).toEqual({ version: 2, fileId: '000042', outcome: 'clean', findings: [] });
   });
 
   it('falls back to a zero file id when the prompt carries none', async () => {
     const executor = new EchoHarnessExecutor();
     const prepared = await executor.prepare(SETTINGS);
     const run = await executor.execute(prepared, { system: '', user: 'no manifest here' });
-    expect(JSON.parse(run.text)).toEqual({ version: 1, fileId: '000000', outcome: 'clean', findings: [] });
+    expect(JSON.parse(run.text)).toEqual({ version: 2, fileId: '000000', outcome: 'clean', findings: [] });
   });
 });

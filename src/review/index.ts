@@ -18,10 +18,20 @@ export { FILE_REVIEW_PROMPT_ID, FILE_REVIEW_PROMPT_VERSION, buildFileReviewPromp
 export {
   FILE_REVIEW_DOCUMENT_VERSION,
   MAX_FILE_FINDINGS,
+  type ChangedLines,
   FileReviewValidator,
   parseChangedLines,
   parseFileReviewDocument,
 } from './report.js';
+export {
+  buildRemediation,
+  formatSpan,
+  MAX_SPAN_LINES,
+  type Remediation,
+  renderFixPrompt,
+  resolveSpanLines,
+  spanLocation,
+} from './remediation.js';
 export { createReviewWriter } from './writer.js';
 export { runFileReviews, type ReviewRunInput, type ReviewRunResult } from './runner.js';
 export { main } from './cli.js';
@@ -32,6 +42,9 @@ export {
   type FileReviewErrorKind,
   type FileReviewOutcome,
   type FileReviewRecord,
+  type PublishedFinding,
+  type ReviewFinding,
   type ReviewRunSummary,
   type ReviewRunSummaryFile,
+  type ValidatedFinding,
 } from './types.js';

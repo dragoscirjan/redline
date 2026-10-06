@@ -68,16 +68,18 @@ def run(args):
 
 # Deterministic review-selection rules. The review tool runs its harness
 # without tools, so reviewed flags are computed here, never by the model.
-# Lock files, vendored dependencies, and build output are excluded; binary
-# files are marked unreviewed and the review tool records them as omitted.
+# Lock files are excluded by basename anywhere in the repository; vendored,
+# generated, and build-output directories are excluded at any depth, not
+# only at the repository root. Binary files are marked unreviewed and the
+# review tool records them as omitted.
 LOCK_FILES = frozenset({
     'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lockb', 'bun.lock',
     'Cargo.lock', 'poetry.lock', 'go.sum', 'composer.lock', 'Gemfile.lock',
     'Podfile.lock', 'flake.lock', 'uv.lock', 'Pipfile.lock',
 })
-GENERATED_PREFIXES = (
-    'node_modules/', 'dist/', 'build/', 'out/', 'vendor/', 'coverage/',
-)
+GENERATED_DIRECTORY_NAMES = frozenset({
+    'node_modules', 'dist', 'build', 'out', 'vendor', 'coverage',
+})
 
 def reviewed_file(binary, paths):
     if binary:
@@ -85,11 +87,13 @@ def reviewed_file(binary, paths):
     for candidate in paths:
         if candidate is None:
             continue
-        if candidate in LOCK_FILES:
+        segments = [segment for segment in candidate.split('/') if segment != '']
+        if not segments:
+            continue
+        if segments[-1] in LOCK_FILES:
             return False
-        for prefix in GENERATED_PREFIXES:
-            if candidate.startswith(prefix):
-                return False
+        if any(segment in GENERATED_DIRECTORY_NAMES for segment in segments[:-1]):
+            return False
     return True
 
 files = []

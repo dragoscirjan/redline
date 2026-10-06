@@ -20,11 +20,26 @@ on:
         required: false
         type: string
         default: defects
+      report-style:
+        description: Report style, single-block or inline. Legacy input kept for the previously published action; the current action ignores it.
+        required: false
+        type: string
+        default: single-block
       timeout:
         description: Review deadline as a duration, for example 10m, 2h, or 1h30m. Capped at 360m.
         required: false
         type: string
         default: 30m
+      credential-isolation:
+        description: Credential isolation mode. Only direct is supported; required explicitly when review execution is enabled against the previously published action.
+        required: false
+        type: string
+        default: ""
+      container-engine:
+        description: Container engine used by the previously published action's staging layer, podman or docker. The current action ignores it.
+        required: false
+        type: string
+        default: docker
       artifact-name:
         description: Base name for the downloadable review artifacts
         required: false
@@ -36,6 +51,9 @@ on:
         type: number
         default: 45
     secrets:
+      github-token:
+        description: GitHub publication token; bind to secrets.GH_TOKEN. Required by the previously published action's review mode; the current action ignores it.
+        required: false
       model-auth:
         description: Provider-keyed credential map (JSON); bind to secrets.MODEL_CREDENTIALS.
         required: false
@@ -83,13 +101,24 @@ jobs:
       # guarded release workflow. Callers requiring a permanently fixed
       # revision should call the composite action directly with the immutable
       # full-version tag instead.
+      #
+      # The github-token, credential-isolation, container-engine, and
+      # report-style inputs are legacy surface kept while the published v1
+      # tag still carries the previous action design, whose review mode
+      # requires them. The current action ignores them. Leave backend,
+      # model-config, and the model-auth secret empty together for
+      # context-only mode; a partial set is rejected.
       - name: Run Redline review action
         uses: dragoscirjan/redline/github@v1
         with:
           backend: ${{ inputs.backend }}
           model-config: ${{ inputs.model-config }}
           model-auth: ${{ secrets.model-auth }}
+          github-token: ${{ secrets.github-token }}
           finding-scope: ${{ inputs.finding-scope }}
+          report-style: ${{ inputs.report-style }}
           timeout: ${{ inputs.timeout }}
+          credential-isolation: ${{ inputs.credential-isolation }}
+          container-engine: ${{ inputs.container-engine }}
           artifact-name: ${{ inputs.artifact-name }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

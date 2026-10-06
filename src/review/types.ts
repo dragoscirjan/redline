@@ -34,7 +34,11 @@ export interface ValidatedFinding extends ReviewFinding {
 
 export type FileReviewOutcome = 'clean' | 'findings' | 'omitted';
 
-export type FileReviewErrorKind = 'harness-failed' | 'harness-timeout' | 'invalid-output';
+export type FileReviewErrorKind =
+  | 'harness-failed'
+  | 'harness-timeout'
+  | 'invalid-output'
+  | 'preparation-failed';
 
 export const FILE_REVIEW_RECORD_VERSION = 1 as const;
 

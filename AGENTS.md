@@ -76,6 +76,8 @@ Review inputs must arrive together; partial selections fail. Unknown
   system prompt, tool permissions, result schema, or publication policy.
 - Model output is rejected rather than guessed: findings must map to a
   changed line of the authoritative diff with byte-identical evidence.
+- Persisted diagnostics, reasons, and raw model output are redacted against
+  the selected credential before any artifact is written.
 - Start harness binaries with argument arrays only. Accept executable paths,
   endpoints, and model identifiers from trusted workflow configuration only.
 

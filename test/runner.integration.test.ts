@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseReviewEnvironment } from '../src/review/environment.js';
@@ -207,6 +207,107 @@ describe('runFileReviews', () => {
       expect(result.summary.harness).toBe('echo');
       expect(result.summary.reviewedFiles).toBe(1);
       expect(result.summary.findings).toBe(0);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('records a preparation failure as omitted without aborting the run', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      // A second manifest entry whose diff carries a malformed hunk header;
+      // prompt preparation must fail for this file only.
+      const manifestPath = join(fixture.review, 'manifest.json');
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
+        files: Array<Record<string, unknown>>;
+      };
+      manifest.files.push({
+        id: '000002',
+        status: 'A',
+        oldPath: null,
+        newPath: 'src/broken.ts',
+        similarity: null,
+        additions: 1,
+        deletions: 0,
+        binary: false,
+        diffFile: 'diffs/000002.diff',
+        baseFile: null,
+      });
+      await writeFile(manifestPath, JSON.stringify(manifest));
+      await writeFile(
+        join(fixture.review, 'diffs', '000002.diff'),
+        '--- a/src/broken.ts\n+++ b/src/broken.ts\n@@ -1 +1 @@\n@@ malformed hunk header\n',
+      );
+      await writeFile(join(fixture.source, 'src', 'broken.ts'), 'broken\n');
+
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      executor.script([
+        { text: reviewDocument({ version: 1, fileId: '000001', outcome: 'clean', findings: [] }) },
+        { text: reviewDocument({ version: 1, fileId: '000002', outcome: 'clean', findings: [] }) },
+      ]);
+      const result = await runFileReviews({ environment: environment.review!, executor });
+
+      // The healthy file is still reviewed; the broken one never reaches the
+      // harness.
+      expect(result.exitCode).toBe(0);
+      expect(executor.prompts).toHaveLength(1);
+      expect(result.summary.omittedFiles).toBe(1);
+
+      const broken = JSON.parse(await readFile(join(fixture.output, 'reviews', '000002.json'), 'utf8')) as {
+        outcome: string;
+        errorKind?: string;
+        reason?: string;
+      };
+      expect(broken.outcome).toBe('omitted');
+      expect(broken.errorKind).toBe('preparation-failed');
+      expect(broken.reason).toMatch(/malformed hunk header/u);
+
+      const good = JSON.parse(await readFile(join(fixture.output, 'reviews', '000001.json'), 'utf8')) as {
+        outcome: string;
+      };
+      expect(good.outcome).toBe('clean');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('redacts the selected credential from persisted diagnostics and output', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      // A harness failure whose diagnostic echoes the credential.
+      executor.script([
+        { status: 'failed', diagnostic: 'connect failed for key test-key at openrouter' },
+      ]);
+      await runFileReviews({ environment: environment.review!, executor });
+      const record = JSON.parse(await readFile(join(fixture.output, 'reviews', '000001.json'), 'utf8')) as {
+        reason?: string;
+        rawModelOutput?: string;
+      };
+      expect(record.reason).toBeDefined();
+      expect(record.reason).not.toContain('test-key');
+      expect(record.reason).toContain('[redacted]');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('redacts the selected credential from persisted raw model output', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      // Output that fails parsing (not JSON) and echoes the credential.
+      executor.script([{ text: 'leaked test-key in text' }]);
+      await runFileReviews({ environment: environment.review!, executor });
+      const record = JSON.parse(await readFile(join(fixture.output, 'reviews', '000001.json'), 'utf8')) as {
+        rawModelOutput?: string;
+      };
+      expect(record.rawModelOutput).toBeDefined();
+      expect(record.rawModelOutput).not.toContain('test-key');
+      expect(record.rawModelOutput).toContain('[redacted]');
     } finally {
       await fixture.cleanup();
     }

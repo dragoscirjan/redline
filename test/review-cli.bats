@@ -73,20 +73,42 @@ build_bundle() {
   grep -Fq '# Review:' "$TMP/output/reviews/000001.md"
 }
 
-@test "excludes lock files from review deterministically" {
-  mkdir -p "$REPO"
+@test "excludes lock files and generated directories from review deterministically" {
+  mkdir -p "$REPO/packages/app" "$REPO/apps/web/node_modules/dep" "$REPO/apps/web/dist"
   printf '{}' > "$REPO/pnpm-lock.yaml"
+  printf '{}' > "$REPO/packages/app/package-lock.json"
+  printf 'x\n' > "$REPO/apps/web/node_modules/dep/index.js"
+  printf 'y\n' > "$REPO/apps/web/dist/bundle.js"
   printf 'more text for the fixture file\n' >> "$REPO/src/example.ts"
   git -C "$REPO" add .
-  git -C "$REPO" commit -qm 'add lock file'
+  git -C "$REPO" commit -qm 'add lock files and generated output'
   HEAD="$(git -C "$REPO" rev-parse HEAD)"
   rm -rf "$TMP/review" "$TMP/source-at-head" "$TMP/source"
   git -C "$REPO" worktree prune
   mkdir -p "$TMP/review"
   git -C "$REPO" worktree add --detach "$TMP/source" "$HEAD" >/dev/null 2>&1
   build_bundle
-  grep -Fq '"reviewed": false' "$TMP/review/manifest.json"
-  run node -e 'const m=require(process.argv[1]); const lock=m.files.find((f)=>f.newPath==="pnpm-lock.yaml"); if(!lock||lock.reviewed!==false){process.exit(1)}' "$TMP/review/manifest.json"
+  run node -e '
+    const m = require(process.argv[1]);
+    const excluded = (f) => {
+      if (!f.reviewed) return true;
+      return false;
+    };
+    const lock = m.files.find((f) => f.newPath === "pnpm-lock.yaml");
+    const nestedLock = m.files.find((f) => f.newPath === "packages/app/package-lock.json");
+    const vendored = m.files.find((f) => f.newPath === "apps/web/node_modules/dep/index.js");
+    const generated = m.files.find((f) => f.newPath === "apps/web/dist/bundle.js");
+    const source = m.files.find((f) => f.newPath === "src/example.ts");
+    const failures = [];
+    for (const [label, entry] of Object.entries({ lock, nestedLock, vendored, generated })) {
+      if (!entry || !excluded(entry)) failures.push(`${label} not excluded`);
+    }
+    if (!source || source.reviewed !== true) failures.push("src/example.ts not reviewed");
+    if (failures.length > 0) {
+      console.error(failures.join(", "));
+      process.exit(1);
+    }
+  ' "$TMP/review/manifest.json"
   [ "$status" -eq 0 ]
 }
 

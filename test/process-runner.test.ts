@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { nodeProcessSpawner, parseJsonLines, readBounded, runBoundedProcess } from '../src/harness-executor/process-runner.js';
+import {
+  createBoundedReader,
+  nodeProcessSpawner,
+  parseJsonLines,
+  readBounded,
+  runBoundedProcess,
+} from '../src/harness-executor/process-runner.js';
 
 function textStream(chunks: string[]): AsyncIterable<Uint8Array> {
   const encoder = new TextEncoder();
@@ -55,6 +61,46 @@ describe('runBoundedProcess', () => {
     });
     expect(result.timedOut).toBe(true);
     expect(result.durationMs).toBeLessThan(5_000);
+  });
+
+  it('bounds the wait when a descendant inherits the output pipe', async () => {
+    // The direct child exits immediately; a descendant inheriting stdout
+    // keeps the pipe open, delaying `close` far beyond the timeout. The
+    // post-kill wait must stay bounded and the stream readers must be
+    // cancellable instead of blocking until the descendant exits.
+    const result = await runBoundedProcess(nodeProcessSpawner, {
+      command: process.execPath,
+      args: [
+        '-e',
+        [
+          "const { spawn } = require('node:child_process');",
+          "spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000);'],",
+          "  { stdio: ['ignore', process.stdout, process.stderr] });",
+        ].join(' '),
+      ],
+      timeoutMs: 500,
+    });
+    expect(result.timedOut).toBe(true);
+    expect(result.code).toBeNull();
+    expect(result.durationMs).toBeGreaterThanOrEqual(500);
+    // Bounded by the kill grace period, not the descendant's 60s lifetime.
+    expect(result.durationMs).toBeLessThan(10_000);
+  });
+
+  it('preserves retained output when a reader is cancelled', async () => {
+    const encoder = new TextEncoder();
+    const blocking = (async function* (): AsyncIterable<Uint8Array> {
+      yield encoder.encode('partial-');
+      await new Promise(() => {
+        // Never resolves: the stream stays open like a descendant-held pipe.
+      });
+    })();
+    const reader = createBoundedReader(blocking, 1024);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    reader.cancel();
+    const bounded = await reader.result();
+    expect(bounded.text).toBe('partial-');
+    expect(bounded.truncated).toBe(true);
   });
 
   it('reports a missing executable as a failed spawn', async () => {

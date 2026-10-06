@@ -18,4 +18,7 @@ jobs:
     with:
       artifact-retention-days: 45
     secrets:
+      # Publication follows the AGENTS.md rule: through the GH_TOKEN PAT,
+      # not the Actions GITHUB_TOKEN.
+      github-token: ${{ secrets.GH_TOKEN }}
       model-auth: ${{ secrets.MODEL_CREDENTIALS }}

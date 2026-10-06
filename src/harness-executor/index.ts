@@ -23,6 +23,7 @@ export {
   OPENCODE_REVIEW_AGENT,
 } from './opencode-executor.js';
 export {
+  createBoundedReader,
   isRecord,
   MAX_DIAGNOSTIC_BYTES,
   MAX_OUTPUT_BYTES,
@@ -32,6 +33,7 @@ export {
   runBoundedProcess,
   type BoundedRunRequest,
   type BoundedRunResult,
+  type BoundedStreamReader,
   type BoundedText,
   type ProcessSpawner,
   type SpawnedProcess,

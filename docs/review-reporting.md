@@ -36,8 +36,8 @@ The review tool writes per-file records and a run summary into `REDLINE_OUTPUT_D
 }
 ```
 
-- `outcome` is `clean`, `findings`, or `omitted`. A file is `omitted` when it cannot be fully reviewed: binary content, a harness failure or timeout, or model output that failed validation.
-- `errorKind` distinguishes `harness-failed`, `harness-timeout`, and `invalid-output` when present.
+- `outcome` is `clean`, `findings`, or `omitted`. A file is `omitted` when it cannot be fully reviewed: binary content, a harness failure or timeout, model output that failed validation, or a preparation failure (an unreadable diff or a prompt that exceeds its byte limit).
+- `errorKind` distinguishes `harness-failed`, `harness-timeout`, `invalid-output`, and `preparation-failed` when present.
 - `side` is `LEFT` for removed lines (old file) and `RIGHT` for added lines (new file); `line` is the line number on that side.
 - `id` is a stable hash of the finding's normalized fields, used for deduplication.
 - `rawModelOutput` keeps the bounded model document for debugging; it is not published.

@@ -33,7 +33,8 @@ Review execution is enabled only when `backend`, `model-config`, and `model-auth
 
 - Pull request content is untrusted data. The harness receives it only inside a delimited context block with an explicit untrusted-data framing; it never alters the fixed policy.
 - The harness runs with tools disabled and a constructed environment; no GitHub token or ambient credentials reach it.
-- Model output must validate against the authoritative diff — path, side, line, and byte-identical evidence — or the finding is rejected.
+- Model output must validate against the authoritative diff — path, side, line, and byte-identical evidence — or the finding is rejected. Persisted reasons and raw model output are redacted against the selected credential before artifacts are written.
+- In context-only mode (review inputs empty) the action uploads only `<artifact-name>-context`; the `<artifact-name>-reviews` artifact is produced only when review execution is enabled.
 - Release tags must contain the built `dist/` output of the exact reviewed source; the action verifies it exists and builds nothing from pull request revisions.
 
 See [runnable review configuration](/runnable-review-configuration) for the environment contract, [harness executor](/harness-executor) for harness specifics, and [review output](/review-reporting) for the record schema.

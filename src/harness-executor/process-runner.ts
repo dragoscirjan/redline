@@ -73,33 +73,72 @@ export interface BoundedText {
   readonly truncated: boolean;
 }
 
+export interface BoundedStreamReader {
+  /** Resolves with the full bounded text when the stream ends, or the retained prefix after `cancel()`. */
+  result(): Promise<BoundedText>;
+  /** Ends collection early, resolving `result()` with what was retained so far. */
+  cancel(): void;
+}
+
 /**
  * Reads a stream fully, retaining at most `maximumBytes`. Bytes beyond the
  * limit are counted and dropped, never buffered. Invalid UTF-8 decodes with
  * replacement characters; harness output that is not valid UTF-8 fails later
- * schema parsing anyway.
+ * schema parsing anyway. The reader can be cancelled, which keeps a
+ * descendant-held pipe from blocking the caller forever.
  */
-export async function readBounded(
+export function createBoundedReader(
   stream: AsyncIterable<Uint8Array>,
   maximumBytes: number,
-): Promise<BoundedText> {
+): BoundedStreamReader {
   if (!Number.isSafeInteger(maximumBytes) || maximumBytes <= 0) {
     throw new Error('bounded read limit is invalid');
   }
   const chunks: Buffer[] = [];
   let retained = 0;
   let total = 0;
-  for await (const chunk of stream) {
-    total += chunk.byteLength;
-    if (retained >= maximumBytes) continue;
-    const selected = chunk.subarray(0, maximumBytes - retained);
-    chunks.push(Buffer.from(selected.buffer, selected.byteOffset, selected.byteLength));
-    retained += selected.byteLength;
-  }
-  return {
-    text: new TextDecoder().decode(Buffer.concat(chunks)),
-    truncated: total > retained,
+  let cancelled = false;
+  let resolveResult!: (value: BoundedText) => void;
+  const result = new Promise<BoundedText>((resolve) => {
+    resolveResult = resolve;
+  });
+  const finish = (): void => {
+    resolveResult({
+      text: new TextDecoder().decode(Buffer.concat(chunks)),
+      truncated: cancelled || total > retained,
+    });
   };
+  void (async () => {
+    try {
+      for await (const chunk of stream) {
+        if (cancelled) break;
+        total += chunk.byteLength;
+        if (retained >= maximumBytes) continue;
+        const selected = chunk.subarray(0, maximumBytes - retained);
+        chunks.push(Buffer.from(selected.buffer, selected.byteOffset, selected.byteLength));
+        retained += selected.byteLength;
+      }
+    } catch {
+      // A stream error ends collection with whatever was retained.
+    }
+    finish();
+  })();
+  return {
+    result: () => result,
+    cancel() {
+      if (cancelled) return;
+      cancelled = true;
+      finish();
+    },
+  };
+}
+
+/** Reads a stream fully under a byte limit; see `createBoundedReader`. */
+export async function readBounded(
+  stream: AsyncIterable<Uint8Array>,
+  maximumBytes: number,
+): Promise<BoundedText> {
+  return createBoundedReader(stream, maximumBytes).result();
 }
 
 export interface BoundedRunRequest extends SpawnRequest {
@@ -126,11 +165,12 @@ export async function runBoundedProcess(
   }
   const startedAt = Date.now();
   const child = spawner.spawn(request);
-  const stdoutPromise = readBounded(child.stdout, MAX_OUTPUT_BYTES);
-  const stderrPromise = readBounded(child.stderr, MAX_DIAGNOSTIC_BYTES);
+  const stdoutReader = createBoundedReader(child.stdout, MAX_OUTPUT_BYTES);
+  const stderrReader = createBoundedReader(child.stderr, MAX_DIAGNOSTIC_BYTES);
 
   let timedOut = false;
   let timer: NodeJS.Timeout | undefined;
+  let graceTimer: NodeJS.Timeout | undefined;
   try {
     const outcome = await Promise.race([
       child.wait().then((result): { kind: 'exit'; result: { code: number | null; error?: string } } => ({
@@ -145,20 +185,36 @@ export async function runBoundedProcess(
         }, request.timeoutMs);
       }),
     ]);
-    if (outcome.kind === 'timeout') {
-      // The kill above races the child's own shutdown; give it a short grace
-      // period so stream readers observe end-of-stream and exit codes settle.
-      const grace = new Promise<void>((resolve) => {
-        const graceTimer = setTimeout(resolve, TIMEOUT_KILL_GRACE_MS);
-        void child.wait().then(() => {
-          clearTimeout(graceTimer);
-          resolve();
-        });
-      });
-      await grace;
+
+    let exit: { code: number | null; error?: string | undefined };
+    if (outcome.kind === 'exit') {
+      exit = outcome.result;
+    } else {
+      // SIGKILL reaches only the direct child. A descendant that inherited
+      // an output pipe can keep `close` from firing long after the kill, so
+      // the post-kill wait is bounded and the stream readers are cancelled
+      // with whatever they retained instead of blocking past the timeout.
+      const settled = await Promise.race([
+        child.wait().then(
+          (result): { done: true; result: { code: number | null; error?: string | undefined } } => ({
+            done: true as const,
+            result,
+          }),
+        ),
+        new Promise<{ done: false }>((resolve) => {
+          graceTimer = setTimeout(() => resolve({ done: false as const }), TIMEOUT_KILL_GRACE_MS);
+        }),
+      ]);
+      if (settled.done) {
+        exit = settled.result;
+      } else {
+        stdoutReader.cancel();
+        stderrReader.cancel();
+        exit = { code: null, error: 'process did not exit before the kill grace period' };
+      }
     }
-    const exit = outcome.kind === 'exit' ? outcome.result : await child.wait();
-    const [stdout, stderr] = await Promise.all([stdoutPromise, stderrPromise]);
+
+    const [stdout, stderr] = await Promise.all([stdoutReader.result(), stderrReader.result()]);
     return {
       code: exit.code,
       error: exit.error,
@@ -170,6 +226,7 @@ export async function runBoundedProcess(
     };
   } finally {
     if (timer !== undefined) clearTimeout(timer);
+    if (graceTimer !== undefined) clearTimeout(graceTimer);
   }
 }
 

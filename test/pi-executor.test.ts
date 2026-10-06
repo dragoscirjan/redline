@@ -6,12 +6,20 @@ import { createPiExecutor, extractPiAssistantText, PI_CREDENTIAL_ENV_NAME } from
 import type { ProcessSpawner, SpawnedProcess } from '../src/harness-executor/process-runner.js';
 import type { HarnessSettings } from '../src/harness-executor/types.js';
 
-const SETTINGS: HarnessSettings = {
-  model: { provider: 'mock', endpoint: 'http://127.0.0.1:8787/v1', model: 'test-model' },
-  credential: { provider: 'mock', value: 'test-key' },
-  timeoutMs: 1_000,
-  workDirectory: '',
-};
+/** Settings with a caller-managed scratch directory; `prepare` writes inside it. */
+async function createSettings(
+  overrides: Partial<HarnessSettings> = {},
+): Promise<HarnessSettings & { cleanup: () => Promise<void> }> {
+  const workDirectory = await mkdtemp(join(tmpdir(), 'redline-pi-settings-'));
+  return {
+    model: { provider: 'mock', endpoint: 'http://127.0.0.1:8787/v1', model: 'test-model' },
+    credential: { provider: 'mock', value: 'test-key' },
+    timeoutMs: 1_000,
+    workDirectory,
+    ...overrides,
+    cleanup: () => rm(workDirectory, { recursive: true, force: true }),
+  };
+}
 
 /** Spawner double that records the spawn request and returns scripted output. */
 class RecordingSpawner implements ProcessSpawner {
@@ -44,15 +52,15 @@ class RecordingSpawner implements ProcessSpawner {
 
 describe('createPiExecutor', () => {
   it('generates models.json without embedding the credential and sets the agent dir env', async () => {
-    const workDirectory = await mkdtemp(join(tmpdir(), 'redline-pi-'));
+    const settings = await createSettings();
     try {
       const spawner = new RecordingSpawner();
       const executor = createPiExecutor({ command: 'pi-fake', spawner });
-      const prepared = await executor.prepare({ ...SETTINGS, workDirectory });
+      const prepared = await executor.prepare(settings);
       spawner.script('{"type":"session"}\n', 0);
       await executor.execute(prepared, { system: 'SYS', user: 'USER' });
 
-      const modelsJson = JSON.parse(await readFile(join(workDirectory, 'pi-agent', 'models.json'), 'utf8'));
+      const modelsJson = JSON.parse(await readFile(join(settings.workDirectory, 'pi-agent', 'models.json'), 'utf8'));
       expect(modelsJson.providers.mock.baseUrl).toBe('http://127.0.0.1:8787/v1');
       expect(modelsJson.providers.mock.api).toBe('openai-completions');
       expect(modelsJson.providers.mock.apiKey).toBe(`$${PI_CREDENTIAL_ENV_NAME}`);
@@ -82,35 +90,36 @@ describe('createPiExecutor', () => {
         ['HOME', 'LANG', 'PATH', 'PI_CODING_AGENT_DIR', PI_CREDENTIAL_ENV_NAME].sort(),
       );
     } finally {
-      await rm(workDirectory, { recursive: true, force: true });
+      await settings.cleanup();
     }
   });
 
   it('uses an unauthenticated placeholder when no credential is configured', async () => {
-    const workDirectory = await mkdtemp(join(tmpdir(), 'redline-pi-'));
+    const settings = await createSettings({ credential: undefined });
     try {
       const executor = createPiExecutor({ spawner: new RecordingSpawner() });
-      const prepared = await executor.prepare({
-        ...SETTINGS,
-        workDirectory,
-        credential: undefined,
-      });
-      const modelsJson = JSON.parse(await readFile(join(workDirectory, 'pi-agent', 'models.json'), 'utf8'));
+      const prepared = await executor.prepare(settings);
+      const modelsJson = JSON.parse(await readFile(join(settings.workDirectory, 'pi-agent', 'models.json'), 'utf8'));
       expect(modelsJson.providers.mock.apiKey).toBe('redline-unauthenticated');
       expect(prepared.description).not.toContain('test-key');
     } finally {
-      await rm(workDirectory, { recursive: true, force: true });
+      await settings.cleanup();
     }
   });
 
   it('reports failure when pi produces no turn_end assistant text', async () => {
-    const spawner = new RecordingSpawner();
-    const executor = createPiExecutor({ spawner });
-    const prepared = await executor.prepare(SETTINGS);
-    spawner.script('{"type":"session"}\n', 0);
-    const run = await executor.execute(prepared, { system: 'SYS', user: 'USER' });
-    expect(run.status).toBe('failed');
-    expect(run.text).toBe('');
+    const settings = await createSettings();
+    try {
+      const spawner = new RecordingSpawner();
+      const executor = createPiExecutor({ spawner });
+      const prepared = await executor.prepare(settings);
+      spawner.script('{"type":"session"}\n', 0);
+      const run = await executor.execute(prepared, { system: 'SYS', user: 'USER' });
+      expect(run.status).toBe('failed');
+      expect(run.text).toBe('');
+    } finally {
+      await settings.cleanup();
+    }
   });
 });
 

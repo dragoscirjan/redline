@@ -88,6 +88,24 @@ describe('parseReviewEnvironment', () => {
   });
 });
 
+describe('REDLINE_VERBOSITY', () => {
+  it('defaults to progress (dots)', () => {
+    expect(parseReviewEnvironment({}).verbosity).toBe('progress');
+  });
+
+  it('accepts every supported value', () => {
+    for (const value of ['silent', 'progress', 'full-output']) {
+      expect(parseReviewEnvironment({ REDLINE_VERBOSITY: value }).verbosity).toBe(value);
+    }
+  });
+
+  it('rejects unsupported values', () => {
+    expect(() => parseReviewEnvironment({ REDLINE_VERBOSITY: 'loud' })).toThrow(
+      /REDLINE_VERBOSITY is unsupported/u,
+    );
+  });
+});
+
 describe('publication environment', () => {
   const PUBLICATION = {
     REDLINE_PUBLISH_TOKEN: 'gh-token',

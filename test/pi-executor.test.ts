@@ -185,6 +185,36 @@ describe('extractPiAssistantText', () => {
     }
   });
 
+  it('renders dots mode as one dot per chunk with segment newlines', async () => {
+    const settings = await createSettings();
+    try {
+      const spawner = new RecordingSpawner();
+      const executor = createPiExecutor({ command: 'pi-fake', spawner });
+      const prepared = await executor.prepare(settings);
+      const stdout = [
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"chunk one"}}',
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"chunk two"}}',
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_end","content":"full"}}',
+        '{"type":"message_end"}',
+        '{"type":"turn_end"}',
+        '',
+      ].join('\n');
+      spawner.script(stdout, 0);
+      const tapped: Array<{ kind: string; line: string }> = [];
+      await executor.execute(prepared, { system: 'SYS', user: 'USER' }, {
+        onOutputLine: (output) => tapped.push({ kind: output.kind, line: output.line }),
+        streamMode: 'dots',
+      });
+
+      const text = tapped.filter((entry) => entry.kind === 'text').map((entry) => entry.line).join('');
+      expect(text).toBe('..\n');
+      // Boundary lines are suppressed in dots mode.
+      expect(tapped.filter((entry) => entry.kind === 'line')).toEqual([]);
+    } finally {
+      await settings.cleanup();
+    }
+  });
+
   it('caps the streamed text and reports truncation', async () => {
     const settings = await createSettings();
     try {

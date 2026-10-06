@@ -13,6 +13,7 @@ Inputs are fixed enums and data. No input accepts free-form review instructions.
 | `model-auth` | JSON secret | Provider-keyed credential map; bind to `secrets.MODEL_CREDENTIALS`. Only the selected provider's credential reaches the harness. |
 | `finding-scope` | `defects`, `defects-and-risks` | Default `defects`. |
 | `timeout` | duration | Review deadline per run, for example `10m` or `2h`. Capped at 360m. Default `30m`. |
+| `verbosity` | `silent`, `progress`, `full-output` | Live model stream in the run log: `silent` keeps per-file lines only, `progress` prints one dot per model text chunk, `full-output` prints the readable stream text. Default `progress`. |
 | `artifact-name` | name | Base name for artifacts. Default `redline-review-<run id>`. |
 | `artifact-retention-days` | 1–90 | Default `45`. |
 | `github-token` | secret | GitHub publication token; bind to `secrets.GH_TOKEN`. A PAT or a GitHub App installation token generated outside the workflow. Publication never uses the Actions `GITHUB_TOKEN`. Empty keeps artifact-only mode. |

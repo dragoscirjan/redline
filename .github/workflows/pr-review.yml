@@ -16,6 +16,9 @@ jobs:
       contents: read
     uses: ./.github/workflows/dogfood-review.yml
     with:
+      # Dots in the run log: alive at a glance, no flood. Set 'silent' for
+      # per-file lines only, 'full-output' for the readable stream text.
+      verbosity: progress
       artifact-retention-days: 45
     secrets:
       # Publication goes through the Redline GitHub App installation token

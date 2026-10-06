@@ -7,6 +7,11 @@ name: Code review (dogfood)
 on:
   workflow_call:
     inputs:
+      verbosity:
+        description: Live model stream in the run log - silent (per-file lines only), progress (one dot per model text chunk), or full-output (readable stream text). Default progress.
+        required: false
+        type: string
+        default: progress
       artifact-retention-days:
         description: Number of days to retain the review artifacts
         required: false
@@ -85,6 +90,7 @@ jobs:
           backend: pi
           model-config: '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}'
           model-auth: ${{ secrets.model-auth }}
+          verbosity: ${{ inputs.verbosity }}
           github-token: ${{ secrets.github-token }}
           github-app-id: ${{ secrets.redline-review-app-id }}
           github-app-key: ${{ secrets.redline-review-private-key }}

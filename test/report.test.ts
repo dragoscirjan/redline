@@ -64,9 +64,22 @@ describe('parseFileReviewDocument', () => {
     ).toThrow(/unsupported version/u);
   });
 
-  it('rejects invalid JSON, fences, and extra prose', () => {
+  it('rejects invalid JSON and extra prose', () => {
     expect(() => parseFileReviewDocument('nope')).toThrow(/not valid JSON/u);
+    // Fenced content is unwrapped, then strict-validated: this fenced body
+    // is a valid JSON envelope but violates the schema.
     expect(() => parseFileReviewDocument('```json\n{"version":2}\n```')).toThrow();
+  });
+
+  it('unwraps a single code fence around an otherwise valid document', () => {
+    const fenced = '```json\n{"version":2,"fileId":"000001","outcome":"clean","findings":[]}\n```';
+    expect(parseFileReviewDocument(fenced).outcome).toBe('clean');
+  });
+
+  it('does not unwrap fenced content that contains fences', () => {
+    expect(() =>
+      parseFileReviewDocument('```json\n{"a":"```"}\n```'),
+    ).toThrow(/not valid JSON/u);
   });
 
   it('rejects schema violations', () => {
@@ -74,9 +87,13 @@ describe('parseFileReviewDocument', () => {
       JSON.stringify({ version: 2, fileId: '000001', outcome: 'clean', findings: [], ...overrides });
     expect(() => parseFileReviewDocument(base({ outcome: 'spooky' }))).toThrow(/unsupported/u);
     expect(() => parseFileReviewDocument(base({ outcome: 'omitted' }))).toThrow(/reason is required/u);
-    expect(() => parseFileReviewDocument(base({ outcome: 'clean', reason: 'why' }))).toThrow(
-      /reason is only valid/u,
-    );
+    // Envelope tolerance: a reason on a non-omitted outcome is dropped.
+    const cleanWithReason = parseFileReviewDocument(base({ outcome: 'clean', reason: 'why' }));
+    expect(cleanWithReason.outcome).toBe('clean');
+    expect(cleanWithReason.reason).toBeUndefined();
+    // Envelope tolerance: findings defaults to empty for non-findings outcomes.
+    const cleanWithoutFindings = parseFileReviewDocument('{"version":2,"fileId":"000001","outcome":"clean"}');
+    expect(cleanWithoutFindings.findings).toEqual([]);
     expect(() => parseFileReviewDocument(base({ outcome: 'findings', findings: [] }))).toThrow(
       /requires at least one finding/u,
     );

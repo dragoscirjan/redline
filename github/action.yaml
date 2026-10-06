@@ -34,6 +34,10 @@ inputs:
     description: Review deadline as a duration, for example 10m, 2h, or 1h30m. Capped at 360m; values above the cap are rejected.
     required: false
     default: 30m
+  verbosity:
+    description: Live model stream in the run log - silent (per-file lines only), progress (one dot per model text chunk), full-output (readable stream text). Default progress.
+    required: false
+    default: progress
   artifact-name:
     description: Base name for the downloadable review artifacts
     required: false
@@ -100,6 +104,7 @@ runs:
         REDLINE_MODEL_AUTH: ${{ inputs.model-auth }}
         REDLINE_FINDING_SCOPE: ${{ inputs.finding-scope }}
         REDLINE_TIMEOUT: ${{ inputs.timeout }}
+        REDLINE_VERBOSITY: ${{ inputs.verbosity }}
         REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
         REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head
         REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
@@ -192,6 +197,7 @@ runs:
         REDLINE_MODEL_AUTH: ${{ inputs.model-auth }}
         REDLINE_FINDING_SCOPE: ${{ inputs.finding-scope }}
         REDLINE_TIMEOUT: ${{ inputs.timeout }}
+        REDLINE_VERBOSITY: ${{ inputs.verbosity }}
         REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
         REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head
         REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews

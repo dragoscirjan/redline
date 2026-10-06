@@ -76,9 +76,18 @@ export interface HarnessOutputLine {
   readonly line: string;
 }
 
+/**
+ * How a streaming harness surfaces its output in the log: `dots` prints
+ * one dot per model text chunk, `text` prints the readable fragments,
+ * `off` streams nothing. Callers that pass no tap stream nothing anyway.
+ */
+export type HarnessStreamMode = 'off' | 'dots' | 'text';
+
 export interface HarnessExecuteOptions {
   /** Live per-line harness output tap for progress logging; optional. */
   readonly onOutputLine?: (output: HarnessOutputLine) => void;
+  /** Stream presentation; defaults to `text`. */
+  readonly streamMode?: HarnessStreamMode;
 }
 
 export interface HarnessExecutor {

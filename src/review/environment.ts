@@ -26,7 +26,14 @@ export const REDLINE_ENV_KEYS = [
   'REDLINE_REPOSITORY',
   'REDLINE_PULL_REQUEST',
   'REDLINE_HEAD',
+  'REDLINE_VERBOSITY',
 ] as const;
+
+/** How much of the live model stream lands in the run log. */
+export const VERBOSITIES = ['silent', 'progress', 'full-output'] as const;
+export type ReviewVerbosity = (typeof VERBOSITIES)[number];
+/** `progress` (dots) is the default: alive without flooding the log. */
+export const DEFAULT_VERBOSITY: ReviewVerbosity = 'progress';
 
 export const DEFAULT_TIMEOUT_INPUT = `${DEFAULT_TIMEOUT_MINUTES}m`;
 
@@ -75,6 +82,7 @@ export interface PublicationEnvironment {
 export interface ParsedReviewEnvironment {
   readonly mode: ReviewMode;
   readonly timeout: Duration;
+  readonly verbosity: ReviewVerbosity;
   readonly review: ReviewEnvironment | undefined;
   readonly publication: PublicationEnvironment | undefined;
 }
@@ -178,6 +186,14 @@ function optionalTimeout(raw: string | undefined): Duration {
   return parseDuration(selected, { maximumMinutes: MAX_TIMEOUT_MINUTES });
 }
 
+function optionalVerbosity(raw: string | undefined): ReviewVerbosity {
+  const selected = raw === undefined || raw.length === 0 ? DEFAULT_VERBOSITY : raw;
+  if (!(VERBOSITIES as readonly string[]).includes(selected)) {
+    throw new Error('REDLINE_VERBOSITY is unsupported; use silent, progress, or full-output');
+  }
+  return selected as ReviewVerbosity;
+}
+
 const REVIEW_REQUIRED_KEYS = [
   'REDLINE_HARNESS',
   'REDLINE_REVIEW_DIR',
@@ -232,6 +248,7 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
 
   // Optional values are validated in both modes so typos fail loudly.
   const findingScope = optionalFindingScope(environment.REDLINE_FINDING_SCOPE);
+  const verbosity = optionalVerbosity(environment.REDLINE_VERBOSITY);
   const timeout = optionalTimeout(environment.REDLINE_TIMEOUT);
   const publication = optionalPublication(environment);
 
@@ -239,7 +256,7 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
   const provided = REVIEW_REQUIRED_KEYS.filter((_key, index) => (values[index] ?? '').length > 0);
   if (provided.length === 0) {
     if (publication !== undefined) throw new Error('publication requires review execution');
-    return Object.freeze({ mode: 'context-only', timeout, review: undefined, publication: undefined });
+    return Object.freeze({ mode: 'context-only', timeout, verbosity, review: undefined, publication: undefined });
   }
   if (provided.length < REVIEW_REQUIRED_KEYS.length) {
     const missing = REVIEW_REQUIRED_KEYS.filter((key) => !provided.includes(key));
@@ -263,5 +280,5 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
     findingScope,
     timeout,
   });
-  return Object.freeze({ mode: 'review', timeout, review, publication });
+  return Object.freeze({ mode: 'review', timeout, verbosity, review, publication });
 }

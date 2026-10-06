@@ -212,14 +212,17 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
       const state = prepared as PreparedPi;
       const args = [...state.args, '--system-prompt', prompt.system, '--', prompt.user];
       // Readable live output: the NDJSON event stream is decoded, and the
-      // model's text deltas are forwarded as raw fragments so the run log
-      // shows the review being written. Text is redacted against the
-      // credential and capped; boundary events stay compact lines.
+      // model's text deltas are forwarded per the stream mode — raw
+      // fragments ('text') or one dot per chunk ('dots'). Text is
+      // redacted against the credential and capped; boundary events stay
+      // compact lines in text mode and are suppressed in dots mode.
+      const streamMode = options?.streamMode ?? 'text';
       const credential = state.env[PI_CREDENTIAL_ENV_NAME];
       let streamedBytes = 0;
       let capReported = false;
       const forwardText = (text: string): void => {
-        const redacted = credential !== undefined ? text.split(credential).join('[redacted]') : text;
+        const rendered = streamMode === 'dots' ? (text === '\n' ? '\n' : '.') : text;
+        const redacted = credential !== undefined ? rendered.split(credential).join('[redacted]') : rendered;
         const remaining = MAX_STREAMED_TEXT_BYTES - streamedBytes;
         if (remaining <= 0) {
           if (!capReported) {
@@ -266,7 +269,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
                   return;
                 }
                 const type = /^\s*\{"type":"([a-z_]+)"/u.exec(line)?.[1];
-                if (type !== undefined && PI_HEARTBEAT_EVENTS.has(type)) {
+                if (streamMode === 'text' && type !== undefined && PI_HEARTBEAT_EVENTS.has(type)) {
                   options.onOutputLine?.({ stream, kind: 'line', line: `pi event: ${type}` });
                 }
               },

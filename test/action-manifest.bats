@@ -23,6 +23,7 @@ assert set(inputs) == {
 }, f'unexpected input surface: {sorted(inputs)}'
 assert inputs['finding-scope']['default'] == 'defects'
 assert inputs['timeout']['default'] == '30m'
+assert inputs['verbosity']['default'] == 'progress'
 assert inputs['github-token']['default'] == ''
 assert inputs['github-token']['required'] is False
 runs = action['runs']
@@ -64,6 +65,11 @@ PY
 
 @test "action gates review execution on the full review input set" {
   grep -Fq "if: \${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}" "$ACTION"
+}
+
+@test "action maps the verbosity to the environment contract" {
+  count=$(grep -cF 'REDLINE_VERBOSITY: ${{ inputs.verbosity }}' "$ACTION")
+  [ "$count" -eq 2 ]
 }
 
 @test "action maps the publication environment from the github-token input" {

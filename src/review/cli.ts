@@ -10,6 +10,7 @@
 
 import { pathToFileURL } from 'node:url';
 import type { HarnessOutputLine } from '../harness-executor/types.js';
+import type { ReviewVerbosity } from './environment.js';
 import {
   GitHubReviewPublisher,
   PublicationService,
@@ -19,7 +20,7 @@ import {
 import type { ReviewPublisher } from '../publish/index.js';
 import type { FileReviewRecord } from './types.js';
 import { parseReviewEnvironment } from './environment.js';
-import { runFileReviews } from './runner.js';
+import { runFileReviews, type ReviewRunInput } from './runner.js';
 
 const USAGE_ERROR_EXIT = 2;
 const RUN_FAILURE_EXIT = 1;
@@ -37,6 +38,29 @@ function progressLine(record: FileReviewRecord): void {
 /** Marks the start of a file's review in the run log. */
 function fileStartLine(file: { readonly path: string }): void {
   writeLine(process.stderr, `redline-review: reviewing ${file.path}…`);
+}
+
+/**
+ * Maps the verbosity level to the runner's progress callbacks. Per-file
+ * start/done lines are always present — they are the minimal signal that
+ * a long sequential run is alive; the level controls only the live model
+ * stream.
+ */
+function progressCallbacks(verbosity: ReviewVerbosity): {
+  onFileStart: typeof fileStartLine;
+  onFileDone: typeof progressLine;
+  onHarnessOutput?: ReviewRunInput['onHarnessOutput'];
+  harnessStreamMode?: 'dots' | 'text';
+} {
+  if (verbosity === 'silent') {
+    return { onFileStart: fileStartLine, onFileDone: progressLine };
+  }
+  return {
+    onFileStart: fileStartLine,
+    onFileDone: progressLine,
+    onHarnessOutput: harnessLine,
+    harnessStreamMode: verbosity === 'progress' ? 'dots' : 'text',
+  };
 }
 
 /** Bounded live harness output on stderr. */
@@ -126,12 +150,7 @@ export async function main(
 
       let result;
       try {
-        result = await runFileReviews({
-          environment: review,
-          onFileStart: fileStartLine,
-          onFileDone: progressLine,
-          onHarnessOutput: harnessLine,
-        });
+        result = await runFileReviews({ ...progressCallbacks(parsed.verbosity), environment: review });
       } catch (error) {
         // Defense in depth: the failure text is published, so the
         // publication token must never appear in it.
@@ -168,12 +187,7 @@ export async function main(
       return exitCode;
     }
 
-    const result = await runFileReviews({
-      environment: review,
-      onFileStart: fileStartLine,
-      onFileDone: progressLine,
-      onHarnessOutput: harnessLine,
-    });
+    const result = await runFileReviews({ ...progressCallbacks(parsed.verbosity), environment: review });
     writeLine(process.stdout, JSON.stringify(result.summary));
     return result.exitCode;
   } catch (error) {

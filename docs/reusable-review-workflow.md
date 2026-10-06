@@ -39,6 +39,7 @@ In context-only mode the workflow uploads only the `<artifact-name>-context` art
 | `model-config` | JSON | Provider-neutral model configuration. See [runnable review configuration](/runnable-review-configuration). |
 | `finding-scope` | `defects`, `defects-and-risks` | Default `defects`. |
 | `timeout` | duration | Default `30m`, capped at `360m`. |
+| `verbosity` | `silent`, `progress`, `full-output` | Live model stream in the run log. Default `progress` (dots). |
 | `artifact-name` | name | Default `redline-review-<run id>`. |
 | `artifact-retention-days` | 1–90 | Default `45`. |
 | `report-style`, `credential-isolation`, `container-engine` | legacy | Surface kept while the published `v1` tag still carries the previous action design, whose review mode requires `credential-isolation: direct` and a `container-engine`. The current action ignores them. |

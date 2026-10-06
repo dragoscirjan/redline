@@ -15,7 +15,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHarnessExecutor } from '../harness-executor/registry.js';
-import type { HarnessExecutor, HarnessOutputLine } from '../harness-executor/types.js';
+import type { HarnessExecutor, HarnessOutputLine, HarnessStreamMode } from '../harness-executor/types.js';
 import { loadReviewBundle, type ReviewBundle, type ReviewManifestFile } from './bundle.js';
 import type { ReviewEnvironment } from './environment.js';
 import { buildFileReviewPrompt, type FileReviewPrompt } from './prompt.js';
@@ -35,24 +35,26 @@ const MAX_REASON_CHARS = 500;
 export interface ReviewRunInput {
   readonly environment: ReviewEnvironment;
   /** Executor override for tests; defaults to the registry for the harness. */
-  readonly executor?: HarnessExecutor;
+  readonly executor?: HarnessExecutor | undefined;
   /**
    * Called after each reviewed file completes, for live progress in the
    * run log — a long sequential run must stay distinguishable from a
    * hang. Absent in tests unless they assert progress.
    */
-  readonly onFileDone?: (record: FileReviewRecord) => void;
+  readonly onFileDone?: ((record: FileReviewRecord) => void) | undefined;
   /**
    * Called before a file's prompt runs; pairs with `onFileDone` for the
    * per-file progress narrative in the run log.
    */
-  readonly onFileStart?: (record: { readonly path: string }) => void;
+  readonly onFileStart?: ((record: { readonly path: string }) => void) | undefined;
   /**
    * Live harness output tap while a file's prompt runs. Harnesses forward
    * bounded heartbeat lines and readable text fragments (redacted and
    * capped), never unbounded raw output.
    */
-  readonly onHarnessOutput?: (output: HarnessOutputLine) => void;
+  readonly onHarnessOutput?: ((output: HarnessOutputLine) => void) | undefined;
+  /** Stream presentation for the tap; defaults to the harness's own. */
+  readonly harnessStreamMode?: HarnessStreamMode | undefined;
 }
 
 export interface ReviewRunResult {
@@ -90,6 +92,7 @@ async function reviewOneFile(
   bundle: ReviewBundle,
   file: ReviewManifestFile,
   onHarnessOutput?: (output: HarnessOutputLine) => void,
+  harnessStreamMode?: HarnessStreamMode,
 ): Promise<FileReviewRecord & { rawModelOutput?: string | undefined }> {
   const redact = (value: string): string => redactCredential(value, environment.credential);
   const described = {
@@ -132,7 +135,12 @@ async function reviewOneFile(
   const run = await executor.execute(
     prepared,
     prompt,
-    onHarnessOutput === undefined ? undefined : { onOutputLine: onHarnessOutput },
+    onHarnessOutput === undefined
+      ? undefined
+      : {
+          onOutputLine: onHarnessOutput,
+          ...(harnessStreamMode !== undefined ? { streamMode: harnessStreamMode } : {}),
+        },
   );
 
   if (run.status !== 'succeeded') {
@@ -256,7 +264,15 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
         continue;
       }
       input.onFileStart?.({ path: fileReviewPath(file) });
-      const record = await reviewOneFile(executor, prepared, environment, bundle, file, input.onHarnessOutput);
+      const record = await reviewOneFile(
+        executor,
+        prepared,
+        environment,
+        bundle,
+        file,
+        input.onHarnessOutput,
+        input.harnessStreamMode,
+      );
       records.push(record);
       await writer.writeFileReview(record);
       input.onFileDone?.(record);

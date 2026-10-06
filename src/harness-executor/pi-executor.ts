@@ -33,6 +33,47 @@ import type {
 /** Event boundaries forwarded as heartbeat lines; event content never is. */
 const PI_HEARTBEAT_EVENTS = new Set(['message_end', 'turn_end', 'agent_end']);
 
+/** Event kinds whose `delta` is the model's readable streaming text. */
+const PI_TEXT_DELTA_EVENTS = new Set(['thinking_delta', 'text_delta']);
+/** Event kinds that close a streamed segment; the log gets a newline. */
+const PI_TEXT_END_EVENTS = new Set(['thinking_end', 'text_end']);
+
+/** Per-run cap on forwarded readable text, keeping the run log bounded. */
+const MAX_STREAMED_TEXT_BYTES = 32 * 1024;
+
+/**
+ * Decodes one pi NDJSON event line into the readable output the run log
+ * should show: `undefined` for event kinds without reader-facing text.
+ */
+function streamEventLine(line: string): { kind: 'text' | 'newline'; text: string } | undefined {
+  try {
+    const event = JSON.parse(line) as { type?: unknown; assistantMessageEvent?: { type?: unknown; delta?: unknown } };
+    if (event.type !== 'message_update') return undefined;
+    const delta = event.assistantMessageEvent?.delta;
+    if (event.assistantMessageEvent?.type === undefined) return undefined;
+    if (PI_TEXT_DELTA_EVENTS.has(event.assistantMessageEvent.type as string)) {
+      return typeof delta === 'string' && delta.length > 0 ? { kind: 'text', text: delta } : undefined;
+    }
+    if (PI_TEXT_END_EVENTS.has(event.assistantMessageEvent.type as string)) return { kind: 'newline', text: '\n' };
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Neutralizes GitHub Actions workflow-command syntax in raw text: the
+ * runner interprets lines starting with `##[` or `::` as commands. The
+ * model stream is untrusted, so those sequences never survive raw.
+ */
+function sanitizeWorkflowCommands(chunk: string, atLineStart: boolean): string {
+  let sanitized = chunk;
+  if (atLineStart && (sanitized.startsWith('##[') || sanitized.startsWith('::'))) {
+    sanitized = ` ${sanitized}`;
+  }
+  return sanitized.replaceAll('##[', '# #[').replaceAll('\n##[', '\n# #[').replaceAll('\n::', '\n: :');
+}
+
 /** Environment variable `models.json` interpolates for the provider credential. */
 export const PI_CREDENTIAL_ENV_NAME = 'REDLINE_MODEL_API_KEY' as const;
 
@@ -170,26 +211,63 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
     async execute(prepared: PreparedHarness, prompt: HarnessPrompt, options?: HarnessExecuteOptions): Promise<HarnessRun> {
       const state = prepared as PreparedPi;
       const args = [...state.args, '--system-prompt', prompt.system, '--', prompt.user];
+      // Readable live output: the NDJSON event stream is decoded, and the
+      // model's text deltas are forwarded as raw fragments so the run log
+      // shows the review being written. Text is redacted against the
+      // credential and capped; boundary events stay compact lines.
+      const credential = state.env[PI_CREDENTIAL_ENV_NAME];
+      let streamedBytes = 0;
+      let capReported = false;
+      const forwardText = (text: string): void => {
+        const redacted = credential !== undefined ? text.split(credential).join('[redacted]') : text;
+        const remaining = MAX_STREAMED_TEXT_BYTES - streamedBytes;
+        if (remaining <= 0) {
+          if (!capReported) {
+            capReported = true;
+            options?.onOutputLine?.({
+              stream: 'stdout',
+              kind: 'line',
+              line: 'pi text stream truncated in the log (full output is in the artifacts)',
+            });
+          }
+          return;
+        }
+        const bounded = redacted.slice(0, remaining);
+        const atRunStart = streamedBytes === 0;
+        streamedBytes += Buffer.byteLength(bounded, 'utf8');
+        // The sanitizer also guards after-newline positions inside the
+        // fragment; the run-start flag covers the very first fragment.
+        options?.onOutputLine?.({ stream: 'stdout', kind: 'text', line: sanitizeWorkflowCommands(bounded, atRunStart) });
+        if (bounded.length < redacted.length && !capReported) {
+          capReported = true;
+          options?.onOutputLine?.({
+            stream: 'stdout',
+            kind: 'line',
+            line: 'pi text stream truncated in the log (full output is in the artifacts)',
+          });
+        }
+      };
       const result = await runBoundedProcess(spawner, {
         command: state.command,
         args,
         cwd: state.cwd,
         env: state.env,
         timeoutMs: state.timeoutMs,
-        // Live heartbeat: pi streams newline-delimited JSON events. Only
-        // event boundaries are forwarded — never event content, which can
-        // quote pull request data — so the run log shows progress without
-        // dumping the model stream.
         ...(options?.onOutputLine !== undefined
           ? {
               onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {
                 if (stream === 'stderr') {
-                  options.onOutputLine?.({ stream, line });
+                  options.onOutputLine?.({ stream, kind: 'line', line });
+                  return;
+                }
+                const event = streamEventLine(line);
+                if (event !== undefined) {
+                  forwardText(event.text);
                   return;
                 }
                 const type = /^\s*\{"type":"([a-z_]+)"/u.exec(line)?.[1];
                 if (type !== undefined && PI_HEARTBEAT_EVENTS.has(type)) {
-                  options.onOutputLine?.({ stream, line: `pi event: ${type}` });
+                  options.onOutputLine?.({ stream, kind: 'line', line: `pi event: ${type}` });
                 }
               },
             }

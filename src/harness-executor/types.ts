@@ -67,6 +67,12 @@ export interface PreparedHarness {
 
 export interface HarnessOutputLine {
   readonly stream: 'stdout' | 'stderr';
+  /**
+   * `line` is a complete, self-contained log line (prefixed by the CLI);
+   * `text` is a raw fragment of the model's streaming output, written to
+   * the log unprefixed so consecutive fragments read as continuous text.
+   */
+  readonly kind: 'line' | 'text';
   readonly line: string;
 }
 

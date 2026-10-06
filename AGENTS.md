@@ -81,8 +81,10 @@ variables (interim design; see `src/review/environment.ts`):
   `REDLINE_HEAD` — the publication context; all four must arrive together
   and only with review execution. The token is the Redline GitHub App
   installation token generated in the action, or an outside-provided PAT
-  as fallback — never the Actions `GITHUB_TOKEN`; it is consumed only by
-  the publication layer and never reaches a harness.
+  as fallback — never the Actions `GITHUB_TOKEN`. The action mints two
+  tokens: one for the start/failure notifications, one fresh for the
+  publication after the review completes; the review step itself runs
+  token-free.
 
 Review inputs must arrive together; partial selections fail. Unknown
 `REDLINE_*` variables are rejected.

@@ -27,6 +27,7 @@ export const REDLINE_ENV_KEYS = [
   'REDLINE_PULL_REQUEST',
   'REDLINE_HEAD',
   'REDLINE_VERBOSITY',
+  'REDLINE_FAILURE_REASON',
 ] as const;
 
 /** How much of the live model stream lands in the run log. */
@@ -44,6 +45,26 @@ const PROVIDER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
 const CONTROL_CHARACTER_PATTERN = /\p{Cc}/u;
 
 export type ReviewMode = 'context-only' | 'review';
+
+/**
+ * Environment for the announce modes (`--announce-only`,
+ * `--announce-failure`): publication context plus the harness and model
+ * id the running body displays. No review execution happens here.
+ */
+export interface AnnounceEnvironment {
+  readonly publication: PublicationEnvironment;
+  readonly harness: HarnessName;
+  readonly model: string;
+}
+
+/**
+ * Environment for `--publish-only`: publication context plus the output
+ * directory the review run wrote its records and summary to.
+ */
+export interface PublishOnlyEnvironment {
+  readonly publication: PublicationEnvironment;
+  readonly outputDirectory: string;
+}
 
 export interface ModelConfiguration {
   readonly provider: string;
@@ -213,20 +234,7 @@ const PUBLICATION_REQUIRED_KEYS = [
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const COMMIT_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 
-/**
- * Parses the publication context. All four variables must arrive together;
- * a partial selection fails instead of degrading to artifact-only mode.
- */
-function optionalPublication(environment: NodeJS.ProcessEnv): PublicationEnvironment | undefined {
-  const values = PUBLICATION_REQUIRED_KEYS.map((key) => environment[key] ?? '');
-  const provided = PUBLICATION_REQUIRED_KEYS.filter((_key, index) => (values[index] ?? '').length > 0);
-  if (provided.length === 0) return undefined;
-  if (provided.length < PUBLICATION_REQUIRED_KEYS.length) {
-    const missing = PUBLICATION_REQUIRED_KEYS.filter((key) => !provided.includes(key));
-    throw new Error(
-      `publication requires ${PUBLICATION_REQUIRED_KEYS.join(', ')} together; missing: ${missing.join(', ')}`,
-    );
-  }
+function publicationFromValues(values: readonly string[]): PublicationEnvironment {
   const token = values[0] ?? '';
   if (token !== token.trim() || /\p{Cc}/u.test(token)) throw new Error('publication token is invalid');
   const repository = values[1] ?? '';
@@ -241,6 +249,68 @@ function optionalPublication(environment: NodeJS.ProcessEnv): PublicationEnviron
     pullRequest: Number.parseInt(pullRequestRaw, 10),
     head,
   });
+}
+
+/**
+ * Parses the publication context. All four variables must arrive together;
+ * a partial selection fails instead of degrading to artifact-only mode.
+ */
+function optionalPublication(environment: NodeJS.ProcessEnv): PublicationEnvironment | undefined {
+  const values = PUBLICATION_REQUIRED_KEYS.map((key) => environment[key] ?? '');
+  const provided = PUBLICATION_REQUIRED_KEYS.filter((_key, index) => (values[index] ?? '').length > 0);
+  if (provided.length === 0) return undefined;
+  if (provided.length < PUBLICATION_REQUIRED_KEYS.length) {
+    const missing = PUBLICATION_REQUIRED_KEYS.filter((key) => !provided.includes(key));
+    throw new Error(
+      `publication requires ${PUBLICATION_REQUIRED_KEYS.join(', ')} together; missing: ${missing.join(', ')}`,
+    );
+  }
+  return publicationFromValues(values);
+}
+
+/**
+ * Required publication context for the single-purpose CLI modes
+ * (`--announce-only`, `--announce-failure`, `--publish-only`): all four
+ * variables must be present. REDLINE_FAILURE_REASON is optional and only
+ * meaningful to the failure mode; it is bounded, redacted, and sanitized
+ * before it reaches a comment.
+ */
+function requiredPublication(environment: NodeJS.ProcessEnv): PublicationEnvironment {
+  const values = PUBLICATION_REQUIRED_KEYS.map((key) => environment[key] ?? '');
+  const missing = PUBLICATION_REQUIRED_KEYS.filter((_key, index) => (values[index] ?? '').length === 0);
+  if (missing.length > 0) {
+    throw new Error(`publication requires ${PUBLICATION_REQUIRED_KEYS.join(', ')} together; missing: ${missing.join(', ')}`);
+  }
+  return publicationFromValues(values);
+}
+
+export function parseFailureReason(raw: string | undefined): string {
+  const bounded = (raw ?? '')
+    .slice(0, 500)
+    .replaceAll(/[\u0000-\u001f]+/gu, ' ')
+    .trim();
+  return bounded;
+}
+
+/**
+ * Announce modes: publication context and the display fields must arrive
+ * together; review execution variables are not part of this contract.
+ */
+export function parseAnnounceEnvironment(environment: NodeJS.ProcessEnv): AnnounceEnvironment {
+  assertKnownEnvironment(environment);
+  const publication = requiredPublication(environment);
+  const harnessRaw = environment.REDLINE_HARNESS ?? '';
+  if (!isHarnessName(harnessRaw)) throw new Error('REDLINE_HARNESS is unsupported');
+  const model = parseModelConfig(environment.REDLINE_MODEL_CONFIG ?? '');
+  return Object.freeze({ publication, harness: harnessRaw, model: model.model });
+}
+
+export function parsePublishOnlyEnvironment(environment: NodeJS.ProcessEnv): PublishOnlyEnvironment {
+  assertKnownEnvironment(environment);
+  const publication = requiredPublication(environment);
+  const outputDirectory = environment.REDLINE_OUTPUT_DIR ?? '';
+  if (outputDirectory.length === 0) throw new Error('publish-only requires REDLINE_OUTPUT_DIR');
+  return Object.freeze({ publication, outputDirectory });
 }
 
 export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedReviewEnvironment {

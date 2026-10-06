@@ -10,16 +10,23 @@
 
 import { pathToFileURL } from 'node:url';
 import type { HarnessOutputLine } from '../harness-executor/types.js';
-import type { ReviewVerbosity } from './environment.js';
 import {
   GitHubReviewPublisher,
   PublicationService,
   type PublicationOutcome,
   type RunningSummaryInfo,
+  publishRecords,
 } from '../publish/index.js';
 import type { ReviewPublisher } from '../publish/index.js';
 import type { FileReviewRecord } from './types.js';
-import { parseReviewEnvironment } from './environment.js';
+import {
+  parseAnnounceEnvironment,
+  parseFailureReason,
+  parsePublishOnlyEnvironment,
+  parseReviewEnvironment,
+  type ReviewVerbosity,
+} from './environment.js';
+import { loadPublishedRun } from './run-output.js';
 import { runFileReviews, type ReviewRunInput } from './runner.js';
 
 const USAGE_ERROR_EXIT = 2;
@@ -80,16 +87,105 @@ export interface CliDependencies {
   readonly publisher?: ReviewPublisher;
 }
 
+/**
+ * Single-purpose modes for the composite action's two-phase token flow:
+ * the announce modes run before the review (fresh token 1); publish-only
+ * runs after the review (fresh token 2) and re-reads what the review
+ * wrote from disk. A failure exits non-zero; the announce steps are
+ * continue-on-error in the action, so a notification problem never
+ * blocks the review.
+ */
+async function runSinglePurposeMode(
+  mode: '--announce-only' | '--announce-failure' | '--publish-only',
+  environment: NodeJS.ProcessEnv,
+  dependencies: CliDependencies,
+): Promise<number> {
+  try {
+    if (mode === '--publish-only') {
+      const parsed = parsePublishOnlyEnvironment(environment);
+      const publisher = dependencies.publisher ?? new GitHubReviewPublisher({ token: parsed.publication.token });
+      const run = await loadPublishedRun(parsed.outputDirectory);
+      // The saved run must be the run for THIS publication head: an output
+      // directory left over from an earlier attempt would otherwise pass
+      // the PR stale-head check while publishing another commit's
+      // findings.
+      if (run.summary.head !== parsed.publication.head) {
+        throw new Error(
+          `review output belongs to head ${run.summary.head.slice(0, 12)}, not the publication head ${parsed.publication.head.slice(0, 12)}`,
+        );
+      }
+      const outcome = await publishRecords({
+        records: run.records,
+        summary: run.summary,
+        publication: parsed.publication,
+        publisher,
+      });
+      writeLine(process.stdout, JSON.stringify(publicationReport(outcome)));
+      const requested = outcome.files.length;
+      if (requested > 0 && outcome.publishedFileReviews === 0 && outcome.failedFileReviews > 0) {
+        return RUN_FAILURE_EXIT;
+      }
+      return 0;
+    }
+    const parsed = parseAnnounceEnvironment(environment);
+    const publisher = dependencies.publisher ?? new GitHubReviewPublisher({ token: parsed.publication.token });
+    const service = new PublicationService(publisher, {
+      repository: parsed.publication.repository,
+      pullRequest: parsed.publication.pullRequest,
+      head: parsed.publication.head,
+    });
+    const info: RunningSummaryInfo = {
+      harness: parsed.harness,
+      model: parsed.model,
+      startedAt: new Date().toISOString(),
+    };
+    if (mode === '--announce-failure') {
+      // The reason becomes published text: bounded, control characters
+      // stripped, and the token redacted defensively.
+      const reason = parseFailureReason(environment.REDLINE_FAILURE_REASON)
+        .split(parsed.publication.token)
+        .join('[redacted]');
+      await service.announceFailure(
+        info,
+        reason.length > 0 ? reason : 'The review run failed; see the run log and artifacts for diagnostics.',
+      );
+      return 0;
+    }
+    await service.announceStart(info);
+    return 0;
+  } catch (error) {
+    writeLine(
+      process.stderr,
+      `redline-review: ${mode.slice(2)} failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return RUN_FAILURE_EXIT;
+  }
+}
+
 export async function main(
   arguments_: readonly string[] = process.argv.slice(2),
   environment: NodeJS.ProcessEnv = process.env,
   dependencies: CliDependencies = {},
 ): Promise<number> {
-  const validateOnly = arguments_.includes('--validate-only');
-  if (arguments_.some((argument) => argument !== '--validate-only')) {
-    writeLine(process.stderr, 'redline-review: unsupported argument (only --validate-only is accepted)');
+  const modes = ['--validate-only', '--announce-only', '--announce-failure', '--publish-only'].filter((mode) =>
+    arguments_.includes(mode),
+  );
+  if (modes.length > 1 || arguments_.some((argument) => !modes.includes(argument))) {
+    writeLine(
+      process.stderr,
+      'redline-review: unsupported argument (only one of --validate-only, --announce-only, --announce-failure, --publish-only is accepted)',
+    );
     return USAGE_ERROR_EXIT;
   }
+  const mode = modes[0];
+  if (mode !== undefined && mode !== '--validate-only') {
+    return runSinglePurposeMode(
+      mode as '--announce-only' | '--announce-failure' | '--publish-only',
+      environment,
+      dependencies,
+    );
+  }
+  const validateOnly = mode === '--validate-only';
 
   let parsed;
   try {

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { parseReviewEnvironment, parseModelConfig, selectModelCredential } from '../src/review/environment.js';
+import {
+  parseAnnounceEnvironment,
+  parseFailureReason,
+  parseModelConfig,
+  parsePublishOnlyEnvironment,
+  parseReviewEnvironment,
+  selectModelCredential,
+} from '../src/review/environment.js';
 import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.js';
 
 const MODEL_CONFIG = JSON.stringify({ provider: 'mock', endpoint: 'http://127.0.0.1:8787/v1', model: 'test-model' });
@@ -103,6 +110,56 @@ describe('REDLINE_VERBOSITY', () => {
     expect(() => parseReviewEnvironment({ REDLINE_VERBOSITY: 'loud' })).toThrow(
       /REDLINE_VERBOSITY is unsupported/u,
     );
+  });
+});
+
+describe('single-purpose mode environments', () => {
+  const PUBLICATION = {
+    REDLINE_PUBLISH_TOKEN: 'gh-token',
+    REDLINE_REPOSITORY: 'owner/repository',
+    REDLINE_PULL_REQUEST: '14',
+    REDLINE_HEAD: 'b'.repeat(40),
+  };
+
+  it('parses the announce contract', () => {
+    const parsed = parseAnnounceEnvironment({
+      ...PUBLICATION,
+      REDLINE_HARNESS: 'pi',
+      REDLINE_MODEL_CONFIG: JSON.stringify({ provider: 'p', endpoint: 'http://127.0.0.1:1/v1', model: 'm' }),
+    });
+    expect(parsed.harness).toBe('pi');
+    expect(parsed.model).toBe('m');
+    expect(parsed.publication.repository).toBe('owner/repository');
+  });
+
+  it('requires publication together in the announce contract', () => {
+    expect(() =>
+      parseAnnounceEnvironment({
+        REDLINE_HARNESS: 'pi',
+        REDLINE_MODEL_CONFIG: JSON.stringify({ provider: 'p', endpoint: 'http://127.0.0.1:1/v1', model: 'm' }),
+        REDLINE_PUBLISH_TOKEN: 't',
+      }),
+    ).toThrow(/publication requires .* together; missing: REDLINE_REPOSITORY/u);
+  });
+
+  it('requires harness and model config in the announce contract', () => {
+    expect(() => parseAnnounceEnvironment({ ...PUBLICATION })).toThrow(/REDLINE_HARNESS is unsupported/u);
+  });
+
+  it('parses the publish-only contract', () => {
+    const parsed = parsePublishOnlyEnvironment({ ...PUBLICATION, REDLINE_OUTPUT_DIR: '/tmp/out' });
+    expect(parsed.outputDirectory).toBe('/tmp/out');
+    expect(parsed.publication.pullRequest).toBe(14);
+  });
+
+  it('requires the output directory in the publish-only contract', () => {
+    expect(() => parsePublishOnlyEnvironment(PUBLICATION)).toThrow(/publish-only requires REDLINE_OUTPUT_DIR/u);
+  });
+
+  it('bounds and sanitizes the failure reason', () => {
+    expect(parseFailureReason('line\nbreak\u0000')).toBe('line break');
+    expect(parseFailureReason(undefined)).toBe('');
+    expect(parseFailureReason('x'.repeat(600)).length).toBe(500);
   });
 });
 

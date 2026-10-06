@@ -19,9 +19,10 @@ jobs:
       artifact-retention-days: 45
     secrets:
       # Publication goes through the Redline GitHub App installation token
-      # when REDLINE_APP_ID/REDLINE_APP_PRIVATE_KEY are configured; the
-      # GH_TOKEN PAT is only the fallback. Never the Actions GITHUB_TOKEN.
+      # when REDLINE_REVIEW_APP_ID/REDLINE_REVIEW_PRIVATE_KEY are
+      # configured; the GH_TOKEN PAT is only the fallback. Never the
+      # Actions GITHUB_TOKEN.
       github-token: ${{ secrets.GH_TOKEN }}
-      redline-app-id: ${{ secrets.REDLINE_APP_ID }}
-      redline-app-private-key: ${{ secrets.REDLINE_APP_PRIVATE_KEY }}
+      redline-review-app-id: ${{ secrets.REDLINE_REVIEW_APP_ID }}
+      redline-review-private-key: ${{ secrets.REDLINE_REVIEW_PRIVATE_KEY }}
       model-auth: ${{ secrets.MODEL_CREDENTIALS }}

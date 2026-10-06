@@ -67,7 +67,7 @@ Formatting, linting, duplication analysis, dependency vulnerability audits, reco
 
 A passing local gate does not prove live model quality, forge comment publication, or production action compatibility.
 
-The publication layer keeps the pull request informed while a review runs: a start notification is published into the managed summary comment before the review executes, and the same comment is replaced by the run summary or the failure state at completion. A failed start notification never aborts the review — artifacts remain the guaranteed output.
+The publication layer keeps the pull request informed while a review runs: a start notification is published into the managed summary comment before the review executes, and the same comment is replaced by the run summary or the failure state at completion. In the action these are separate steps with their own freshly minted tokens (the review step runs token-free); a failed start notification never aborts the review — artifacts remain the guaranteed output.
 
 ## Documentation
 

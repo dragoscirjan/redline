@@ -16,11 +16,11 @@ on:
       github-token:
         description: Fallback publication token (PAT) used while the Redline App secrets are not configured.
         required: false
-      redline-app-id:
-        description: Redline GitHub App id, bound to secrets.REDLINE_APP_ID. Preferred over the PAT fallback.
+      redline-review-app-id:
+        description: Redline GitHub App id, bound to secrets.REDLINE_REVIEW_APP_ID. Preferred over the PAT fallback.
         required: false
-      redline-app-private-key:
-        description: Redline GitHub App private key, bound to secrets.REDLINE_APP_PRIVATE_KEY.
+      redline-review-private-key:
+        description: Redline GitHub App private key, bound to secrets.REDLINE_REVIEW_PRIVATE_KEY.
         required: false
       model-auth:
         description: Provider-keyed credential map (JSON), bound to the MODEL_CREDENTIALS secret. Enables review execution when set.
@@ -86,7 +86,7 @@ jobs:
           model-config: '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}'
           model-auth: ${{ secrets.model-auth }}
           github-token: ${{ secrets.github-token }}
-          github-app-id: ${{ secrets.redline-app-id }}
-          github-app-private-key: ${{ secrets.redline-app-private-key }}
+          github-app-id: ${{ secrets.redline-review-app-id }}
+          github-app-key: ${{ secrets.redline-review-private-key }}
           artifact-name: pull-request-review-${{ github.event.pull_request.number }}-${{ github.run_id }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

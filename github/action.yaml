@@ -22,6 +22,10 @@ inputs:
     description: Provider-keyed credential map (JSON); bind to secrets.MODEL_CREDENTIALS. Only the selected credential reaches the harness.
     required: false
     default: ""
+  github-token:
+    description: GitHub publication token; bind to secrets.GH_TOKEN. A PAT or a GitHub App installation token generated outside the workflow — consumed identically. Publication never uses the Actions GITHUB_TOKEN. Empty keeps artifact-only mode.
+    required: false
+    default: ""
   finding-scope:
     description: Finding scope, defects or defects-and-risks
     required: false
@@ -99,6 +103,13 @@ runs:
         REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
         REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head
         REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
+        # The publication context arrives together or not at all: the
+        # repository, pull request, and head only count as provided when a
+        # publication token is present.
+        REDLINE_PUBLISH_TOKEN: ${{ inputs.github-token }}
+        REDLINE_REPOSITORY: ${{ inputs.github-token != '' && github.repository || '' }}
+        REDLINE_PULL_REQUEST: ${{ inputs.github-token != '' && github.event.pull_request.number || '' }}
+        REDLINE_HEAD: ${{ inputs.github-token != '' && github.event.pull_request.head.sha || '' }}
       run: |
         set -euo pipefail
         # Authoritative input validation runs even in context-only mode, so
@@ -163,6 +174,12 @@ runs:
         REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
         REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head
         REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
+        # Publication runs after the artifacts are written; the token never
+        # reaches the harness (it runs in its own constructed environment).
+        REDLINE_PUBLISH_TOKEN: ${{ inputs.github-token }}
+        REDLINE_REPOSITORY: ${{ inputs.github-token != '' && github.repository || '' }}
+        REDLINE_PULL_REQUEST: ${{ inputs.github-token != '' && github.event.pull_request.number || '' }}
+        REDLINE_HEAD: ${{ inputs.github-token != '' && github.event.pull_request.head.sha || '' }}
       run: |
         set -euo pipefail
         node "${{ github.action_path }}/../dist/src/review/cli.js"

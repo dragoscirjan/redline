@@ -1,6 +1,6 @@
 # Review output
 
-The review tool writes per-file records and a run summary into `REDLINE_OUTPUT_DIR` under `reviews/`. The JSON records are the machine-readable contract for later GitHub comment publication; the Markdown records are the human-readable counterpart. Nothing is published to GitHub in the current milestone — the output travels as the `<artifact-name>-reviews` artifact.
+The review tool writes per-file records and a run summary into `REDLINE_OUTPUT_DIR` under `reviews/`. The JSON records are the machine-readable contract for GitHub publication; the Markdown records are the human-readable counterpart. The output always travels as the `<artifact-name>-reviews` artifact. When the action's `github-token` input is supplied, the publication layer also publishes the records to GitHub — one review per file with findings plus a managed summary comment (see [GitHub composite action](/github-composite-action#publication)).
 
 ## Presenting findings: `file:x-y` spans
 
@@ -52,7 +52,7 @@ A file with multiple issues carries multiple findings, one span each. Every find
 
 ## Change suggestions
 
-Each finding may carry a `suggestion`: a unified-diff-style block — `-` the current span lines, `+` the proposed replacement — rendered from authoritative content. The span content comes from the review diff itself (its changed and context lines) or, when the span reaches beyond it, from the head file (RIGHT side) or the captured base file (LEFT side). Suggestions are produced only when the model proposed a concrete replacement in its review document and the replacement actually changes the span; a proposal identical to the current content is dropped. Humans can apply the suggestion directly; coding agents can consume it verbatim, and a future GitHub publisher can convert it into a `suggestion`-format comment because the path, side, and span travel with the finding.
+Each finding may carry a `suggestion`: a unified-diff-style block — `-` the current span lines, `+` the proposed replacement — rendered from authoritative content. The span content comes from the review diff itself (its changed and context lines) or, when the span reaches beyond it, from the head file (RIGHT side) or the captured base file (LEFT side). Suggestions are produced only when the model proposed a concrete replacement in its review document and the replacement actually changes the span; a proposal identical to the current content is dropped. Humans can apply the suggestion directly; coding agents can consume it verbatim, and the GitHub publisher renders it as a `suggestion` block in the inline comment because the path, side, and span travel with the finding.
 
 ## Fix prompts
 

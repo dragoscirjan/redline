@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { main } from '../src/review/cli.js';
+import { main, type CliDependencies } from '../src/review/cli.js';
+import type { ReviewPublisher } from '../src/publish/index.js';
 import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.js';
 
 describe('redline-review CLI', () => {
@@ -56,5 +57,79 @@ describe('redline-review CLI', () => {
     } finally {
       await fixture.cleanup();
     }
+  });
+
+  describe('publication', () => {
+    const HEAD = 'b'.repeat(40);
+
+    function fakePublisher(head = HEAD): {
+      publisher: ReviewPublisher;
+      calls: { currentHead: number; publishFileReview: number; upsertSummary: number };
+    } {
+      const calls = { currentHead: 0, publishFileReview: 0, upsertSummary: 0 };
+      const publisher: ReviewPublisher = {
+        async currentHead() {
+          calls.currentHead += 1;
+          return head;
+        },
+        async upsertSummary() {
+          calls.upsertSummary += 1;
+          return 100;
+        },
+        async publishFileReview() {
+          calls.publishFileReview += 1;
+          return 30;
+        },
+      };
+      return { publisher, calls };
+    }
+
+    function publicationEnvironment(fixture: Awaited<ReturnType<typeof createBundleFixture>>): NodeJS.ProcessEnv {
+      return {
+        ...cleanReviewEnvironment(fixture, 'echo'),
+        REDLINE_PUBLISH_TOKEN: 'gh-token',
+        REDLINE_REPOSITORY: 'owner/repository',
+        REDLINE_PULL_REQUEST: '14',
+        REDLINE_HEAD: HEAD,
+      };
+    }
+
+    it('publishes the managed summary after a clean review', async () => {
+      const fixture = await createBundleFixture();
+      try {
+        const { publisher, calls } = fakePublisher();
+        const exit = await main([], publicationEnvironment(fixture), { publisher });
+        expect(exit).toBe(0);
+        expect(calls.publishFileReview).toBe(0);
+        expect(calls.upsertSummary).toBe(1);
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+
+    it('exits 1 when the head moved during the review', async () => {
+      const fixture = await createBundleFixture();
+      try {
+        const { publisher, calls } = fakePublisher('c'.repeat(40));
+        const exit = await main([], publicationEnvironment(fixture), { publisher });
+        expect(exit).toBe(1);
+        expect(calls.publishFileReview).toBe(0);
+        expect(calls.upsertSummary).toBe(0);
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+
+    it('validates publication inputs in validate-only mode', async () => {
+      const fixture = await createBundleFixture();
+      try {
+        expect(await main(['--validate-only'], publicationEnvironment(fixture))).toBe(0);
+        expect(
+          await main(['--validate-only'], { ...publicationEnvironment(fixture), REDLINE_HEAD: 'short' }),
+        ).toBe(2);
+      } finally {
+        await fixture.cleanup();
+      }
+    });
   });
 });

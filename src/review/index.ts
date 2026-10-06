@@ -2,6 +2,7 @@ export {
   REDLINE_ENV_KEYS,
   type ModelConfiguration,
   type ParsedReviewEnvironment,
+  type PublicationEnvironment,
   type ReviewEnvironment,
   type ReviewMode,
   type SelectedModelCredential,

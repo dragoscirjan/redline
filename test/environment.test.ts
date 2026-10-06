@@ -88,6 +88,68 @@ describe('parseReviewEnvironment', () => {
   });
 });
 
+describe('publication environment', () => {
+  const PUBLICATION = {
+    REDLINE_PUBLISH_TOKEN: 'gh-token',
+    REDLINE_REPOSITORY: 'owner/repository',
+    REDLINE_PULL_REQUEST: '14',
+    REDLINE_HEAD: 'b'.repeat(40),
+  };
+
+  it('is absent without publication variables', () => {
+    expect(parseReviewEnvironment({}).publication).toBeUndefined();
+  });
+
+  it('parses the complete publication context in review mode', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const parsed = parseReviewEnvironment({
+        ...cleanReviewEnvironment(fixture, 'echo'),
+        ...PUBLICATION,
+      });
+      expect(parsed.publication).toEqual({
+        token: 'gh-token',
+        repository: 'owner/repository',
+        pullRequest: 14,
+        head: 'b'.repeat(40),
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects partial publication contexts', () => {
+    expect(() => parseReviewEnvironment({ ...PUBLICATION, REDLINE_HEAD: '' })).toThrow(
+      /publication requires .* together; missing: REDLINE_HEAD/u,
+    );
+  });
+
+  it('rejects publication without review execution', () => {
+    expect(() => parseReviewEnvironment(PUBLICATION)).toThrow(/publication requires review execution/u);
+  });
+
+  it('validates repository, pull request, and head shapes', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const base = cleanReviewEnvironment(fixture, 'echo');
+      expect(() => parseReviewEnvironment({ ...base, ...PUBLICATION, REDLINE_REPOSITORY: 'owner name' })).toThrow(
+        /REDLINE_REPOSITORY must use owner\/name syntax/u,
+      );
+      expect(() => parseReviewEnvironment({ ...base, ...PUBLICATION, REDLINE_PULL_REQUEST: '0' })).toThrow(
+        /REDLINE_PULL_REQUEST must be a pull request number/u,
+      );
+      expect(() => parseReviewEnvironment({ ...base, ...PUBLICATION, REDLINE_HEAD: 'abc' })).toThrow(
+        /REDLINE_HEAD must be a full commit identifier/u,
+      );
+      expect(() => parseReviewEnvironment({ ...base, ...PUBLICATION, REDLINE_PUBLISH_TOKEN: ' spaced ' })).toThrow(
+        /publication token is invalid/u,
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+});
+
 describe('parseModelConfig', () => {
   it('rejects malformed JSON, non-objects, and unknown fields', () => {
     expect(() => parseModelConfig('not json')).toThrow(/valid JSON/u);

@@ -56,25 +56,17 @@ jobs:
       # The checkout above is the trusted base revision: pull request code is
       # never installed, built, or executed.
       #
-      # TRANSITION: the action runs from the base revision, which still
-      # carries the previous design while this branch is open. That
-      # revision's review mode runs the replaced containerized pipeline,
-      # which fails silently (empty backend diagnostic, exit 0) on this
-      # branch's large restart diff, so review execution stays disabled
-      # here and the current pipeline's live behavior is validated by the
-      # CI harness matrix instead (echo, pi, opencode against the mock
-      # model endpoint). Re-enable backend/model-config/model-auth once
-      # this design is the base revision; the github-token secret stays
-      # wired for that flip. Only inputs the current action declares are
-      # passed: the previous action's legacy surface (github-token,
-      # credential-isolation, container-engine) is rejected by actionlint
-      # against this action manifest and is not needed in context-only
-      # mode.
+      # Auto-review on this repository's own pull requests: pi runs the real
+      # model review and publishes one review per file plus a managed
+      # summary, through the GH_TOKEN PAT (never the Actions GITHUB_TOKEN).
+      # While a base revision still lacks an input declared here, the extra
+      # input is ignored, so this call stays green across transitions.
       - name: Run Redline review action
         uses: ./github
         with:
-          backend: ''
-          model-config: ''
-          model-auth: ''
+          backend: pi
+          model-config: '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}'
+          model-auth: ${{ secrets.model-auth }}
+          github-token: ${{ secrets.github-token }}
           artifact-name: pull-request-review-${{ github.event.pull_request.number }}-${{ github.run_id }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

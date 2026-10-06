@@ -2,6 +2,12 @@
 # Runs one end-to-end review with the given harness (echo, pi, or opencode)
 # against the local mock model endpoint. Used by the CI harness matrix and
 # usable locally: bash test/harness-matrix-run.sh <harness>
+#
+# The review output is written to $HARNESS_MATRIX_OUTPUT_DIR when set (used
+# by CI to upload the per-harness review artifact); otherwise it stays inside
+# the throwaway fixture directory. The echo harness answers clean; pi and
+# opencode are served a scripted finding document so the run demonstrates
+# real validated findings end to end.
 set -euo pipefail
 
 HARNESS="${1:?usage: harness-matrix-run.sh <echo|pi|opencode>}"
@@ -12,6 +18,8 @@ esac
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMP="$(mktemp -d)"
+OUTPUT_DIR="${HARNESS_MATRIX_OUTPUT_DIR:-$TMP/output}"
+mkdir -p "$OUTPUT_DIR"
 MOCK_PID=""
 
 cleanup() {
@@ -54,41 +62,69 @@ git -C "$REPO" worktree add --detach "$TMP/source" "$HEAD_SHA" >/dev/null 2>&1
     --source "$TMP/source-at-head"
 )
 
-# Mock model server on an ephemeral loopback port.
-node "$ROOT/test/fixtures/mock-model-server.mjs" 0 > "$TMP/mock-port.json" &
-MOCK_PID=$!
-for _ in $(seq 1 50); do
-  [[ -s "$TMP/mock-port.json" ]] && break
-  sleep 0.1
-done
-PORT="$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).port))' "$TMP/mock-port.json")"
-printf 'harness=%s mock-port=%s\n' "$HARNESS" "$PORT"
+PORT=""
+if [[ "$HARNESS" != "echo" ]]; then
+  # Scripted finding document for the fixture diff: RIGHT line 1 is "new".
+  # The runner must accept it through schema and diff-evidence validation.
+  MOCK_RESPONSE_TEXT='{"version":1,"fileId":"000001","outcome":"findings","findings":[{"category":"correctness","classification":"defect","severity":"high","confidence":0.9,"side":"RIGHT","line":1,"evidence":"new","impact":"The changed line breaks the fixture contract for this review.","fix":"Restore the previous value or update the contract."}]}' \
+    node "$ROOT/test/fixtures/mock-model-server.mjs" 0 > "$TMP/mock-port.json" &
+  MOCK_PID=$!
+  for _ in $(seq 1 50); do
+    [[ -s "$TMP/mock-port.json" ]] && break
+    sleep 0.1
+  done
+  PORT="$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).port))' "$TMP/mock-port.json")"
+fi
+printf 'harness=%s mock-port=%s output=%s\n' "$HARNESS" "${PORT:-n/a}" "$OUTPUT_DIR"
+
+MODEL_CONFIG='{"provider":"mock","endpoint":"http://127.0.0.1:1/v1","model":"test-model"}'
+if [[ -n "$PORT" ]]; then
+  MODEL_CONFIG="$(printf '{"provider":"mock","endpoint":"http://127.0.0.1:%s/v1","model":"test-model"}' "$PORT")"
+fi
 
 REDLINE_HARNESS="$HARNESS" \
 REDLINE_REVIEW_DIR="$TMP/review" \
 REDLINE_SOURCE_DIR="$TMP/source-at-head" \
-REDLINE_OUTPUT_DIR="$TMP/output" \
-REDLINE_MODEL_CONFIG="$(printf '{"provider":"mock","endpoint":"http://127.0.0.1:%s/v1","model":"test-model"}' "$PORT")" \
+REDLINE_OUTPUT_DIR="$OUTPUT_DIR" \
+REDLINE_MODEL_CONFIG="$MODEL_CONFIG" \
 REDLINE_MODEL_AUTH='{"mock":"test-key"}' \
 REDLINE_TIMEOUT=10m \
 node "$ROOT/dist/src/review/cli.js"
 
-# Assert the review completed clean for the single fixture file.
-node - "$HARNESS" "$TMP/output/reviews/summary.json" <<'NODE'
+# Assert the review outcome for the single fixture file. Echo is the
+# deterministic clean harness; pi and opencode must produce the scripted,
+# diff-validated finding.
+node - "$HARNESS" "$OUTPUT_DIR/reviews/summary.json" "$OUTPUT_DIR/reviews/000001.json" <<'NODE'
 const fs = require('fs');
 const harness = process.argv[2];
 const summary = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+const record = JSON.parse(fs.readFileSync(process.argv[4], 'utf8'));
+const expectFindings = harness !== 'echo';
+const expectedOutcome = expectFindings ? 'findings' : 'clean';
 const failures = [];
 if (summary.harness !== harness) failures.push(`harness=${summary.harness} expected=${harness}`);
 if (summary.reviewedFiles !== 1) failures.push(`reviewedFiles=${summary.reviewedFiles}`);
 if (summary.omittedFiles !== 0) failures.push(`omittedFiles=${summary.omittedFiles}`);
-if (summary.findings !== 0) failures.push(`findings=${summary.findings}`);
+const expectedFindingCount = expectFindings ? 1 : 0;
+if (summary.findings !== expectedFindingCount) failures.push(`findings=${summary.findings} expected=${expectedFindingCount}`);
 const file = summary.files[0];
-if (!file || file.outcome !== 'clean') failures.push(`file outcome=${file && file.outcome}`);
+if (!file || file.outcome !== expectedOutcome) failures.push(`file outcome=${file && file.outcome} expected=${expectedOutcome}`);
+if (record.outcome !== expectedOutcome) failures.push(`record outcome=${record.outcome} expected=${expectedOutcome}`);
+if (expectFindings) {
+  const finding = record.findings && record.findings[0];
+  if (!finding) {
+    failures.push('finding missing from record');
+  } else {
+    if (!/^f-[0-9a-f]{24}$/u.test(finding.id)) failures.push(`finding id=${finding.id} is not a stable id`);
+    if (finding.side !== 'RIGHT' || finding.line !== 1 || finding.evidence !== 'new') {
+      failures.push(`finding mapping=${finding.side}:${finding.line} "${finding.evidence}" is not RIGHT:1 "new"`);
+    }
+  }
+}
 if (failures.length > 0) {
   console.error(`harness matrix assertion failed: ${failures.join(', ')}`);
   process.exit(1);
 }
-console.log(`harness matrix ok: ${harness} reviewed ${summary.reviewedFiles} file clean`);
+console.log(`harness matrix ok: ${harness} reviewed ${summary.reviewedFiles} file, outcome ${expectedOutcome}, findings ${summary.findings}`);
 NODE
-head -8 "$TMP/output/reviews/summary.md"
+head -12 "$OUTPUT_DIR/reviews/summary.md"

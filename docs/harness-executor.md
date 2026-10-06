@@ -64,6 +64,16 @@ It answers every prompt with a `clean` review document for the file the
 prompt targets, extracted from the prompt's machine-readable manifest block.
 It never spawns a process and never needs a model endpoint.
 
+### The CI harness matrix
+
+The CI workflow runs every harness end to end against the local mock model
+endpoint and publishes each harness's review output as a
+`harness-<harness>-reviews-…` artifact. Pi and OpenCode are served a scripted
+finding document, so the artifacts carry real diff-validated findings
+(stable id, side, line, byte-identical evidence) through the whole pipeline,
+while echo demonstrates the deterministic clean path. No secrets or live
+models are involved.
+
 ## Adding a harness
 
 1. Implement the `HarnessExecutor` interface in a new module under

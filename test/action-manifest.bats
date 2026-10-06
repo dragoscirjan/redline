@@ -56,7 +56,7 @@ PY
   grep -Fq 'src/context-bundle.sh' "$ACTION"
   grep -Fq 'name: ${{ inputs.artifact-name }}-context' "$ACTION"
   grep -Fq 'name: ${{ inputs.artifact-name }}-reviews' "$ACTION"
-  grep -Fq 'actions/upload-artifact@v4' "$ACTION"
+  grep -Fq 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1' "$ACTION"
 }
 
 @test "action gates review execution on the full review input set" {

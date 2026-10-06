@@ -87,7 +87,10 @@ Review inputs must arrive together; partial selections fail. Unknown
   action-manifest, bundle, and gate tests run with bats (`test/*.bats`).
 - The CI harness matrix (`test/harness-matrix-run.sh`) runs every harness
   end to end against the local mock model endpoint
-  (`test/fixtures/mock-model-server.mjs`); no secrets or live models.
+  (`test/fixtures/mock-model-server.mjs`) and uploads each harness's review
+  output as a `harness-<harness>-reviews-…` artifact — pi and opencode are
+  served a scripted finding so the artifact carries diff-validated findings,
+  not only clean runs. No secrets or live models.
 - Live-harness integration tests are opt-in via
   `REDLINE_LIVE_HARNESS_TESTS=1` and need the harness binaries on PATH.
 - Tests use temporary directories only and never mutate the source checkout.

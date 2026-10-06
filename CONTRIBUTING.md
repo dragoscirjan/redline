@@ -45,7 +45,7 @@ Each pull request adds or updates tests for changed behavior.
 - **Unit tests** (vitest, `test/*.test.ts`) cover parsing, validation, prompt assembly, diff-line mapping, finding validation, and output writing.
 - **Integration tests** (vitest) cover the review runner end to end with the echo harness and a scripted executor, plus the CLI entry points.
 - **CLI and manifest tests** (bats, `test/*.bats`) cover the built CLI against real bundle fixtures, the GitHub Action manifest contract, and the validation gate itself.
-- **Harness matrix** (`test/harness-matrix-run.sh`, used by CI) runs echo, pi, and opencode end to end against the local mock model endpoint.
+- **Harness matrix** (`test/harness-matrix-run.sh`, used by CI) runs echo, pi, and opencode end to end against the local mock model endpoint; CI uploads each harness's review output as a per-harness artifact, with a scripted finding for pi and opencode so the artifacts demonstrate diff-validated findings.
 - **Live-harness tests** are opt-in: `REDLINE_LIVE_HARNESS_TESTS=1` with the harness binaries on PATH.
 - **End-to-end tests** against a real repository are manual and opt-in; never target a production repository.
 

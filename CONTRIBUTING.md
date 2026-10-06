@@ -67,6 +67,8 @@ Formatting, linting, duplication analysis, dependency vulnerability audits, reco
 
 A passing local gate does not prove live model quality, forge comment publication, or production action compatibility.
 
+The publication layer keeps the pull request informed while a review runs: a start notification is published into the managed summary comment before the review executes, and the same comment is replaced by the run summary or the failure state at completion. A failed start notification never aborts the review — artifacts remain the guaranteed output.
+
 ## Documentation
 
 Product documentation lives under `docs/` as a VitePress site. Register new pages in `docs/.vitepress/config.ts`. Build with `pnpm run docs` before pushing; the gate enforces it. Write documentation plainly and concretely; avoid filler.

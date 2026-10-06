@@ -113,6 +113,53 @@ export function renderFileReviewBody(scope: ReviewScope, record: FileReviewRecor
   return lines.join('\n');
 }
 
+export interface RunningSummaryInfo {
+  readonly harness: string;
+  readonly model: string;
+  /** ISO timestamp captured when the review run started. */
+  readonly startedAt: string;
+}
+
+/**
+ * Renders the running body published while the review executes. It ends
+ * with the standard summary marker, so the final summary upserts this
+ * comment in place instead of adding a second one.
+ */
+export function renderRunningSummaryBody(scope: ReviewScope, info: RunningSummaryInfo): string {
+  const lines = [
+    '## Redline review in progress',
+    '',
+    `- **Started at:** ${info.startedAt}`,
+    `- **Harness:** ${info.harness} (${info.model})`,
+    '',
+    'The review runs one prompt per reviewed file and can take a while. Findings will be attached as inline comments, and this comment will be replaced by the run summary when the review completes.',
+    '',
+    summaryMarker(scope),
+  ];
+  return lines.join('\n');
+}
+
+/**
+ * Renders the body published when the review run itself fails, so the
+ * comment does not stay at "running". The message is caller-redacted and
+ * bounded; it ends with the summary marker for the same in-place update.
+ */
+export function renderFailedSummaryBody(scope: ReviewScope, info: RunningSummaryInfo, message: string): string {
+  const bounded = message.slice(0, 500).replaceAll(/[\u0000-\u001f]+/gu, ' ');
+  const lines = [
+    '## Redline review failed',
+    '',
+    `- **Started at:** ${info.startedAt}`,
+    `- **Harness:** ${info.harness} (${info.model})`,
+    `- **Reason:** ${bounded}`,
+    '',
+    'No findings were published. The run artifacts contain the diagnostics.',
+    '',
+    summaryMarker(scope),
+  ];
+  return lines.join('\n');
+}
+
 export interface SummaryPublicationNotes {
   /** Number of file reviews published this run. */
   readonly publishedFileReviews: number;

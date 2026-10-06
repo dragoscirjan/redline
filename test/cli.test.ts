@@ -94,14 +94,94 @@ describe('redline-review CLI', () => {
       };
     }
 
-    it('publishes the managed summary after a clean review', async () => {
+    it('announces the start and upserts the same summary after a clean review', async () => {
       const fixture = await createBundleFixture();
       try {
-        const { publisher, calls } = fakePublisher();
+        const bodies: string[] = [];
+        const calls = { currentHead: 0, publishFileReview: 0, upsertSummary: 0 };
+        const publisher: ReviewPublisher = {
+          async currentHead() {
+            calls.currentHead += 1;
+            return HEAD;
+          },
+          async upsertSummary(_scope, body) {
+            calls.upsertSummary += 1;
+            bodies.push(body);
+            return 100; // Same comment id: the final body PATCHes the running one.
+          },
+          async publishFileReview() {
+            calls.publishFileReview += 1;
+            return 30;
+          },
+        };
         const exit = await main([], publicationEnvironment(fixture), { publisher });
         expect(exit).toBe(0);
         expect(calls.publishFileReview).toBe(0);
-        expect(calls.upsertSummary).toBe(1);
+        // Start announcement plus final summary, in place.
+        expect(calls.upsertSummary).toBe(2);
+        expect(bodies[0]).toContain('Redline review in progress');
+        expect(bodies[1]).toContain('Redline review summary');
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+
+    it('updates the summary to the failure state when the review crashes', async () => {
+      const fixture = await createBundleFixture();
+      try {
+        const broken = {
+          ...publicationEnvironment(fixture),
+          REDLINE_REVIEW_DIR: '/nonexistent/redline-review-dir',
+        };
+        const bodies: string[] = [];
+        const calls = { currentHead: 0, publishFileReview: 0, upsertSummary: 0 };
+        const publisher: ReviewPublisher = {
+          async currentHead() {
+            calls.currentHead += 1;
+            return HEAD;
+          },
+          async upsertSummary(_scope, body) {
+            calls.upsertSummary += 1;
+            bodies.push(body);
+            return 100;
+          },
+          async publishFileReview() {
+            calls.publishFileReview += 1;
+            return 30;
+          },
+        };
+        const exit = await main([], broken, { publisher });
+        expect(exit).toBe(1);
+        expect(calls.upsertSummary).toBe(2);
+        expect(bodies[0]).toContain('Redline review in progress');
+        expect(bodies[1]).toContain('Redline review failed');
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+
+    it('continues the review when the start notification fails', async () => {
+      const fixture = await createBundleFixture();
+      try {
+        const calls = { currentHead: 0, publishFileReview: 0, upsertSummary: 0 };
+        const publisher: ReviewPublisher = {
+          async currentHead() {
+            calls.currentHead += 1;
+            return HEAD;
+          },
+          async upsertSummary() {
+            calls.upsertSummary += 1;
+            if (calls.upsertSummary === 1) throw new Error('permission denied');
+            return 100;
+          },
+          async publishFileReview() {
+            calls.publishFileReview += 1;
+            return 30;
+          },
+        };
+        const exit = await main([], publicationEnvironment(fixture), { publisher });
+        expect(exit).toBe(0);
+        expect(calls.upsertSummary).toBe(2);
       } finally {
         await fixture.cleanup();
       }
@@ -114,6 +194,8 @@ describe('redline-review CLI', () => {
         const exit = await main([], publicationEnvironment(fixture), { publisher });
         expect(exit).toBe(1);
         expect(calls.publishFileReview).toBe(0);
+        // The stale-head guard runs inside announceStart before anything
+        // else is published.
         expect(calls.upsertSummary).toBe(0);
       } finally {
         await fixture.cleanup();

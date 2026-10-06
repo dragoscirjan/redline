@@ -16,7 +16,10 @@ import {
   fileReviewMarker,
   renderFileReviewBody,
   renderFindingComment,
+  renderFailedSummaryBody,
+  renderRunningSummaryBody,
   renderSummaryBody,
+  type RunningSummaryInfo,
   summaryMarker,
 } from './render.js';
 import type { FileReviewPublication, ReviewPublisher, ReviewScope } from './types.js';
@@ -57,6 +60,28 @@ export class PublicationService {
 
   get scope(): ReviewScope {
     return this.#scope;
+  }
+
+  /**
+   * Announces that a review started, by publishing the running body into
+   * the marker-managed summary comment. Throws when the pull request head
+   * moved past the reviewed commit — the same guard the final publication
+   * applies — and on upsert failure; the CLI decides whether to continue.
+   */
+  async announceStart(info: RunningSummaryInfo): Promise<number> {
+    const currentHead = await this.#publisher.currentHead(this.#scope);
+    if (currentHead !== this.#scope.head) {
+      throw new Error('pull request head changed during review');
+    }
+    return this.#publisher.upsertSummary(this.#scope, renderRunningSummaryBody(this.#scope, info), summaryMarker(this.#scope));
+  }
+
+  /**
+   * Replaces the running body with the failure state after a crashed
+   * review; best-effort at the call site, so failures here propagate.
+   */
+  async announceFailure(info: RunningSummaryInfo, message: string): Promise<number> {
+    return this.#publisher.upsertSummary(this.#scope, renderFailedSummaryBody(this.#scope, info, message), summaryMarker(this.#scope));
   }
 
   /** Builds one file review publication from a written record. */

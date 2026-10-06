@@ -9,7 +9,12 @@
  */
 
 import { pathToFileURL } from 'node:url';
-import { publishRecords, type PublicationOutcome } from '../publish/index.js';
+import {
+  GitHubReviewPublisher,
+  PublicationService,
+  type PublicationOutcome,
+  type RunningSummaryInfo,
+} from '../publish/index.js';
 import type { ReviewPublisher } from '../publish/index.js';
 import { parseReviewEnvironment } from './environment.js';
 import { runFileReviews } from './runner.js';
@@ -68,18 +73,56 @@ export async function main(
   }
 
   try {
-    const result = await runFileReviews({ environment: parsed.review as NonNullable<typeof parsed.review> });
-    writeLine(process.stdout, JSON.stringify(result.summary));
-
-    let exitCode = result.exitCode;
+    const review = parsed.review as NonNullable<typeof parsed.review>;
     if (parsed.publication !== undefined) {
+      const publisher = dependencies.publisher ?? new GitHubReviewPublisher({ token: parsed.publication.token });
+      const service = new PublicationService(publisher, {
+        repository: parsed.publication.repository,
+        pullRequest: parsed.publication.pullRequest,
+        head: parsed.publication.head,
+      });
+      // The start notification goes out before the review executes: a run
+      // can take tens of minutes, and the PR must not look abandoned. A
+      // failed announcement never aborts the run — the artifacts remain
+      // the guaranteed output.
+      const running: RunningSummaryInfo = {
+        harness: review.harness,
+        model: review.model.model,
+        startedAt: new Date().toISOString(),
+      };
       try {
-        const publication = await publishRecords({
-          records: result.records,
-          summary: result.summary,
-          publication: parsed.publication,
-          ...(dependencies.publisher !== undefined ? { publisher: dependencies.publisher } : {}),
-        });
+        await service.announceStart(running);
+      } catch (error) {
+        writeLine(
+          process.stderr,
+          `redline-review: start notification failed (continuing): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      let result;
+      try {
+        result = await runFileReviews({ environment: review });
+      } catch (error) {
+        // Defense in depth: the failure text is published, so the
+        // publication token must never appear in it.
+        const message = (error instanceof Error ? error.message : String(error))
+          .split(parsed.publication.token)
+          .join('[redacted]');
+        try {
+          await service.announceFailure(running, message);
+        } catch (notifyError) {
+          writeLine(
+            process.stderr,
+            `redline-review: failure notification failed: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`,
+          );
+        }
+        throw error;
+      }
+      writeLine(process.stdout, JSON.stringify(result.summary));
+
+      let exitCode = result.exitCode;
+      try {
+        const publication = await service.publish(result.records, result.summary);
         writeLine(process.stdout, JSON.stringify(publicationReport(publication)));
         const requested = publication.files.length;
         if (requested > 0 && publication.publishedFileReviews === 0 && publication.failedFileReviews > 0) {
@@ -92,8 +135,12 @@ export async function main(
         );
         exitCode = RUN_FAILURE_EXIT;
       }
+      return exitCode;
     }
-    return exitCode;
+
+    const result = await runFileReviews({ environment: review });
+    writeLine(process.stdout, JSON.stringify(result.summary));
+    return result.exitCode;
   } catch (error) {
     writeLine(process.stderr, `redline-review: ${error instanceof Error ? error.message : String(error)}`);
     return RUN_FAILURE_EXIT;

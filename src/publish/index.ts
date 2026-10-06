@@ -10,11 +10,14 @@ export {
   type GitHubReviewPublisherOptions,
 } from './github-publisher.js';
 export {
+  type RunningSummaryInfo,
   type SummaryPublicationNotes,
   fileReviewMarker,
   findingMarker,
+  renderFailedSummaryBody,
   renderFileReviewBody,
   renderFindingComment,
+  renderRunningSummaryBody,
   renderSummaryBody,
   summaryMarker,
 } from './render.js';

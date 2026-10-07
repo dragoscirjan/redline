@@ -64,9 +64,48 @@ describe('parseFileReviewDocument', () => {
     ).toThrow(/unsupported version/u);
   });
 
-  it('rejects invalid JSON, fences, and extra prose', () => {
+  it('rejects invalid JSON and extra prose', () => {
     expect(() => parseFileReviewDocument('nope')).toThrow(/not valid JSON/u);
+    // Fenced content is unwrapped, then strict-validated: this fenced body
+    // is a valid JSON envelope but violates the schema.
     expect(() => parseFileReviewDocument('```json\n{"version":2}\n```')).toThrow();
+  });
+
+  it('unwraps a single code fence around an otherwise valid document', () => {
+    const fenced = '```json\n{"version":2,"fileId":"000001","outcome":"clean","findings":[]}\n```';
+    expect(parseFileReviewDocument(fenced).outcome).toBe('clean');
+  });
+
+  it('unwraps a fenced document whose content carries inner fences', () => {
+    // The real shape from live model output: inner ``` runs inside a JSON
+    // string value (an unescaped markdown suggestion), closed by the final
+    // fence. The anchored unwrap takes everything up to the last fence.
+    const document = {
+      version: 2,
+      fileId: '000001',
+      outcome: 'findings',
+      reason: '',
+      findings: [
+        {
+          category: 'security',
+          classification: 'defect',
+          severity: 'medium',
+          confidence: 1.0,
+          side: 'RIGHT',
+          startLine: 78,
+          endLine: 79,
+          evidence: '## CLI usage',
+          impact: 'i',
+          fix: 'f',
+          suggestedChange: 'see:\n```markdown\ntable\n```',
+        },
+      ],
+    };
+    const fenced = ['```json', JSON.stringify(document), '```', ''].join('\n');
+    const parsed = parseFileReviewDocument(fenced);
+    expect(parsed.outcome).toBe('findings');
+    expect(parsed.findings).toHaveLength(1);
+    expect(parsed.findings[0]?.suggestedChange).toContain('```markdown');
   });
 
   it('rejects schema violations', () => {
@@ -74,9 +113,21 @@ describe('parseFileReviewDocument', () => {
       JSON.stringify({ version: 2, fileId: '000001', outcome: 'clean', findings: [], ...overrides });
     expect(() => parseFileReviewDocument(base({ outcome: 'spooky' }))).toThrow(/unsupported/u);
     expect(() => parseFileReviewDocument(base({ outcome: 'omitted' }))).toThrow(/reason is required/u);
-    expect(() => parseFileReviewDocument(base({ outcome: 'clean', reason: 'why' }))).toThrow(
-      /reason is only valid/u,
+    // Envelope tolerance: a reason on a non-omitted outcome is dropped.
+    const cleanWithReason = parseFileReviewDocument(base({ outcome: 'clean', reason: 'why' }));
+    expect(cleanWithReason.outcome).toBe('clean');
+    expect(cleanWithReason.reason).toBeUndefined();
+    // Envelope tolerance: findings defaults to empty for non-findings outcomes.
+    const cleanWithoutFindings = parseFileReviewDocument('{"version":2,"fileId":"000001","outcome":"clean"}');
+    expect(cleanWithoutFindings.findings).toEqual([]);
+    // Envelope tolerance: an empty-string reason on a findings outcome is
+    // absent, and the findings survive (observed live from local models).
+    const findingsWithEmptyReason = parseFileReviewDocument(
+      '{"version":2,"fileId":"000001","outcome":"findings","reason":"","findings":[{"category":"correctness","classification":"defect","severity":"low","confidence":0.65,"side":"RIGHT","startLine":1,"endLine":1,"evidence":"+new","impact":"i","fix":"f"}]}',
     );
+    expect(findingsWithEmptyReason.outcome).toBe('findings');
+    expect(findingsWithEmptyReason.reason).toBeUndefined();
+    expect(findingsWithEmptyReason.findings).toHaveLength(1);
     expect(() => parseFileReviewDocument(base({ outcome: 'findings', findings: [] }))).toThrow(
       /requires at least one finding/u,
     );

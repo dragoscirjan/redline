@@ -108,11 +108,25 @@ function parseFinding(value: unknown): ReviewFinding {
   };
 }
 
+/**
+ * Models frequently wrap a JSON payload in a markdown code fence even when
+ * instructed not to. When the entire payload is exactly one fenced block,
+ * unwrap it — inner fences inside string values are fine because the
+ * closing fence is anchored to the end of the payload. Anything that does
+ * not match stays unwrapped and fails the strict JSON parse below.
+ * Validation is unchanged — this only normalizes the container.
+ */
+function unwrapCodeFence(raw: string): string {
+  const trimmed = raw.trim();
+  const match = /^```[^\n]*\n([\s\S]*?)\n?```$/u.exec(trimmed);
+  return match === null ? trimmed : (match[1] as string);
+}
+
 /** Parses the raw model text as exactly one review document. */
 export function parseFileReviewDocument(raw: string): FileReviewDocument {
   let decoded: unknown;
   try {
-    decoded = JSON.parse(raw) as unknown;
+    decoded = JSON.parse(unwrapCodeFence(raw)) as unknown;
   } catch {
     throw new Error('review document is not valid JSON');
   }
@@ -123,19 +137,32 @@ export function parseFileReviewDocument(raw: string): FileReviewDocument {
   }
   const fileId = boundedString(decoded.fileId, 'review document.fileId', 6);
   const outcome = enumValue(decoded.outcome, OUTCOMES, 'review document.outcome');
-  const reason =
-    decoded.reason === undefined ? undefined : boundedString(decoded.reason, 'review document.reason', 500);
-  if (outcome === 'omitted' && (reason === undefined || reason.length === 0)) {
+  // Envelope tolerances for local and small models (the v2 schema is
+  // enforced on everything that carries meaning): a reason on a
+  // non-omitted outcome is dropped — only omission carries a reason in
+  // records — and an absent findings array on a non-findings outcome
+  // defaults to empty. Findings themselves, span anchoring, and evidence
+  // keep full strict validation.
+  let reason: string | undefined;
+  if (
+    (typeof decoded.reason === 'string' && decoded.reason.trim().length === 0) ||
+    decoded.reason === null
+  ) {
+    // Empty-string or null reason: absent, whatever the outcome. Models
+    // emit these routinely alongside findings.
+  } else if (decoded.reason !== undefined) {
+    const provided = boundedString(decoded.reason, 'review document.reason', 500);
+    if (outcome === 'omitted') reason = provided;
+  }
+  if (outcome === 'omitted' && reason === undefined) {
     throw new Error('review document.reason is required when the outcome is omitted');
   }
-  if (outcome !== 'omitted' && reason !== undefined) {
-    throw new Error('review document.reason is only valid when the outcome is omitted');
-  }
-  if (!Array.isArray(decoded.findings)) throw new Error('review document.findings must be an array');
-  if (decoded.findings.length > MAX_FILE_FINDINGS) {
+  const rawFindings = decoded.findings === undefined && outcome !== 'findings' ? [] : decoded.findings;
+  if (!Array.isArray(rawFindings)) throw new Error('review document.findings must be an array');
+  if (rawFindings.length > MAX_FILE_FINDINGS) {
     throw new Error(`review document.findings exceeds the ${MAX_FILE_FINDINGS}-finding limit`);
   }
-  const findings = decoded.findings.map((item) => parseFinding(item));
+  const findings = rawFindings.map((item) => parseFinding(item));
   if (outcome === 'clean' && findings.length > 0) {
     throw new Error('clean outcome is inconsistent with findings');
   }

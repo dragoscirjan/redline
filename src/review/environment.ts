@@ -70,6 +70,13 @@ export interface ModelConfiguration {
   readonly provider: string;
   readonly endpoint: string;
   readonly model: string;
+  /**
+   * `"none"` selects a credential-less profile for endpoints that need no
+   * authentication — local model runners (Ollama, LM Studio, llama.cpp
+   * server, vLLM) and unauthenticated CI mocks. `REDLINE_MODEL_AUTH` is
+   * not required, and must not be supplied, in this mode.
+   */
+  readonly auth: 'none' | undefined;
 }
 
 export interface SelectedModelCredential {
@@ -83,7 +90,8 @@ export interface ReviewEnvironment {
   readonly sourceDirectory: string;
   readonly outputDirectory: string;
   readonly model: ModelConfiguration;
-  readonly credential: SelectedModelCredential;
+  /** Undefined in the credential-less profile (`auth: "none"`). */
+  readonly credential: SelectedModelCredential | undefined;
   readonly findingScope: FindingScope;
   readonly timeout: Duration;
 }
@@ -151,12 +159,19 @@ function boundedString(value: unknown, maximumLength: number, label: string): st
 
 export function parseModelConfig(raw: string): ModelConfiguration {
   const parsed = parseJsonObject(raw, MAX_MODEL_CONFIG_BYTES, 'model-config');
-  assertExactKeys(parsed, ['provider', 'endpoint', 'model'], 'model-config');
+  const hasAuthField = Object.hasOwn(parsed, 'auth');
+  assertExactKeys(
+    parsed,
+    hasAuthField ? ['provider', 'endpoint', 'model', 'auth'] : ['provider', 'endpoint', 'model'],
+    'model-config',
+  );
 
   const provider = boundedString(parsed.provider, 64, 'model-config provider');
   if (!PROVIDER_PATTERN.test(provider)) throw new Error('model-config provider is invalid');
   const endpointValue = boundedString(parsed.endpoint, 2_048, 'model-config endpoint');
   const model = boundedString(parsed.model, 256, 'model-config model');
+  const auth = hasAuthField ? boundedString(parsed.auth, 16, 'model-config auth') : undefined;
+  if (auth !== undefined && auth !== 'none') throw new Error('model-config auth only supports "none"');
 
   let endpoint: URL;
   try {
@@ -167,14 +182,17 @@ export function parseModelConfig(raw: string): ModelConfiguration {
   if (endpoint.protocol !== 'http:' && endpoint.protocol !== 'https:') {
     throw new Error('model-config endpoint must use http or https');
   }
-  return Object.freeze({ provider, endpoint: endpointValue, model });
+  return Object.freeze({ provider, endpoint: endpointValue, model, auth });
 }
 
 export function selectModelCredential(
   model: ModelConfiguration,
   modelCredentials: string,
   mapLabel = 'model-auth',
-): SelectedModelCredential {
+): SelectedModelCredential | undefined {
+  // Credential-less profile: local model runners and unauthenticated mocks
+  // ignore the authorization header, so no credential is selected.
+  if (model.auth === 'none') return undefined;
   const credentials = parseJsonObject(modelCredentials, MAX_MODEL_CREDENTIALS_BYTES, mapLabel);
   if (!Object.hasOwn(credentials, model.provider)) {
     throw new Error(`${mapLabel} has no entry for the configured provider`);
@@ -328,8 +346,11 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
     if (publication !== undefined) throw new Error('publication requires review execution');
     return Object.freeze({ mode: 'context-only', timeout, verbosity, review: undefined, publication: undefined });
   }
-  if (provided.length < REVIEW_REQUIRED_KEYS.length) {
-    const missing = REVIEW_REQUIRED_KEYS.filter((key) => !provided.includes(key));
+  const missing = REVIEW_REQUIRED_KEYS.filter((key) => !provided.includes(key));
+  const credentialLessAllowed =
+    missing.length === 1 && missing[0] === 'REDLINE_MODEL_AUTH' &&
+    parseModelConfig(environment.REDLINE_MODEL_CONFIG ?? '').auth === 'none';
+  if (missing.length > 0 && !credentialLessAllowed) {
     throw new Error(`review execution requires ${REVIEW_REQUIRED_KEYS.join(', ')} together; missing: ${missing.join(', ')}`);
   }
 
@@ -338,7 +359,17 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
     throw new Error('REDLINE_HARNESS is unsupported');
   }
   const model = parseModelConfig(environment.REDLINE_MODEL_CONFIG ?? '');
-  const credential = selectModelCredential(model, environment.REDLINE_MODEL_AUTH ?? '');
+  const modelAuthRaw = environment.REDLINE_MODEL_AUTH ?? '';
+  let credential: SelectedModelCredential | undefined;
+  if (model.auth === 'none') {
+    // A supplied credential map is tolerated and NOT consulted: the
+    // action's review gate requires a non-empty model-auth, so action
+    // users pass a placeholder for local-model servers. The credential
+    // never reaches the harness either way.
+    credential = undefined;
+  } else {
+    credential = selectModelCredential(model, modelAuthRaw);
+  }
 
   const review: ReviewEnvironment = Object.freeze({
     harness: harnessRaw,

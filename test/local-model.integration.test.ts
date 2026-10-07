@@ -1,0 +1,96 @@
+/**
+ * Opt-in live local-model integration test.
+ *
+ * Runs the real review pipeline end to end against a local OpenAI-compatible
+ * model server (Ollama, LM Studio, llama.cpp server, vLLM) with the
+ * credential-less `auth: "none"` profile. Enable with
+ * REDLINE_LOCAL_MODEL_TESTS=1; additionally set REDLINE_LOCAL_MODEL_CONFIG
+ * to the model config JSON and REDLINE_LOCAL_MODEL_BIN to the harness
+ * binary (default `pi`). Skipped unless the endpoint answers on `/v1/models`.
+ */
+
+import { spawn } from 'node:child_process';
+import { describe, expect, it } from 'vitest';
+import { parseReviewEnvironment } from '../src/review/environment.js';
+import { runFileReviews } from '../src/review/runner.js';
+import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.js';
+
+const ENABLED = process.env.REDLINE_LOCAL_MODEL_TESTS === '1';
+const MODEL_CONFIG = process.env.REDLINE_LOCAL_MODEL_CONFIG ?? '';
+const MODEL_ENDPOINT = (() => {
+  try {
+    // The configured endpoint already carries its API path (usually /v1);
+    // probing its /models keeps path-prefixed endpoints working.
+    return MODEL_CONFIG.length > 0 ? JSON.parse(MODEL_CONFIG).endpoint : '';
+  } catch {
+    return '';
+  }
+})();
+const HARNESS_BIN = process.env.REDLINE_LOCAL_MODEL_BIN ?? 'pi';
+
+async function binaryAvailable(command: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = spawn(command, ['--version'], { stdio: 'ignore' });
+    probe.on('error', () => resolve(false));
+    probe.on('close', (code) => resolve(code === 0 || code === 1));
+  });
+}
+
+async function endpointAlive(endpoint: string): Promise<boolean> {
+  if (endpoint.length === 0) return false;
+  return new Promise((resolve) => {
+    // --fail rejects HTTP errors (404 on a wrong path is not "alive").
+    const probe = spawn('curl', ['-s', '--fail', '-m', '3', `${endpoint}/models`], { stdio: 'ignore' });
+    probe.on('error', () => resolve(false));
+    probe.on('close', (code) => resolve(code === 0));
+  });
+}
+
+describe.skipIf(!ENABLED)('local model runner integration', () => {
+  it('reviews the fixture bundle with the credential-less profile', async () => {
+    expect(MODEL_CONFIG).toMatch(/"auth"\s*:\s*"none"/u);
+    expect(await binaryAvailable(HARNESS_BIN)).toBe(true);
+    expect(await endpointAlive(MODEL_ENDPOINT)).toBe(true);
+
+    // Small local models judge nondeterministically; a run where the model
+    // omits the file is a model judgment, not a plumbing failure. Retry so
+    // the test proves the profile CAN produce a real review end to end.
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const fixture = await createBundleFixture();
+      try {
+        const environment = {
+          ...cleanReviewEnvironment(fixture, HARNESS_BIN),
+          REDLINE_MODEL_CONFIG: MODEL_CONFIG,
+          REDLINE_MODEL_AUTH: '',
+          REDLINE_FINDING_SCOPE: 'defects',
+        };
+        const parsed = parseReviewEnvironment(environment);
+        expect(parsed.mode).toBe('review');
+        expect(parsed.review?.credential).toBeUndefined();
+        const result = await runFileReviews({ environment: parsed.review as NonNullable<typeof parsed.review> });
+        expect(result.records.length).toBeGreaterThan(0);
+        for (const record of result.records) {
+          expect(['clean', 'findings', 'omitted']).toContain(record.outcome);
+        }
+        // A green signal means the model actually reviewed something: an
+        // all-omitted run (unparseable output, wrong endpoint) must fail
+        // here. reviewedFiles counts attempts, so successful reviews are
+        // attempts minus omissions.
+        if (result.summary.reviewedFiles - result.summary.omittedFiles > 0) {
+          // A run with validated reviews must also have exited cleanly;
+          // exitCode 1 with records means every file was omitted.
+          expect(result.exitCode).toBe(0);
+          console.log(
+            `local model review (attempt ${attempt}): ${result.summary.reviewedFiles} reviewed, ${result.summary.findings} findings, ` +
+              `${result.summary.omittedFiles} omitted ` +
+              `(${JSON.stringify(result.summary.files.map((file) => `${file.path}: ${file.outcome}${file.errorKind === undefined ? '' : ` (${file.errorKind})`}`))})`,
+          );
+          return;
+        }
+      } finally {
+        await fixture.cleanup();
+      }
+    }
+    throw new Error('local model never produced a review in 3 attempts');
+  }, 900_000);
+});

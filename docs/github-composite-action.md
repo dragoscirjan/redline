@@ -9,8 +9,8 @@ Inputs are fixed enums and data. No input accepts free-form review instructions.
 | Input | Values | Notes |
 | --- | --- | --- |
 | `backend` | `pi`, `opencode`, `echo` | The review harness. `echo` is the deterministic test harness. Required together with `model-config` and `model-auth` to enable review execution. |
-| `model-config` | JSON | Provider-neutral model configuration: `provider`, `endpoint`, `model`. See [runnable review configuration](/runnable-review-configuration). |
-| `model-auth` | JSON secret | Provider-keyed credential map; bind to `secrets.MODEL_CREDENTIALS`. Only the selected provider's credential reaches the harness. |
+| `model-config` | JSON | Provider-neutral model configuration: `provider`, `endpoint`, `model`, and the optional `auth: "none"` credential-less profile for local model servers. See [runnable review configuration](/runnable-review-configuration). |
+| `model-auth` | JSON secret | Provider-keyed credential map; bind to `secrets.MODEL_CREDENTIALS`. Only the selected provider's credential reaches the harness. Required whenever review execution is enabled — with a local model server declaring `auth: "none"` in `model-config`, pass a placeholder map: it satisfies the gate and is not consulted. |
 | `finding-scope` | `defects`, `defects-and-risks` | Default `defects`. |
 | `timeout` | duration | Review deadline per run, for example `10m` or `2h`. Capped at 360m. Default `30m`. |
 | `verbosity` | `silent`, `progress`, `full-output` | Live model stream in the run log: `silent` keeps per-file lines only, `progress` prints one dot per model text chunk, `full-output` prints the readable stream text. Default `progress`. |

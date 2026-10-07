@@ -33,6 +33,68 @@ describe('parseReviewEnvironment', () => {
     );
   });
 
+  it('parses a credential-less review environment with auth none', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const parsed = parseReviewEnvironment({
+        ...cleanReviewEnvironment(fixture, 'pi'),
+        REDLINE_MODEL_CONFIG: JSON.stringify({
+          provider: 'ollama',
+          endpoint: 'http://127.0.0.1:11434/v1',
+          model: 'qwen3:0.6b',
+          auth: 'none',
+        }),
+        REDLINE_MODEL_AUTH: '',
+      });
+      expect(parsed.mode).toBe('review');
+      expect(parsed.review?.model.auth).toBe('none');
+      expect(parsed.review?.credential).toBeUndefined();
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('ignores a supplied REDLINE_MODEL_AUTH with auth none', async () => {
+    // The action's review gate requires a non-empty model-auth, so action
+    // users pass a placeholder for local-model servers; the map is then
+    // not consulted and no credential is selected.
+    const fixture = await createBundleFixture();
+    try {
+      const parsed = parseReviewEnvironment({
+        ...cleanReviewEnvironment(fixture, 'pi'),
+        REDLINE_MODEL_CONFIG: JSON.stringify({
+          provider: 'ollama',
+          endpoint: 'http://127.0.0.1:11434/v1',
+          model: 'qwen3:0.6b',
+          auth: 'none',
+        }),
+        REDLINE_MODEL_AUTH: MODEL_AUTH,
+      });
+      expect(parsed.review?.credential).toBeUndefined();
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('requires REDLINE_MODEL_AUTH unless auth none is declared', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = cleanReviewEnvironment(fixture, 'pi');
+      const withoutCredential = { ...environment, REDLINE_MODEL_AUTH: '' };
+      expect(() => parseReviewEnvironment(withoutCredential)).toThrow(
+        /review execution requires .* together; missing: REDLINE_MODEL_AUTH/u,
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects unsupported auth values', () => {
+    expect(() =>
+      parseModelConfig(JSON.stringify({ provider: 'mock', endpoint: 'http://127.0.0.1:8787/v1', model: 'm', auth: 'basic' })),
+    ).toThrow(/only supports "none"/u);
+  });
+
   it('requires every review input together', () => {
     const partial = {
       REDLINE_HARNESS: 'pi',
@@ -256,7 +318,12 @@ describe('parseModelConfig', () => {
 });
 
 describe('selectModelCredential', () => {
-  const model = { provider: 'mock', endpoint: 'http://127.0.0.1:8787/v1', model: 'test-model' };
+  const model = {
+    provider: 'mock',
+    endpoint: 'http://127.0.0.1:8787/v1',
+    model: 'test-model',
+    auth: undefined,
+  };
 
   it('selects the entry for the configured provider', () => {
     expect(selectModelCredential(model, JSON.stringify({ mock: 'k', other: 'x' }))).toEqual({

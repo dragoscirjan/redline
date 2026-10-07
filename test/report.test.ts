@@ -94,6 +94,14 @@ describe('parseFileReviewDocument', () => {
     // Envelope tolerance: findings defaults to empty for non-findings outcomes.
     const cleanWithoutFindings = parseFileReviewDocument('{"version":2,"fileId":"000001","outcome":"clean"}');
     expect(cleanWithoutFindings.findings).toEqual([]);
+    // Envelope tolerance: an empty-string reason on a findings outcome is
+    // absent, and the findings survive (observed live from local models).
+    const findingsWithEmptyReason = parseFileReviewDocument(
+      '{"version":2,"fileId":"000001","outcome":"findings","reason":"","findings":[{"category":"correctness","classification":"defect","severity":"low","confidence":0.65,"side":"RIGHT","startLine":1,"endLine":1,"evidence":"+new","impact":"i","fix":"f"}]}',
+    );
+    expect(findingsWithEmptyReason.outcome).toBe('findings');
+    expect(findingsWithEmptyReason.reason).toBeUndefined();
+    expect(findingsWithEmptyReason.findings).toHaveLength(1);
     expect(() => parseFileReviewDocument(base({ outcome: 'findings', findings: [] }))).toThrow(
       /requires at least one finding/u,
     );

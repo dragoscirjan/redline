@@ -144,7 +144,13 @@ export function parseFileReviewDocument(raw: string): FileReviewDocument {
   // defaults to empty. Findings themselves, span anchoring, and evidence
   // keep full strict validation.
   let reason: string | undefined;
-  if (decoded.reason !== undefined) {
+  if (
+    (typeof decoded.reason === 'string' && decoded.reason.trim().length === 0) ||
+    decoded.reason === null
+  ) {
+    // Empty-string or null reason: absent, whatever the outcome. Models
+    // emit these routinely alongside findings.
+  } else if (decoded.reason !== undefined) {
     const provided = boundedString(decoded.reason, 'review document.reason', 500);
     if (outcome === 'omitted') reason = provided;
   }

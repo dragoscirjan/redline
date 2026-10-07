@@ -309,6 +309,28 @@ describe('deriveChangeImpact', () => {
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
   });
 
+  it('uses runtime-independent raw code-unit ordering for artifact identities', () => {
+    const input = fixture();
+    const result = deriveChangeImpact({
+      ...input,
+      changedTargets: [
+        ...input.changedTargets,
+        { id: 'z', fileId: '000004', status: 'A', oldPath: null, newPath: 'src/z.ts' },
+        { id: '_', fileId: '000005', status: 'A', oldPath: null, newPath: 'src/underscore.ts' },
+        { id: 'A', fileId: '000006', status: 'A', oldPath: null, newPath: 'src/uppercase.ts' },
+      ],
+    }, { monotonicNow: frozenClock });
+
+    expect(result.impactMap.changedTargets.map((target) => target.id)).toEqual([
+      'A',
+      '_',
+      'target-api',
+      'target-other',
+      'target-service',
+      'z',
+    ]);
+  });
+
   it('records candidates omitted by independent byte and token budgets', () => {
     const input = fixture();
     const diffBytes = Buffer.byteLength('diff context', 'utf8');

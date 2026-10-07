@@ -1,4 +1,4 @@
-import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -65,7 +65,10 @@ describe('createChangeImpactWriter', () => {
     try {
       const result = deriveChangeImpact(input, { monotonicNow: () => 0 });
       const writer = createChangeImpactWriter(output);
-      await writer.writeImpactMap(result.impactMap);
+      await Promise.all([
+        writer.writeImpactMap(result.impactMap),
+        writer.writeImpactMap(result.impactMap),
+      ]);
       await writer.writeContextPlan(result.contextPlan);
 
       const impactJson = JSON.parse(await readFile(join(output, 'impact', 'change-impact.json'), 'utf8')) as {
@@ -91,6 +94,7 @@ describe('createChangeImpactWriter', () => {
       expect(contextMarkdown).toContain('# Review context plan');
       expect(contextMarkdown).toContain('Authoritative changed declaration');
       expect(contextMarkdown).toContain('captured source');
+      expect((await readdir(join(output, 'impact'))).some((name) => name.endsWith('.tmp'))).toBe(false);
     } finally {
       await rm(output, { recursive: true, force: true });
     }

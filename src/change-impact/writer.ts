@@ -1,6 +1,19 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ChangeImpactMap, ReviewContextPlan } from './types.js';
+
+let temporarySequence = 0;
+
+async function writeAtomic(path: string, content: string): Promise<void> {
+  temporarySequence += 1;
+  const temporaryPath = `${path}.${process.pid}.${temporarySequence}.tmp`;
+  try {
+    await writeFile(temporaryPath, content);
+    await rename(temporaryPath, path);
+  } finally {
+    await rm(temporaryPath, { force: true });
+  }
+}
 
 function escapeTable(value: string): string {
   return value.replaceAll('|', '\\|').replaceAll('\n', ' ');
@@ -101,13 +114,13 @@ export function createChangeImpactWriter(outputDirectory: string): ChangeImpactW
   return {
     async writeImpactMap(map: ChangeImpactMap): Promise<void> {
       await prepare();
-      await writeFile(join(impactDirectory, 'change-impact.json'), `${JSON.stringify(map, null, 2)}\n`);
-      await writeFile(join(impactDirectory, 'change-impact.md'), renderChangeImpactMarkdown(map));
+      await writeAtomic(join(impactDirectory, 'change-impact.json'), `${JSON.stringify(map, null, 2)}\n`);
+      await writeAtomic(join(impactDirectory, 'change-impact.md'), renderChangeImpactMarkdown(map));
     },
     async writeContextPlan(plan: ReviewContextPlan): Promise<void> {
       await prepare();
-      await writeFile(join(impactDirectory, 'context-plan.json'), `${JSON.stringify(plan, null, 2)}\n`);
-      await writeFile(join(impactDirectory, 'context-plan.md'), renderContextPlanMarkdown(plan));
+      await writeAtomic(join(impactDirectory, 'context-plan.json'), `${JSON.stringify(plan, null, 2)}\n`);
+      await writeAtomic(join(impactDirectory, 'context-plan.md'), renderContextPlanMarkdown(plan));
     },
   };
 }

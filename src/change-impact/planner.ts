@@ -89,7 +89,7 @@ interface QueueItem {
 }
 
 function compareText(left: string, right: string): number {
-  return left.localeCompare(right, 'en');
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function sortedUnique(values: Iterable<string>): string[] {

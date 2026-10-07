@@ -19,7 +19,9 @@ const ENABLED = process.env.REDLINE_LOCAL_MODEL_TESTS === '1';
 const MODEL_CONFIG = process.env.REDLINE_LOCAL_MODEL_CONFIG ?? '';
 const MODEL_ENDPOINT = (() => {
   try {
-    return MODEL_CONFIG.length > 0 ? new URL(JSON.parse(MODEL_CONFIG).endpoint).origin : '';
+    // The configured endpoint already carries its API path (usually /v1);
+    // probing its /models keeps path-prefixed endpoints working.
+    return MODEL_CONFIG.length > 0 ? JSON.parse(MODEL_CONFIG).endpoint : '';
   } catch {
     return '';
   }
@@ -37,7 +39,8 @@ async function binaryAvailable(command: string): Promise<boolean> {
 async function endpointAlive(endpoint: string): Promise<boolean> {
   if (endpoint.length === 0) return false;
   return new Promise((resolve) => {
-    const probe = spawn('curl', ['-s', '--fail', '-m', '3', `${endpoint}/v1/models`], { stdio: 'ignore' });
+    // --fail rejects HTTP errors (404 on a wrong path is not "alive").
+    const probe = spawn('curl', ['-s', '--fail', '-m', '3', `${endpoint}/models`], { stdio: 'ignore' });
     probe.on('error', () => resolve(false));
     probe.on('close', (code) => resolve(code === 0));
   });
@@ -74,6 +77,9 @@ describe.skipIf(!ENABLED)('local model runner integration', () => {
         // here. reviewedFiles counts attempts, so successful reviews are
         // attempts minus omissions.
         if (result.summary.reviewedFiles - result.summary.omittedFiles > 0) {
+          // A run with validated reviews must also have exited cleanly;
+          // exitCode 1 with records means every file was omitted.
+          expect(result.exitCode).toBe(0);
           console.log(
             `local model review (attempt ${attempt}): ${result.summary.reviewedFiles} reviewed, ${result.summary.findings} findings, ` +
               `${result.summary.omittedFiles} omitted ` +

@@ -11,7 +11,7 @@ The GitHub Action passes every value to the review tool through environment vari
 | `REDLINE_SOURCE_DIR` | review mode | Source-at-head export used for head-file context. |
 | `REDLINE_OUTPUT_DIR` | review mode | Destination for per-file review records and the summary. |
 | `REDLINE_MODEL_CONFIG` | review mode | Model configuration JSON (below). |
-| `REDLINE_MODEL_AUTH` | review mode | Provider-keyed credential map JSON (below). |
+| `REDLINE_MODEL_AUTH` | review mode | Provider-keyed credential map JSON (below). Not consulted when the model config declares `auth: "none"`. |
 | `REDLINE_FINDING_SCOPE` | optional | `defects` (default) or `defects-and-risks`. |
 | `REDLINE_TIMEOUT` | optional | Duration like `10m`, `2h`, `1h30m`. Default `30m`, capped at `360m`. |
 | `REDLINE_VERBOSITY` | optional | `silent` (per-file lines only), `progress` (one dot per model text chunk, default), or `full-output` (readable stream text). |
@@ -54,7 +54,7 @@ There is no fixed-model allowlist and no provider-specific credential input.
 
 Only the entry for the configured provider is selected; everything else stays host-side. The selected credential reaches the harness through the mechanism documented in [harness executor](/harness-executor) — an environment variable for Pi, a mode-0600 generated config file for OpenCode — and never appears in prompts, logs, diagnostics, or published output.
 
-When the model config declares `"auth": "none"`, the credential map is not required and must not be supplied — a contradictory configuration fails instead of silently dropping one side. No credential is selected and nothing reaches the harness.
+When the model config declares `"auth": "none"`, the credential map is not required and **not consulted**: no credential is selected and nothing reaches the harness. A supplied map is tolerated (not an error) because the action's review gate requires a non-empty `model-auth`; pass a placeholder map there.
 
 ## Local model runners
 
@@ -77,7 +77,7 @@ Notes:
 - Each runner mounts the OpenAI-compatible API under `/v1` — include the suffix.
 - Loopback (`127.0.0.1`, `localhost`) and private-network endpoints are accepted by the same endpoint validation as remote APIs.
 - A server that still checks the header (rare) instead takes a placeholder entry in `REDLINE_MODEL_AUTH`; the value is local-only.
-- Via the GitHub Action, keep supplying `model-auth` (a placeholder map) — the action's review gate requires it, and local servers ignore the header it produces.
+- Via the GitHub Action, keep supplying `model-auth` (a placeholder map) — the action's review gate requires it, and with `auth: "none"` the map is not consulted, so no credential reaches the harness.
 - Self-hosted CI runners can reach the local server directly, which is the intended production shape for private projects. The container-sandbox milestone will revisit isolation for untrusted environments.
 
 ## CLI usage

@@ -362,9 +362,10 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
   const modelAuthRaw = environment.REDLINE_MODEL_AUTH ?? '';
   let credential: SelectedModelCredential | undefined;
   if (model.auth === 'none') {
-    if (modelAuthRaw.length > 0) {
-      throw new Error('REDLINE_MODEL_AUTH is not used when model-config declares auth "none"');
-    }
+    // A supplied credential map is tolerated and NOT consulted: the
+    // action's review gate requires a non-empty model-auth, so action
+    // users pass a placeholder for local-model servers. The credential
+    // never reaches the harness either way.
     credential = undefined;
   } else {
     credential = selectModelCredential(model, modelAuthRaw);

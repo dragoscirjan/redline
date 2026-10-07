@@ -110,16 +110,16 @@ function parseFinding(value: unknown): ReviewFinding {
 
 /**
  * Models frequently wrap a JSON payload in a markdown code fence even when
- * instructed not to. When the entire payload is exactly one fenced block
- * whose content carries no fence of its own, unwrap it; anything ambiguous
- * stays unwrapped and fails the strict JSON parse below. Validation is
- * unchanged — this only normalizes the container.
+ * instructed not to. When the entire payload is exactly one fenced block,
+ * unwrap it — inner fences inside string values are fine because the
+ * closing fence is anchored to the end of the payload. Anything that does
+ * not match stays unwrapped and fails the strict JSON parse below.
+ * Validation is unchanged — this only normalizes the container.
  */
 function unwrapCodeFence(raw: string): string {
   const trimmed = raw.trim();
   const match = /^```[^\n]*\n([\s\S]*?)\n?```$/u.exec(trimmed);
-  if (match === null || (match[1] as string).includes('```')) return trimmed;
-  return match[1] as string;
+  return match === null ? trimmed : (match[1] as string);
 }
 
 /** Parses the raw model text as exactly one review document. */

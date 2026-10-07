@@ -76,10 +76,36 @@ describe('parseFileReviewDocument', () => {
     expect(parseFileReviewDocument(fenced).outcome).toBe('clean');
   });
 
-  it('does not unwrap fenced content that contains fences', () => {
-    expect(() =>
-      parseFileReviewDocument('```json\n{"a":"```"}\n```'),
-    ).toThrow(/not valid JSON/u);
+  it('unwraps a fenced document whose content carries inner fences', () => {
+    // The real shape from live model output: inner ``` runs inside a JSON
+    // string value (an unescaped markdown suggestion), closed by the final
+    // fence. The anchored unwrap takes everything up to the last fence.
+    const document = {
+      version: 2,
+      fileId: '000001',
+      outcome: 'findings',
+      reason: '',
+      findings: [
+        {
+          category: 'security',
+          classification: 'defect',
+          severity: 'medium',
+          confidence: 1.0,
+          side: 'RIGHT',
+          startLine: 78,
+          endLine: 79,
+          evidence: '## CLI usage',
+          impact: 'i',
+          fix: 'f',
+          suggestedChange: 'see:\n```markdown\ntable\n```',
+        },
+      ],
+    };
+    const fenced = ['```json', JSON.stringify(document), '```', ''].join('\n');
+    const parsed = parseFileReviewDocument(fenced);
+    expect(parsed.outcome).toBe('findings');
+    expect(parsed.findings).toHaveLength(1);
+    expect(parsed.findings[0]?.suggestedChange).toContain('```markdown');
   });
 
   it('rejects schema violations', () => {

@@ -54,10 +54,13 @@ describe('parseReviewEnvironment', () => {
     }
   });
 
-  it('rejects REDLINE_MODEL_AUTH together with auth none', async () => {
+  it('ignores a supplied REDLINE_MODEL_AUTH with auth none', async () => {
+    // The action's review gate requires a non-empty model-auth, so action
+    // users pass a placeholder for local-model servers; the map is then
+    // not consulted and no credential is selected.
     const fixture = await createBundleFixture();
     try {
-      const environment = {
+      const parsed = parseReviewEnvironment({
         ...cleanReviewEnvironment(fixture, 'pi'),
         REDLINE_MODEL_CONFIG: JSON.stringify({
           provider: 'ollama',
@@ -65,10 +68,9 @@ describe('parseReviewEnvironment', () => {
           model: 'qwen3:0.6b',
           auth: 'none',
         }),
-      };
-      expect(() => parseReviewEnvironment({ ...environment, REDLINE_MODEL_AUTH: MODEL_AUTH })).toThrow(
-        /is not used when model-config declares auth/u,
-      );
+        REDLINE_MODEL_AUTH: MODEL_AUTH,
+      });
+      expect(parsed.review?.credential).toBeUndefined();
     } finally {
       await fixture.cleanup();
     }

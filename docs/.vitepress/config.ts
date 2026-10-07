@@ -30,6 +30,7 @@ export default defineConfig({
           { text: 'GitHub composite action', link: '/github-composite-action' },
           { text: 'Runnable review configuration', link: '/runnable-review-configuration' },
           { text: 'Harness executor', link: '/harness-executor' },
+          { text: 'Change-impact planning', link: '/change-impact' },
           { text: 'Review output', link: '/review-reporting' },
         ],
       },

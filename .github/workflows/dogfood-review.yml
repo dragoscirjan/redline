@@ -90,6 +90,10 @@ jobs:
           backend: pi
           model-config: '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}'
           model-auth: ${{ secrets.model-auth }}
+          # Risks join defects: operational/maintainability/compatibility
+          # findings give the auto-review real coverage on docs- and
+          # workflow-heavy diffs like this repository's own.
+          finding-scope: defects-and-risks
           verbosity: ${{ inputs.verbosity }}
           github-token: ${{ secrets.github-token }}
           github-app-id: ${{ secrets.redline-review-app-id }}

@@ -55,6 +55,33 @@ describe('code-intelligence contracts', () => {
     expect(() => parseCodeIntelligenceRecording(invalid)).toThrow('snapshot contains unsupported fields');
   });
 
+  it('validates provider extension data before measuring it', async () => {
+    const { raw } = await loadRecording();
+
+    const missing = structuredClone(raw);
+    const missingSnapshot = missing['snapshot'] as Record<string, unknown>;
+    const missingNodes = missingSnapshot['nodes'] as Array<Record<string, unknown>>;
+    const missingExtension = missingNodes[0]?.['extension'] as Record<string, unknown>;
+    delete missingExtension['data'];
+    expect(() => parseCodeIntelligenceRecording(missing)).toThrow('.data is required');
+
+    const invalid = structuredClone(raw);
+    const invalidSnapshot = invalid['snapshot'] as Record<string, unknown>;
+    const invalidNodes = invalidSnapshot['nodes'] as Array<Record<string, unknown>>;
+    const invalidExtension = invalidNodes[0]?.['extension'] as Record<string, unknown>;
+    invalidExtension['data'] = 1n;
+    expect(() => parseCodeIntelligenceRecording(invalid)).toThrow('.data must contain only JSON values');
+
+    const cyclic = structuredClone(raw);
+    const cyclicSnapshot = cyclic['snapshot'] as Record<string, unknown>;
+    const cyclicNodes = cyclicSnapshot['nodes'] as Array<Record<string, unknown>>;
+    const cyclicExtension = cyclicNodes[0]?.['extension'] as Record<string, unknown>;
+    const cycle: Record<string, unknown> = {};
+    cycle['self'] = cycle;
+    cyclicExtension['data'] = cycle;
+    expect(() => parseCodeIntelligenceRecording(cyclic)).toThrow('exceeds the maximum JSON nesting depth');
+  });
+
   it('rejects non-normalized repository paths', async () => {
     const { raw } = await loadRecording();
     const invalid = structuredClone(raw);

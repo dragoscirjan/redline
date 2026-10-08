@@ -241,13 +241,15 @@ function parseJsonValue(value: unknown, label: string, depth = 0): JsonValue {
 function parseExtension(value: unknown, label: string): ProviderExtension {
   const input = record(value, label);
   onlyKeys(input, ['provider', 'schema', 'data'], label);
-  if (byteLength(JSON.stringify(input['data'])) > MAX_EXTENSION_BYTES) {
+  if (input['data'] === undefined) throw new Error(`${label}.data is required`);
+  const data = parseJsonValue(input['data'], `${label}.data`);
+  if (byteLength(JSON.stringify(data)) > MAX_EXTENSION_BYTES) {
     throw new Error(`${label}.data exceeds ${MAX_EXTENSION_BYTES} bytes`);
   }
   return {
     provider: identifier(input['provider'], `${label}.provider`),
     schema: stringValue(input['schema'], `${label}.schema`, 256),
-    data: parseJsonValue(input['data'], `${label}.data`),
+    data,
   };
 }
 

@@ -15,11 +15,14 @@ const HEAD = 'b'.repeat(40);
 
 function provenance(side: 'base' | 'head', queryId = 'fixture-query'): FactProvenance {
   return {
+    contractVersion: 1,
     provider: side === 'base' ? 'provider-a' : 'provider-b',
     providerVersion: '1.2.3',
+    adapterVersion: '1.0.0',
     snapshotId: `${side}-snapshot`,
     revision: side === 'base' ? BASE : HEAD,
     queryId,
+    retrievalReason: 'Change-impact fixture',
     status: 'complete',
   };
 }
@@ -37,8 +40,7 @@ function node(
     name: id,
     path,
     span: { startLine: 1, endLine: 5 },
-    digest: `${side}-${id}`,
-    roles,
+    roles: [...roles].sort(),
     provenance: provenance(side),
     ...overrides,
   };
@@ -47,7 +49,7 @@ function node(
 function edge(
   side: 'base' | 'head',
   id: string,
-  kind: string,
+  kind: GraphEdge['kind'],
   from: string,
   to: string,
   overrides: Partial<GraphEdge> = {},
@@ -63,14 +65,22 @@ function snapshot(
 ): CodeIntelligenceSnapshot {
   return {
     version: 1,
+    contractVersion: 1,
     id: `${side}-snapshot`,
+    repositoryId: 'redline-fixture',
     revision: side === 'base' ? BASE : HEAD,
+    sourceTreeDigest: `sha256:${side === 'base' ? 'a' : 'b'}`.padEnd(71, side === 'base' ? 'a' : 'b'),
     provider: side === 'base' ? 'provider-a' : 'provider-b',
     providerVersion: '1.2.3',
+    adapterVersion: '1.0.0',
+    schemaVersion: 'fixture-v1',
+    configurationDigest: `sha256:${'c'.repeat(64)}`,
     coverage: 'complete',
-    capabilities: ['calls', 'contracts', 'tests'],
-    nodes,
-    edges,
+    capabilities: ['associated-tests', 'callers-callees', 'implementations'],
+    languageCoverage: [],
+    fileCoverage: [],
+    nodes: [...nodes].sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
+    edges: [...edges].sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
     uncertainty: [],
     ...overrides,
   };
@@ -389,6 +399,28 @@ describe('deriveChangeImpact', () => {
     expect(result.impactMap.neighborhoods).toHaveLength(3);
     expect(result.impactMap.cones.every((cone) => cone.coverage === 'unavailable')).toBe(true);
     expect(result.contextPlan.questions[0]?.items.map((item) => item.id)).toEqual(['diff', 'witness', 'requirements']);
+  });
+
+  it('keeps base and head snapshot identities distinct', () => {
+    const input = fixture();
+    const base = input.baseSnapshot;
+    const head = input.headSnapshot;
+    if (base === undefined || head === undefined) throw new Error('fixture snapshots are required');
+    const reusedIdentity: CodeIntelligenceSnapshot = {
+      ...head,
+      id: base.id,
+      nodes: head.nodes.map((value) => ({
+        ...value,
+        provenance: { ...value.provenance, snapshotId: base.id },
+      })),
+      edges: head.edges.map((value) => ({
+        ...value,
+        provenance: { ...value.provenance, snapshotId: base.id },
+      })),
+    };
+    expect(() => deriveChangeImpact({ ...input, headSnapshot: reusedIdentity }, { monotonicNow: frozenClock })).toThrow(
+      'baseSnapshot and headSnapshot must have distinct immutable identities',
+    );
   });
 
   it('rejects graph-selected context without provider and query provenance', () => {

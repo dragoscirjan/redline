@@ -5,87 +5,35 @@
  * remain authoritative for finding locations and evidence.
  */
 
+import type {
+  CodeIntelligenceSnapshot,
+  CoverageStatus,
+  FactProvenance,
+  GraphEdge,
+  GraphNode,
+  GraphNodeRole,
+  RevisionSide,
+  SnapshotUncertainty,
+  SourceSpan,
+} from '../code-intelligence/types.js';
+
+export type {
+  CodeIntelligenceSnapshot,
+  CoverageStatus,
+  FactProvenance,
+  GraphEdge,
+  GraphNode,
+  GraphNodeRole,
+  RevisionSide,
+  SnapshotUncertainty,
+  SourceSpan,
+} from '../code-intelligence/types.js';
+
 export const CHANGE_IMPACT_MAP_VERSION = 1 as const;
 export const CONTEXT_PLAN_VERSION = 1 as const;
 export const GRAPH_DELTA_VERSION = 1 as const;
 
-export type RevisionSide = 'base' | 'head';
-export type CoverageStatus = 'complete' | 'partial' | 'unsupported' | 'unavailable';
 export type AnalysisMode = 'file-only' | 'indexed-context' | 'full-impact';
-
-export interface SourceSpan {
-  readonly startLine: number;
-  readonly endLine: number;
-}
-
-export interface FactProvenance {
-  readonly provider: string;
-  readonly providerVersion: string;
-  readonly snapshotId: string;
-  readonly revision: string;
-  readonly queryId: string;
-  readonly status: CoverageStatus;
-}
-
-export type GraphNodeRole =
-  | 'entry-point'
-  | 'contract'
-  | 'test'
-  | 'fixture'
-  | 'state-read'
-  | 'state-write'
-  | 'event'
-  | 'external-call'
-  | 'resource-owner'
-  | 'persistent-state'
-  | 'configuration';
-
-export interface GraphNode {
-  /** Stable provider-neutral identity when identity is known across revisions. */
-  readonly id: string;
-  readonly kind: string;
-  readonly name: string;
-  readonly path: string;
-  readonly span?: SourceSpan;
-  readonly digest?: string;
-  readonly signature?: string;
-  readonly public?: boolean;
-  readonly roles: readonly GraphNodeRole[];
-  readonly ambiguous?: boolean;
-  readonly provenance: FactProvenance;
-}
-
-export interface GraphEdge {
-  /** Stable identity for this relationship within and across snapshots. */
-  readonly id: string;
-  readonly kind: string;
-  readonly from: string;
-  readonly to: string;
-  readonly digest?: string;
-  readonly approximate?: boolean;
-  readonly provenance: FactProvenance;
-}
-
-export interface SnapshotUncertainty {
-  readonly code: string;
-  readonly message: string;
-  readonly path?: string;
-  readonly nodeId?: string;
-  readonly queryId?: string;
-}
-
-export interface CodeIntelligenceSnapshot {
-  readonly version: 1;
-  readonly id: string;
-  readonly revision: string;
-  readonly provider: string;
-  readonly providerVersion: string;
-  readonly coverage: CoverageStatus;
-  readonly capabilities: readonly string[];
-  readonly nodes: readonly GraphNode[];
-  readonly edges: readonly GraphEdge[];
-  readonly uncertainty: readonly SnapshotUncertainty[];
-}
 
 export type ChangeStatus = 'A' | 'M' | 'D' | 'R' | 'C' | 'T' | 'U' | 'X' | 'B';
 

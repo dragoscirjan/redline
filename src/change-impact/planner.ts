@@ -1,4 +1,5 @@
 import { performance } from 'node:perf_hooks';
+import { parseCodeIntelligenceSnapshot } from '../code-intelligence/contracts.js';
 import {
   CHANGE_IMPACT_MAP_VERSION,
   CONTEXT_PLAN_VERSION,
@@ -14,7 +15,6 @@ import {
   type ContractSurfaceDelta,
   type CoverageStatus,
   type EdgeDelta,
-  type FactProvenance,
   type GraphDelta,
   type GraphEdge,
   type GraphNode,
@@ -123,39 +123,10 @@ function validateBudget(budget: TraversalBudget): void {
   assertPositiveInteger(budget.maxWitnesses, 'traversal.maxWitnesses');
 }
 
-function validateProvenance(provenance: FactProvenance, label: string): void {
-  assertNonEmpty(provenance.provider, `${label}.provider`);
-  assertNonEmpty(provenance.providerVersion, `${label}.providerVersion`);
-  assertNonEmpty(provenance.snapshotId, `${label}.snapshotId`);
-  assertNonEmpty(provenance.revision, `${label}.revision`);
-  assertNonEmpty(provenance.queryId, `${label}.queryId`);
-}
-
 function validateSnapshot(snapshot: CodeIntelligenceSnapshot, expectedRevision: string, label: string): void {
-  if (snapshot.version !== 1) throw new Error(`${label}.version must be 1`);
+  parseCodeIntelligenceSnapshot(snapshot);
   if (snapshot.revision !== expectedRevision) {
     throw new Error(`${label}.revision does not match the requested immutable revision`);
-  }
-  assertUniqueIds(snapshot.nodes, `${label} node`);
-  assertUniqueIds(snapshot.edges, `${label} edge`);
-  const nodeIds = new Set(snapshot.nodes.map((node) => node.id));
-  for (const node of snapshot.nodes) {
-    validateProvenance(node.provenance, `${label} node ${node.id}`);
-    if (node.provenance.snapshotId !== snapshot.id || node.provenance.revision !== snapshot.revision) {
-      throw new Error(`${label} node ${node.id} provenance does not match its snapshot`);
-    }
-    if (node.span !== undefined && (node.span.startLine <= 0 || node.span.endLine < node.span.startLine)) {
-      throw new Error(`${label} node ${node.id} has an invalid source span`);
-    }
-  }
-  for (const edge of snapshot.edges) {
-    validateProvenance(edge.provenance, `${label} edge ${edge.id}`);
-    if (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) {
-      throw new Error(`${label} edge ${edge.id} references an unknown node`);
-    }
-    if (edge.provenance.snapshotId !== snapshot.id || edge.provenance.revision !== snapshot.revision) {
-      throw new Error(`${label} edge ${edge.id} provenance does not match its snapshot`);
-    }
   }
 }
 
@@ -169,6 +140,11 @@ function validateInput(input: ChangeImpactInput): void {
   assertUniqueIds(input.questions, 'review question');
   if (input.baseSnapshot !== undefined) validateSnapshot(input.baseSnapshot, input.baseRevision, 'baseSnapshot');
   if (input.headSnapshot !== undefined) validateSnapshot(input.headSnapshot, input.headRevision, 'headSnapshot');
+  if (
+    input.baseSnapshot !== undefined &&
+    input.headSnapshot !== undefined &&
+    input.baseSnapshot.id === input.headSnapshot.id
+  ) throw new Error('baseSnapshot and headSnapshot must have distinct immutable identities');
   for (const target of input.changedTargets) {
     if (target.oldPath === null && target.newPath === null) {
       throw new Error(`changed target ${target.id} must have an old or new path`);

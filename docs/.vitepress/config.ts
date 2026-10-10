@@ -32,6 +32,7 @@ export default defineConfig({
           { text: 'Harness executor', link: '/harness-executor' },
           { text: 'Change-impact planning', link: '/change-impact' },
           { text: 'Code intelligence', link: '/code-intelligence' },
+          { text: 'Artifact cache', link: '/artifact-cache' },
           { text: 'Review output', link: '/review-reporting' },
         ],
       },

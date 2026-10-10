@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { reviewToolDescriptorDigest } from '../contracts.js';
 import { REVIEW_TOOL_DESCRIPTOR_VERSION, type ReviewToolDescriptor, type ToolInstaller } from '../types.js';
@@ -30,12 +30,25 @@ const GITNEXUS_ARCHIVE_URL = `https://registry.npmjs.org/gitnexus/-/gitnexus-${G
 const GITNEXUS_ARCHIVE_DIGEST = 'sha512:5b3fbe84e5bbdd2925b939102c96d1213f3e216eb8f4a99fe2623ef7d671cdc420d8d978eec4a395f7bcf4d37fab4baeb464ef6d57976983074434b39c3b24e6' as const;
 const GITNEXUS_LOCK_URL = `https://raw.githubusercontent.com/abhigyanpatwari/GitNexus/v${GITNEXUS_VERSION}/gitnexus/package-lock.json`;
 const GITNEXUS_LOCK_DIGEST = 'sha256:d97b46eeb3c1cbc4e81ab0b13d84ccd50991b08c4b5488300088c234cc894678' as const;
-const GITNEXUS_EXECUTABLE = 'dist/cli/index.js';
+const GITNEXUS_EXECUTABLE = '.redline/health.mjs';
 const MAX_ARCHIVE_BYTES = 256 * 1024 * 1024;
 const MAX_LOCK_BYTES = 4 * 1024 * 1024;
 
 export function currentToolPlatform(): ToolPlatform {
   return { operatingSystem: process.platform, architecture: process.arch };
+}
+
+function corePlatformPackage(platform: ToolPlatform): string {
+  const key = `${platform.operatingSystem}-${platform.architecture}`;
+  const supported = new Set([
+    'darwin-arm64',
+    'darwin-x64',
+    'linux-arm64',
+    'linux-x64',
+    'win32-x64',
+  ]);
+  if (!supported.has(key)) throw new Error(`GitNexus ${GITNEXUS_VERSION} has no pinned native package for ${key}`);
+  return `@ladybugdb/core-${key}`;
 }
 
 function assertSupportedNodeRuntime(): void {
@@ -48,6 +61,7 @@ function assertSupportedNodeRuntime(): void {
 
 /** Exact GitNexus build approved for the current Redline acquisition recipe. */
 export function createGitNexusDescriptor(platform: ToolPlatform = currentToolPlatform()): ReviewToolDescriptor {
+  corePlatformPackage(platform);
   return {
     version: REVIEW_TOOL_DESCRIPTOR_VERSION,
     id: 'gitnexus',
@@ -78,12 +92,13 @@ export function createGitNexusDescriptor(platform: ToolPlatform = currentToolPla
       `dependency-lock-${GITNEXUS_LOCK_DIGEST}`,
       'embeddings-disabled',
       'graphology-community-detection',
+      'lifecycle-scripts-disabled',
     ],
     healthProbe: {
       executable: GITNEXUS_EXECUTABLE,
       args: ['--version'],
       expectedExitCode: 0,
-      expectedOutput: GITNEXUS_VERSION,
+      expectedOutput: `GitNexus ${GITNEXUS_VERSION} native-ok`,
     },
   };
 }
@@ -197,7 +212,7 @@ export class GitNexusInstaller implements ToolInstaller {
       await chmod(lockfile, 0o644);
       const installed = await this.#runner.run({
         command: this.#npmExecutable,
-        args: ['ci', '--omit=dev', '--omit=optional', '--no-audit', '--no-fund'],
+        args: ['ci', '--ignore-scripts', '--no-bin-links', '--omit=dev', '--no-audit', '--no-fund'],
         cwd: request.destinationDirectory,
         env: toolEnvironment(temporaryDirectory, this.#environment),
         timeoutMs: remaining(),
@@ -209,7 +224,24 @@ export class GitNexusInstaller implements ToolInstaller {
       if (installed.code !== 0) {
         return failedInstallation(startedAt, 'gitnexus-install-failed', installed.stderr || installed.stdout || `npm exited ${installed.code}`);
       }
-      await rm(join(request.destinationDirectory, 'node_modules', '.bin'), { force: true, recursive: true });
+      const nodeModules = join(request.destinationDirectory, 'node_modules');
+      const nativePackage = corePlatformPackage(descriptor.platform);
+      await copyFile(
+        join(nodeModules, ...nativePackage.split('/'), 'lbugjs.node'),
+        join(nodeModules, '@ladybugdb', 'core', 'lbugjs.node'),
+      );
+      await rm(join(nodeModules, '@huggingface', 'transformers'), { force: true, recursive: true });
+      await rm(join(nodeModules, 'onnxruntime-node'), { force: true, recursive: true });
+      const healthDirectory = join(request.destinationDirectory, '.redline');
+      await mkdir(healthDirectory, { mode: 0o755 });
+      const healthScript = [
+        "await import('@ladybugdb/core');",
+        "await import('tree-sitter');",
+        "await import('tree-sitter-javascript');",
+        `console.log('GitNexus ${GITNEXUS_VERSION} native-ok');`,
+        '',
+      ].join('\n');
+      await writeFile(join(healthDirectory, 'health.mjs'), healthScript, { mode: 0o755 });
       const manifest = await createInstalledToolManifest(
         descriptor,
         request.destinationDirectory,

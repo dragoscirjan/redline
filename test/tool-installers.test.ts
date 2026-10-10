@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -74,9 +74,12 @@ class FixtureRunner implements ToolCommandRunner {
       };
     }
     if (request.command === '/fixture/npm') {
-      const binDirectory = join(request.cwd, 'node_modules', '.bin');
-      await mkdir(binDirectory, { recursive: true });
-      await symlink('../../dist/cli/index.js', join(binDirectory, 'gitnexus'));
+      const nodeModules = join(request.cwd, 'node_modules');
+      const coreDirectory = join(nodeModules, '@ladybugdb', 'core');
+      const nativeDirectory = join(nodeModules, `@ladybugdb/core-${process.platform}-${process.arch}`);
+      await mkdir(coreDirectory, { recursive: true });
+      await mkdir(nativeDirectory, { recursive: true });
+      await writeFile(join(nativeDirectory, 'lbugjs.node'), 'native binding');
       return {
         code: 0,
         timedOut: false,
@@ -90,7 +93,9 @@ class FixtureRunner implements ToolCommandRunner {
       code: 0,
       timedOut: false,
       stdout: this.healthOutput
-        ?? (request.command.endsWith('cgc') ? `CodeGraphContext ${CGC_VERSION}` : GITNEXUS_VERSION),
+        ?? (request.command.endsWith('cgc')
+          ? `CodeGraphContext ${CGC_VERSION}`
+          : `GitNexus ${GITNEXUS_VERSION} native-ok`),
       stderr: '',
       stdoutTruncated: false,
       durationMs: 1,
@@ -195,12 +200,12 @@ describe('GitNexusInstaller', () => {
       workDirectory: join(workspace, 'work'),
       timeoutMs: 5_000,
     });
-    expect(result.status).toBe('installed');
+    if (result.status !== 'installed') throw new Error(JSON.stringify(result.diagnostics));
     expect(downloader.requests[0]?.url).toBe(selectedDescriptor.distribution.source);
     expect(runner.requests.map((request) => request.command)).toEqual(['/fixture/tar', '/fixture/npm']);
-    expect(runner.requests[1]?.args).toContain('--omit=optional');
+    expect(runner.requests[1]?.args).toContain('--ignore-scripts');
+    expect(runner.requests[1]?.args).toContain('--no-bin-links');
     await expect(rm(join(installationDirectory, 'node_modules', '.bin'))).rejects.toMatchObject({ code: 'ENOENT' });
-    if (result.status !== 'installed') throw new Error('installation failed');
     const validation = await installer.validate({
       descriptor: selectedDescriptor,
       installationDirectory,
@@ -255,8 +260,10 @@ describe('GitNexusInstaller', () => {
   });
 });
 
+const cgcHostSupported = ['linux/x64', 'darwin/arm64'].includes(`${process.platform}/${process.arch}`);
+
 describe('CgcInstaller', () => {
-  it('verifies and installs a pinned standalone binary, then runs its health probe', async () => {
+  it.skipIf(!cgcHostSupported)('verifies and installs a pinned standalone binary, then runs its health probe', async () => {
     const workspace = await temporaryDirectory('redline-cgc-installer-');
     const binary = 'fixture cgc binary';
     const selectedDescriptor = withFixtureDistribution(createCgcDescriptor(), 'sha256', binary);

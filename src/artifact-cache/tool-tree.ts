@@ -96,7 +96,7 @@ export async function createInstalledToolManifest(
 ): Promise<InstalledToolManifest> {
   const requestedExecutables = new Set(executablePaths);
   const prepared = await scanDirectory(installationDirectory, '', requestedExecutables, true);
-  const files = parseArtifactFileEntries(prepared.files);
+  const files = parseArtifactFileEntries(prepared.files.sort((left, right) => compareText(left.path, right.path)));
   return parseInstalledToolManifest({
     version: INSTALLED_TOOL_MANIFEST_VERSION,
     descriptorDigest: reviewToolDescriptorDigest(descriptor),
@@ -113,7 +113,7 @@ export async function inspectInstalledToolManifest(
   executablePaths: readonly string[],
 ): Promise<InstalledToolManifest> {
   const inspected = await scanDirectory(installationDirectory, '', new Set(executablePaths), false);
-  const files = parseArtifactFileEntries(inspected.files);
+  const files = parseArtifactFileEntries(inspected.files.sort((left, right) => compareText(left.path, right.path)));
   return parseInstalledToolManifest({
     version: INSTALLED_TOOL_MANIFEST_VERSION,
     descriptorDigest: reviewToolDescriptorDigest(descriptor),

@@ -1,0 +1,348 @@
+{
+  "version": 1,
+  "descriptor": {
+    "contractVersion": 1,
+    "id": "gitnexus",
+    "displayName": "GitNexus",
+    "providerVersion": "1.2.0",
+    "adapterVersion": "1.0.0",
+    "schemaVersion": "graph-v1",
+    "capabilities": [
+      { "capability": "associated-tests", "status": "supported" },
+      { "capability": "callers-callees", "status": "supported" },
+      { "capability": "native-impact", "status": "experimental", "detail": "Provider-native traversal remains derived evidence." },
+      { "capability": "symbol-definitions", "status": "supported" }
+    ],
+    "languages": ["typescript"],
+    "license": {
+      "name": "PolyForm Noncommercial 1.0.0 or commercial license",
+      "spdx": "PolyForm-Noncommercial-1.0.0",
+      "url": "https://github.com/abhigyanpatwari/GitNexus/blob/main/LICENSE",
+      "redistribution": "conditional",
+      "notice": "The npm distribution declares PolyForm Noncommercial 1.0.0; commercial use requires a separate license."
+    },
+    "distribution": {
+      "source": "npm:gitnexus",
+      "pinnedVersion": "1.2.0"
+    }
+  },
+  "snapshot": {
+    "version": 1,
+    "contractVersion": 1,
+    "id": "gitnexus:fixture:head",
+    "repositoryId": "fixture-repo",
+    "revision": "dddddddddddddddddddddddddddddddddddddddd",
+    "sourceTreeDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "provider": "gitnexus",
+    "providerVersion": "1.2.0",
+    "adapterVersion": "1.0.0",
+    "schemaVersion": "graph-v1",
+    "configurationDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "coverage": "complete",
+    "capabilities": [
+      "associated-tests",
+      "callers-callees",
+      "native-impact",
+      "symbol-definitions"
+    ],
+    "languageCoverage": [
+      {
+        "language": "typescript",
+        "status": "complete",
+        "discoveredFiles": 3,
+        "indexedFiles": 3
+      }
+    ],
+    "fileCoverage": [
+      { "path": "src/handler.ts", "status": "indexed", "language": "typescript" },
+      { "path": "src/service.ts", "status": "indexed", "language": "typescript" },
+      { "path": "test/handler.test.ts", "status": "indexed", "language": "typescript" }
+    ],
+    "nodes": [
+      {
+        "id": "handler",
+        "kind": "function",
+        "name": "handle",
+        "path": "src/handler.ts",
+        "span": { "startLine": 1, "endLine": 5 },
+        "public": true,
+        "roles": ["entry-point"],
+        "confidence": 1,
+        "extension": {
+          "provider": "gitnexus",
+          "schema": "symbol-v1",
+          "data": { "community": 2, "resolution": "exact" }
+        },
+        "provenance": {
+          "contractVersion": 1,
+          "provider": "gitnexus",
+          "providerVersion": "1.2.0",
+          "adapterVersion": "1.0.0",
+          "snapshotId": "gitnexus:fixture:head",
+          "revision": "dddddddddddddddddddddddddddddddddddddddd",
+          "queryId": "snapshot:index",
+          "retrievalReason": "Recorded fixture indexing",
+          "status": "complete",
+          "source": {
+            "path": "src/handler.ts",
+            "span": { "startLine": 1, "endLine": 5 }
+          }
+        }
+      },
+      {
+        "id": "route-test",
+        "kind": "test",
+        "name": "handles requests",
+        "path": "test/handler.test.ts",
+        "span": { "startLine": 3, "endLine": 9 },
+        "roles": ["test"],
+        "provenance": {
+          "contractVersion": 1,
+          "provider": "gitnexus",
+          "providerVersion": "1.2.0",
+          "adapterVersion": "1.0.0",
+          "snapshotId": "gitnexus:fixture:head",
+          "revision": "dddddddddddddddddddddddddddddddddddddddd",
+          "queryId": "snapshot:index",
+          "retrievalReason": "Recorded fixture indexing",
+          "status": "complete",
+          "source": {
+            "path": "test/handler.test.ts",
+            "span": { "startLine": 3, "endLine": 9 }
+          }
+        }
+      },
+      {
+        "id": "service",
+        "kind": "function",
+        "name": "loadValue",
+        "path": "src/service.ts",
+        "span": { "startLine": 1, "endLine": 4 },
+        "roles": [],
+        "provenance": {
+          "contractVersion": 1,
+          "provider": "gitnexus",
+          "providerVersion": "1.2.0",
+          "adapterVersion": "1.0.0",
+          "snapshotId": "gitnexus:fixture:head",
+          "revision": "dddddddddddddddddddddddddddddddddddddddd",
+          "queryId": "snapshot:index",
+          "retrievalReason": "Recorded fixture indexing",
+          "status": "complete",
+          "source": {
+            "path": "src/service.ts",
+            "span": { "startLine": 1, "endLine": 4 }
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "calls-service",
+        "kind": "calls",
+        "from": "handler",
+        "to": "service",
+        "confidence": 1,
+        "provenance": {
+          "contractVersion": 1,
+          "provider": "gitnexus",
+          "providerVersion": "1.2.0",
+          "adapterVersion": "1.0.0",
+          "snapshotId": "gitnexus:fixture:head",
+          "revision": "dddddddddddddddddddddddddddddddddddddddd",
+          "queryId": "snapshot:index",
+          "retrievalReason": "Recorded fixture indexing",
+          "status": "complete"
+        }
+      },
+      {
+        "id": "tests-handler",
+        "kind": "tests",
+        "from": "route-test",
+        "to": "handler",
+        "provenance": {
+          "contractVersion": 1,
+          "provider": "gitnexus",
+          "providerVersion": "1.2.0",
+          "adapterVersion": "1.0.0",
+          "snapshotId": "gitnexus:fixture:head",
+          "revision": "dddddddddddddddddddddddddddddddddddddddd",
+          "queryId": "snapshot:index",
+          "retrievalReason": "Recorded fixture indexing",
+          "status": "complete"
+        }
+      }
+    ],
+    "uncertainty": []
+  },
+  "queryResults": [
+    {
+      "version": 1,
+      "queryId": "query:callers",
+      "snapshotId": "gitnexus:fixture:head",
+      "revision": "dddddddddddddddddddddddddddddddddddddddd",
+      "provider": "gitnexus",
+      "providerVersion": "1.2.0",
+      "status": "complete",
+      "facts": [
+        {
+          "version": 1,
+          "kind": "edge",
+          "edge": {
+            "id": "calls-service",
+            "kind": "calls",
+            "from": "handler",
+            "to": "service",
+            "confidence": 1,
+            "provenance": {
+              "contractVersion": 1,
+              "provider": "gitnexus",
+              "providerVersion": "1.2.0",
+              "adapterVersion": "1.0.0",
+              "snapshotId": "gitnexus:fixture:head",
+              "revision": "dddddddddddddddddddddddddddddddddddddddd",
+              "queryId": "query:callers",
+              "retrievalReason": "Find callers of service",
+              "status": "complete"
+            }
+          }
+        },
+        {
+          "version": 1,
+          "kind": "node",
+          "node": {
+            "id": "handler",
+            "kind": "function",
+            "name": "handle",
+            "path": "src/handler.ts",
+            "span": { "startLine": 1, "endLine": 5 },
+            "public": true,
+            "roles": ["entry-point"],
+            "confidence": 1,
+            "extension": {
+              "provider": "gitnexus",
+              "schema": "symbol-v1",
+              "data": { "community": 2, "resolution": "exact" }
+            },
+            "provenance": {
+              "contractVersion": 1,
+              "provider": "gitnexus",
+              "providerVersion": "1.2.0",
+              "adapterVersion": "1.0.0",
+              "snapshotId": "gitnexus:fixture:head",
+              "revision": "dddddddddddddddddddddddddddddddddddddddd",
+              "queryId": "query:callers",
+              "retrievalReason": "Find callers of service",
+              "status": "complete",
+              "source": {
+                "path": "src/handler.ts",
+                "span": { "startLine": 1, "endLine": 5 }
+              }
+            }
+          }
+        }
+      ],
+      "diagnostics": [],
+      "truncationReasons": [],
+      "observedDepth": 1,
+      "observedMaxFanOut": 1,
+      "bytes": 512,
+      "durationMs": 12
+    },
+    {
+      "version": 1,
+      "queryId": "query:definitions",
+      "snapshotId": "gitnexus:fixture:head",
+      "revision": "dddddddddddddddddddddddddddddddddddddddd",
+      "provider": "gitnexus",
+      "providerVersion": "1.2.0",
+      "status": "complete",
+      "facts": [
+        {
+          "version": 1,
+          "kind": "node",
+          "node": {
+            "id": "handler",
+            "kind": "function",
+            "name": "handle",
+            "path": "src/handler.ts",
+            "span": { "startLine": 1, "endLine": 5 },
+            "public": true,
+            "roles": ["entry-point"],
+            "confidence": 1,
+            "extension": {
+              "provider": "gitnexus",
+              "schema": "symbol-v1",
+              "data": { "community": 2, "resolution": "exact" }
+            },
+            "provenance": {
+              "contractVersion": 1,
+              "provider": "gitnexus",
+              "providerVersion": "1.2.0",
+              "adapterVersion": "1.0.0",
+              "snapshotId": "gitnexus:fixture:head",
+              "revision": "dddddddddddddddddddddddddddddddddddddddd",
+              "queryId": "query:definitions",
+              "retrievalReason": "Find symbol definition for handler",
+              "status": "complete",
+              "source": {
+                "path": "src/handler.ts",
+                "span": { "startLine": 1, "endLine": 5 }
+              }
+            }
+          }
+        }
+      ],
+      "diagnostics": [],
+      "truncationReasons": [],
+      "observedDepth": 0,
+      "observedMaxFanOut": 0,
+      "bytes": 336,
+      "durationMs": 7
+    },
+    {
+      "version": 1,
+      "queryId": "query:tests",
+      "snapshotId": "gitnexus:fixture:head",
+      "revision": "dddddddddddddddddddddddddddddddddddddddd",
+      "provider": "gitnexus",
+      "providerVersion": "1.2.0",
+      "status": "complete",
+      "facts": [
+        {
+          "version": 1,
+          "kind": "node",
+          "node": {
+            "id": "route-test",
+            "kind": "test",
+            "name": "handles requests",
+            "path": "test/handler.test.ts",
+            "span": { "startLine": 3, "endLine": 9 },
+            "roles": ["test"],
+            "provenance": {
+              "contractVersion": 1,
+              "provider": "gitnexus",
+              "providerVersion": "1.2.0",
+              "adapterVersion": "1.0.0",
+              "snapshotId": "gitnexus:fixture:head",
+              "revision": "dddddddddddddddddddddddddddddddddddddddd",
+              "queryId": "query:tests",
+              "retrievalReason": "Find associated tests for handler",
+              "status": "complete",
+              "source": {
+                "path": "test/handler.test.ts",
+                "span": { "startLine": 3, "endLine": 9 }
+              }
+            }
+          }
+        }
+      ],
+      "diagnostics": [],
+      "truncationReasons": [],
+      "observedDepth": 1,
+      "observedMaxFanOut": 1,
+      "bytes": 304,
+      "durationMs": 8
+    }
+  ]
+}

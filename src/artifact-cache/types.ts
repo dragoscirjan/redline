@@ -39,6 +39,7 @@ export interface ToolHealthProbe {
   readonly executable: string;
   readonly args: readonly string[];
   readonly expectedExitCode: number;
+  /** Exact expected stdout after trimming surrounding whitespace. */
   readonly expectedOutput?: string;
 }
 

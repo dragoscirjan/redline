@@ -7,14 +7,15 @@ Redline's artifact-cache layer defines forge-independent contracts for exact rev
 This milestone provides:
 
 - versioned review-tool descriptors and installed-tool manifests;
-- provider-neutral `ToolInstaller` contracts and an immutable installer registry;
+- provider-neutral `ToolInstaller` contracts, an immutable installer registry, and a restore/validate/reinstall acquisition manager;
+- pinned GitNexus and CodeGraphContext installer adapters with immutable distributions and executable health checks;
 - digest-bound identities for downloaded tools, installed tools, code-index snapshots, normalized queries, graph deltas, change-impact maps, and context plans;
 - strict artifact-manifest parsing and deterministic compatibility keys;
 - an explicit no-cache backend;
 - a local-filesystem backend with validated restore, atomic publication, inter-writer locking, stale-lock recovery, corruption eviction, expiry, and bounded retention;
 - operation-level status, byte counts, elapsed time, and bounded diagnostics.
 
-Concrete Pi, OpenCode, GitNexus, and CodeGraphContext installers are not implemented by this milestone. The GitHub Actions cache adapter, runner wiring, aggregate performance metrics, and cold-versus-warm benchmarks also remain future #111 work.
+Concrete Pi and OpenCode installers are not implemented by this milestone. The GitHub Actions cache adapter, code-index snapshot integration, review-runner wiring, aggregate performance metrics, and cold-versus-warm benchmarks also remain future #111 work.
 
 ## Tool descriptors
 
@@ -32,7 +33,15 @@ A `ReviewToolDescriptor` binds an exact tool to all acquisition and compatibilit
 
 `reviewToolDescriptorDigest` changes when any of these fields changes. Download and installed-tool cache identities use that digest, so a tool version, recipe, ABI, platform, grammar, feature, distribution, or licensing change cannot reuse the previous artifact identity.
 
-The installer registry contains no built-in installers yet. Adding a tool requires an adapter and registration rather than branching in harness, review, publication, or code-intelligence domains.
+`InstalledToolManager` tries a validated restore first. A missing, bypassed, corrupt, incompatible, backend-error, or timed-out cache result falls back to installation. Cache operations have a separate bounded budget and restore into an isolated staging path, so an abandoned backend cannot later overwrite the selected installation. A restored tree must match its file manifest and pass an exact pinned-version probe; otherwise it is evicted and reinstalled. New installations are validated before optional cache publication. Cache failures are retained as warnings and never prevent a successfully acquired required tool from being used.
+
+The built-in code-indexer registry contains GitNexus and CodeGraphContext adapters. Adding another tool requires an adapter and registration rather than branching in harness, review, publication, or code-intelligence domains.
+
+## Pinned code-indexer distributions
+
+GitNexus is pinned to `1.6.12`. Acquisition verifies the published npm archive SHA-512 digest, separately verifies the tagged upstream `package-lock.json`, extracts the archive with an argument-array `tar` invocation, and runs `npm ci` without development or optional dependencies. The dependency-lock digest, disabled optional embedding stack, exact Node version, and Node module ABI are compatibility inputs. GitNexus remains subject to the PolyForm Noncommercial License; Redline records redistribution as conditional and does not repackage it.
+
+CodeGraphContext is pinned to `0.5.7`. Acquisition uses the upstream standalone release binaries and published SHA-256 digests for Linux x64, macOS arm64, and Windows x64. Unsupported platform/architecture combinations fail explicitly. CodeGraphContext is MIT-licensed and its descriptor records redistribution as allowed.
 
 ## Artifact identities
 
@@ -76,4 +85,4 @@ The backend returns explicit `hit`, `miss`, `stale`, `incompatible`, `corrupt`, 
 
 Cache roots, tool descriptors, installer registrations, artifact identities, and filesystem destinations are trusted workflow configuration. Repository and pull-request content remain untrusted data and cannot alter keys, installer recipes, executable probes, cache paths, or health checks.
 
-Cache metadata contains no credentials. Tool installers must receive only the credentials explicitly selected for acquisition, must not persist them in installed trees or manifests, and must validate restored executables before use. Those concrete installer and health-check implementations are deferred to the next #111 slice.
+Cache metadata contains no credentials. The current public-distribution installers require trusted absolute Node, npm, and tar executable paths plus an explicitly constructed environment from the composition layer; they do not read ambient `PATH` or package-manager credentials. Downloads require HTTPS, have byte and time bounds, and are digest-verified before execution or extraction. Installer and health processes use the neutral shared bounded process runner, argument arrays, bounded output, and hard timeouts. Installed trees reject symbolic links and unsupported file types before caching.

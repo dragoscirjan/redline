@@ -42,6 +42,15 @@ describe('ToolInstallerRegistry', () => {
     expect(original.has('A')).toBe(false);
   });
 
+  it('does not retain mutable registration aliases', () => {
+    const registration = { id: 'stable', create: () => new StubInstaller('stable') };
+    const registry = new ToolInstallerRegistry([registration]);
+    const extended = registry.with({ id: 'extra', create: () => new StubInstaller('extra') });
+    registration.create = () => new StubInstaller('changed');
+    expect(registry.create('stable').id).toBe('stable');
+    expect(extended.create('stable').id).toBe('stable');
+  });
+
   it('rejects invalid, duplicate, unknown, and mismatched installers', () => {
     expect(() => new ToolInstallerRegistry([
       { id: '../escape', create: () => new StubInstaller('../escape') },

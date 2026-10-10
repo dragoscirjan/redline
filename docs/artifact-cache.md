@@ -64,7 +64,7 @@ Symbolic links, non-regular files, nested empty directories, and directory modes
 
 `LocalFilesystemArtifactCache` publishes through a temporary sibling directory and one atomic rename. A per-key owner lease with a heartbeat serializes concurrent publishers, including publishers in separate cache instances. A stale lease is reclaimed only when its recorded local process is no longer alive. Temporary and lock paths are not valid cache entries and interrupted publication cannot expose a complete-looking artifact.
 
-Retention supports maximum age, entry count, and payload bytes. Pruning removes expired and corrupt entries first, then the oldest immutable entries until all configured bounds are satisfied. Eviction affects performance only; it never changes normalized inputs or review decisions.
+Retention supports maximum age, entry count, and payload bytes. Pruning reclaims stale interrupted-publication directories and retired stale-lock directories, removes expired and corrupt entries, then removes the oldest immutable entries until all configured bounds are satisfied. Fresh or actively locked publication work is preserved. Eviction affects performance only; it never changes normalized inputs or review decisions.
 
 The backend returns explicit `hit`, `miss`, `stale`, `incompatible`, `corrupt`, `bypassed`, and `error` states. Save, remove, and prune operations similarly report outcomes instead of pretending cache work succeeded.
 

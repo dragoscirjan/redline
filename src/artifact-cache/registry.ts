@@ -27,7 +27,10 @@ export class ToolInstallerRegistry {
     for (const registration of registrations) {
       validateRegistration(registration);
       if (indexed.has(registration.id)) throw new Error(`duplicate tool installer: ${registration.id}`);
-      indexed.set(registration.id, registration);
+      indexed.set(registration.id, {
+        id: registration.id,
+        create: registration.create,
+      });
     }
     this.#registrations = indexed;
   }

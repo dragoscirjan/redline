@@ -42,6 +42,7 @@ async function createSource(root: string, suffix = ''): Promise<string> {
   const source = join(root, `source${suffix}`);
   await mkdir(join(source, 'bin'), { recursive: true });
   await mkdir(join(source, 'a'), { recursive: true });
+  await Promise.all([source, join(source, 'bin'), join(source, 'a')].map((path) => chmod(path, 0o755)));
   await writeFile(join(source, 'bin', 'tool'), `tool${suffix}`);
   await chmod(join(source, 'bin', 'tool'), 0o755);
   await writeFile(join(source, 'a', 'nested.txt'), `nested${suffix}`);
@@ -220,6 +221,32 @@ describe('LocalFilesystemArtifactCache', () => {
     await cache.save({ identity: identity('a'), sourceDirectory: source });
     expect((await cache.inspect(identity('a'))).status).toBe('hit');
     expect((await cache.inspect(identity('b'))).status).toBe('miss');
+  });
+
+  it('prunes abandoned publication and stale-lock directories without touching fresh work', async () => {
+    const workspace = await temporaryDirectory('redline-cache-orphans-');
+    const cacheRoot = join(workspace, 'cache');
+    const [, kind, digest] = artifactCacheKey(identity()).split('/');
+    if (kind === undefined || digest === undefined) throw new Error('test cache key is malformed');
+    const kindDirectory = join(cacheRoot, 'artifacts', 'v1', kind);
+    const oldPublication = join(kindDirectory, `.publish-${digest}-old`);
+    const freshPublication = join(kindDirectory, `.publish-${digest}-fresh`);
+    const staleLock = join(cacheRoot, 'locks', `${kind}-${digest}.lock.stale.999.1`);
+    await mkdir(oldPublication, { recursive: true });
+    await mkdir(freshPublication, { recursive: true });
+    await mkdir(staleLock, { recursive: true });
+    await writeFile(join(oldPublication, 'partial'), 'old');
+    await writeFile(join(freshPublication, 'partial'), 'fresh');
+    await utimes(oldPublication, new Date(0), new Date(0));
+    await utimes(staleLock, new Date(0), new Date(0));
+
+    const cache = new LocalFilesystemArtifactCache(cacheRoot, { staleLockMs: 1_000 });
+    const pruned = await cache.prune({ maxEntries: 10 });
+    expect(pruned.status).toBe('completed');
+    expect(pruned.removedEntries).toBe(1);
+    await expect(stat(oldPublication)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(stat(staleLock)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect((await stat(freshPublication)).isDirectory()).toBe(true);
   });
 
   it('prunes oldest entries by count and bytes without changing retained payloads', async () => {

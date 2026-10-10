@@ -529,7 +529,7 @@ export class LocalFilesystemArtifactCache implements ArtifactCache {
       await rm(existing.directory, { force: true, recursive: true });
       const parent = dirname(existing.directory);
       await mkdir(parent, { recursive: true });
-      temporaryDirectory = await mkdtemp(join(parent, '.publish-'));
+      temporaryDirectory = await mkdtemp(join(parent, `.publish-${basename(existing.directory)}-`));
       const payloadDirectory = join(temporaryDirectory, PAYLOAD_DIRECTORY);
       await mkdir(payloadDirectory);
       await chmod(payloadDirectory, 0o755);
@@ -602,6 +602,86 @@ export class LocalFilesystemArtifactCache implements ArtifactCache {
     }
   }
 
+  async #lockAppearsActive(key: string): Promise<boolean> {
+    const lockPath = this.#lockPath(key);
+    try {
+      let activity = await stat(lockPath);
+      let ownerPid: number | undefined;
+      let ownerToken: string | undefined;
+      try {
+        const owner = JSON.parse(await readFile(join(lockPath, 'owner.json'), 'utf8')) as {
+          pid?: unknown;
+          token?: unknown;
+        };
+        if (Number.isSafeInteger(owner.pid) && (owner.pid as number) > 0) ownerPid = owner.pid as number;
+        if (typeof owner.token === 'string') ownerToken = owner.token;
+        activity = await stat(join(lockPath, 'owner.json'));
+      } catch (error) {
+        if (!isErrno(error, 'ENOENT') && !(error instanceof SyntaxError)) return true;
+      }
+      const ownerAlive = ownerPid === process.pid && ownerToken !== undefined
+        ? activeLockTokens.has(ownerToken)
+        : ownerPid !== undefined && processIsAlive(ownerPid);
+      const staleAfterMs = ownerPid === undefined ? Math.max(this.#staleLockMs, 1_000) : this.#staleLockMs;
+      return ownerAlive || Date.now() - activity.mtimeMs < staleAfterMs;
+    } catch (error) {
+      return !isErrno(error, 'ENOENT');
+    }
+  }
+
+  async #cleanupOrphans(): Promise<number> {
+    const now = Date.now();
+    const locksDirectory = join(this.#rootDirectory, 'locks');
+    try {
+      const locks = await readdir(locksDirectory, { withFileTypes: true });
+      for (const lock of locks) {
+        if (!lock.isDirectory() || lock.isSymbolicLink() || !lock.name.includes('.lock.stale.')) continue;
+        const path = join(locksDirectory, lock.name);
+        const metadata = await lstat(path);
+        if (now - metadata.mtimeMs >= this.#staleLockMs) await removeBestEffort(path);
+      }
+    } catch (error) {
+      if (!isErrno(error, 'ENOENT')) throw error;
+    }
+
+    const versionDirectory = join(this.#rootDirectory, 'artifacts', 'v1');
+    let kinds;
+    try {
+      kinds = await readdir(versionDirectory, { withFileTypes: true });
+    } catch (error) {
+      if (isErrno(error, 'ENOENT')) return 0;
+      throw error;
+    }
+    let removed = 0;
+    for (const kind of kinds) {
+      if (!kind.isDirectory() || kind.isSymbolicLink()) continue;
+      const kindDirectory = join(versionDirectory, kind.name);
+      const artifacts = await readdir(kindDirectory, { withFileTypes: true });
+      for (const artifact of artifacts) {
+        const match = /^\.publish-([0-9a-f]{64})-/u.exec(artifact.name);
+        if (!artifact.isDirectory() || artifact.isSymbolicLink() || match === null) continue;
+        const path = join(kindDirectory, artifact.name);
+        const metadata = await lstat(path);
+        if (now - metadata.mtimeMs < this.#staleLockMs) continue;
+        const key = `v1/${kind.name}/${match[1]}`;
+        if (await this.#lockAppearsActive(key)) continue;
+        let releaseLock: (() => Promise<void>) | undefined;
+        try {
+          releaseLock = await this.#acquireLock(key);
+          const current = await lstat(path);
+          if (now - current.mtimeMs < this.#staleLockMs) continue;
+          await rm(path, { force: true, recursive: true });
+          removed += 1;
+        } catch (error) {
+          if (!isErrno(error, 'ENOENT')) throw error;
+        } finally {
+          if (releaseLock !== undefined) await releaseLock();
+        }
+      }
+    }
+    return removed;
+  }
+
   async #artifactDirectories(): Promise<string[]> {
     const versionDirectory = join(this.#rootDirectory, 'artifacts', 'v1');
     let kinds;
@@ -634,6 +714,7 @@ export class LocalFilesystemArtifactCache implements ArtifactCache {
     let removedEntries = 0;
     let removedBytes = 0;
     try {
+      removedEntries += await this.#cleanupOrphans();
       const candidates: RetentionCandidate[] = [];
       for (const directory of await this.#artifactDirectories()) {
         try {

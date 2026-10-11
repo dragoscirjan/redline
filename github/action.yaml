@@ -1,13 +1,14 @@
 name: Redline review
 
-description: Build a review context bundle for a pull request's exact base and head commits and, when review inputs are supplied, run the harness executor and publish its per-file review output as artifacts.
+description: Build a review context bundle for a pull request's exact base and head commits and, when review inputs are supplied, build bounded indexed context, run the harness executor, and publish its per-file review output as artifacts.
 
 author: dragoscirjan
 
 # Inputs are fixed enums/data. No input accepts free-form review
 # instructions. Review execution is enabled only when backend, model-config,
 # and model-auth are all supplied; otherwise the action keeps the
-# context-bundle-only behavior. Values travel from the action to the review
+# context-bundle-only behavior. Indexing is action-owned and enabled by
+# default for review execution. Values travel from the action to the review
 # tool through the REDLINE_* environment contract (interim design).
 inputs:
   backend:
@@ -46,10 +47,10 @@ inputs:
     description: Live model stream in the run log - silent (per-file lines only), progress (one dot per model text chunk), full-output (readable stream text). Default progress.
     required: false
     default: progress
-  code-context:
-    description: Optional path to a code-context.json artifact produced for this repository and pull request head. Invalid or unavailable context degrades to file-only review.
+  indexing:
+    description: Indexed-context mode, enabled or disabled. Enabled builds bounded context inside this action; unavailable context degrades to file-only review.
     required: false
-    default: ""
+    default: enabled
   artifact-name:
     description: Base name for the downloadable review artifacts
     required: false
@@ -68,6 +69,7 @@ runs:
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        INDEXING: ${{ inputs.indexing }}
         ARTIFACT_RETENTION_DAYS: ${{ inputs.artifact-retention-days }}
       run: |
         set -euo pipefail
@@ -78,6 +80,7 @@ runs:
         [[ "$BASE_SHA" =~ ^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$ ]]
         [[ "$HEAD_SHA" =~ ^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$ ]]
         [[ "$HEAD_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+        [[ "$INDEXING" == 'enabled' || "$INDEXING" == 'disabled' ]]
         [[ "$ARTIFACT_RETENTION_DAYS" =~ ^[0-9]+$ ]]
         (( ARTIFACT_RETENTION_DAYS >= 1 && ARTIFACT_RETENTION_DAYS <= 90 ))
 
@@ -133,8 +136,6 @@ runs:
         REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
         REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head
         REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
-        REDLINE_CODE_CONTEXT: ${{ inputs.code-context }}
-        REDLINE_CODE_CONTEXT_REPOSITORY: ${{ inputs.code-context != '' && github.repository || '' }}
         # The publication context arrives together or not at all: the
         # repository, pull request, and head only count as provided when a
         # publication token is present. The App installation token is
@@ -168,6 +169,16 @@ runs:
         git cat-file -e "$BASE_SHA^{commit}"
         git cat-file -e "$HEAD_SHA^{commit}"
 
+    - name: Build bounded code index
+      id: code-index
+      if: ${{ inputs.indexing == 'enabled' && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
+      uses: $/github/code-index
+      with:
+        base: ${{ github.event.pull_request.base.sha }}
+        head: ${{ github.event.pull_request.head.sha }}
+        repository: ${{ github.repository }}
+        output-directory: ${{ github.workspace }}/code-index
+
     - name: Build review context bundle
       shell: bash
       env:
@@ -189,6 +200,7 @@ runs:
       with:
         name: ${{ inputs.artifact-name }}-context
         path: |
+          code-index/code-context.json
           source-at-head/
           review/
         if-no-files-found: error
@@ -249,8 +261,8 @@ runs:
         REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
         REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head
         REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
-        REDLINE_CODE_CONTEXT: ${{ inputs.code-context }}
-        REDLINE_CODE_CONTEXT_REPOSITORY: ${{ inputs.code-context != '' && github.repository || '' }}
+        REDLINE_CODE_CONTEXT: ${{ steps.code-index.outputs.context-file }}
+        REDLINE_CODE_CONTEXT_REPOSITORY: ${{ steps.code-index.outputs.context-file != '' && github.repository || '' }}
       run: |
         set -euo pipefail
         # Token-free by design: the review process carries no publication

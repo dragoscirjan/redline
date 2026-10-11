@@ -1,35 +1,28 @@
 # Code-index action
 
-`github/code-index` is a secondary composite action that prepares bounded code context for an exact pull request head. It runs before the review action. The review core does not install an indexer, open an index database, or invoke provider commands.
+`github/code-index` is a secondary composite action that prepares bounded code context for an exact pull request head. The published Redline action invokes it before review execution. The review core does not install an indexer, open an index database, or invoke provider commands.
 
 The first implementation uses CodeGraphContext (CGC) 0.5.7 with its embedded FalkorDB backend on Linux x64. Its standalone MIT-licensed release binary is pinned by version and SHA-256 digest. Other platforms produce an `unsupported` artifact instead of blocking file-only review.
 
-## Workflow use
+## Root action integration
 
-The caller checks out trusted workflow tooling with both pull request commits available, then invokes the index action:
-
-```yaml
-- name: Prepare bounded code context
-  id: code-index
-  uses: dragoscirjan/redline/github/code-index@v1.0.0
-  with:
-    base: ${{ github.event.pull_request.base.sha }}
-    head: ${{ github.event.pull_request.head.sha }}
-    repository: ${{ github.repository }}
-    output-directory: ${{ github.workspace }}/code-index
-```
-
-The action writes `code-context.json` and exposes its absolute path and coverage status. Pass that path to the review action's optional `code-context` input:
+Consumers invoke only the published Redline action. A configured review enables indexing by default; `indexing: disabled` is the explicit file-only mode.
 
 ```yaml
 - name: Run Redline review
   uses: dragoscirjan/redline/github@v1.0.0
   with:
-    code-context: ${{ steps.code-index.outputs.artifact-path }}
-    # backend, model-config, model-auth, and publication inputs omitted here
+    backend: pi
+    model-config: ${{ vars.REDLINE_MODEL_CONFIG }}
+    model-auth: ${{ secrets.MODEL_CREDENTIALS }}
+    indexing: enabled # default; set disabled for file-only review
 ```
 
-The review validates the artifact identity and resolves every selected span again from its captured exact-head source. Missing or invalid context remains file-only review. The repository's normal reusable and dogfood workflows do not enable indexing until the #104 benchmark comparison justifies it.
+Inside `github/action.yaml`, the root composite invokes `uses: $/github/code-index` after fetching the exact base and head commits. GitHub.com's `$/` self-repository reference resolves the child action at the root action's exact running commit, so a consumer pinned to a version tag or commit cannot receive a different index action. It also avoids `./`, which would resolve against the consumer's workspace. GitHub Enterprise Server does not support `$/`; it is outside this action's current platform scope.
+
+The child writes `code-context.json` and exposes its absolute path and coverage status to the root action. The root passes that generated path through the internal review environment contract and includes the artifact in the downloadable context bundle. Consuming workflows do not supply a context path or orchestrate a separate index step.
+
+The review validates the artifact identity and resolves every selected span again from its captured exact-head source. Missing, invalid, unsupported, or unavailable context remains file-only review with explicit degraded coverage.
 
 ## What the action does
 

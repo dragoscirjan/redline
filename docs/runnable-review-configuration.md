@@ -1,6 +1,6 @@
 # Runnable review configuration
 
-The GitHub Action passes every value to the review tool through environment variables. This is the interim contract; the parsing in `src/review/environment.ts` is authoritative.
+The GitHub Action passes every value to the review tool through environment variables. This is the interim contract; the parsing in `src/review/environment.ts` is authoritative. When action-owned indexing is enabled, the action fills the code-context variables from its bundled index action; GitHub Action callers do not provide an artifact path.
 
 ## Environment contract
 
@@ -92,7 +92,7 @@ node dist/src/review/cli.js --validate-only   # validate the environment only
 node dist/src/review/cli.js                   # run the review
 ```
 
-To opt into indexed context, set both variables before running the review:
+For standalone CLI use, opt into indexed context by setting both variables before running the review:
 
 ```bash
 REDLINE_CODE_CONTEXT=/absolute/path/code-context.json

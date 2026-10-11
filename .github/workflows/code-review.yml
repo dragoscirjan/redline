@@ -25,6 +25,11 @@ on:
         required: false
         type: string
         default: progress
+      indexing:
+        description: Indexed-context mode, enabled or disabled. Default enabled.
+        required: false
+        type: string
+        default: enabled
       report-style:
         description: Report style, single-block or inline. Legacy input kept for the previously published action; the current action ignores it.
         required: false
@@ -122,6 +127,7 @@ jobs:
           github-token: ${{ secrets.github-token }}
           finding-scope: ${{ inputs.finding-scope }}
           verbosity: ${{ inputs.verbosity }}
+          indexing: ${{ inputs.indexing }}
           report-style: ${{ inputs.report-style }}
           timeout: ${{ inputs.timeout }}
           credential-isolation: ${{ inputs.credential-isolation }}

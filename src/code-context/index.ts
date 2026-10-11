@@ -1,0 +1,14 @@
+export {
+  CODE_CONTEXT_VERSION,
+  MAX_CODE_CONTEXT_ARTIFACT_BYTES,
+  loadCodeContextArtifact,
+  parseCodeContextArtifact,
+  type ChangedFileCodeContext,
+  type CodeContextArtifact,
+  type CodeContextDiagnostic,
+  type CodeContextDiagnosticLevel,
+  type CodeContextProvider,
+  type CodeContextStatus,
+  type CodeContextTimings,
+  type RelatedCodeSpan,
+} from './artifact.js';

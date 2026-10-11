@@ -1,0 +1,92 @@
+name: Redline code index
+
+description: Build bounded, source-validated code context for an exact pull request revision without executing repository code.
+
+author: dragoscirjan
+
+inputs:
+  base:
+    description: Exact pull request base commit (full SHA-1 or SHA-256 identifier).
+    required: true
+  head:
+    description: Exact pull request head commit (full SHA-1 or SHA-256 identifier).
+    required: true
+  repository:
+    description: Repository identity in owner/name form.
+    required: true
+  output-directory:
+    description: Directory under github.workspace where code-context.json is written.
+    required: true
+
+outputs:
+  context-file:
+    description: Absolute path to the bounded code-context.json artifact.
+    value: ${{ steps.finalize.outputs.context-file }}
+  status:
+    description: "Context coverage status: complete, partial, unsupported, or unavailable."
+    value: ${{ steps.finalize.outputs.status }}
+  cache-hit:
+    description: Whether actions/cache restored an exact-head or compatible earlier database.
+    value: ${{ steps.finalize.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare pinned CGC and cache identity
+      id: prepare
+      shell: bash
+      env:
+        REDLINE_CODE_INDEX_BASE: ${{ inputs.base }}
+        REDLINE_CODE_INDEX_HEAD: ${{ inputs.head }}
+        REDLINE_CODE_INDEX_REPOSITORY: ${{ inputs.repository }}
+        REDLINE_CODE_INDEX_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
+      run: bash "${{ github.action_path }}/run.sh" prepare
+
+    - name: Restore CGC database
+      id: cache-restore
+      if: ${{ steps.prepare.outputs.available == 'true' }}
+      continue-on-error: true
+      uses: actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+      with:
+        path: ${{ steps.prepare.outputs.cache-path }}
+        key: ${{ steps.prepare.outputs.cache-primary-key }}
+        restore-keys: |
+          ${{ steps.prepare.outputs.cache-exact-prefix }}
+          ${{ steps.prepare.outputs.cache-compatible-prefix }}
+
+    - name: Index head and export bounded context
+      id: build
+      if: ${{ steps.prepare.outputs.available == 'true' }}
+      shell: bash
+      env:
+        REDLINE_CODE_INDEX_BASE: ${{ inputs.base }}
+        REDLINE_CODE_INDEX_HEAD: ${{ inputs.head }}
+        REDLINE_CODE_INDEX_REPOSITORY: ${{ inputs.repository }}
+        REDLINE_CODE_INDEX_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
+        REDLINE_CODE_INDEX_CACHE_MATCHED_KEY: ${{ steps.cache-restore.outputs.cache-matched-key }}
+        REDLINE_CODE_INDEX_CACHE_RESTORE_OUTCOME: ${{ steps.cache-restore.outcome }}
+      run: bash "${{ github.action_path }}/run.sh" build
+
+    - name: Start cache-save timing
+      if: ${{ steps.build.outputs.cache-ready == 'true' }}
+      shell: bash
+      run: bash "${{ github.action_path }}/run.sh" save-start
+
+    - name: Save validated CGC database
+      id: cache-save
+      if: ${{ steps.build.outputs.cache-ready == 'true' }}
+      continue-on-error: true
+      uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+      with:
+        path: ${{ steps.prepare.outputs.cache-path }}
+        key: ${{ steps.prepare.outputs.cache-primary-key }}
+
+    - name: Finalize code-context diagnostics
+      id: finalize
+      if: ${{ always() && steps.prepare.outcome == 'success' }}
+      shell: bash
+      env:
+        REDLINE_CODE_INDEX_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
+        REDLINE_CODE_INDEX_CACHE_MATCHED_KEY: ${{ steps.cache-restore.outputs.cache-matched-key }}
+        REDLINE_CODE_INDEX_CACHE_SAVE_OUTCOME: ${{ steps.cache-save.outcome }}
+      run: bash "${{ github.action_path }}/run.sh" finalize

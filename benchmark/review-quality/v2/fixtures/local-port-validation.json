@@ -1,0 +1,136 @@
+{
+  "version": 2,
+  "id": "local-port-validation",
+  "title": "Reject non-integer network ports",
+  "kind": "defect",
+  "baseRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "headRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "files": [
+    {
+      "id": "000001",
+      "path": "src/config.ts",
+      "status": "M",
+      "base": "export function parsePort(value: string): number {\n  const port = Number(value);\n  if (!Number.isInteger(port) || port < 1 || port > 65_535) {\n    throw new Error('invalid port');\n  }\n  return port;\n}\n",
+      "head": "export function parsePort(value: string): number {\n  const port = Number(value);\n  if (port < 1 || port > 65_535) {\n    throw new Error('invalid port');\n  }\n  return port;\n}\n",
+      "diff": "diff --git a/src/config.ts b/src/config.ts\n--- a/src/config.ts\n+++ b/src/config.ts\n@@ -1,7 +1,7 @@\n export function parsePort(value: string): number {\n   const port = Number(value);\n-  if (!Number.isInteger(port) || port < 1 || port > 65_535) {\n+  if (port < 1 || port > 65_535) {\n     throw new Error('invalid port');\n   }\n   return port;\n }\n"
+    }
+  ],
+  "additionalHeadFiles": {},
+  "expectedIssues": [
+    {
+      "id": "non-integer-port",
+      "title": "Non-integer ports are accepted",
+      "locations": [
+        {
+          "path": "src/config.ts",
+          "side": "RIGHT",
+          "startLine": 3,
+          "endLine": 3
+        }
+      ]
+    }
+  ],
+  "recordings": [
+    {
+      "mode": "file-only",
+      "responses": [
+        {
+          "fileId": "000001",
+          "durationMs": 12,
+          "document": {
+            "version": 2,
+            "fileId": "000001",
+            "outcome": "findings",
+            "findings": [
+              {
+                "category": "correctness",
+                "classification": "defect",
+                "severity": "medium",
+                "confidence": 0.98,
+                "side": "RIGHT",
+                "startLine": 3,
+                "endLine": 3,
+                "evidence": "  if (port < 1 || port > 65_535) {",
+                "impact": "Values such as 1.5 now pass validation even though TCP and UDP ports must be integers.",
+                "fix": "Restore the integer check before accepting the parsed port."
+              }
+            ]
+          }
+        }
+      ],
+      "judgments": [
+        {
+          "fileId": "000001",
+          "findingIndex": 0,
+          "expectedIssueId": "non-integer-port"
+        }
+      ]
+    },
+    {
+      "mode": "indexed-context",
+      "responses": [
+        {
+          "fileId": "000001",
+          "durationMs": 12,
+          "document": {
+            "version": 2,
+            "fileId": "000001",
+            "outcome": "findings",
+            "findings": [
+              {
+                "category": "correctness",
+                "classification": "defect",
+                "severity": "medium",
+                "confidence": 0.98,
+                "side": "RIGHT",
+                "startLine": 3,
+                "endLine": 3,
+                "evidence": "  if (port < 1 || port > 65_535) {",
+                "impact": "Values such as 1.5 now pass validation even though TCP and UDP ports must be integers.",
+                "fix": "Restore the integer check before accepting the parsed port."
+              }
+            ]
+          }
+        }
+      ],
+      "judgments": [
+        {
+          "fileId": "000001",
+          "findingIndex": 0,
+          "expectedIssueId": "non-integer-port"
+        }
+      ],
+      "codeContext": {
+        "version": 1,
+        "provider": {
+          "id": "cgc",
+          "version": "0.5.7"
+        },
+        "repository": "benchmark/redline",
+        "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "status": "complete",
+        "files": [
+          {
+            "changedPath": "src/config.ts",
+            "status": "complete",
+            "related": []
+          }
+        ],
+        "diagnostics": [
+          {
+            "level": "info",
+            "code": "recorded-benchmark",
+            "message": "Checked-in provider output for deterministic evaluation."
+          }
+        ],
+        "timings": {
+          "installationMs": 0,
+          "restoreMs": 0,
+          "indexMs": 0,
+          "queryMs": 0,
+          "saveMs": null
+        }
+      }
+    }
+  ]
+}

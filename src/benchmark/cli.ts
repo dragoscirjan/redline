@@ -10,7 +10,7 @@ interface CliOptions {
 }
 
 function parseArguments(args: readonly string[]): CliOptions {
-  let corpusDirectory = 'benchmark/review-quality/v1';
+  let corpusDirectory = 'benchmark/review-quality/v2';
   let outputDirectory: string | undefined;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -26,7 +26,7 @@ function parseArguments(args: readonly string[]): CliOptions {
   const corpus = resolve(corpusDirectory);
   return {
     corpusDirectory: corpus,
-    outputDirectory: resolve(outputDirectory ?? `${corpus}/baseline`),
+    outputDirectory: resolve(outputDirectory ?? `${corpus}/comparison`),
   };
 }
 

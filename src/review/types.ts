@@ -4,6 +4,8 @@
  * GitHub Action surface.
  */
 
+import type { CodeContextProvider, CodeContextStatus } from '../code-context/artifact.js';
+
 export type FindingScope = 'defects' | 'defects-and-risks';
 
 export const FINDING_SCOPES: readonly FindingScope[] = ['defects', 'defects-and-risks'];
@@ -70,7 +72,32 @@ export type FileReviewErrorKind =
   | 'invalid-output'
   | 'preparation-failed';
 
-export const FILE_REVIEW_RECORD_VERSION = 2 as const;
+export type ReviewCodeContextStatus = CodeContextStatus | 'disabled';
+
+export type ReviewCodeContextReason =
+  | 'not-configured'
+  | 'artifact-invalid'
+  | 'identity-mismatch'
+  | 'artifact-unsupported'
+  | 'artifact-unavailable'
+  | 'provider-partial'
+  | 'no-file-entry'
+  | 'source-byte-limit';
+
+export interface ReviewCodeContextCoverage {
+  readonly status: ReviewCodeContextStatus;
+  readonly provider: CodeContextProvider | null;
+  readonly revision: string | null;
+  readonly relatedSpans: number;
+  readonly sourceBytes: number;
+  readonly reason: ReviewCodeContextReason | null;
+}
+
+export interface ReviewCodeContextRunCoverage extends ReviewCodeContextCoverage {
+  readonly filesWithContext: number;
+}
+
+export const FILE_REVIEW_RECORD_VERSION = 3 as const;
 
 /**
  * The persisted per-file review record. Written as JSON and Markdown into
@@ -84,6 +111,7 @@ export interface FileReviewRecord {
   readonly status: string;
   readonly harness: string;
   readonly model: string;
+  readonly codeContext: ReviewCodeContextCoverage;
   readonly outcome: FileReviewOutcome;
   readonly errorKind?: FileReviewErrorKind | undefined;
   readonly reason?: string | undefined;
@@ -91,13 +119,14 @@ export interface FileReviewRecord {
   readonly durationMs: number;
 }
 
-export const REVIEW_RUN_SUMMARY_VERSION = 2 as const;
+export const REVIEW_RUN_SUMMARY_VERSION = 3 as const;
 
 export interface ReviewRunSummaryFile {
   readonly fileId: string;
   readonly path: string;
   readonly outcome: FileReviewOutcome;
   readonly errorKind?: FileReviewErrorKind | undefined;
+  readonly codeContext: ReviewCodeContextCoverage;
   readonly findingCount: number;
   /** Finding spans as `x` or `x-y` strings, one per published finding. */
   readonly findingSpans: readonly string[];
@@ -115,5 +144,6 @@ export interface ReviewRunSummary {
   readonly reviewedFiles: number;
   readonly omittedFiles: number;
   readonly findings: number;
+  readonly codeContext: ReviewCodeContextRunCoverage;
   readonly files: readonly ReviewRunSummaryFile[];
 }

@@ -136,9 +136,51 @@ describe('parseReviewEnvironment', () => {
       expect(parsed.review?.credential).toEqual({ provider: 'mock', value: 'test-key' });
       expect(parsed.review?.findingScope).toBe('defects');
       expect(parsed.review?.timeout.minutes).toBe(30);
+      expect(parsed.review?.codeContext).toBeUndefined();
     } finally {
       await fixture.cleanup();
     }
+  });
+
+  it('parses optional indexed context identity', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const parsed = parseReviewEnvironment({
+        ...cleanReviewEnvironment(fixture, 'echo'),
+        REDLINE_CODE_CONTEXT: '/tmp/code-context.json',
+        REDLINE_CODE_CONTEXT_REPOSITORY: 'owner/repository',
+      });
+      expect(parsed.review?.codeContext).toEqual({
+        path: '/tmp/code-context.json',
+        repository: 'owner/repository',
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('requires indexed context path and repository together', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const base = cleanReviewEnvironment(fixture, 'echo');
+      expect(() => parseReviewEnvironment({ ...base, REDLINE_CODE_CONTEXT: '/tmp/context.json' })).toThrow(
+        /must arrive together/u,
+      );
+      expect(() => parseReviewEnvironment({
+        ...base,
+        REDLINE_CODE_CONTEXT: '/tmp/context.json',
+        REDLINE_CODE_CONTEXT_REPOSITORY: 'invalid repository',
+      })).toThrow(/must use owner\/name syntax/u);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects indexed context without review execution', () => {
+    expect(() => parseReviewEnvironment({
+      REDLINE_CODE_CONTEXT: '/tmp/context.json',
+      REDLINE_CODE_CONTEXT_REPOSITORY: 'owner/repository',
+    })).toThrow(/requires review execution/u);
   });
 
   it('accepts defects-and-risks and a custom timeout', () => {

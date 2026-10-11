@@ -12,12 +12,20 @@ A file with multiple issues carries multiple findings, one span each. Every find
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "fileId": "000001",
   "path": "src/example.ts",
   "status": "M",
   "harness": "pi",
   "model": "z-ai/glm-5.3-flash",
+  "codeContext": {
+    "status": "complete",
+    "provider": { "id": "cgc", "version": "0.5.7" },
+    "revision": "…40-hex…",
+    "relatedSpans": 2,
+    "sourceBytes": 1840,
+    "reason": null
+  },
   "outcome": "findings",
   "errorKind": null,
   "reason": null,
@@ -44,6 +52,7 @@ A file with multiple issues carries multiple findings, one span each. Every find
 ```
 
 - `outcome` is `clean`, `findings`, or `omitted`. A file is `omitted` when it cannot be fully reviewed: binary content, a harness failure or timeout, model output that failed validation, or a preparation failure (an unreadable diff or a prompt that exceeds its byte limit).
+- `codeContext` records actual indexed coverage for this file. Status is `disabled`, `complete`, `partial`, `unsupported`, or `unavailable`; provider and revision are null when context was not configured or could not be parsed. `reason` distinguishes identity mismatch, invalid artifacts, provider coverage loss, missing file entries, and byte-limit truncation.
 - `errorKind` distinguishes `harness-failed`, `harness-timeout`, `invalid-output`, and `preparation-failed` when present.
 - `side` is `LEFT` for removed lines (old file) and `RIGHT` for added lines (new file); `startLine`/`endLine` are line numbers on that side.
 - `evidence` is the exact content of `startLine` on that side, without its diff marker.
@@ -76,7 +85,7 @@ Model output that fails schema or diff validation marks the file `invalid-output
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "harness": "pi",
   "model": "z-ai/glm-5.3-flash",
   "provider": "openrouter",
@@ -87,11 +96,28 @@ Model output that fails schema or diff validation marks the file `invalid-output
   "reviewedFiles": 10,
   "omittedFiles": 2,
   "findings": 3,
+  "codeContext": {
+    "status": "partial",
+    "provider": { "id": "cgc", "version": "0.5.7" },
+    "revision": "…40-hex…",
+    "relatedSpans": 6,
+    "sourceBytes": 7320,
+    "reason": "provider-partial",
+    "filesWithContext": 3
+  },
   "files": [
     {
       "fileId": "000001",
       "path": "src/example.ts",
       "outcome": "findings",
+      "codeContext": {
+        "status": "complete",
+        "provider": { "id": "cgc", "version": "0.5.7" },
+        "revision": "…40-hex…",
+        "relatedSpans": 2,
+        "sourceBytes": 1840,
+        "reason": null
+      },
       "findingCount": 1,
       "findingSpans": ["3-5"]
     }
@@ -99,11 +125,11 @@ Model output that fails schema or diff validation marks the file `invalid-output
 }
 ```
 
-The summary counts every manifest file; `findingSpans` lists each published finding's span. Files the bundle excluded from review are absent from `files`; `manifestFiles - reviewedFiles` is that excluded count.
+The summary counts every manifest file; `findingSpans` lists each published finding's span. Files the bundle excluded from review are absent from `files`; `manifestFiles - reviewedFiles` is that excluded count. Top-level `codeContext` aggregates files with resolved context, selected spans, source bytes, and degraded coverage.
 
 ## Schema versions
 
 - Review document (harness output): version 2 — introduced spans (`startLine`/`endLine`) and `suggestedChange`.
-- Per-file record: version 2 — findings carry spans, rendered `suggestion`, and `fixPrompt`.
-- Run summary: version 2 — `findingSpans` added.
+- Per-file record: version 3 — adds deterministic indexed-context coverage and source-byte measurements; version 2 introduced spans, rendered `suggestion`, and `fixPrompt`.
+- Run summary: version 3 — adds aggregate and per-file indexed-context coverage; version 2 introduced `findingSpans`.
 - Review policy: `redline-file-review/v2`, hosted in `prompts/v4/`. The directory number tracks the repository's policy lineage (v1–v3 are prior designs); the policy ID tracks the per-file review contract.

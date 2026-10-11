@@ -18,15 +18,22 @@ import { createHarnessExecutor } from '../harness-executor/registry.js';
 import type { HarnessExecutor, HarnessOutputLine, HarnessStreamMode } from '../harness-executor/types.js';
 import { loadReviewBundle, type ReviewBundle, type ReviewManifestFile } from './bundle.js';
 import type { ReviewEnvironment } from './environment.js';
+import {
+  codeContextForFile,
+  loadReviewCodeContext,
+  type LoadedReviewCodeContext,
+} from './indexed-context.js';
 import { buildFileReviewPrompt, type FileReviewPrompt } from './prompt.js';
 import { FileReviewValidator, parseFileReviewDocument } from './report.js';
 import { buildRemediation, formatSpan } from './remediation.js';
-import type {
-  FileReviewRecord,
-  PublishedFinding,
-  ReviewRunSummary,
-  ReviewRunSummaryFile,
-  ValidatedFinding,
+import {
+  FILE_REVIEW_RECORD_VERSION,
+  REVIEW_RUN_SUMMARY_VERSION,
+  type FileReviewRecord,
+  type PublishedFinding,
+  type ReviewRunSummary,
+  type ReviewRunSummaryFile,
+  type ValidatedFinding,
 } from './types.js';
 import { createReviewWriter } from './writer.js';
 
@@ -90,18 +97,21 @@ async function reviewOneFile(
   prepared: Awaited<ReturnType<HarnessExecutor['prepare']>>,
   environment: ReviewEnvironment,
   bundle: ReviewBundle,
+  indexedContext: LoadedReviewCodeContext,
   file: ReviewManifestFile,
   onHarnessOutput?: (output: HarnessOutputLine) => void,
   harnessStreamMode?: HarnessStreamMode,
 ): Promise<FileReviewRecord & { rawModelOutput?: string | undefined }> {
   const redact = (value: string): string => redactCredential(value, environment.credential);
+  const fileContext = codeContextForFile(indexedContext, file);
   const described = {
-    version: 2 as const,
+    version: FILE_REVIEW_RECORD_VERSION,
     fileId: file.id,
     path: fileReviewPath(file),
     status: file.status,
     harness: environment.harness,
     model: environment.model.model,
+    codeContext: fileContext.coverage,
   };
 
   // Preparation (diff reading, validator construction, prompt assembly) is
@@ -120,6 +130,7 @@ async function reviewOneFile(
       findingScope: environment.findingScope,
       harness: environment.harness,
       model: environment.model.model,
+      indexedContext: fileContext.prompt,
     });
   } catch (error) {
     return {
@@ -230,6 +241,7 @@ async function reviewOneFile(
 export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunResult> {
   const { environment } = input;
   const bundle = await loadReviewBundle(environment.reviewDirectory, environment.sourceDirectory);
+  const indexedContext = await loadReviewCodeContext(bundle, environment.codeContext);
   const writer = createReviewWriter(environment.outputDirectory);
   const executor = input.executor ?? createHarnessExecutor(environment.harness);
 
@@ -247,12 +259,13 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       if (!file.reviewed) continue;
       if (file.binary) {
         const binaryRecord: FileReviewRecord & { rawModelOutput?: string | undefined } = {
-          version: 2,
+          version: FILE_REVIEW_RECORD_VERSION,
           fileId: file.id,
           path: fileReviewPath(file),
           status: file.status,
           harness: environment.harness,
           model: environment.model.model,
+          codeContext: codeContextForFile(indexedContext, file).coverage,
           outcome: 'omitted',
           reason: 'binary diff; not reviewable as text',
           findings: [],
@@ -269,6 +282,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
         prepared,
         environment,
         bundle,
+        indexedContext,
         file,
         input.onHarnessOutput,
         input.harnessStreamMode,
@@ -279,7 +293,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
     }
 
     const summary: ReviewRunSummary = {
-      version: 2,
+      version: REVIEW_RUN_SUMMARY_VERSION,
       harness: environment.harness,
       model: environment.model.model,
       provider: environment.model.provider,
@@ -290,11 +304,13 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       reviewedFiles: records.length,
       omittedFiles: records.filter((record) => record.outcome === 'omitted').length,
       findings: records.reduce((total, record) => total + record.findings.length, 0),
+      codeContext: indexedContext.coverage,
       files: records.map((record): ReviewRunSummaryFile => ({
         fileId: record.fileId,
         path: record.path,
         outcome: record.outcome,
         errorKind: record.errorKind,
+        codeContext: record.codeContext,
         findingCount: record.findings.length,
         findingSpans: record.findings.map((finding) => formatSpan(finding.startLine, finding.endLine)),
       })),

@@ -9,7 +9,12 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isRecord } from './bundle.js';
-import type { FileReviewRecord, ReviewRunSummary } from './types.js';
+import {
+  FILE_REVIEW_RECORD_VERSION,
+  REVIEW_RUN_SUMMARY_VERSION,
+  type FileReviewRecord,
+  type ReviewRunSummary,
+} from './types.js';
 
 export interface PublishedRun {
   readonly records: readonly FileReviewRecord[];
@@ -33,14 +38,14 @@ export async function loadPublishedRun(outputDirectory: string): Promise<Publish
   const records: FileReviewRecord[] = [];
   for (const file of recordFiles) {
     const value = JSON.parse(await readFile(join(reviewsDirectory, file), 'utf8')) as unknown;
-    if (!isRecord(value) || value['version'] !== 2) {
-      throw new Error(`review output record ${file} is not a v2 record`);
+    if (!isRecord(value) || value['version'] !== FILE_REVIEW_RECORD_VERSION) {
+      throw new Error(`review output record ${file} is not a v${FILE_REVIEW_RECORD_VERSION} record`);
     }
     records.push(value as unknown as FileReviewRecord);
   }
   const summaryValue = JSON.parse(await readFile(join(reviewsDirectory, 'summary.json'), 'utf8')) as unknown;
-  if (!isRecord(summaryValue) || summaryValue['version'] !== 2) {
-    throw new Error('review output summary is not a v2 summary');
+  if (!isRecord(summaryValue) || summaryValue['version'] !== REVIEW_RUN_SUMMARY_VERSION) {
+    throw new Error(`review output summary is not a v${REVIEW_RUN_SUMMARY_VERSION} summary`);
   }
   return { records, summary: summaryValue as unknown as ReviewRunSummary };
 }

@@ -12,6 +12,14 @@ import type { ReviewScope } from '../../src/publish/types.js';
 
 const HEAD = 'b'.repeat(40);
 const SCOPE: ReviewScope = { repository: 'owner/repository', pullRequest: 14, head: HEAD };
+const DISABLED_CONTEXT = {
+  status: 'disabled' as const,
+  provider: null,
+  revision: null,
+  relatedSpans: 0,
+  sourceBytes: 0,
+  reason: 'not-configured' as const,
+};
 
 function finding(overrides: Partial<PublishedFinding> = {}): PublishedFinding {
   return {
@@ -33,19 +41,20 @@ function finding(overrides: Partial<PublishedFinding> = {}): PublishedFinding {
 }
 
 const RECORD: FileReviewRecord = {
-  version: 2,
+  version: 3,
   fileId: '000001',
   path: 'src/example.ts',
   status: 'M',
   harness: 'pi',
   model: 'z-ai/glm-5.3-flash',
+  codeContext: DISABLED_CONTEXT,
   outcome: 'findings',
   findings: [finding()],
   durationMs: 900,
 };
 
 const SUMMARY: ReviewRunSummary = {
-  version: 2,
+  version: 3,
   harness: 'pi',
   model: 'z-ai/glm-5.3-flash',
   provider: 'openrouter',
@@ -56,9 +65,24 @@ const SUMMARY: ReviewRunSummary = {
   reviewedFiles: 2,
   omittedFiles: 0,
   findings: 1,
+  codeContext: { ...DISABLED_CONTEXT, filesWithContext: 0 },
   files: [
-    { fileId: '000001', path: 'src/example.ts', outcome: 'findings', findingCount: 1, findingSpans: ['3-5'] },
-    { fileId: '000002', path: 'src/other.ts', outcome: 'clean', findingCount: 0, findingSpans: [] },
+    {
+      fileId: '000001',
+      path: 'src/example.ts',
+      outcome: 'findings',
+      codeContext: DISABLED_CONTEXT,
+      findingCount: 1,
+      findingSpans: ['3-5'],
+    },
+    {
+      fileId: '000002',
+      path: 'src/other.ts',
+      outcome: 'clean',
+      codeContext: DISABLED_CONTEXT,
+      findingCount: 0,
+      findingSpans: [],
+    },
   ],
 };
 

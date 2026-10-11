@@ -10,6 +10,8 @@ The GitHub Action passes every value to the review tool through environment vari
 | `REDLINE_REVIEW_DIR` | review mode | Directory holding the context bundle (`manifest.json`, `diffs/`, `base-files/`, …). |
 | `REDLINE_SOURCE_DIR` | review mode | Source-at-head export used for head-file context. |
 | `REDLINE_OUTPUT_DIR` | review mode | Destination for per-file review records and the summary. |
+| `REDLINE_CODE_CONTEXT` | optional in review mode | Path to a bounded `code-context.json` artifact. Requires `REDLINE_CODE_CONTEXT_REPOSITORY`. |
+| `REDLINE_CODE_CONTEXT_REPOSITORY` | with `REDLINE_CODE_CONTEXT` | Expected `owner/name` repository identity. Must match the artifact. |
 | `REDLINE_MODEL_CONFIG` | review mode | Model configuration JSON (below). |
 | `REDLINE_MODEL_AUTH` | review mode | Provider-keyed credential map JSON (below). Not consulted when the model config declares `auth: "none"`. |
 | `REDLINE_FINDING_SCOPE` | optional | `defects` (default) or `defects-and-risks`. |
@@ -21,6 +23,7 @@ Rules enforced by the parser:
 - Review inputs must arrive together. A partial selection fails instead of degrading to context-only mode.
 - Unknown `REDLINE_*` variables are rejected, so typos fail loudly.
 - Optional values are validated even without review execution.
+- Indexed-context path and repository identity arrive together. Configured context that is missing, invalid, stale, unsupported, or unavailable is recorded and degrades to file-only review instead of failing the run.
 - No variable accepts free-form review instructions.
 
 ## Model configuration
@@ -88,5 +91,14 @@ The same contract drives the standalone CLI:
 node dist/src/review/cli.js --validate-only   # validate the environment only
 node dist/src/review/cli.js                   # run the review
 ```
+
+To opt into indexed context, set both variables before running the review:
+
+```bash
+REDLINE_CODE_CONTEXT=/absolute/path/code-context.json
+REDLINE_CODE_CONTEXT_REPOSITORY=owner/repository
+```
+
+The review tool verifies repository and head identity, parses the exact artifact schema, and re-resolves each selected span from `REDLINE_SOURCE_DIR`. It never opens the provider database or invokes the provider.
 
 Exit codes: `0` success (context-only or completed review), `1` review or bundle failure, `2` usage or validation failure. A review run exits `1` when no reviewed file produced a validated review — every file failed, timed out, or produced invalid output.

@@ -1,10 +1,11 @@
 /**
  * Builds the fixed, versioned per-file review prompts.
  *
- * The system prompt is the review policy (loaded from `prompts/v3/`) plus a
+ * The system prompt is the review policy (loaded from `prompts/v4/`) plus a
  * trusted run configuration; it never contains repository content. The user
  * prompt embeds exactly one file's untrusted context — manifest entry, the
- * authoritative diff, and bounded base and head file content — inside a
+ * authoritative diff, bounded base and head file content, and optional
+ * source-validated indexed context — inside a
  * generated length-delimited boundary, with an explicit untrusted-data
  * framing the policy forbids following.
  */
@@ -21,6 +22,7 @@ import {
   type ReviewBundle,
   type ReviewManifestFile,
 } from './bundle.js';
+import type { PromptCodeContext } from './indexed-context.js';
 import type { FindingScope } from './types.js';
 
 export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v2' as const;
@@ -61,6 +63,7 @@ export interface FileReviewPromptOptions {
   readonly findingScope: FindingScope;
   readonly harness: string;
   readonly model: string;
+  readonly indexedContext?: PromptCodeContext | undefined;
   readonly promptRoot?: string;
 }
 
@@ -166,7 +169,7 @@ export async function buildFileReviewPrompt(options: FileReviewPromptOptions): P
     (value) => value !== null,
   );
   const context = JSON.stringify({
-    contextVersion: 1,
+    contextVersion: options.indexedContext === undefined ? 1 : 2,
     fileId: file.id,
     revisions: { base: bundle.manifest.base, head: bundle.manifest.head },
     manifestEntry: {
@@ -182,6 +185,7 @@ export async function buildFileReviewPrompt(options: FileReviewPromptOptions): P
     baseFileContent: base.content,
     headFileContent: head.content,
     fileContentOmitted: omittedSides,
+    ...(options.indexedContext === undefined ? {} : { indexedContext: options.indexedContext }),
   });
   const contextBytes = Buffer.byteLength(context, 'utf8');
   if (contextBytes > MAX_UNTRUSTED_CONTEXT_BYTES) {

@@ -19,12 +19,13 @@ action = yaml.safe_load(Path(sys.argv[1]).read_text())
 inputs = action['inputs']
 assert set(inputs) == {
     'backend', 'model-config', 'model-auth', 'finding-scope',
-    'timeout', 'verbosity', 'artifact-name', 'artifact-retention-days',
+    'timeout', 'verbosity', 'code-context', 'artifact-name', 'artifact-retention-days',
     'github-token', 'github-app-id', 'github-app-key',
 }, f'unexpected input surface: {sorted(inputs)}'
 assert inputs['finding-scope']['default'] == 'defects'
 assert inputs['timeout']['default'] == '30m'
 assert inputs['verbosity']['default'] == 'progress'
+assert inputs['code-context']['default'] == ''
 assert inputs['github-token']['default'] == ''
 assert inputs['github-token']['required'] is False
 runs = action['runs']
@@ -60,6 +61,10 @@ PY
   grep -Fq 'REDLINE_REVIEW_DIR: ${{ github.workspace }}/review' "$ACTION"
   grep -Fq 'REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head' "$ACTION"
   grep -Fq 'REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews' "$ACTION"
+  count=$(grep -cF 'REDLINE_CODE_CONTEXT: ${{ inputs.code-context }}' "$ACTION")
+  [ "$count" -eq 2 ]
+  count=$(grep -cF "REDLINE_CODE_CONTEXT_REPOSITORY: \${{ inputs.code-context != '' && github.repository || '' }}" "$ACTION")
+  [ "$count" -eq 2 ]
 }
 
 @test "action keeps the context bundle step and both artifact uploads" {

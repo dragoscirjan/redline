@@ -4,6 +4,15 @@ import { describe, expect, it } from 'vitest';
 import { createReviewWriter } from '../src/review/writer.js';
 import type { FileReviewRecord, PublishedFinding, ReviewRunSummary } from '../src/review/types.js';
 
+const DISABLED_CONTEXT = {
+  status: 'disabled' as const,
+  provider: null,
+  revision: null,
+  relatedSpans: 0,
+  sourceBytes: 0,
+  reason: 'not-configured' as const,
+};
+
 const FIX_PROMPT = [
   'Fix one code-review finding.',
   '',
@@ -37,12 +46,13 @@ describe('createReviewWriter', () => {
     try {
       const writer = createReviewWriter(output);
       const record: FileReviewRecord = {
-        version: 2,
+        version: 3,
         fileId: '000001',
         path: 'src/example.ts',
         status: 'M',
         harness: 'echo',
         model: 'test-model',
+        codeContext: DISABLED_CONTEXT,
         outcome: 'findings',
         findings: [publishedFinding()],
         durationMs: 5,
@@ -54,7 +64,7 @@ describe('createReviewWriter', () => {
         findings: Array<PublishedFinding & { suggestedChange?: unknown }>;
         rawModelOutput?: string;
       };
-      expect(json.version).toBe(2);
+      expect(json.version).toBe(3);
       expect(json.outcome).toBe('findings');
       expect(json.findings).toHaveLength(1);
       expect(json.findings[0]?.startLine).toBe(3);
@@ -82,7 +92,7 @@ describe('createReviewWriter', () => {
       expect(markdown).toContain('Fix one code-review finding.');
 
       const summary: ReviewRunSummary = {
-        version: 2,
+        version: 3,
         harness: 'echo',
         model: 'test-model',
         provider: 'mock',
@@ -93,11 +103,13 @@ describe('createReviewWriter', () => {
         reviewedFiles: 1,
         omittedFiles: 0,
         findings: 1,
+        codeContext: { ...DISABLED_CONTEXT, filesWithContext: 0 },
         files: [
           {
             fileId: '000001',
             path: 'src/example.ts',
             outcome: 'findings',
+            codeContext: DISABLED_CONTEXT,
             findingCount: 1,
             findingSpans: ['3-5'],
           },
@@ -108,11 +120,11 @@ describe('createReviewWriter', () => {
         version: number;
         findings: number;
       };
-      expect(summaryJson.version).toBe(2);
+      expect(summaryJson.version).toBe(3);
       expect(summaryJson.findings).toBe(1);
       const summaryMarkdown = await readFile(join(output, 'reviews', 'summary.md'), 'utf8');
       expect(summaryMarkdown).toContain('# Review run summary');
-      expect(summaryMarkdown).toContain('| src/example.ts | findings | 1 (3-5) |');
+      expect(summaryMarkdown).toContain('| src/example.ts | findings | 1 (3-5) | disabled (0 spans) |');
     } finally {
       await rm(output, { recursive: true, force: true });
     }

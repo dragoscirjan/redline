@@ -5,6 +5,14 @@ import type { FileReviewRecord, ReviewRunSummary } from '../../src/review/types.
 
 const HEAD = 'b'.repeat(40);
 const SCOPE: ReviewScope = { repository: 'owner/repository', pullRequest: 14, head: HEAD };
+const DISABLED_CONTEXT = {
+  status: 'disabled' as const,
+  provider: null,
+  revision: null,
+  relatedSpans: 0,
+  sourceBytes: 0,
+  reason: 'not-configured' as const,
+};
 
 interface FakePublisherCalls {
   currentHead: number;
@@ -40,12 +48,13 @@ function fakePublisher(options: { head?: string; publishError?: Error } = {}): {
 
 function record(overrides: Partial<FileReviewRecord> = {}): FileReviewRecord {
   return {
-    version: 2,
+    version: 3,
     fileId: '000001',
     path: 'src/example.ts',
     status: 'M',
     harness: 'pi',
     model: 'test-model',
+    codeContext: DISABLED_CONTEXT,
     outcome: 'findings',
     findings: [
       {
@@ -70,7 +79,7 @@ function record(overrides: Partial<FileReviewRecord> = {}): FileReviewRecord {
 
 function summary(overrides: Partial<ReviewRunSummary> = {}): ReviewRunSummary {
   return {
-    version: 2,
+    version: 3,
     harness: 'pi',
     model: 'test-model',
     provider: 'test',
@@ -81,7 +90,15 @@ function summary(overrides: Partial<ReviewRunSummary> = {}): ReviewRunSummary {
     reviewedFiles: 1,
     omittedFiles: 0,
     findings: 1,
-    files: [{ fileId: '000001', path: 'src/example.ts', outcome: 'findings', findingCount: 1, findingSpans: ['3-3'] }],
+    codeContext: { ...DISABLED_CONTEXT, filesWithContext: 0 },
+    files: [{
+      fileId: '000001',
+      path: 'src/example.ts',
+      outcome: 'findings',
+      codeContext: DISABLED_CONTEXT,
+      findingCount: 1,
+      findingSpans: ['3-3'],
+    }],
     ...overrides,
   };
 }

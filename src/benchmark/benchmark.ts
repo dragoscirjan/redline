@@ -608,6 +608,7 @@ async function runRecording(fixture: BenchmarkFixture, recording: FixtureRecordi
       reviewDirectory: paths.review,
       sourceDirectory: paths.source,
       outputDirectory: paths.output,
+      codeContext: undefined,
       model: { provider: 'benchmark', endpoint: 'http://127.0.0.1', model: 'recorded', auth: 'none' },
       credential: undefined,
       findingScope: 'defects',

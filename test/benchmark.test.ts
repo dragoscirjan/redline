@@ -71,12 +71,20 @@ function finding(line: number): PublishedFinding {
 
 function recordWithFindings(findings: readonly PublishedFinding[]): FileReviewRecord {
   return {
-    version: 2,
+    version: 3,
     fileId: '000001',
     path: 'src/example.ts',
     status: 'M',
     harness: 'echo',
     model: 'recorded',
+    codeContext: {
+      status: 'disabled',
+      provider: null,
+      revision: null,
+      relatedSpans: 0,
+      sourceBytes: 0,
+      reason: 'not-configured',
+    },
     outcome: findings.length === 0 ? 'clean' : 'findings',
     findings,
     durationMs: 1,

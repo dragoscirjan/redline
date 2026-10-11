@@ -56,7 +56,12 @@ function renderRecordMarkdown(record: FileReviewRecord): string {
     `- **Outcome:** ${record.outcome}`,
     `- **Harness:** ${record.harness} (${record.model})`,
     `- **Duration:** ${record.durationMs} ms`,
+    `- **Indexed context:** ${record.codeContext.status}; ${record.codeContext.relatedSpans} spans, ${record.codeContext.sourceBytes} source bytes`,
   ];
+  if (record.codeContext.provider !== null) {
+    lines.push(`- **Index provider:** ${record.codeContext.provider.id} ${record.codeContext.provider.version}`);
+  }
+  if (record.codeContext.reason !== null) lines.push(`- **Index coverage reason:** ${record.codeContext.reason}`);
   if (record.reason !== undefined) lines.push(`- **Reason:** ${record.reason}`);
   if (record.errorKind !== undefined) lines.push(`- **Error kind:** ${record.errorKind}`);
   lines.push('', '');
@@ -82,18 +87,21 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
     `- **Reviewed:** ${summary.reviewedFiles}`,
     `- **Omitted:** ${summary.omittedFiles}`,
     `- **Findings:** ${summary.findings}`,
+    `- **Indexed context:** ${summary.codeContext.status}; ${summary.codeContext.filesWithContext} files, ${summary.codeContext.relatedSpans} spans, ${summary.codeContext.sourceBytes} source bytes`,
     '',
     '## Files',
     '',
-    '| File | Outcome | Findings |',
-    '| --- | --- | --- |',
+    '| File | Outcome | Findings | Indexed context |',
+    '| --- | --- | --- | --- |',
   ];
   for (const file of summary.files) {
     const spans =
       file.findingCount > 0 && file.findingSpans.length > 0
         ? ` (${file.findingSpans.join(', ')})`
         : '';
-    lines.push(`| ${file.path} | ${file.outcome} | ${file.findingCount}${spans} |`);
+    lines.push(
+      `| ${file.path} | ${file.outcome} | ${file.findingCount}${spans} | ${file.codeContext.status} (${file.codeContext.relatedSpans} spans) |`,
+    );
   }
   return `${lines.join('\n')}\n`;
 }

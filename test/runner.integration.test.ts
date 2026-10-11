@@ -4,7 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { parseReviewEnvironment } from '../src/review/environment.js';
 import { runFileReviews } from '../src/review/runner.js';
 import type { HarnessExecutor, HarnessPrompt, HarnessRun, PreparedHarness } from '../src/harness-executor/types.js';
-import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.js';
+import {
+  cleanReviewEnvironment,
+  createBundleFixture,
+  HEAD_SHA,
+  type BundleFixture,
+} from './helpers/bundle.js';
 
 /** Scripted executor double: answers prompts from a queue of runs. */
 class ScriptedExecutor implements HarnessExecutor {
@@ -38,6 +43,29 @@ class ScriptedExecutor implements HarnessExecutor {
 
 function reviewDocument(value: object): string {
   return JSON.stringify(value);
+}
+
+async function writeCodeContext(fixture: BundleFixture, value?: object): Promise<string> {
+  const path = join(fixture.root, 'code-context.json');
+  await writeFile(path, JSON.stringify(value ?? {
+    version: 1,
+    provider: { id: 'cgc', version: '0.5.7' },
+    repository: 'owner/repository',
+    revision: HEAD_SHA,
+    status: 'complete',
+    files: [
+      {
+        changedPath: 'src/example.ts',
+        status: 'complete',
+        related: [
+          { path: 'src/related.ts', startLine: 1, endLine: 2, reason: 'incoming CALLS relationship' },
+        ],
+      },
+    ],
+    diagnostics: [],
+    timings: { installationMs: 1, restoreMs: 2, indexMs: 3, queryMs: 4, saveMs: null },
+  }));
+  return path;
 }
 
 describe('runFileReviews', () => {
@@ -84,7 +112,7 @@ describe('runFileReviews', () => {
       const record = JSON.parse(
         await readFile(join(fixture.output, 'reviews', '000001.json'), 'utf8'),
       ) as { version: number; outcome: string; rawModelOutput?: string };
-      expect(record.version).toBe(2);
+      expect(record.version).toBe(3);
       expect(record.outcome).toBe('clean');
       expect(record.rawModelOutput).toBeDefined();
       await expect(readFile(join(fixture.output, 'reviews', '000001.md'), 'utf8')).resolves.toContain(
@@ -97,6 +125,74 @@ describe('runFileReviews', () => {
       expect(summary.reviewedFiles).toBe(1);
       expect(summary.findings).toBe(0);
       expect(summary.files[0]?.outcome).toBe('clean');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('adds source-validated indexed context to the prompt and review artifacts', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      await writeFile(join(fixture.source, 'src', 'related.ts'), 'export const related = true;\nsecond line\n');
+      const contextPath = await writeCodeContext(fixture);
+      const environment = parseReviewEnvironment({
+        ...cleanReviewEnvironment(fixture, 'echo'),
+        REDLINE_CODE_CONTEXT: contextPath,
+        REDLINE_CODE_CONTEXT_REPOSITORY: 'owner/repository',
+      });
+      const executor = new ScriptedExecutor();
+      executor.script([
+        { text: reviewDocument({ version: 2, fileId: '000001', outcome: 'clean', findings: [] }) },
+      ]);
+
+      const result = await runFileReviews({ environment: environment.review!, executor });
+
+      expect(result.exitCode).toBe(0);
+      expect(executor.prompts[0]!.user).toContain('"contextVersion":2');
+      expect(executor.prompts[0]!.user).toContain('"indexedContext"');
+      expect(executor.prompts[0]!.user).toContain('export const related = true;\\nsecond line');
+      expect(result.summary.codeContext).toMatchObject({
+        status: 'complete',
+        filesWithContext: 1,
+        relatedSpans: 1,
+      });
+      expect(result.records[0]!.codeContext).toMatchObject({ status: 'complete', relatedSpans: 1 });
+      const markdown = await readFile(join(fixture.output, 'reviews', 'summary.md'), 'utf8');
+      expect(markdown).toContain('**Indexed context:** complete; 1 files, 1 spans');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('keeps the file-only prompt when configured context is invalid', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const baselineEnvironment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const baselineExecutor = new ScriptedExecutor();
+      baselineExecutor.script([
+        { text: reviewDocument({ version: 2, fileId: '000001', outcome: 'clean', findings: [] }) },
+      ]);
+      await runFileReviews({ environment: baselineEnvironment.review!, executor: baselineExecutor });
+
+      const contextPath = await writeCodeContext(fixture, { invalid: true });
+      const environment = parseReviewEnvironment({
+        ...cleanReviewEnvironment(fixture, 'echo'),
+        REDLINE_CODE_CONTEXT: contextPath,
+        REDLINE_CODE_CONTEXT_REPOSITORY: 'owner/repository',
+      });
+      const executor = new ScriptedExecutor();
+      executor.script([
+        { text: reviewDocument({ version: 2, fileId: '000001', outcome: 'clean', findings: [] }) },
+      ]);
+
+      const result = await runFileReviews({ environment: environment.review!, executor });
+
+      expect(result.exitCode).toBe(0);
+      expect(executor.prompts[0]).toEqual(baselineExecutor.prompts[0]);
+      expect(executor.prompts[0]!.user).toContain('"contextVersion":1');
+      expect(executor.prompts[0]!.user).not.toContain('"indexedContext"');
+      expect(result.summary.codeContext).toMatchObject({ status: 'unavailable', reason: 'artifact-invalid' });
+      expect(result.records[0]!.codeContext).toMatchObject({ status: 'unavailable', reason: 'artifact-invalid' });
     } finally {
       await fixture.cleanup();
     }
@@ -169,7 +265,7 @@ describe('runFileReviews', () => {
       expect(markdown).toContain('-new line');
       expect(markdown).toContain('+guarded line');
       const summaryMarkdown = await readFile(join(fixture.output, 'reviews', 'summary.md'), 'utf8');
-      expect(summaryMarkdown).toContain('| src/example.ts | findings | 1 (1) |');
+      expect(summaryMarkdown).toContain('| src/example.ts | findings | 1 (1) | disabled (0 spans) |');
     } finally {
       await fixture.cleanup();
     }

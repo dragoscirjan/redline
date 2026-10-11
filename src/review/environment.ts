@@ -11,6 +11,7 @@
 import { DEFAULT_TIMEOUT_MINUTES, MAX_TIMEOUT_MINUTES, parseDuration, type Duration } from '../duration.js';
 import { isHarnessName } from '../harness-executor/registry.js';
 import type { HarnessName } from '../harness-executor/types.js';
+import type { ReviewCodeContextInput } from './indexed-context.js';
 import { FINDING_SCOPES, type FindingScope } from './types.js';
 
 export const REDLINE_ENV_KEYS = [
@@ -18,6 +19,8 @@ export const REDLINE_ENV_KEYS = [
   'REDLINE_REVIEW_DIR',
   'REDLINE_SOURCE_DIR',
   'REDLINE_OUTPUT_DIR',
+  'REDLINE_CODE_CONTEXT',
+  'REDLINE_CODE_CONTEXT_REPOSITORY',
   'REDLINE_MODEL_CONFIG',
   'REDLINE_MODEL_AUTH',
   'REDLINE_FINDING_SCOPE',
@@ -41,6 +44,7 @@ export const DEFAULT_TIMEOUT_INPUT = `${DEFAULT_TIMEOUT_MINUTES}m`;
 const MAX_MODEL_CONFIG_BYTES = 16 * 1024;
 const MAX_MODEL_CREDENTIALS_BYTES = 64 * 1024;
 const MAX_SELECTED_CREDENTIAL_BYTES = 16 * 1024;
+const MAX_CODE_CONTEXT_PATH_BYTES = 4_096;
 const PROVIDER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
 const CONTROL_CHARACTER_PATTERN = /\p{Cc}/u;
 
@@ -89,6 +93,7 @@ export interface ReviewEnvironment {
   readonly reviewDirectory: string;
   readonly sourceDirectory: string;
   readonly outputDirectory: string;
+  readonly codeContext: ReviewCodeContextInput | undefined;
   readonly model: ModelConfiguration;
   /** Undefined in the credential-less profile (`auth: "none"`). */
   readonly credential: SelectedModelCredential | undefined;
@@ -252,6 +257,22 @@ const PUBLICATION_REQUIRED_KEYS = [
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const COMMIT_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 
+function optionalCodeContext(environment: NodeJS.ProcessEnv): ReviewCodeContextInput | undefined {
+  const path = environment.REDLINE_CODE_CONTEXT ?? '';
+  const repository = environment.REDLINE_CODE_CONTEXT_REPOSITORY ?? '';
+  if (path.length === 0 && repository.length === 0) return undefined;
+  if (path.length === 0 || repository.length === 0) {
+    throw new Error('REDLINE_CODE_CONTEXT and REDLINE_CODE_CONTEXT_REPOSITORY must arrive together');
+  }
+  if (Buffer.byteLength(path, 'utf8') > MAX_CODE_CONTEXT_PATH_BYTES || CONTROL_CHARACTER_PATTERN.test(path)) {
+    throw new Error('REDLINE_CODE_CONTEXT is invalid');
+  }
+  if (!REPOSITORY_PATTERN.test(repository)) {
+    throw new Error('REDLINE_CODE_CONTEXT_REPOSITORY must use owner/name syntax');
+  }
+  return Object.freeze({ path, repository });
+}
+
 function publicationFromValues(values: readonly string[]): PublicationEnvironment {
   const token = values[0] ?? '';
   if (token !== token.trim() || /\p{Cc}/u.test(token)) throw new Error('publication token is invalid');
@@ -339,11 +360,13 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
   const verbosity = optionalVerbosity(environment.REDLINE_VERBOSITY);
   const timeout = optionalTimeout(environment.REDLINE_TIMEOUT);
   const publication = optionalPublication(environment);
+  const codeContext = optionalCodeContext(environment);
 
   const values = REVIEW_REQUIRED_KEYS.map((key) => environment[key] ?? '');
   const provided = REVIEW_REQUIRED_KEYS.filter((_key, index) => (values[index] ?? '').length > 0);
   if (provided.length === 0) {
     if (publication !== undefined) throw new Error('publication requires review execution');
+    if (codeContext !== undefined) throw new Error('indexed code context requires review execution');
     return Object.freeze({ mode: 'context-only', timeout, verbosity, review: undefined, publication: undefined });
   }
   const missing = REVIEW_REQUIRED_KEYS.filter((key) => !provided.includes(key));
@@ -376,6 +399,7 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
     reviewDirectory: environment.REDLINE_REVIEW_DIR ?? '',
     sourceDirectory: environment.REDLINE_SOURCE_DIR ?? '',
     outputDirectory: environment.REDLINE_OUTPUT_DIR ?? '',
+    codeContext,
     model,
     credential,
     findingScope,

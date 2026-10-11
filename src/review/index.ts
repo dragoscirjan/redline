@@ -15,6 +15,18 @@ export {
   type ReviewManifestFile,
   loadReviewBundle,
 } from './bundle.js';
+export {
+  MAX_INDEXED_CONTEXT_SOURCE_BYTES,
+  MAX_INDEXED_CONTEXT_SOURCE_BYTES_PER_FILE,
+  MAX_INDEXED_CONTEXT_SOURCE_FILE_BYTES,
+  codeContextForFile,
+  loadReviewCodeContext,
+  type FileReviewCodeContext,
+  type LoadedReviewCodeContext,
+  type PromptCodeContext,
+  type ResolvedRelatedCodeSpan,
+  type ReviewCodeContextInput,
+} from './indexed-context.js';
 export { FILE_REVIEW_PROMPT_ID, FILE_REVIEW_PROMPT_VERSION, buildFileReviewPrompt, loadReviewPolicy } from './prompt.js';
 export {
   FILE_REVIEW_DOCUMENT_VERSION,
@@ -44,6 +56,10 @@ export {
   type FileReviewOutcome,
   type FileReviewRecord,
   type PublishedFinding,
+  type ReviewCodeContextCoverage,
+  type ReviewCodeContextReason,
+  type ReviewCodeContextRunCoverage,
+  type ReviewCodeContextStatus,
   type ReviewFinding,
   type ReviewRunSummary,
   type ReviewRunSummaryFile,

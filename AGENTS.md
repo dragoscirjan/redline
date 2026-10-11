@@ -48,10 +48,14 @@
   output, and timeouts.
 - `src/review/` — the review tool. Parses the `REDLINE_*` environment
   contract, loads the context bundle, builds fixed versioned prompts from
-  `prompts/v3/`, runs one prompt per reviewed file, validates each review
+  `prompts/v4/`, runs one prompt per reviewed file, validates each review
   document against the authoritative diff, and writes per-file records and
   the run summary. Runs as a CLI (`redline-review`) and as the GitHub
   Action component.
+- `src/review/indexed-context.ts` — loads the optional provider-neutral
+  `code-context.json`, verifies repository/head identity, resolves bounded
+  related spans from captured head source, and degrades invalid or missing
+  context to explicit file-only coverage.
 - `src/context-bundle.sh` — builds the review context bundle (manifest,
   diffs, base files, source-at-head). The `reviewed` flag is computed here
   deterministically: lock files, vendored dependencies, build output, and
@@ -83,6 +87,10 @@ variables (interim design; see `src/review/environment.ts`):
 - `REDLINE_MODEL_CONFIG` — JSON: provider, endpoint, model.
 - `REDLINE_MODEL_AUTH` — provider-keyed credential map; only the selected
   credential reaches the harness.
+- `REDLINE_CODE_CONTEXT`, `REDLINE_CODE_CONTEXT_REPOSITORY` — optional
+  indexed-context artifact path and expected `owner/name`; they arrive
+  together and invalid, stale, unsupported, or unavailable context degrades
+  to recorded file-only coverage.
 - `REDLINE_FINDING_SCOPE`, `REDLINE_TIMEOUT` — optional policy values.
 - `REDLINE_PUBLISH_TOKEN`, `REDLINE_REPOSITORY`, `REDLINE_PULL_REQUEST`,
   `REDLINE_HEAD` — the publication context; all four must arrive together
@@ -112,8 +120,10 @@ Review inputs must arrive together; partial selections fail. Unknown
   auto-review target: the dogfood workflow publishes on this repository;
   other repositories opt in through the reusable workflow with their own
   token or App.
-- Repository content, PR metadata, paths, and diff text never alter the
-  system prompt, tool permissions, result schema, or publication policy.
+- Repository content, PR metadata, paths, diff text, and indexed context
+  never alter the system prompt, tool permissions, result schema, or
+  publication policy. Indexed relationships only select candidates; every
+  path and span is re-resolved from bounded captured head source.
 - Model output is rejected rather than guessed: findings must map both span
   endpoints to changed lines of the authoritative diff with byte-identical
   evidence at the start line.

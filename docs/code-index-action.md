@@ -19,7 +19,17 @@ The caller checks out trusted workflow tooling with both pull request commits av
     output-directory: ${{ github.workspace }}/code-index
 ```
 
-The action writes `code-context.json` and exposes its absolute path and coverage status. Passing that artifact into review is the next bounded-context integration slice; the current review action does not consume it yet.
+The action writes `code-context.json` and exposes its absolute path and coverage status. Pass that path to the review action's optional `code-context` input:
+
+```yaml
+- name: Run Redline review
+  uses: dragoscirjan/redline/github@v1.0.0
+  with:
+    code-context: ${{ steps.code-index.outputs.artifact-path }}
+    # backend, model-config, model-auth, and publication inputs omitted here
+```
+
+The review validates the artifact identity and resolves every selected span again from its captured exact-head source. Missing or invalid context remains file-only review. The repository's normal reusable and dogfood workflows do not enable indexing until the #104 benchmark comparison justifies it.
 
 ## What the action does
 

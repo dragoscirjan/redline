@@ -53,4 +53,4 @@ Keep fixture source small enough to inspect directly. Include both defect and cl
 
 ## Adding indexed context
 
-Issue #110 will add a `github/code-index` action. Benchmark schema version 1 accepts only `file-only` recordings. Add an `indexed-context` mode only when #110 supplies the real indexed prompt path and its byte measurement. Do not change expected issues, accepted evidence locations, or file-only recordings when comparing the modes.
+Issue #110 added the `github/code-index` action, and the review path now accepts its bounded artifact as optional indexed context. Benchmark schema version 1 still accepts only `file-only` recordings. The next #104 slice adds an `indexed-context` mode using this production prompt path and its recorded source-byte measurement. Do not change expected issues, accepted evidence locations, or file-only recordings when comparing the modes.

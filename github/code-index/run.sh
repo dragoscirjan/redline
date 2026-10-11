@@ -6,13 +6,14 @@ readonly RUNTIME_ROOT="${RUNNER_TEMP:?RUNNER_TEMP is required}/redline-code-inde
 readonly CONTROL_DIR="$RUNTIME_ROOT/control"
 readonly CACHE_ROOT="$RUNTIME_ROOT/cache"
 readonly SOURCE_ROOT="$RUNTIME_ROOT/source"
+readonly HEAD_SOURCE_ROOT="$RUNTIME_ROOT/head-source"
 readonly CGC_HOME="$RUNTIME_ROOT/home"
 readonly TOOL_ROOT="$RUNTIME_ROOT/tool"
 readonly PINNED_CGC="$TOOL_ROOT/cgc"
 readonly CGC_VERSION='0.5.7'
 readonly CGC_URL="https://github.com/CodeGraphContext/CodeGraphContext/releases/download/v${CGC_VERSION}/cgc-linux-x86_64"
 readonly CGC_SHA256='9b62140c77e88d153de24abfaebe1977f320511b170bf9aea6087106601d0e5f'
-readonly CONFIG_ID='falkordb-head-only-v1-calls-64x80-49152b'
+readonly CONFIG_ID='falkordb-base-only-v2-calls-64x80-49152b'
 
 write_output() {
   local key=$1 value=$2
@@ -75,7 +76,7 @@ initialize_artifact() {
 }
 
 prepare() {
-  rm -rf -- "$CONTROL_DIR" "$SOURCE_ROOT" "$CGC_HOME" "$TOOL_ROOT" "$CACHE_ROOT"
+  rm -rf -- "$CONTROL_DIR" "$SOURCE_ROOT" "$HEAD_SOURCE_ROOT" "$CGC_HOME" "$TOOL_ROOT" "$CACHE_ROOT"
   mkdir -p -- "$CONTROL_DIR" "$CGC_HOME" "$TOOL_ROOT" "$CACHE_ROOT"
 
   local started platform_os platform_arch executable version_output installation_ms
@@ -143,30 +144,28 @@ prepare() {
   fi
 
   installation_ms=$(elapsed_ms "$started")
-  local repository_digest config_digest platform_slug cache_prefix head run_suffix
+  local repository_digest config_digest platform_slug cache_prefix base run_suffix
   repository_digest=$(printf '%s' "$REDLINE_CODE_INDEX_REPOSITORY" | sha256sum | cut -d' ' -f1)
   config_digest=$(printf '%s' "$CONFIG_ID" | sha256sum | cut -d' ' -f1)
   platform_slug="linux-x64"
-  head=$(printf '%s' "$REDLINE_CODE_INDEX_HEAD" | tr '[:upper:]' '[:lower:]')
-  cache_prefix="redline-code-index-v1-cgc-${CGC_VERSION}-${platform_slug}-${repository_digest}-${config_digest}"
+  base=$(printf '%s' "$REDLINE_CODE_INDEX_BASE" | tr '[:upper:]' '[:lower:]')
+  cache_prefix="redline-code-index-v2-cgc-${CGC_VERSION}-${platform_slug}-${repository_digest}-${config_digest}"
   run_suffix="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
 
   write_control executable "$executable"
   write_control installation-ms "$installation_ms"
   write_control restore-start-ns "$(now_ns)"
-  write_control cache-primary-key "${cache_prefix}-${head}-${run_suffix}"
-  write_control cache-exact-prefix "${cache_prefix}-${head}-"
-  write_control cache-compatible-prefix "${cache_prefix}-"
+  write_control cache-primary-key "${cache_prefix}-${base}-${run_suffix}"
+  write_control cache-base-prefix "${cache_prefix}-${base}-"
   write_control config-id "$CONFIG_ID"
 
   initialize_artifact unavailable code-index-awaiting-provider \
-    'Pinned CGC is ready; cache restore and indexing have not completed.' "$installation_ms"
+    'Pinned CGC is ready; base-revision cache restore and indexing have not completed.' "$installation_ms"
 
   write_output available true
   write_output cache-path "$CACHE_ROOT"
-  write_output cache-primary-key "${cache_prefix}-${head}-${run_suffix}"
-  write_output cache-exact-prefix "${cache_prefix}-${head}-"
-  write_output cache-compatible-prefix "${cache_prefix}-"
+  write_output cache-primary-key "${cache_prefix}-${base}-${run_suffix}"
+  write_output cache-base-prefix "${cache_prefix}-${base}-"
 }
 
 build() {
@@ -183,6 +182,7 @@ build() {
     --output-directory "${REDLINE_CODE_INDEX_OUTPUT_DIRECTORY}" \
     --workspace "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE is required}" \
     --source-root "$SOURCE_ROOT" \
+    --head-source-root "$HEAD_SOURCE_ROOT" \
     --cache-root "$CACHE_ROOT" \
     --cgc-home "$CGC_HOME" \
     --executable "$executable" \

@@ -102,12 +102,19 @@ uses = [step.get('uses') for step in steps]
 sha = 'cdf6c1fa76f9f475f3d7449005a359c84ca0f306'
 assert f'actions/cache/restore@{sha}' in uses
 assert f'actions/cache/save@{sha}' in uses
+restore = next(step for step in steps if step.get('id') == 'cache-restore')
+assert restore['with']['restore-keys'].strip() == '${{ steps.prepare.outputs.cache-base-prefix }}'
+assert 'cache-exact-prefix' not in restore['with']['restore-keys']
+assert 'cache-compatible-prefix' not in restore['with']['restore-keys']
 assert action['outputs']['context-file']['value'] == '${{ steps.finalize.outputs.context-file }}'
 PY
 }
 
-@test "cold and warm fake-CGC runs export equivalent validated context" {
+@test "cold and restored-base fake-CGC runs export equivalent validated context" {
   prepare_action
+  grep -Fq -- "-$BASE-123-1" "$GITHUB_OUTPUT"
+  grep -Fq -- "-$BASE-" "$GITHUB_OUTPUT"
+  ! grep -Fq -- "-$HEAD_REVISION-" "$GITHUB_OUTPUT"
   build_action '' success
   grep -Fq 'cache-ready=true' "$GITHUB_OUTPUT"
   run bash "$ACTION_DIR/run.sh" save-start
@@ -141,14 +148,14 @@ assert cold['files'][0]['related'] == [{
     'endLine': 5,
     'reason': 'related-symbol-calls-changed-code',
 }]
-assert any(item['code'] == 'cache-exact-head' for item in warm['diagnostics'])
+assert any(item['code'] == 'cache-base-revision' for item in warm['diagnostics'])
 PY
 }
 
-@test "a compatible cache is reused without re-indexing after a new commit" {
+@test "the base cache is reused without re-indexing after a new head commit" {
   prepare_action
   build_action '' success
-  cached_revision="$HEAD_REVISION"
+  cached_revision="$BASE"
 
   cat > "$REPOSITORY/src/cache.ts" <<'EOF'
 export function userCacheKey(accountId: string, userId: string): string {
@@ -170,10 +177,11 @@ import json, sys
 artifact = json.load(open(sys.argv[1], encoding='utf-8'))
 state = json.load(open(sys.argv[2], encoding='utf-8'))
 assert artifact['revision'] == sys.argv[4]
-assert artifact['status'] == 'partial'
-assert artifact['files'][0]['status'] == 'partial'
+assert artifact['status'] == 'complete'
+assert artifact['files'][0]['status'] == 'complete'
 assert artifact['timings']['indexMs'] == 0
-assert any(item['code'] == 'cache-compatible-head' for item in artifact['diagnostics'])
+assert any(item['code'] == 'graph-base-revision' for item in artifact['diagnostics'])
+assert any(item['code'] == 'cache-base-revision' for item in artifact['diagnostics'])
 assert state['revision'] == sys.argv[3]
 PY
 }
@@ -216,7 +224,7 @@ assert any(item['code'] == 'cgc-index-failed' for item in artifact['diagnostics'
 PY
 }
 
-@test "unsupported changed files still build a reusable exact-head repository cache" {
+@test "unsupported changed files still build a reusable base-revision repository cache" {
   git -C "$REPOSITORY" reset -q --hard "$BASE"
   mkdir -p "$REPOSITORY/.github/workflows"
   printf 'name: cache-test\n' > "$REPOSITORY/.github/workflows/cache-test.yml"
@@ -232,7 +240,7 @@ PY
   grep -Fq 'cache-ready=true' "$GITHUB_OUTPUT"
   grep -Fq "index $RUNNER_TEMP/redline-code-index/source --no-progress" "$PROVIDER/calls.log"
   [ -f "$RUNNER_TEMP/redline-code-index/cache/state.json" ]
-  python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$RUNNER_TEMP/redline-code-index/cache/state.json" "$HEAD_REVISION" <<'PY'
+  python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$RUNNER_TEMP/redline-code-index/cache/state.json" "$BASE" <<'PY'
 import json, sys
 artifact = json.load(open(sys.argv[1], encoding='utf-8'))
 state = json.load(open(sys.argv[2], encoding='utf-8'))

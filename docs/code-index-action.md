@@ -27,17 +27,17 @@ The review validates the artifact identity and resolves every selected span agai
 ## What the action does
 
 1. Downloads the pinned CGC binary and verifies its SHA-256 digest.
-2. Restores a CGC FalkorDB database with `actions/cache/restore`.
-3. Exports the entire exact pull request head with `git archive`.
-4. Removes symlinks and repository-supplied CGC configuration from the temporary source tree.
-5. Validates and reuses a restored database without running CGC indexing again.
-6. On a cache miss or invalid restore, indexes the full exported repository regardless of whether the changed files use a CGC-supported language.
-7. Uses supported changed source files only as bounded relationship-query anchors.
-8. Resolves every selected path and line range against the exported head source.
+2. Restores the exact pull request base-revision CGC database with `actions/cache/restore`.
+3. Exports both the exact base and exact head with `git archive`.
+4. Removes symlinks and repository-supplied CGC configuration from both temporary source trees.
+5. Validates and reuses a restored base database without running CGC indexing again.
+6. On a cache miss or invalid restore, indexes the full exported base repository regardless of whether the changed files use a CGC-supported language.
+7. Uses supported changed files that exist in the base graph as bounded relationship-query anchors.
+8. Resolves every selected path and line range against the exported exact-head source.
 9. Writes the bounded artifact atomically.
-10. Saves a validated database only after a cache miss or invalid restore.
+10. Saves a validated base database only after a cache miss or invalid restore.
 
-Repository builds, scripts, package installers, tests, and Git hooks are never run. An exact-head cache has complete graph provenance. A compatible earlier-head cache is reused without re-indexing to keep follow-up review latency bounded; its current-head graph coverage is explicitly `partial`, while every selected span is still re-resolved from captured exact-head source.
+Repository builds, scripts, package installers, tests, and Git hooks are never run. The graph is identified by `pull_request.base.sha`, so every new head commit in the same pull request reuses it without `cgc index` or `cgc update`. If the base revision changes, the action creates a new cache. New head-only files receive explicit partial graph coverage, while every selected span is still re-resolved from captured exact-head source.
 
 ## Artifact contract
 
@@ -53,23 +53,23 @@ The version 1 artifact contains:
 
 It contains no graph database, source text, credentials, model conclusions, or finding locations. The strict parser is exported from `src/code-context/artifact.ts`. Limits include 256 changed files, 64 related spans, eight spans per changed file, 80 lines per span, 48 KiB of resolved source coverage, 20 diagnostics, and a 128 KiB artifact.
 
-`complete` means every represented, supported head file was queried within the limits using a graph built for that exact head. `partial` records a compatible earlier-head graph, any unsupported file mixed with supported coverage, failed query direction, invalid provider row, or truncation. `unsupported` means no changed head file can anchor a provider query. `unavailable` means indexing or validation failed. Empty successful query output is only empty context; it is not proof that no relationship exists.
+`complete` means every represented, supported changed file exists in the base graph and was queried within the limits. `partial` records a supported head-only file that is absent from the base graph, any unsupported file mixed with supported coverage, failed query direction, invalid provider row, or truncation. `unsupported` means no changed head file can anchor a provider query. `unavailable` means indexing or validation failed. Empty successful query output is only empty context; it is not proof that no relationship exists.
 
 ## Cache keys
 
 The key prefix is:
 
 ```text
-redline-code-index-v1-cgc-0.5.7-linux-x64-<repository-digest>-<configuration-digest>
+redline-code-index-v2-cgc-0.5.7-linux-x64-<repository-digest>-<configuration-digest>
 ```
 
-The save key adds the exact head, workflow run ID, and attempt. Restore prefixes first select the newest database for the exact head, then the newest provider-compatible earlier database. A valid restored database is queried directly: CGC `index` and `update` are not invoked, and the existing cache is not saved again. The run suffix allows a validated rebuild to supersede an immutable invalid cache entry.
+The save key adds the exact base SHA, workflow run ID, and attempt. The only restore prefix includes that same exact base SHA; there is no cross-base fallback. A valid restored database is queried directly: CGC `index` and `update` are not invoked, and the existing cache is not saved again. The run suffix allows a validated rebuild to supersede an immutable invalid cache entry.
 
-The cache root contains only the embedded FalkorDB files and a small identity sidecar. The action verifies provider version, repository, configuration, stable source path, and a bounded repository query before reuse. A validated graph is cached even when none of the changed files can anchor a relationship query; in that case the context artifact remains `unsupported`, but the repository graph can accelerate a later review. Cache restore or save failure does not invalidate context produced during the current run.
+The cache root contains only the embedded FalkorDB files and a small identity sidecar. The action verifies provider version, repository, configuration, exact base revision, stable source path, and a bounded repository query before reuse. A validated base graph is cached even when none of the changed files can anchor a relationship query; in that case the context artifact remains `unsupported`, but the repository graph can accelerate a later review. Cache restore or save failure does not invalidate context produced during the current run.
 
 ## Tests
 
-Normal CI uses a fake CGC executable and performs no provider download. It covers cold and exact-head equivalence, no-reindex compatible-cache reuse, invalid restore rebuilding, and provider failure fallback. A live smoke test is opt-in:
+Normal CI uses a fake CGC executable and performs no provider download. It covers cold and restored-base equivalence, no-reindex reuse across head commits, exact-base cache identity, invalid restore rebuilding, and provider failure fallback. A live smoke test is opt-in:
 
 ```bash
 REDLINE_LIVE_CODE_INDEX_TESTS=1 mise run test

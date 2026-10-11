@@ -26,7 +26,7 @@ outputs:
     description: "Context coverage status: complete, partial, unsupported, or unavailable."
     value: ${{ steps.finalize.outputs.status }}
   cache-hit:
-    description: Whether actions/cache restored an exact-head or compatible earlier database.
+    description: Whether actions/cache restored the exact pull request base-revision database.
     value: ${{ steps.finalize.outputs.cache-hit }}
 
 runs:
@@ -51,10 +51,9 @@ runs:
         path: ${{ steps.prepare.outputs.cache-path }}
         key: ${{ steps.prepare.outputs.cache-primary-key }}
         restore-keys: |
-          ${{ steps.prepare.outputs.cache-exact-prefix }}
-          ${{ steps.prepare.outputs.cache-compatible-prefix }}
+          ${{ steps.prepare.outputs.cache-base-prefix }}
 
-    - name: Reuse cached graph or index head
+    - name: Reuse cached base graph or index base
       id: build
       if: ${{ steps.prepare.outputs.available == 'true' }}
       shell: bash

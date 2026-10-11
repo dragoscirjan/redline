@@ -719,26 +719,40 @@ def build_artifact(args: argparse.Namespace) -> bool:
     diagnostics: list[dict[str, str]] = []
     measured = timings(args.installation_ms, args.restore_ms)
     source_root = Path(args.source_root).resolve(strict=False)
+    head_source_root = Path(args.head_source_root).resolve(strict=False)
     cache_root = Path(args.cache_root).resolve(strict=False)
     cgc_home = Path(args.cgc_home).resolve(strict=False)
     executable = Path(args.executable).resolve(strict=True)
     if executable.is_symlink() or not executable.is_file() or not os.access(executable, os.X_OK):
         raise ValueError("CGC executable is not a regular executable file")
 
-    export_source(repository_root, head, source_root)
+    export_source(repository_root, base, source_root)
+    export_source(repository_root, head, head_source_root)
+    add_diagnostic(diagnostics, "info", "graph-base-revision", f"CGC graph provenance is pull request base revision {base}.")
     changed, changed_paths_truncated = parse_changed_paths(repository_root, base, head, diagnostics)
     files: list[dict[str, Any]] = []
     supported_paths: list[str] = []
+    missing_from_base = False
     for path, change_status in changed:
-        source_file = safe_source_file(source_root, path)
-        supported = (
+        head_source_file = safe_source_file(head_source_root, path)
+        provider_supported = (
             change_status != "D"
-            and source_file is not None
+            and head_source_file is not None
             and Path(path).suffix.lower() in SUPPORTED_SUFFIXES
         )
-        files.append({"changedPath": path, "status": "complete" if supported else "unsupported", "related": []})
-        if supported:
+        base_source_file = safe_source_file(source_root, path) if provider_supported else None
+        if provider_supported and base_source_file is not None:
+            file_status = "complete"
             supported_paths.append(path)
+        elif provider_supported:
+            file_status = "partial"
+            missing_from_base = True
+        else:
+            file_status = "unsupported"
+        files.append({"changedPath": path, "status": file_status, "related": []})
+
+    if missing_from_base:
+        add_diagnostic(diagnostics, "warning", "changed-file-absent-from-base", "A supported changed file is absent from the base graph and cannot anchor a relationship query.")
 
     if changed_paths_truncated:
         for file_entry in files:
@@ -746,7 +760,10 @@ def build_artifact(args: argparse.Namespace) -> bool:
                 file_entry["status"] = "partial"
 
     if not supported_paths:
-        add_diagnostic(diagnostics, "info", "no-supported-changed-files", "No head-present changed file uses a language supported by the pinned CGC integration; the exact-head repository graph was still indexed for cache reuse.")
+        if any(file_entry["status"] == "partial" for file_entry in files):
+            add_diagnostic(diagnostics, "warning", "no-base-query-anchors", "No supported changed file exists in the base graph; exact-head source review remains available.")
+        else:
+            add_diagnostic(diagnostics, "info", "no-supported-changed-files", "No head-present changed file uses a language supported by the pinned CGC integration; the base graph was still indexed for cache reuse.")
 
     queryable_paths, query_path_truncated = query_paths(supported_paths, source_root)
     if query_path_truncated:
@@ -770,6 +787,8 @@ def build_artifact(args: argparse.Namespace) -> bool:
         restored_material
         and database_tree_safe(database_path)
         and compatible_cache_state(cached_state, repository, args.configuration_id, source_root)
+        and cached_state is not None
+        and cached_state.get("revision") == base
         and validate_database(executable, environment, source_root)
     )
     measured["queryMs"] = monotonic_ms() - query_started
@@ -781,25 +800,12 @@ def build_artifact(args: argparse.Namespace) -> bool:
     cache_reused = cache_valid
     rebuilt = False
     if cache_reused:
-        exact = cached_state is not None and cached_state.get("revision") == head
-        if exact:
-            add_diagnostic(
-                diagnostics,
-                "info",
-                "cache-exact-head",
-                "A validated exact-head CGC database was restored and reused without indexing.",
-            )
-        else:
-            cached_revision = cached_state.get("revision") if cached_state is not None else "unknown"
-            add_diagnostic(
-                diagnostics,
-                "warning",
-                "cache-compatible-head",
-                f"Validated CGC graph revision {cached_revision} was reused without re-indexing; current-head graph coverage is partial.",
-            )
-            for file_entry in files:
-                if file_entry["status"] == "complete":
-                    file_entry["status"] = "partial"
+        add_diagnostic(
+            diagnostics,
+            "info",
+            "cache-base-revision",
+            "A validated pull request base CGC database was restored and reused without indexing.",
+        )
         indexed = True
         measured["indexMs"] = 0
     else:
@@ -813,7 +819,7 @@ def build_artifact(args: argparse.Namespace) -> bool:
         for file_entry in files:
             if file_entry["status"] != "unsupported":
                 file_entry["status"] = "unavailable"
-        add_diagnostic(diagnostics, "error", "cgc-index-failed", "Pinned CGC could not index the exact head source; file-only review remains available.")
+        add_diagnostic(diagnostics, "error", "cgc-index-failed", "Pinned CGC could not index the pull request base source; file-only review remains available.")
         write_artifact(output, make_artifact(repository, head, aggregate_status(files), files, diagnostics, measured))
         return False
 
@@ -843,7 +849,7 @@ def build_artifact(args: argparse.Namespace) -> bool:
         return False
 
     if not supported_paths:
-        cache_ready = False if cache_reused else prepare_cache(cache_root, repository, head, args.configuration_id, source_root, diagnostics)
+        cache_ready = False if cache_reused else prepare_cache(cache_root, repository, base, args.configuration_id, source_root, diagnostics)
         status = "partial" if changed_paths_truncated else aggregate_status(files)
         write_artifact(output, make_artifact(repository, head, status, files, diagnostics, measured))
         return cache_ready
@@ -872,7 +878,7 @@ def build_artifact(args: argparse.Namespace) -> bool:
         write_artifact(output, make_artifact(repository, head, aggregate_status(files), files, diagnostics, measured))
         return False
 
-    selected, selection_truncated = source_validated_contexts(all_rows, source_root, diagnostics)
+    selected, selection_truncated = source_validated_contexts(all_rows, head_source_root, diagnostics)
     query_partial = query_partial or selection_truncated
     for file_entry in files:
         file_entry["related"] = selected.get(file_entry["changedPath"], [])
@@ -881,7 +887,7 @@ def build_artifact(args: argparse.Namespace) -> bool:
     if query_partial:
         add_diagnostic(diagnostics, "warning", "cgc-query-partial", "At least one provider row or query exceeded validation or a deterministic bound.")
 
-    cache_ready = False if cache_reused else prepare_cache(cache_root, repository, head, args.configuration_id, source_root, diagnostics)
+    cache_ready = False if cache_reused else prepare_cache(cache_root, repository, base, args.configuration_id, source_root, diagnostics)
     write_artifact(output, make_artifact(repository, head, aggregate_status(files), files, diagnostics, measured))
     return cache_ready
 
@@ -931,8 +937,8 @@ def parser() -> argparse.ArgumentParser:
 
     build_command = commands.add_parser("build")
     for name in (
-        "base", "head", "repository", "output-directory", "workspace", "source-root", "cache-root",
-        "cgc-home", "executable", "configuration-id", "cache-matched-key", "cache-restore-outcome", "result-file",
+        "base", "head", "repository", "output-directory", "workspace", "source-root", "head-source-root",
+        "cache-root", "cgc-home", "executable", "configuration-id", "cache-matched-key", "cache-restore-outcome", "result-file",
     ):
         build_command.add_argument(f"--{name}", required=True)
     build_command.add_argument("--installation-ms", type=int, required=True)

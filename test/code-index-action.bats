@@ -88,13 +88,13 @@ build_action() {
 }
 
 @test "secondary action pins CGC and actions/cache without provider configuration inputs" {
+  if ! python3 -c 'import yaml' 2>/dev/null; then
+    skip 'PyYAML is required to validate action.yaml'
+  fi
   python3 - "$ACTION_DIR/action.yaml" <<'PY'
 import sys
 from pathlib import Path
-try:
-    import yaml
-except ImportError:
-    raise SystemExit(0)
+import yaml
 action = yaml.safe_load(Path(sys.argv[1]).read_text())
 assert set(action['inputs']) == {'base', 'head', 'repository', 'output-directory'}
 steps = action['runs']['steps']

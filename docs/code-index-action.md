@@ -24,7 +24,7 @@ The action writes `code-context.json` and exposes its absolute path and coverage
 ## What the action does
 
 1. Downloads the pinned CGC binary and verifies its SHA-256 digest.
-2. Restores a CGC LadybugDB database with `actions/cache/restore`.
+2. Restores a CGC FalkorDB database with `actions/cache/restore`.
 3. Exports the exact head commit with `git archive`.
 4. Removes symlinks and repository-supplied CGC configuration from the temporary source tree.
 5. Validates a restored database, refreshes it to the head, or deletes and rebuilds it once.

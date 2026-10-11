@@ -83,7 +83,7 @@ runs:
 
     - name: Finalize code-context diagnostics
       id: finalize
-      if: ${{ always() }}
+      if: ${{ always() && steps.prepare.outcome == 'success' }}
       shell: bash
       env:
         REDLINE_CODE_INDEX_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}

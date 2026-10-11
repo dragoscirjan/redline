@@ -236,22 +236,27 @@ def export_source(repo: Path, head: str, source_root: Path) -> None:
         ["git", "-C", str(repo), "archive", head],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
     )
     assert archive.stdout is not None
-    extract = subprocess.run(
-        ["tar", "-x", "-C", str(source_root)],
-        stdin=archive.stdout,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        check=False,
-        timeout=120,
-    )
-    archive.stdout.close()
-    archive_stderr = archive.stderr.read() if archive.stderr is not None else b""
-    archive_status = archive.wait(timeout=30)
+    try:
+        extract = subprocess.run(
+            ["tar", "-x", "-C", str(source_root)],
+            stdin=archive.stdout,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=120,
+        )
+        archive.stdout.close()
+        archive_status = archive.wait(timeout=30)
+    finally:
+        if not archive.stdout.closed:
+            archive.stdout.close()
+        if archive.poll() is None:
+            archive.kill()
+            archive.wait()
     if archive_status != 0 or extract.returncode != 0:
-        del archive_stderr
         raise RuntimeError("could not export the requested head revision")
 
     for root, directories, names in os.walk(source_root, topdown=True, followlinks=False):

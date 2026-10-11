@@ -11,7 +11,8 @@ import {
 } from '../src/benchmark/benchmark.js';
 import type { FileReviewRecord, PublishedFinding } from '../src/review/types.js';
 
-const CORPUS = resolve('benchmark/review-quality/v1');
+const CORPUS = resolve('benchmark/review-quality/v2');
+const HISTORICAL_BASELINE = resolve('benchmark/review-quality/v1/baseline/report.json');
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
@@ -20,7 +21,7 @@ afterEach(async () => {
 
 function scoringFixture() {
   return parseBenchmarkFixture({
-    version: 1,
+    version: 2,
     id: 'scoring-case',
     title: 'Scoring case',
     kind: 'defect',
@@ -40,15 +41,36 @@ function scoringFixture() {
       title: 'Expected root cause',
       locations: [{ path: 'src/example.ts', side: 'RIGHT', startLine: 1, endLine: 1 }],
     }],
-    recordings: [{
-      mode: 'file-only',
-      responses: [{
-        fileId: '000001',
-        durationMs: 1,
-        document: { version: 2, fileId: '000001', outcome: 'clean', findings: [] },
-      }],
-      judgments: [],
-    }],
+    recordings: [
+      {
+        mode: 'file-only',
+        responses: [{
+          fileId: '000001',
+          durationMs: 1,
+          document: { version: 2, fileId: '000001', outcome: 'clean', findings: [] },
+        }],
+        judgments: [],
+      },
+      {
+        mode: 'indexed-context',
+        responses: [{
+          fileId: '000001',
+          durationMs: 1,
+          document: { version: 2, fileId: '000001', outcome: 'clean', findings: [] },
+        }],
+        judgments: [],
+        codeContext: {
+          version: 1,
+          provider: { id: 'cgc', version: '0.5.7' },
+          repository: 'benchmark/redline',
+          revision: 'b'.repeat(40),
+          status: 'complete',
+          files: [{ changedPath: 'src/example.ts', status: 'complete', related: [] }],
+          diagnostics: [],
+          timings: { installationMs: 0, restoreMs: 0, indexMs: 0, queryMs: 0, saveMs: null },
+        },
+      },
+    ],
   });
 }
 
@@ -92,38 +114,89 @@ function recordWithFindings(findings: readonly PublishedFinding[]): FileReviewRe
 }
 
 describe('review-quality benchmark', () => {
-  it('scores the checked-in file-only recordings', async () => {
+  it('compares checked-in file-only and indexed-context recordings', async () => {
     const report = await runRecordedBenchmark(CORPUS);
 
-    expect(report.version).toBe(1);
-    expect(report.modes).toHaveLength(1);
-    const mode = report.modes[0]!;
-    expect(mode.mode).toBe('file-only');
-    expect(mode.fixtures).toBe(4);
-    expect(mode.expectedIssues).toBe(2);
-    expect(mode.rootCauseMatches).toBe(1);
-    expect(mode.creditedIssues).toBe(1);
-    expect(mode.findings).toBe(2);
-    expect(mode.falsePositives).toBe(1);
-    expect(mode.cleanFixtures).toBe(2);
-    expect(mode.cleanFixturesWithFalsePositives).toBe(1);
-    expect(mode.claimedMatches).toBe(1);
-    expect(mode.validEvidenceMatches).toBe(1);
-    expect(mode.duplicateFindings).toBe(0);
-    expect(mode.promptBytes).toBeGreaterThan(0);
-    expect(mode.reviewDurationMs).toBe(39);
+    expect(report.version).toBe(2);
+    expect(report.modes).toHaveLength(2);
+    const fileOnly = report.modes[0]!;
+    expect(fileOnly.mode).toBe('file-only');
+    expect(fileOnly).toMatchObject({
+      fixtures: 4,
+      expectedIssues: 2,
+      rootCauseMatches: 1,
+      creditedIssues: 1,
+      findings: 2,
+      falsePositives: 1,
+      cleanFixtures: 2,
+      cleanFixturesWithFalsePositives: 1,
+      claimedMatches: 1,
+      validEvidenceMatches: 1,
+      duplicateFindings: 0,
+      reviewDurationMs: 39,
+      codeContextCoverage: { disabled: 4, complete: 0, partial: 0, unsupported: 0, unavailable: 0 },
+      codeContextSourceBytes: 0,
+      indexTimings: null,
+    });
+    expect(fileOnly.promptBytes).toBeGreaterThan(0);
+
+    const historical = JSON.parse(await readFile(HISTORICAL_BASELINE, 'utf8')) as {
+      modes: Array<Record<string, unknown>>;
+    };
+    const historicalFileOnly = historical.modes[0]!;
+    for (const field of [
+      'fixtures',
+      'expectedIssues',
+      'rootCauseMatches',
+      'creditedIssues',
+      'findings',
+      'falsePositives',
+      'duplicateFindings',
+      'promptBytes',
+      'reviewDurationMs',
+    ]) {
+      expect(fileOnly[field as keyof typeof fileOnly]).toBe(historicalFileOnly[field]);
+    }
+
+    const indexed = report.modes[1]!;
+    expect(indexed).toMatchObject({
+      mode: 'indexed-context',
+      fixtures: 4,
+      expectedIssues: 2,
+      rootCauseMatches: 2,
+      creditedIssues: 2,
+      findings: 2,
+      falsePositives: 0,
+      duplicateFindings: 0,
+      codeContextCoverage: { disabled: 0, complete: 4, partial: 0, unsupported: 0, unavailable: 0 },
+      codeContextFilesWithContext: 2,
+      codeContextRelatedSpans: 2,
+      reviewDurationMs: 39,
+      indexTimings: { installationMs: 0, restoreMs: 0, indexMs: 0, queryMs: 0, saveMs: null },
+    });
+    expect(indexed.codeContextSourceBytes).toBeGreaterThan(0);
+    expect(indexed.promptBytes).toBeGreaterThan(fileOnly.promptBytes);
+    expect(report.comparison).toMatchObject({
+      rootCauseMatchesDelta: 1,
+      creditedIssuesDelta: 1,
+      falsePositivesDelta: -1,
+      duplicateFindingsDelta: 0,
+      reviewDurationMsDelta: 0,
+    });
+
     const checkedInJson = JSON.parse(
-      await readFile(join(CORPUS, 'baseline', 'report.json'), 'utf8'),
+      await readFile(join(CORPUS, 'comparison', 'report.json'), 'utf8'),
     ) as unknown;
     expect(checkedInJson).toEqual(report);
-    await expect(readFile(join(CORPUS, 'baseline', 'report.md'), 'utf8')).resolves.toBe(
+    await expect(readFile(join(CORPUS, 'comparison', 'report.md'), 'utf8')).resolves.toBe(
       renderBenchmarkMarkdown(report),
     );
 
-    const crossFile = mode.cases.find((item) => item.fixtureId === 'cross-file-cache-collision');
-    expect(crossFile?.unmatchedIssueIds).toEqual(['cross-account-cache-collision']);
-    expect(crossFile?.uncreditedIssueIds).toEqual(['cross-account-cache-collision']);
-    expect(crossFile?.coverage).toBe('complete');
+    const fileOnlyCrossFile = fileOnly.cases.find((item) => item.fixtureId === 'cross-file-cache-collision');
+    expect(fileOnlyCrossFile?.unmatchedIssueIds).toEqual(['cross-account-cache-collision']);
+    const indexedCrossFile = indexed.cases.find((item) => item.fixtureId === 'cross-file-cache-collision');
+    expect(indexedCrossFile?.creditedIssues).toBe(1);
+    expect(indexedCrossFile?.codeContext).toMatchObject({ status: 'complete', relatedSpans: 1 });
   });
 
   it('writes stable JSON and Markdown reports', async () => {
@@ -133,10 +206,12 @@ describe('review-quality benchmark', () => {
     await writeBenchmarkReport(report, output);
 
     const json = JSON.parse(await readFile(join(output, 'report.json'), 'utf8')) as { version: number };
-    expect(json.version).toBe(1);
+    expect(json.version).toBe(2);
     const markdown = await readFile(join(output, 'report.md'), 'utf8');
     expect(markdown).toBe(renderBenchmarkMarkdown(report));
     expect(markdown).toContain('Root-cause recall: 1/2 (50.0%)');
+    expect(markdown).toContain('Root-cause recall: 2/2 (100.0%)');
+    expect(markdown).toContain('## Comparison');
     expect(markdown).toContain('This report evaluates checked-in responses and human judgments.');
   });
 
@@ -200,12 +275,36 @@ describe('review-quality benchmark', () => {
     })).toThrow('additional head file duplicates changed path');
   });
 
+  it('rejects indexed context for a different fixture revision', () => {
+    const fixture = scoringFixture();
+    const indexed = fixture.recordings[1]!;
+    if (indexed.mode !== 'indexed-context') throw new Error('test fixture is missing indexed context');
+    expect(() => parseBenchmarkFixture({
+      ...fixture,
+      recordings: [
+        fixture.recordings[0],
+        {
+          ...indexed,
+          codeContext: { ...indexed.codeContext, revision: 'c'.repeat(40) },
+        },
+      ],
+    })).toThrow('must target the fixture head revision');
+  });
+
+  it('requires both comparison modes in every fixture', () => {
+    const fixture = scoringFixture();
+    expect(() => parseBenchmarkFixture({
+      ...fixture,
+      recordings: [fixture.recordings[0]],
+    })).toThrow('must contain file-only and indexed-context recordings');
+  });
+
   it('rejects fixture files reached through a symbolic link', async () => {
     const root = await mkdtemp(join(tmpdir(), 'redline-benchmark-symlink-'));
     const outside = await mkdtemp(join(tmpdir(), 'redline-benchmark-outside-'));
     temporaryDirectories.push(root, outside);
     await mkdir(join(root, 'fixtures'));
-    await writeFile(join(root, 'corpus.json'), JSON.stringify({ version: 1, fixtures: ['fixtures/case.json'] }));
+    await writeFile(join(root, 'corpus.json'), JSON.stringify({ version: 2, fixtures: ['fixtures/case.json'] }));
     await writeFile(join(outside, 'case.json'), '{}');
     await symlink(join(outside, 'case.json'), join(root, 'fixtures', 'case.json'));
 
@@ -214,7 +313,7 @@ describe('review-quality benchmark', () => {
 
   it('rejects clean fixtures that declare an expected defect', () => {
     expect(() => parseBenchmarkFixture({
-      version: 1,
+      version: 2,
       id: 'invalid-clean',
       title: 'Invalid clean fixture',
       kind: 'clean',

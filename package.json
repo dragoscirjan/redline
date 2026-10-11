@@ -9,6 +9,7 @@
   },
   "scripts": {
     "benchmark": "pnpm run build && node dist/src/benchmark/cli.js",
+    "benchmark:live-model": "pnpm run build && node dist/src/benchmark/live-cli.js",
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "docs": "vitepress build docs",
     "docs:preview": "vitepress preview docs",

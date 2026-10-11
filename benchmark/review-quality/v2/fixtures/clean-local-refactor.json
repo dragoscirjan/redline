@@ -1,0 +1,85 @@
+{
+  "version": 2,
+  "id": "clean-local-refactor",
+  "title": "Rename a local normalization variable",
+  "kind": "clean",
+  "baseRevision": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "headRevision": "ffffffffffffffffffffffffffffffffffffffff",
+  "files": [
+    {
+      "id": "000001",
+      "path": "src/name.ts",
+      "status": "M",
+      "base": "export function normalizeName(value: string): string {\n  const normalized = value.trim();\n  return normalized.toLowerCase();\n}\n",
+      "head": "export function normalizeName(value: string): string {\n  const trimmed = value.trim();\n  return trimmed.toLowerCase();\n}\n",
+      "diff": "diff --git a/src/name.ts b/src/name.ts\n--- a/src/name.ts\n+++ b/src/name.ts\n@@ -1,4 +1,4 @@\n export function normalizeName(value: string): string {\n-  const normalized = value.trim();\n-  return normalized.toLowerCase();\n+  const trimmed = value.trim();\n+  return trimmed.toLowerCase();\n }\n"
+    }
+  ],
+  "additionalHeadFiles": {},
+  "expectedIssues": [],
+  "recordings": [
+    {
+      "mode": "file-only",
+      "responses": [
+        {
+          "fileId": "000001",
+          "durationMs": 8,
+          "document": {
+            "version": 2,
+            "fileId": "000001",
+            "outcome": "clean",
+            "findings": []
+          }
+        }
+      ],
+      "judgments": []
+    },
+    {
+      "mode": "indexed-context",
+      "responses": [
+        {
+          "fileId": "000001",
+          "durationMs": 8,
+          "document": {
+            "version": 2,
+            "fileId": "000001",
+            "outcome": "clean",
+            "findings": []
+          }
+        }
+      ],
+      "judgments": [],
+      "codeContext": {
+        "version": 1,
+        "provider": {
+          "id": "cgc",
+          "version": "0.5.7"
+        },
+        "repository": "benchmark/redline",
+        "revision": "ffffffffffffffffffffffffffffffffffffffff",
+        "status": "complete",
+        "files": [
+          {
+            "changedPath": "src/name.ts",
+            "status": "complete",
+            "related": []
+          }
+        ],
+        "diagnostics": [
+          {
+            "level": "info",
+            "code": "recorded-benchmark",
+            "message": "Checked-in provider output for deterministic evaluation."
+          }
+        ],
+        "timings": {
+          "installationMs": 0,
+          "restoreMs": 0,
+          "indexMs": 0,
+          "queryMs": 0,
+          "saveMs": null
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+{
+  "version": 2,
+  "id": "clean-api-extension",
+  "title": "Add an optional name separator",
+  "kind": "clean",
+  "baseRevision": "1111111111111111111111111111111111111111",
+  "headRevision": "2222222222222222222222222222222222222222",
+  "files": [
+    {
+      "id": "000001",
+      "path": "src/format.ts",
+      "status": "M",
+      "base": "export function formatName(first: string, last: string): string {\n  return `${first} ${last}`;\n}\n",
+      "head": "export function formatName(first: string, last: string, separator = ' '): string {\n  return [first, last].join(separator);\n}\n",
+      "diff": "diff --git a/src/format.ts b/src/format.ts\n--- a/src/format.ts\n+++ b/src/format.ts\n@@ -1,3 +1,3 @@\n-export function formatName(first: string, last: string): string {\n-  return `${first} ${last}`;\n+export function formatName(first: string, last: string, separator = ' '): string {\n+  return [first, last].join(separator);\n }\n"
+    }
+  ],
+  "additionalHeadFiles": {
+    "src/profile.ts": "import { formatName } from './format.js';\n\nexport function profileLabel(first: string, last: string): string {\n  return formatName(first, last);\n}\n"
+  },
+  "expectedIssues": [],
+  "recordings": [
+    {
+      "mode": "file-only",
+      "responses": [
+        {
+          "fileId": "000001",
+          "durationMs": 9,
+          "document": {
+            "version": 2,
+            "fileId": "000001",
+            "outcome": "findings",
+            "findings": [
+              {
+                "category": "regression",
+                "classification": "defect",
+                "severity": "low",
+                "confidence": 0.65,
+                "side": "RIGHT",
+                "startLine": 1,
+                "endLine": 1,
+                "evidence": "export function formatName(first: string, last: string, separator = ' '): string {",
+                "impact": "Existing callers may not provide the new argument.",
+                "fix": "Update all callers to pass a separator."
+              }
+            ]
+          }
+        }
+      ],
+      "judgments": [
+        {
+          "fileId": "000001",
+          "findingIndex": 0,
+          "expectedIssueId": null
+        }
+      ]
+    },
+    {
+      "mode": "indexed-context",
+      "responses": [
+        {
+          "fileId": "000001",
+          "durationMs": 9,
+          "document": {
+            "version": 2,
+            "fileId": "000001",
+            "outcome": "clean",
+            "findings": []
+          }
+        }
+      ],
+      "judgments": [],
+      "codeContext": {
+        "version": 1,
+        "provider": {
+          "id": "cgc",
+          "version": "0.5.7"
+        },
+        "repository": "benchmark/redline",
+        "revision": "2222222222222222222222222222222222222222",
+        "status": "complete",
+        "files": [
+          {
+            "changedPath": "src/format.ts",
+            "status": "complete",
+            "related": [
+              {
+                "path": "src/profile.ts",
+                "startLine": 3,
+                "endLine": 5,
+                "reason": "related-symbol-calls-changed-code"
+              }
+            ]
+          }
+        ],
+        "diagnostics": [
+          {
+            "level": "info",
+            "code": "recorded-benchmark",
+            "message": "Checked-in provider output for deterministic evaluation."
+          }
+        ],
+        "timings": {
+          "installationMs": 0,
+          "restoreMs": 0,
+          "indexMs": 0,
+          "queryMs": 0,
+          "saveMs": null
+        }
+      }
+    }
+  ]
+}

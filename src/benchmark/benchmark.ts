@@ -8,19 +8,30 @@ import type {
   HarnessSettings,
   PreparedHarness,
 } from '../harness-executor/types.js';
+import {
+  parseCodeContextArtifact,
+  type CodeContextArtifact,
+  type CodeContextProvider,
+  type CodeContextTimings,
+} from '../code-context/artifact.js';
 import { parseDuration } from '../duration.js';
 import type { ReviewEnvironment } from '../review/environment.js';
 import { parseChangedLines, type ChangedLines } from '../review/report.js';
 import { runFileReviews } from '../review/runner.js';
-import type { FileReviewRecord, FindingSide } from '../review/types.js';
+import type {
+  FileReviewRecord,
+  FindingSide,
+  ReviewCodeContextReason,
+  ReviewCodeContextRunCoverage,
+} from '../review/types.js';
 
-const BENCHMARK_VERSION = 1 as const;
+const BENCHMARK_VERSION = 2 as const;
 const FIXTURE_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const FILE_ID = /^\d{6}$/u;
 const REVISION = /^[0-9a-f]{40}$/u;
-const MODES = ['file-only'] as const;
+const MODES = ['file-only', 'indexed-context'] as const;
 
-type BenchmarkMode = (typeof MODES)[number];
+export type BenchmarkMode = (typeof MODES)[number];
 type FixtureKind = 'defect' | 'clean';
 type CoverageStatus = 'complete' | 'partial' | 'unavailable';
 
@@ -58,11 +69,20 @@ interface FindingJudgment {
   readonly expectedIssueId: string | null;
 }
 
-interface FixtureRecording {
-  readonly mode: BenchmarkMode;
+interface FileOnlyRecording {
+  readonly mode: 'file-only';
   readonly responses: readonly RecordedResponse[];
   readonly judgments: readonly FindingJudgment[];
 }
+
+interface IndexedContextRecording {
+  readonly mode: 'indexed-context';
+  readonly responses: readonly RecordedResponse[];
+  readonly judgments: readonly FindingJudgment[];
+  readonly codeContext: CodeContextArtifact;
+}
+
+export type FixtureRecording = FileOnlyRecording | IndexedContextRecording;
 
 export interface BenchmarkFixture {
   readonly version: typeof BENCHMARK_VERSION;
@@ -82,11 +102,23 @@ interface CorpusManifest {
   readonly fixtures: readonly string[];
 }
 
+export interface BenchmarkCodeContextResult {
+  readonly status: ReviewCodeContextRunCoverage['status'];
+  readonly provider: CodeContextProvider | null;
+  readonly revision: string | null;
+  readonly filesWithContext: number;
+  readonly relatedSpans: number;
+  readonly sourceBytes: number;
+  readonly reason: ReviewCodeContextReason | null;
+  readonly timings: CodeContextTimings | null;
+}
+
 export interface BenchmarkCaseResult {
   readonly fixtureId: string;
   readonly title: string;
   readonly kind: FixtureKind;
   readonly coverage: CoverageStatus;
+  readonly codeContext: BenchmarkCodeContextResult;
   readonly expectedIssues: number;
   readonly rootCauseMatches: number;
   readonly creditedIssues: number;
@@ -99,6 +131,14 @@ export interface BenchmarkCaseResult {
   readonly validEvidenceMatches: number;
   readonly promptBytes: number;
   readonly reviewDurationMs: number;
+}
+
+export interface BenchmarkCodeContextCoverageCounts {
+  readonly disabled: number;
+  readonly complete: number;
+  readonly partial: number;
+  readonly unsupported: number;
+  readonly unavailable: number;
 }
 
 export interface BenchmarkModeResult {
@@ -116,13 +156,31 @@ export interface BenchmarkModeResult {
   readonly validEvidenceMatches: number;
   readonly promptBytes: number;
   readonly reviewDurationMs: number;
+  readonly codeContextCoverage: BenchmarkCodeContextCoverageCounts;
+  readonly codeContextFilesWithContext: number;
+  readonly codeContextRelatedSpans: number;
+  readonly codeContextSourceBytes: number;
+  readonly indexTimings: CodeContextTimings | null;
   readonly cases: readonly BenchmarkCaseResult[];
+}
+
+export interface BenchmarkComparison {
+  readonly baseline: 'file-only';
+  readonly candidate: 'indexed-context';
+  readonly rootCauseMatchesDelta: number;
+  readonly creditedIssuesDelta: number;
+  readonly falsePositivesDelta: number;
+  readonly duplicateFindingsDelta: number;
+  readonly promptBytesDelta: number;
+  readonly reviewDurationMsDelta: number;
+  readonly codeContextSourceBytesDelta: number;
 }
 
 export interface BenchmarkReport {
   readonly version: typeof BENCHMARK_VERSION;
   readonly corpusVersion: typeof BENCHMARK_VERSION;
   readonly modes: readonly BenchmarkModeResult[];
+  readonly comparison: BenchmarkComparison;
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -213,9 +271,15 @@ function parseExpectedIssue(value: unknown, label: string): ExpectedIssue {
 
 function parseRecording(value: unknown, label: string): FixtureRecording {
   const input = record(value, label);
-  exactKeys(input, ['mode', 'responses', 'judgments'], label);
   const mode = input['mode'];
   if (!MODES.includes(mode as BenchmarkMode)) throw new Error(`${label}.mode is unsupported`);
+  exactKeys(
+    input,
+    mode === 'indexed-context'
+      ? ['mode', 'responses', 'judgments', 'codeContext']
+      : ['mode', 'responses', 'judgments'],
+    label,
+  );
   const responses = array(input['responses'], `${label}.responses`).map((item, index): RecordedResponse => {
     const response = record(item, `${label}.responses[${index}]`);
     exactKeys(response, ['fileId', 'document', 'durationMs'], `${label}.responses[${index}]`);
@@ -240,7 +304,15 @@ function parseRecording(value: unknown, label: string): FixtureRecording {
         : string(judgment['expectedIssueId'], `${label}.judgments[${index}].expectedIssueId`),
     };
   });
-  return { mode: mode as BenchmarkMode, responses, judgments };
+  if (mode === 'indexed-context') {
+    return {
+      mode,
+      responses,
+      judgments,
+      codeContext: parseCodeContextArtifact(input['codeContext']),
+    };
+  }
+  return { mode: 'file-only', responses, judgments };
 }
 
 export function parseBenchmarkFixture(value: unknown): BenchmarkFixture {
@@ -309,7 +381,33 @@ export function parseBenchmarkFixture(value: unknown): BenchmarkFixture {
   if (recordings.length === 0) throw new Error('benchmark fixture.recordings must not be empty');
   const modes = new Set(recordings.map((recording) => recording.mode));
   if (modes.size !== recordings.length) throw new Error('benchmark fixture recording modes must be unique');
+  if (MODES.some((mode) => !modes.has(mode))) {
+    throw new Error('benchmark fixture must contain file-only and indexed-context recordings');
+  }
+  const sourceByPath = new Map<string, string>([
+    ...files.map((file): readonly [string, string] => [file.path, file.head]),
+    ...Object.entries(additionalHeadFiles),
+  ]);
   for (const recording of recordings) {
+    if (recording.mode === 'indexed-context') {
+      if (recording.codeContext.revision !== headRevision) {
+        throw new Error(`benchmark fixture ${id} indexed context must target the fixture head revision`);
+      }
+      for (const contextFile of recording.codeContext.files) {
+        if (!filePaths.has(contextFile.changedPath)) {
+          throw new Error(`benchmark fixture ${id} indexed context references unchanged path ${contextFile.changedPath}`);
+        }
+        for (const span of contextFile.related) {
+          const source = sourceByPath.get(span.path);
+          if (source === undefined) {
+            throw new Error(`benchmark fixture ${id} indexed context references missing source ${span.path}`);
+          }
+          if (span.endLine > sourceLines(source).lines.length) {
+            throw new Error(`benchmark fixture ${id} indexed context span exceeds source ${span.path}`);
+          }
+        }
+      }
+    }
     if (recording.responses.length !== files.length) {
       throw new Error(`benchmark fixture ${id} ${recording.mode} recording must contain one response per file`);
     }
@@ -469,7 +567,10 @@ async function writeFixtureFile(root: string, path: string, content: string): Pr
   await writeFile(destination, content);
 }
 
-async function materializeFixture(fixture: BenchmarkFixture, root: string): Promise<{ review: string; source: string; output: string }> {
+export async function materializeBenchmarkFixture(
+  fixture: BenchmarkFixture,
+  root: string,
+): Promise<{ review: string; source: string; output: string }> {
   const review = join(root, 'review');
   const source = join(root, 'source');
   const output = join(root, 'output');
@@ -535,6 +636,16 @@ export function scoreBenchmarkCase(
   recording: FixtureRecording,
   records: readonly FileReviewRecord[],
   promptBytes: number,
+  codeContext: BenchmarkCodeContextResult = {
+    status: 'disabled',
+    provider: null,
+    revision: null,
+    filesWithContext: 0,
+    relatedSpans: 0,
+    sourceBytes: 0,
+    reason: 'not-configured',
+    timings: null,
+  },
 ): BenchmarkCaseResult {
   const recordsById = new Map(records.map((item) => [item.fileId, item]));
   const findings = records.reduce((total, item) => total + item.findings.length, 0);
@@ -583,6 +694,7 @@ export function scoreBenchmarkCase(
     title: fixture.title,
     kind: fixture.kind,
     coverage: coverage(records),
+    codeContext,
     expectedIssues: fixture.expectedIssues.length,
     rootCauseMatches: matched.size,
     creditedIssues: credited.size,
@@ -601,27 +713,60 @@ export function scoreBenchmarkCase(
 async function runRecording(fixture: BenchmarkFixture, recording: FixtureRecording): Promise<BenchmarkCaseResult> {
   const root = await mkdtemp(join(tmpdir(), `redline-benchmark-${fixture.id}-`));
   try {
-    const paths = await materializeFixture(fixture, root);
+    const paths = await materializeBenchmarkFixture(fixture, root);
+    let codeContext: ReviewEnvironment['codeContext'];
+    if (recording.mode === 'indexed-context') {
+      const contextPath = join(root, 'code-context.json');
+      await writeFile(contextPath, `${JSON.stringify(recording.codeContext, null, 2)}\n`);
+      codeContext = { path: contextPath, repository: recording.codeContext.repository };
+    }
     const executor = new RecordedExecutor(recording.responses);
     const environment: ReviewEnvironment = {
       harness: 'echo',
       reviewDirectory: paths.review,
       sourceDirectory: paths.source,
       outputDirectory: paths.output,
-      codeContext: undefined,
+      codeContext,
       model: { provider: 'benchmark', endpoint: 'http://127.0.0.1', model: 'recorded', auth: 'none' },
       credential: undefined,
       findingScope: 'defects',
       timeout: parseDuration('1m'),
     };
     const result = await runFileReviews({ environment, executor });
-    return scoreBenchmarkCase(fixture, recording, result.records, executor.promptBytes);
+    return scoreBenchmarkCase(
+      fixture,
+      recording,
+      result.records,
+      executor.promptBytes,
+      {
+        ...result.summary.codeContext,
+        timings: recording.mode === 'indexed-context' ? recording.codeContext.timings : null,
+      },
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 }
 
+function sumIndexTimings(cases: readonly BenchmarkCaseResult[]): CodeContextTimings | null {
+  const timings = cases
+    .map((item) => item.codeContext.timings)
+    .filter((item): item is CodeContextTimings => item !== null);
+  if (timings.length === 0) return null;
+  return {
+    installationMs: timings.reduce((total, item) => total + item.installationMs, 0),
+    restoreMs: timings.reduce((total, item) => total + item.restoreMs, 0),
+    indexMs: timings.reduce((total, item) => total + item.indexMs, 0),
+    queryMs: timings.reduce((total, item) => total + item.queryMs, 0),
+    saveMs: timings.every((item) => item.saveMs !== null)
+      ? timings.reduce((total, item) => total + (item.saveMs ?? 0), 0)
+      : null,
+  };
+}
+
 function aggregateMode(mode: BenchmarkMode, cases: readonly BenchmarkCaseResult[]): BenchmarkModeResult {
+  const countStatus = (status: ReviewCodeContextRunCoverage['status']): number =>
+    cases.filter((item) => item.codeContext.status === status).length;
   return {
     mode,
     fixtures: cases.length,
@@ -637,11 +782,27 @@ function aggregateMode(mode: BenchmarkMode, cases: readonly BenchmarkCaseResult[
     validEvidenceMatches: cases.reduce((total, item) => total + item.validEvidenceMatches, 0),
     promptBytes: cases.reduce((total, item) => total + item.promptBytes, 0),
     reviewDurationMs: cases.reduce((total, item) => total + item.reviewDurationMs, 0),
+    codeContextCoverage: {
+      disabled: countStatus('disabled'),
+      complete: countStatus('complete'),
+      partial: countStatus('partial'),
+      unsupported: countStatus('unsupported'),
+      unavailable: countStatus('unavailable'),
+    },
+    codeContextFilesWithContext: cases.reduce((total, item) => total + item.codeContext.filesWithContext, 0),
+    codeContextRelatedSpans: cases.reduce((total, item) => total + item.codeContext.relatedSpans, 0),
+    codeContextSourceBytes: cases.reduce((total, item) => total + item.codeContext.sourceBytes, 0),
+    indexTimings: sumIndexTimings(cases),
     cases,
   };
 }
 
-export async function runRecordedBenchmark(corpusDirectory: string): Promise<BenchmarkReport> {
+export interface LoadedBenchmarkCorpus {
+  readonly version: typeof BENCHMARK_VERSION;
+  readonly fixtures: readonly BenchmarkFixture[];
+}
+
+export async function loadBenchmarkCorpus(corpusDirectory: string): Promise<LoadedBenchmarkCorpus> {
   const requestedRoot = resolve(corpusDirectory);
   const rootMetadata = await lstat(requestedRoot);
   if (!rootMetadata.isDirectory() || rootMetadata.isSymbolicLink()) {
@@ -656,6 +817,12 @@ export async function runRecordedBenchmark(corpusDirectory: string): Promise<Ben
   }
   const ids = new Set(fixtures.map((fixture) => fixture.id));
   if (ids.size !== fixtures.length) throw new Error('benchmark fixture IDs must be unique across the corpus');
+  return { version: corpus.version, fixtures };
+}
+
+export async function runRecordedBenchmark(corpusDirectory: string): Promise<BenchmarkReport> {
+  const corpus = await loadBenchmarkCorpus(corpusDirectory);
+  const fixtures = corpus.fixtures;
   const casesByMode = new Map<BenchmarkMode, BenchmarkCaseResult[]>();
   for (const fixture of fixtures) {
     for (const recording of fixture.recordings) {
@@ -664,10 +831,28 @@ export async function runRecordedBenchmark(corpusDirectory: string): Promise<Ben
       casesByMode.set(recording.mode, results);
     }
   }
-  const modes = MODES
-    .filter((mode) => casesByMode.has(mode))
-    .map((mode) => aggregateMode(mode, casesByMode.get(mode) ?? []));
-  return { version: BENCHMARK_VERSION, corpusVersion: corpus.version, modes };
+  const modes = MODES.map((mode) => aggregateMode(mode, casesByMode.get(mode) ?? []));
+  const baseline = modes.find((mode) => mode.mode === 'file-only');
+  const candidate = modes.find((mode) => mode.mode === 'indexed-context');
+  if (baseline === undefined || candidate === undefined || baseline.fixtures !== candidate.fixtures) {
+    throw new Error('benchmark comparison requires both modes over the same fixture count');
+  }
+  return {
+    version: BENCHMARK_VERSION,
+    corpusVersion: corpus.version,
+    modes,
+    comparison: {
+      baseline: 'file-only',
+      candidate: 'indexed-context',
+      rootCauseMatchesDelta: candidate.rootCauseMatches - baseline.rootCauseMatches,
+      creditedIssuesDelta: candidate.creditedIssues - baseline.creditedIssues,
+      falsePositivesDelta: candidate.falsePositives - baseline.falsePositives,
+      duplicateFindingsDelta: candidate.duplicateFindings - baseline.duplicateFindings,
+      promptBytesDelta: candidate.promptBytes - baseline.promptBytes,
+      reviewDurationMsDelta: candidate.reviewDurationMs - baseline.reviewDurationMs,
+      codeContextSourceBytesDelta: candidate.codeContextSourceBytes - baseline.codeContextSourceBytes,
+    },
+  };
 }
 
 function fraction(numerator: number, denominator: number): string {
@@ -690,20 +875,34 @@ export function renderBenchmarkMarkdown(report: BenchmarkReport): string {
       `- Evidence accuracy for claimed matches: ${fraction(mode.validEvidenceMatches, mode.claimedMatches)}`,
       `- Total prompt: ${mode.promptBytes} bytes`,
       `- Recorded review duration: ${mode.reviewDurationMs} ms`,
+      `- Indexed coverage: disabled ${mode.codeContextCoverage.disabled}, complete ${mode.codeContextCoverage.complete}, partial ${mode.codeContextCoverage.partial}, unsupported ${mode.codeContextCoverage.unsupported}, unavailable ${mode.codeContextCoverage.unavailable}`,
+      `- Indexed source: ${mode.codeContextSourceBytes} bytes across ${mode.codeContextRelatedSpans} spans in ${mode.codeContextFilesWithContext} reviewed files`,
+      ...(mode.indexTimings === null
+        ? ['- Recorded index timings: not applicable']
+        : [`- Recorded index timings: install ${mode.indexTimings.installationMs} ms, restore ${mode.indexTimings.restoreMs} ms, index ${mode.indexTimings.indexMs} ms, query ${mode.indexTimings.queryMs} ms, save ${mode.indexTimings.saveMs === null ? 'n/a' : `${mode.indexTimings.saveMs} ms`}`]),
       '',
-      '| Fixture | Kind | Coverage | Expected | Root matches | Credited | Findings | False positives | Duplicates | Prompt bytes | Duration ms |',
-      '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+      '| Fixture | Kind | Review coverage | Indexed coverage | Expected | Root matches | Credited | Findings | False positives | Duplicates | Context spans | Context bytes | Prompt bytes | Duration ms |',
+      '| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
     );
     for (const item of mode.cases) {
-      lines.push(`| ${item.fixtureId} | ${item.kind} | ${item.coverage} | ${item.expectedIssues} | ${item.rootCauseMatches} | ${item.creditedIssues} | ${item.findings} | ${item.falsePositives} | ${item.duplicateFindings} | ${item.promptBytes} | ${item.reviewDurationMs} |`);
+      lines.push(`| ${item.fixtureId} | ${item.kind} | ${item.coverage} | ${item.codeContext.status} | ${item.expectedIssues} | ${item.rootCauseMatches} | ${item.creditedIssues} | ${item.findings} | ${item.falsePositives} | ${item.duplicateFindings} | ${item.codeContext.relatedSpans} | ${item.codeContext.sourceBytes} | ${item.promptBytes} | ${item.reviewDurationMs} |`);
     }
     lines.push('');
   }
   lines.push(
+    '## Comparison',
+    '',
+    `- Root-cause matches: ${report.comparison.rootCauseMatchesDelta >= 0 ? '+' : ''}${report.comparison.rootCauseMatchesDelta}`,
+    `- Credited issues: ${report.comparison.creditedIssuesDelta >= 0 ? '+' : ''}${report.comparison.creditedIssuesDelta}`,
+    `- False positives: ${report.comparison.falsePositivesDelta >= 0 ? '+' : ''}${report.comparison.falsePositivesDelta}`,
+    `- Duplicate findings: ${report.comparison.duplicateFindingsDelta >= 0 ? '+' : ''}${report.comparison.duplicateFindingsDelta}`,
+    `- Prompt bytes: ${report.comparison.promptBytesDelta >= 0 ? '+' : ''}${report.comparison.promptBytesDelta}`,
+    `- Recorded review duration: ${report.comparison.reviewDurationMsDelta >= 0 ? '+' : ''}${report.comparison.reviewDurationMsDelta} ms`,
+    `- Resolved indexed source: ${report.comparison.codeContextSourceBytesDelta >= 0 ? '+' : ''}${report.comparison.codeContextSourceBytesDelta} bytes`,
+    '',
     '## Interpretation',
     '',
     'This report evaluates checked-in responses and human judgments. It verifies the fixture, scoring, and reporting contracts without measuring a live model or code indexer.',
-    '',
   );
   return `${lines.join('\n')}\n`;
 }

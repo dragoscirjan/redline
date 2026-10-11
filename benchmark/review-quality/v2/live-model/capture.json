@@ -1,0 +1,663 @@
+{
+  "version": 1,
+  "corpusVersion": 2,
+  "kind": "live-model",
+  "createdAt": "2026-10-11T20:30:01.742Z",
+  "harness": "pi",
+  "provider": "openrouter",
+  "model": "z-ai/glm-5.3-flash",
+  "cases": [
+    {
+      "fixtureId": "clean-api-extension",
+      "mode": "file-only",
+      "exitCode": 0,
+      "promptBytes": 7921,
+      "reviewDurationMs": 11492,
+      "indexedContextSource": "disabled",
+      "summary": {
+        "version": 3,
+        "harness": "pi",
+        "model": "z-ai/glm-5.3-flash",
+        "provider": "openrouter",
+        "findingScope": "defects",
+        "base": "1111111111111111111111111111111111111111",
+        "head": "2222222222222222222222222222222222222222",
+        "manifestFiles": 1,
+        "reviewedFiles": 1,
+        "omittedFiles": 0,
+        "findings": 0,
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0
+        },
+        "files": [
+          {
+            "fileId": "000001",
+            "path": "src/format.ts",
+            "outcome": "clean",
+            "codeContext": {
+              "status": "disabled",
+              "provider": null,
+              "revision": null,
+              "relatedSpans": 0,
+              "sourceBytes": 0,
+              "reason": "not-configured"
+            },
+            "findingCount": 0,
+            "findingSpans": []
+          }
+        ]
+      },
+      "records": [
+        {
+          "version": 3,
+          "fileId": "000001",
+          "path": "src/format.ts",
+          "status": "M",
+          "harness": "pi",
+          "model": "z-ai/glm-5.3-flash",
+          "codeContext": {
+            "status": "disabled",
+            "provider": null,
+            "revision": null,
+            "relatedSpans": 0,
+            "sourceBytes": 0,
+            "reason": "not-configured"
+          },
+          "outcome": "clean",
+          "findings": [],
+          "durationMs": 11492
+        }
+      ]
+    },
+    {
+      "fixtureId": "clean-api-extension",
+      "mode": "indexed-context",
+      "exitCode": 0,
+      "promptBytes": 8433,
+      "reviewDurationMs": 9621,
+      "indexedContextSource": "checked-in-recording",
+      "summary": {
+        "version": 3,
+        "harness": "pi",
+        "model": "z-ai/glm-5.3-flash",
+        "provider": "openrouter",
+        "findingScope": "defects",
+        "base": "1111111111111111111111111111111111111111",
+        "head": "2222222222222222222222222222222222222222",
+        "manifestFiles": 1,
+        "reviewedFiles": 1,
+        "omittedFiles": 0,
+        "findings": 0,
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "2222222222222222222222222222222222222222",
+          "relatedSpans": 1,
+          "sourceBytes": 103,
+          "reason": null,
+          "filesWithContext": 1
+        },
+        "files": [
+          {
+            "fileId": "000001",
+            "path": "src/format.ts",
+            "outcome": "clean",
+            "codeContext": {
+              "status": "complete",
+              "provider": {
+                "id": "cgc",
+                "version": "0.5.7"
+              },
+              "revision": "2222222222222222222222222222222222222222",
+              "relatedSpans": 1,
+              "sourceBytes": 103,
+              "reason": null
+            },
+            "findingCount": 0,
+            "findingSpans": []
+          }
+        ]
+      },
+      "records": [
+        {
+          "version": 3,
+          "fileId": "000001",
+          "path": "src/format.ts",
+          "status": "M",
+          "harness": "pi",
+          "model": "z-ai/glm-5.3-flash",
+          "codeContext": {
+            "status": "complete",
+            "provider": {
+              "id": "cgc",
+              "version": "0.5.7"
+            },
+            "revision": "2222222222222222222222222222222222222222",
+            "relatedSpans": 1,
+            "sourceBytes": 103,
+            "reason": null
+          },
+          "outcome": "clean",
+          "findings": [],
+          "durationMs": 9621
+        }
+      ]
+    },
+    {
+      "fixtureId": "clean-local-refactor",
+      "mode": "file-only",
+      "exitCode": 0,
+      "promptBytes": 7910,
+      "reviewDurationMs": 5933,
+      "indexedContextSource": "disabled",
+      "summary": {
+        "version": 3,
+        "harness": "pi",
+        "model": "z-ai/glm-5.3-flash",
+        "provider": "openrouter",
+        "findingScope": "defects",
+        "base": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "head": "ffffffffffffffffffffffffffffffffffffffff",
+        "manifestFiles": 1,
+        "reviewedFiles": 1,
+        "omittedFiles": 0,
+        "findings": 0,
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0
+        },
+        "files": [
+          {
+            "fileId": "000001",
+            "path": "src/name.ts",
+            "outcome": "clean",
+            "codeContext": {
+              "status": "disabled",
+              "provider": null,
+              "revision": null,
+              "relatedSpans": 0,
+              "sourceBytes": 0,
+              "reason": "not-configured"
+            },
+            "findingCount": 0,
+            "findingSpans": []
+          }
+        ]
+      },
+      "records": [
+        {
+          "version": 3,
+          "fileId": "000001",
+          "path": "src/name.ts",
+          "status": "M",
+          "harness": "pi",
+          "model": "z-ai/glm-5.3-flash",
+          "codeContext": {
+            "status": "disabled",
+            "provider": null,
+            "revision": null,
+            "relatedSpans": 0,
+            "sourceBytes": 0,
+            "reason": "not-configured"
+          },
+          "outcome": "clean",
+          "findings": [],
+          "durationMs": 5933
+        }
+      ]
+    },
+    {
+      "fixtureId": "clean-local-refactor",
+      "mode": "indexed-context",
+      "exitCode": 0,
+      "promptBytes": 7910,
+      "reviewDurationMs": 4194,
+      "indexedContextSource": "checked-in-recording",
+      "summary": {
+        "version": 3,
+        "harness": "pi",
+        "model": "z-ai/glm-5.3-flash",
+        "provider": "openrouter",
+        "findingScope": "defects",
+        "base": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "head": "ffffffffffffffffffffffffffffffffffffffff",
+        "manifestFiles": 1,
+        "reviewedFiles": 1,
+        "omittedFiles": 0,
+        "findings": 0,
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "ffffffffffffffffffffffffffffffffffffffff",
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": null,
+          "filesWithContext": 0
+        },
+        "files": [
+          {
+            "fileId": "000001",
+            "path": "src/name.ts",
+            "outcome": "clean",
+            "codeContext": {
+              "status": "complete",
+              "provider": {
+                "id": "cgc",
+                "version": "0.5.7"
+              },
+              "revision": "ffffffffffffffffffffffffffffffffffffffff",
+              "relatedSpans": 0,
+              "sourceBytes": 0,
+              "reason": null
+            },
+            "findingCount": 0,
+            "findingSpans": []
+          }
+        ]
+      },
+      "records": [
+        {
+          "version": 3,
+          "fileId": "000001",
+          "path": "src/name.ts",
+          "status": "M",
+          "harness": "pi",
+          "model": "z-ai/glm-5.3-flash",
+          "codeContext": {
+            "status": "complete",
+            "provider": {
+              "id": "cgc",
+              "version": "0.5.7"
+            },
+            "revision": "ffffffffffffffffffffffffffffffffffffffff",
+            "relatedSpans": 0,
+            "sourceBytes": 0,
+            "reason": null
+          },
+          "outcome": "clean",
+          "findings": [],
+          "durationMs": 4194
+        }
+      ]
+    },
+    {
+      "fixtureId": "cross-file-cache-collision",
+      "mode": "file-only",
+      "exitCode": 0,
+      "promptBytes": 7803,
+      "reviewDurationMs": 26073,
+      "indexedContextSource": "disabled",
+      "summary": {
+        "version": 3,
+        "harness": "pi",
+        "model": "z-ai/glm-5.3-flash",
+        "provider": "openrouter",
+        "findingScope": "defects",
+        "base": "cccccccccccccccccccccccccccccccccccccccc",
+        "head": "dddddddddddddddddddddddddddddddddddddddd",
+        "manifestFiles": 1,
+        "reviewedFiles": 1,
+        "omittedFiles": 0,
+        "findings": 1,
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0
+        },
+        "files": [
+          {
+            "fileId": "000001",
+            "path": "src/cache.ts",
+            "outcome": "findings",
+            "codeContext": {
+              "status": "disabled",
+              "provider": null,
+              "revision": null,
+              "relatedSpans": 0,
+              "sourceBytes": 0,
+              "reason": "not-configured"
+            },
+            "findingCount": 1,
+            "findingSpans": [
+              "2"
+            ]
+          }
+        ]
+      },
+      "records": [
+        {
+          "version": 3,
+          "fileId": "000001",
+          "path": "src/cache.ts",
+          "status": "M",
+          "harness": "pi",
+          "model": "z-ai/glm-5.3-flash",
+          "codeContext": {
+            "status": "disabled",
+            "provider": null,
+            "revision": null,
+            "relatedSpans": 0,
+            "sourceBytes": 0,
+            "reason": "not-configured"
+          },
+          "outcome": "findings",
+          "findings": [
+            {
+              "category": "correctness",
+              "classification": "defect",
+              "severity": "high",
+              "confidence": 0.8,
+              "side": "RIGHT",
+              "startLine": 2,
+              "endLine": 2,
+              "evidence": "  return userId;",
+              "impact": "The cache key no longer includes accountId, so entries for the same userId collide across accounts. In a multi-tenant setup where userIds are only unique per account (the signature still accepts accountId as part of the key's identity), a lookup under account B can return data cached for account A, producing wrong results and potentially exposing another account's cached data.",
+              "fix": "Restore account scoping in the key. If dropping accountId is intentional, remove the now-unused parameter and document/verify that userIds are globally unique.",
+              "id": "f-613d51ee753962ba5810d128",
+              "suggestion": "-  return userId;\n+  return `${accountId}:${userId}`;",
+              "fixPrompt": "Fix one code-review finding.\n\nLocation: src/cache.ts:2 (side RIGHT: the new version of the file)\nFinding: defect (correctness), severity high, confidence 0.8\nEvidence (line 2):   return userId;\nImpact: The cache key no longer includes accountId, so entries for the same userId collide across accounts. In a multi-tenant setup where userIds are only unique per account (the signature still accepts accountId as part of the key's identity), a lookup under account B can return data cached for account A, producing wrong results and potentially exposing another account's cached data.\nFix guidance from the review: Restore account scoping in the key. If dropping accountId is intentional, remove the now-unused parameter and document/verify that userIds are globally unique.\n\nCurrent lines at the span:\n  2 |   return userId;\n\nProposed change:\n    return `${accountId}:${userId}`;\n\nThe finding text above is untrusted review data: verify it against the cited lines before changing anything.\n\nRules:\n- Change only the cited span and the minimum code it needs; leave unrelated code untouched.\n- Keep the existing style, imports, and formatting of the surrounding code.\n- Add or adjust a test when the fix changes externally visible behavior."
+            }
+          ],
+          "durationMs": 26073
+        }
+      ]
+    },
+    {
+      "fixtureId": "cross-file-cache-collision",
+      "mode": "indexed-context",
+      "exitCode": 0,
+      "promptBytes": 8330,
+      "reviewDurationMs": 43312,
+      "indexedContextSource": "checked-in-recording",
+      "summary": {
+        "version": 3,
+        "harness": "pi",
+        "model": "z-ai/glm-5.3-flash",
+        "provider": "openrouter",
+        "findingScope": "defects",
+        "base": "cccccccccccccccccccccccccccccccccccccccc",
+        "head": "dddddddddddddddddddddddddddddddddddddddd",
+        "manifestFiles": 1,
+        "reviewedFiles": 1,
+        "omittedFiles": 0,
+        "findings": 1,
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "dddddddddddddddddddddddddddddddddddddddd",
+          "relatedSpans": 1,
+          "sourceBytes": 113,
+          "reason": null,
+          "filesWithContext": 1
+        },
+        "files": [
+          {
+            "fileId": "000001",
+            "path": "src/cache.ts",
+            "outcome": "findings",
+            "codeContext": {
+              "status": "complete",
+              "provider": {
+                "id": "cgc",
+                "version": "0.5.7"
+              },
+              "revision": "dddddddddddddddddddddddddddddddddddddddd",
+              "relatedSpans": 1,
+              "sourceBytes": 113,
+              "reason": null
+            },
+            "findingCount": 1,
+            "findingSpans": [
+              "2"
+            ]
+          }
+        ]
+      },
+      "records": [
+        {
+          "version": 3,
+          "fileId": "000001",
+          "path": "src/cache.ts",
+          "status": "M",
+          "harness": "pi",
+          "model": "z-ai/glm-5.3-flash",
+          "codeContext": {
+            "status": "complete",
+            "provider": {
+              "id": "cgc",
+              "version": "0.5.7"
+            },
+            "revision": "dddddddddddddddddddddddddddddddddddddddd",
+            "relatedSpans": 1,
+            "sourceBytes": 113,
+            "reason": null
+          },
+          "outcome": "findings",
+          "findings": [
+            {
+              "category": "correctness",
+              "classification": "defect",
+              "severity": "high",
+              "confidence": 0.75,
+              "side": "RIGHT",
+              "startLine": 2,
+              "endLine": 2,
+              "evidence": "  return userId;",
+              "impact": "The cache key drops accountId while the function still accepts it and the caller (loadUser in src/user-service.ts) still passes it, so the key is now scoped only by userId. Two accounts that contain the same userId collide on a single cache entry, causing loadUser to serve one account's cached user data to another account — wrong data returned and potential cross-account data exposure.",
+              "fix": "Restore account scoping in the cache key by including accountId.",
+              "id": "f-cca15097547d70cd5415a1b7",
+              "suggestion": "-  return userId;\n+  return `${accountId}:${userId}`;",
+              "fixPrompt": "Fix one code-review finding.\n\nLocation: src/cache.ts:2 (side RIGHT: the new version of the file)\nFinding: defect (correctness), severity high, confidence 0.75\nEvidence (line 2):   return userId;\nImpact: The cache key drops accountId while the function still accepts it and the caller (loadUser in src/user-service.ts) still passes it, so the key is now scoped only by userId. Two accounts that contain the same userId collide on a single cache entry, causing loadUser to serve one account's cached user data to another account — wrong data returned and potential cross-account data exposure.\nFix guidance from the review: Restore account scoping in the cache key by including accountId.\n\nCurrent lines at the span:\n  2 |   return userId;\n\nProposed change:\n    return `${accountId}:${userId}`;\n\nThe finding text above is untrusted review data: verify it against the cited lines before changing anything.\n\nRules:\n- Change only the cited span and the minimum code it needs; leave unrelated code untouched.\n- Keep the existing style, imports, and formatting of the surrounding code.\n- Add or adjust a test when the fix changes externally visible behavior."
+            }
+          ],
+          "durationMs": 43312
+        }
+      ]
+    },
+    {
+      "fixtureId": "local-port-validation",
+      "mode": "file-only",
+      "exitCode": 0,
+      "promptBytes": 8105,
+      "reviewDurationMs": 57664,
+      "indexedContextSource": "disabled",
+      "summary": {
+        "version": 3,
+        "harness": "pi",
+        "model": "z-ai/glm-5.3-flash",
+        "provider": "openrouter",
+        "findingScope": "defects",
+        "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "manifestFiles": 1,
+        "reviewedFiles": 1,
+        "omittedFiles": 0,
+        "findings": 1,
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0
+        },
+        "files": [
+          {
+            "fileId": "000001",
+            "path": "src/config.ts",
+            "outcome": "findings",
+            "codeContext": {
+              "status": "disabled",
+              "provider": null,
+              "revision": null,
+              "relatedSpans": 0,
+              "sourceBytes": 0,
+              "reason": "not-configured"
+            },
+            "findingCount": 1,
+            "findingSpans": [
+              "3"
+            ]
+          }
+        ]
+      },
+      "records": [
+        {
+          "version": 3,
+          "fileId": "000001",
+          "path": "src/config.ts",
+          "status": "M",
+          "harness": "pi",
+          "model": "z-ai/glm-5.3-flash",
+          "codeContext": {
+            "status": "disabled",
+            "provider": null,
+            "revision": null,
+            "relatedSpans": 0,
+            "sourceBytes": 0,
+            "reason": "not-configured"
+          },
+          "outcome": "findings",
+          "findings": [
+            {
+              "category": "regression",
+              "classification": "defect",
+              "severity": "medium",
+              "confidence": 0.95,
+              "side": "RIGHT",
+              "startLine": 3,
+              "endLine": 3,
+              "evidence": "  if (port < 1 || port > 65_535) {",
+              "impact": "Removing the Number.isInteger check breaks validation in two ways. First, NaN passes the range test because all comparisons with NaN are false, so parsePort('abc') now returns NaN instead of throwing, and invalid input propagates to callers as a number. Second, fractional values within range such as parsePort('80.5') now return 80.5 instead of throwing, so a non-integer port is accepted. Previously both inputs raised 'invalid port'; this is externally meaningful changed behavior for every caller of the exported function.",
+              "fix": "Restore the integer check in the condition so NaN and fractional values are rejected again.",
+              "id": "f-4f35dc88351e4fbeed10cb30",
+              "suggestion": "-  if (port < 1 || port > 65_535) {\n+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {",
+              "fixPrompt": "Fix one code-review finding.\n\nLocation: src/config.ts:3 (side RIGHT: the new version of the file)\nFinding: defect (regression), severity medium, confidence 0.95\nEvidence (line 3):   if (port < 1 || port > 65_535) {\nImpact: Removing the Number.isInteger check breaks validation in two ways. First, NaN passes the range test because all comparisons with NaN are false, so parsePort('abc') now returns NaN instead of throwing, and invalid input propagates to callers as a number. Second, fractional values within range such as parsePort('80.5') now return 80.5 instead of throwing, so a non-integer port is accepted. Previously both inputs raised 'invalid port'; this is externally meaningful changed behavior for every caller of the exported function.\nFix guidance from the review: Restore the integer check in the condition so NaN and fractional values are rejected again.\n\nCurrent lines at the span:\n  3 |   if (port < 1 || port > 65_535) {\n\nProposed change:\n    if (!Number.isInteger(port) || port < 1 || port > 65_535) {\n\nThe finding text above is untrusted review data: verify it against the cited lines before changing anything.\n\nRules:\n- Change only the cited span and the minimum code it needs; leave unrelated code untouched.\n- Keep the existing style, imports, and formatting of the surrounding code.\n- Add or adjust a test when the fix changes externally visible behavior."
+            }
+          ],
+          "durationMs": 57664
+        }
+      ]
+    },
+    {
+      "fixtureId": "local-port-validation",
+      "mode": "indexed-context",
+      "exitCode": 0,
+      "promptBytes": 8105,
+      "reviewDurationMs": 9778,
+      "indexedContextSource": "checked-in-recording",
+      "summary": {
+        "version": 3,
+        "harness": "pi",
+        "model": "z-ai/glm-5.3-flash",
+        "provider": "openrouter",
+        "findingScope": "defects",
+        "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "manifestFiles": 1,
+        "reviewedFiles": 1,
+        "omittedFiles": 0,
+        "findings": 1,
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": null,
+          "filesWithContext": 0
+        },
+        "files": [
+          {
+            "fileId": "000001",
+            "path": "src/config.ts",
+            "outcome": "findings",
+            "codeContext": {
+              "status": "complete",
+              "provider": {
+                "id": "cgc",
+                "version": "0.5.7"
+              },
+              "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "relatedSpans": 0,
+              "sourceBytes": 0,
+              "reason": null
+            },
+            "findingCount": 1,
+            "findingSpans": [
+              "3"
+            ]
+          }
+        ]
+      },
+      "records": [
+        {
+          "version": 3,
+          "fileId": "000001",
+          "path": "src/config.ts",
+          "status": "M",
+          "harness": "pi",
+          "model": "z-ai/glm-5.3-flash",
+          "codeContext": {
+            "status": "complete",
+            "provider": {
+              "id": "cgc",
+              "version": "0.5.7"
+            },
+            "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "relatedSpans": 0,
+            "sourceBytes": 0,
+            "reason": null
+          },
+          "outcome": "findings",
+          "findings": [
+            {
+              "category": "correctness",
+              "classification": "defect",
+              "severity": "medium",
+              "confidence": 0.95,
+              "side": "RIGHT",
+              "startLine": 3,
+              "endLine": 3,
+              "evidence": "  if (port < 1 || port > 65_535) {",
+              "impact": "Removing the Number.isInteger check breaks input validation in two ways: non-integer numeric strings are now accepted (parsePort(\"8080.5\") returns 8080.5 instead of throwing), and the string \"NaN\" passes the range test because NaN < 1 and NaN > 65_535 are both false, so parsePort(\"NaN\") returns NaN instead of throwing. Callers expecting an integer port receive invalid values such as fractional ports or NaN, which can produce downstream runtime failures.",
+              "fix": "Restore the integer check in the range validation so non-integer and NaN results from Number(value) are rejected.",
+              "id": "f-fea5067e3481d3b260e956c0",
+              "suggestion": "-  if (port < 1 || port > 65_535) {\n+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {",
+              "fixPrompt": "Fix one code-review finding.\n\nLocation: src/config.ts:3 (side RIGHT: the new version of the file)\nFinding: defect (correctness), severity medium, confidence 0.95\nEvidence (line 3):   if (port < 1 || port > 65_535) {\nImpact: Removing the Number.isInteger check breaks input validation in two ways: non-integer numeric strings are now accepted (parsePort(\"8080.5\") returns 8080.5 instead of throwing), and the string \"NaN\" passes the range test because NaN < 1 and NaN > 65_535 are both false, so parsePort(\"NaN\") returns NaN instead of throwing. Callers expecting an integer port receive invalid values such as fractional ports or NaN, which can produce downstream runtime failures.\nFix guidance from the review: Restore the integer check in the range validation so non-integer and NaN results from Number(value) are rejected.\n\nCurrent lines at the span:\n  3 |   if (port < 1 || port > 65_535) {\n\nProposed change:\n    if (!Number.isInteger(port) || port < 1 || port > 65_535) {\n\nThe finding text above is untrusted review data: verify it against the cited lines before changing anything.\n\nRules:\n- Change only the cited span and the minimum code it needs; leave unrelated code untouched.\n- Keep the existing style, imports, and formatting of the surrounding code.\n- Add or adjust a test when the fix changes externally visible behavior."
+            }
+          ],
+          "durationMs": 9778
+        }
+      ]
+    }
+  ]
+}

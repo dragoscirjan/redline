@@ -183,9 +183,7 @@ PY
 
 @test "live pinned CGC smoke test is opt-in" {
   [[ "${REDLINE_LIVE_CODE_INDEX_TESTS:-0}" == '1' ]] || skip 'set REDLINE_LIVE_CODE_INDEX_TESTS=1 to run the live pinned-provider smoke test'
-  live_cgc=$(command -v cgc)
-  live_cgc=$(readlink -f "$live_cgc")
-  export REDLINE_CGC_EXECUTABLE="$live_cgc"
+  unset REDLINE_CGC_EXECUTABLE
   : > "$GITHUB_OUTPUT"
   run bash "$ACTION_DIR/run.sh" prepare
   [ "$status" -eq 0 ]
@@ -194,6 +192,7 @@ PY
   python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" <<'PY'
 import json, sys
 artifact = json.load(open(sys.argv[1], encoding='utf-8'))
+print(json.dumps(artifact, sort_keys=True))
 assert artifact['provider'] == {'id': 'cgc', 'version': '0.5.7'}
 assert artifact['status'] == 'complete'
 assert artifact['files'][0]['related'] == [{
@@ -202,5 +201,15 @@ assert artifact['files'][0]['related'] == [{
     'endLine': 5,
     'reason': 'related-symbol-calls-changed-code',
 }]
+timings = artifact['timings']
+for key in ('installationMs', 'restoreMs', 'indexMs', 'queryMs'):
+    assert isinstance(timings[key], int) and timings[key] >= 0
+assert timings['saveMs'] is None or isinstance(timings['saveMs'], int)
+print(json.dumps({
+    'provider': artifact['provider'],
+    'status': artifact['status'],
+    'related': artifact['files'][0]['related'],
+    'timings': timings,
+}, sort_keys=True))
 PY
 }

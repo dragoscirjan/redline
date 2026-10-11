@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "kind": "live-indexer",
+  "recordedAt": "2026-10-11T20:29:05Z",
+  "fixtureId": "cross-file-cache-collision",
+  "provider": {
+    "id": "cgc",
+    "version": "0.5.7"
+  },
+  "run": "cold",
+  "environment": "local-linux-x64",
+  "command": "mise run benchmark:live-indexer",
+  "status": "partial",
+  "expectedRelationFound": false,
+  "relatedSpans": [],
+  "diagnostics": [
+    "cgc-incoming-query-failed",
+    "cgc-query-partial"
+  ],
+  "timings": {
+    "installationMs": 2036,
+    "restoreMs": 67,
+    "indexMs": 8023,
+    "queryMs": 18063,
+    "saveMs": null
+  }
+}

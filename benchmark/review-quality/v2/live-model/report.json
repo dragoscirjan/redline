@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "kind": "live-model",
+  "capture": "capture.json",
+  "createdAt": "2026-10-11T20:30:01.742Z",
+  "harness": "pi",
+  "provider": "openrouter",
+  "model": "z-ai/glm-5.3-flash",
+  "indexedContextSource": "checked-in-recordings",
+  "modes": [
+    {
+      "mode": "file-only",
+      "fixtures": 4,
+      "expectedIssues": 2,
+      "rootCauseMatches": 2,
+      "creditedIssues": 2,
+      "findings": 2,
+      "falsePositives": 0,
+      "duplicateFindings": 0,
+      "validEvidenceMatches": 2,
+      "promptBytes": 31739,
+      "reviewDurationMs": 101162,
+      "sourceBytes": 0
+    },
+    {
+      "mode": "indexed-context",
+      "fixtures": 4,
+      "expectedIssues": 2,
+      "rootCauseMatches": 2,
+      "creditedIssues": 2,
+      "findings": 2,
+      "falsePositives": 0,
+      "duplicateFindings": 0,
+      "validEvidenceMatches": 2,
+      "promptBytes": 32778,
+      "reviewDurationMs": 66905,
+      "sourceBytes": 216
+    }
+  ],
+  "comparison": {
+    "rootCauseMatchesDelta": 0,
+    "creditedIssuesDelta": 0,
+    "falsePositivesDelta": 0,
+    "duplicateFindingsDelta": 0,
+    "promptBytesDelta": 1039,
+    "reviewDurationMsDelta": -34257,
+    "sourceBytesDelta": 216
+  },
+  "judgments": [
+    {
+      "fixtureId": "cross-file-cache-collision",
+      "mode": "file-only",
+      "fileId": "000001",
+      "findingIndex": 0,
+      "expectedIssueId": "cross-account-cache-collision",
+      "validEvidence": true
+    },
+    {
+      "fixtureId": "cross-file-cache-collision",
+      "mode": "indexed-context",
+      "fileId": "000001",
+      "findingIndex": 0,
+      "expectedIssueId": "cross-account-cache-collision",
+      "validEvidence": true
+    },
+    {
+      "fixtureId": "local-port-validation",
+      "mode": "file-only",
+      "fileId": "000001",
+      "findingIndex": 0,
+      "expectedIssueId": "non-integer-port",
+      "validEvidence": true
+    },
+    {
+      "fixtureId": "local-port-validation",
+      "mode": "indexed-context",
+      "fileId": "000001",
+      "findingIndex": 0,
+      "expectedIssueId": "non-integer-port",
+      "validEvidence": true
+    }
+  ]
+}

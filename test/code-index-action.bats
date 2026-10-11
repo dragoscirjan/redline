@@ -119,7 +119,8 @@ PY
 
   : > "$PROVIDER/calls.log"
   build_action 'redline-code-index-compatible-cache' success
-  grep -Fq 'update ' "$PROVIDER/calls.log"
+  grep -Fq 'cache-ready=false' "$GITHUB_OUTPUT"
+  ! grep -Eq '^(index|update) ' "$PROVIDER/calls.log"
   cp "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$TMP_ROOT/warm.json"
 
   python3 - "$TMP_ROOT/cold.json" "$TMP_ROOT/warm.json" "$HEAD_REVISION" <<'PY'
@@ -132,6 +133,7 @@ assert cold['revision'] == sys.argv[3]
 assert cold['status'] == warm['status'] == 'complete'
 assert cold['files'] == warm['files']
 assert isinstance(cold['timings']['saveMs'], int)
+assert warm['timings']['indexMs'] == 0
 assert any(item['code'] == 'cache-save-failed' for item in cold['diagnostics'])
 assert cold['files'][0]['related'] == [{
     'path': 'src/user-service.ts',
@@ -140,6 +142,39 @@ assert cold['files'][0]['related'] == [{
     'reason': 'related-symbol-calls-changed-code',
 }]
 assert any(item['code'] == 'cache-exact-head' for item in warm['diagnostics'])
+PY
+}
+
+@test "a compatible cache is reused without re-indexing after a new commit" {
+  prepare_action
+  build_action '' success
+  cached_revision="$HEAD_REVISION"
+
+  cat > "$REPOSITORY/src/cache.ts" <<'EOF'
+export function userCacheKey(accountId: string, userId: string): string {
+  return `${userId}:${accountId}`;
+}
+EOF
+  git -C "$REPOSITORY" add src/cache.ts
+  git -C "$REPOSITORY" commit -q -m follow-up
+  HEAD_REVISION=$(git -C "$REPOSITORY" rev-parse HEAD)
+  export REDLINE_CODE_INDEX_HEAD="$HEAD_REVISION"
+  : > "$PROVIDER/calls.log"
+
+  build_action 'redline-code-index-earlier-head-cache' success
+
+  grep -Fq 'cache-ready=false' "$GITHUB_OUTPUT"
+  ! grep -Eq '^(index|update) ' "$PROVIDER/calls.log"
+  python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$RUNNER_TEMP/redline-code-index/cache/state.json" "$cached_revision" "$HEAD_REVISION" <<'PY'
+import json, sys
+artifact = json.load(open(sys.argv[1], encoding='utf-8'))
+state = json.load(open(sys.argv[2], encoding='utf-8'))
+assert artifact['revision'] == sys.argv[4]
+assert artifact['status'] == 'partial'
+assert artifact['files'][0]['status'] == 'partial'
+assert artifact['timings']['indexMs'] == 0
+assert any(item['code'] == 'cache-compatible-head' for item in artifact['diagnostics'])
+assert state['revision'] == sys.argv[3]
 PY
 }
 

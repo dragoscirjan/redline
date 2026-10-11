@@ -778,26 +778,36 @@ def build_artifact(args: argparse.Namespace) -> bool:
     if restored_material and not cache_valid:
         add_diagnostic(diagnostics, "warning", "cache-restore-invalid", "The restored CGC database failed identity or query validation and was rebuilt once.")
 
-    index_started = monotonic_ms()
+    cache_reused = cache_valid
     rebuilt = False
-    if cache_valid:
+    if cache_reused:
         exact = cached_state is not None and cached_state.get("revision") == head
-        add_diagnostic(
-            diagnostics,
-            "info",
-            "cache-exact-head" if exact else "cache-compatible-head",
-            "A validated exact-head CGC database was restored and refreshed." if exact else "A validated compatible CGC database was restored and re-indexed to the requested head.",
-        )
-        indexed, _ = run_provider(executable, ["update", str(source_root), "--quiet"], environment, 180)
-        if not indexed:
-            clear_database(cache_root)
-            rebuilt = True
-            indexed, _ = run_provider(executable, ["index", str(source_root), "--no-progress"], environment, 180)
+        if exact:
+            add_diagnostic(
+                diagnostics,
+                "info",
+                "cache-exact-head",
+                "A validated exact-head CGC database was restored and reused without indexing.",
+            )
+        else:
+            cached_revision = cached_state.get("revision") if cached_state is not None else "unknown"
+            add_diagnostic(
+                diagnostics,
+                "warning",
+                "cache-compatible-head",
+                f"Validated CGC graph revision {cached_revision} was reused without re-indexing; current-head graph coverage is partial.",
+            )
+            for file_entry in files:
+                if file_entry["status"] == "complete":
+                    file_entry["status"] = "partial"
+        indexed = True
+        measured["indexMs"] = 0
     else:
         clear_database(cache_root)
         rebuilt = restored_material
+        index_started = monotonic_ms()
         indexed, _ = run_provider(executable, ["index", str(source_root), "--no-progress"], environment, 180)
-    measured["indexMs"] = monotonic_ms() - index_started
+        measured["indexMs"] = monotonic_ms() - index_started
 
     if not indexed:
         for file_entry in files:
@@ -807,11 +817,13 @@ def build_artifact(args: argparse.Namespace) -> bool:
         write_artifact(output, make_artifact(repository, head, aggregate_status(files), files, diagnostics, measured))
         return False
 
-    validation_started = monotonic_ms()
-    database_valid = validate_database(executable, environment, source_root)
-    measured["queryMs"] = int(measured["queryMs"] or 0) + monotonic_ms() - validation_started
+    database_valid = cache_reused
+    if not cache_reused:
+        validation_started = monotonic_ms()
+        database_valid = validate_database(executable, environment, source_root)
+        measured["queryMs"] = int(measured["queryMs"] or 0) + monotonic_ms() - validation_started
     if not database_valid and not rebuilt:
-        add_diagnostic(diagnostics, "warning", "cgc-post-index-invalid", "CGC validation failed after refresh; the database was rebuilt once.")
+        add_diagnostic(diagnostics, "warning", "cgc-post-index-invalid", "CGC validation failed after indexing; the database was rebuilt once.")
         clear_database(cache_root)
         rebuild_started = monotonic_ms()
         indexed, _ = run_provider(executable, ["index", str(source_root), "--no-progress"], environment, 180)
@@ -831,7 +843,7 @@ def build_artifact(args: argparse.Namespace) -> bool:
         return False
 
     if not supported_paths:
-        cache_ready = prepare_cache(cache_root, repository, head, args.configuration_id, source_root, diagnostics)
+        cache_ready = False if cache_reused else prepare_cache(cache_root, repository, head, args.configuration_id, source_root, diagnostics)
         status = "partial" if changed_paths_truncated else aggregate_status(files)
         write_artifact(output, make_artifact(repository, head, status, files, diagnostics, measured))
         return cache_ready
@@ -869,7 +881,7 @@ def build_artifact(args: argparse.Namespace) -> bool:
     if query_partial:
         add_diagnostic(diagnostics, "warning", "cgc-query-partial", "At least one provider row or query exceeded validation or a deterministic bound.")
 
-    cache_ready = prepare_cache(cache_root, repository, head, args.configuration_id, source_root, diagnostics)
+    cache_ready = False if cache_reused else prepare_cache(cache_root, repository, head, args.configuration_id, source_root, diagnostics)
     write_artifact(output, make_artifact(repository, head, aggregate_status(files), files, diagnostics, measured))
     return cache_ready
 

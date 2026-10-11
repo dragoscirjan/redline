@@ -226,7 +226,7 @@ runs:
     #       pi) command -v pi >/dev/null 2>&1 || npm install -g --ignore-scripts @earendil-works/pi-coding-agent ;;
     #       opencode) command -v opencode >/dev/null 2>&1 || npm install -g opencode-ai@1.18.34 ;;
     #     esac
-
+    #
     # - name: Announce review start
     #   if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' && (steps.app-token-start.outputs.token != '' || inputs.github-token != '') }}
     #   continue-on-error: true

@@ -54,7 +54,7 @@ runs:
           ${{ steps.prepare.outputs.cache-exact-prefix }}
           ${{ steps.prepare.outputs.cache-compatible-prefix }}
 
-    - name: Index head and export bounded context
+    - name: Reuse cached graph or index head
       id: build
       if: ${{ steps.prepare.outputs.available == 'true' }}
       shell: bash

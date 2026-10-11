@@ -30,6 +30,11 @@ on:
         required: false
         type: string
         default: enabled
+      indexing-provider:
+        description: Code-index provider, cgc or gitnexus. Default cgc.
+        required: false
+        type: string
+        default: cgc
       report-style:
         description: Report style, single-block or inline. Legacy input kept for the previously published action; the current action ignores it.
         required: false
@@ -125,6 +130,7 @@ jobs:
           finding-scope: ${{ inputs.finding-scope }}
           verbosity: ${{ inputs.verbosity }}
           indexing: ${{ inputs.indexing }}
+          indexing-provider: ${{ inputs.indexing-provider }}
           timeout: ${{ inputs.timeout }}
           artifact-name: ${{ inputs.artifact-name }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

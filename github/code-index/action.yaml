@@ -5,6 +5,10 @@ description: Build bounded, source-validated code context for an exact pull requ
 author: dragoscirjan
 
 inputs:
+  provider:
+    description: Code-index provider, cgc or gitnexus.
+    required: false
+    default: cgc
   base:
     description: Exact pull request base commit (full SHA-1 or SHA-256 identifier).
     required: true
@@ -32,17 +36,18 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Prepare pinned CGC and cache identity
+    - name: Prepare pinned provider and cache identity
       id: prepare
       shell: bash
       env:
+        REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
         REDLINE_CODE_INDEX_BASE: ${{ inputs.base }}
         REDLINE_CODE_INDEX_HEAD: ${{ inputs.head }}
         REDLINE_CODE_INDEX_REPOSITORY: ${{ inputs.repository }}
         REDLINE_CODE_INDEX_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
       run: bash "${{ github.action_path }}/run.sh" prepare
 
-    - name: Restore CGC database
+    - name: Restore provider database
       id: cache-restore
       if: ${{ steps.prepare.outputs.available == 'true' }}
       continue-on-error: true
@@ -58,6 +63,7 @@ runs:
       if: ${{ steps.prepare.outputs.available == 'true' }}
       shell: bash
       env:
+        REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
         REDLINE_CODE_INDEX_BASE: ${{ inputs.base }}
         REDLINE_CODE_INDEX_HEAD: ${{ inputs.head }}
         REDLINE_CODE_INDEX_REPOSITORY: ${{ inputs.repository }}
@@ -69,9 +75,11 @@ runs:
     - name: Start cache-save timing
       if: ${{ steps.build.outputs.cache-ready == 'true' }}
       shell: bash
+      env:
+        REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
       run: bash "${{ github.action_path }}/run.sh" save-start
 
-    - name: Save validated CGC database
+    - name: Save validated provider database
       id: cache-save
       if: ${{ steps.build.outputs.cache-ready == 'true' }}
       continue-on-error: true
@@ -85,6 +93,7 @@ runs:
       if: ${{ always() && steps.prepare.outcome == 'success' }}
       shell: bash
       env:
+        REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
         REDLINE_CODE_INDEX_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
         REDLINE_CODE_INDEX_CACHE_MATCHED_KEY: ${{ steps.cache-restore.outputs.cache-matched-key }}
         REDLINE_CODE_INDEX_CACHE_SAVE_OUTCOME: ${{ steps.cache-save.outcome }}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build Redline's bounded code-context artifact from a pinned CGC index."""
+"""Build Redline's bounded code-context artifact from a pinned code index."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import resource
 import shutil
 import stat
 import subprocess
@@ -17,8 +18,9 @@ from pathlib import Path
 from typing import Any, Iterable
 
 VERSION = 1
+PROVIDER_VERSIONS = {"cgc": "0.5.7", "gitnexus": "1.6.12"}
 PROVIDER_ID = "cgc"
-PROVIDER_VERSION = "0.5.7"
+PROVIDER_VERSION = PROVIDER_VERSIONS[PROVIDER_ID]
 MAX_ARTIFACT_BYTES = 128 * 1024
 MAX_CHANGED_FILES = 256
 MAX_CHANGED_PATH_BYTES = 48 * 1024
@@ -45,6 +47,15 @@ SUPPORTED_SUFFIXES = frozenset(
         ".ts", ".tsx",
     }
 )
+
+
+def select_provider(provider: str, version: str) -> None:
+    expected = PROVIDER_VERSIONS.get(provider)
+    if expected is None or version != expected:
+        raise ValueError("provider and version must select a pinned code-index integration")
+    global PROVIDER_ID, PROVIDER_VERSION
+    PROVIDER_ID = provider
+    PROVIDER_VERSION = version
 
 
 def monotonic_ms() -> int:
@@ -270,7 +281,10 @@ def export_source(repo: Path, head: str, source_root: Path) -> None:
             if stat.S_ISLNK(mode):
                 candidate.unlink(missing_ok=True)
     shutil.rmtree(source_root / ".codegraphcontext", ignore_errors=True)
+    shutil.rmtree(source_root / ".gitnexus", ignore_errors=True)
     (source_root / ".cgcignore").unlink(missing_ok=True)
+    (source_root / ".gitnexusignore").unlink(missing_ok=True)
+    (source_root / ".gitnexusrc").unlink(missing_ok=True)
 
 
 def parse_changed_paths(
@@ -335,15 +349,24 @@ def safe_source_file(source_root: Path, relative_path: str) -> Path | None:
     return resolved
 
 
-def provider_environment(cgc_home: Path, cache_root: Path) -> dict[str, str]:
-    database_file = cache_root / "database" / "falkordb.db"
-    socket_file = cache_root / "database" / "falkordb.sock"
-    return {
-        "HOME": str(cgc_home),
+def provider_environment(provider: str, provider_home: Path, cache_root: Path) -> dict[str, str]:
+    environment = {
+        "HOME": str(provider_home),
         "PATH": "/usr/local/bin:/usr/bin:/bin",
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
         "TMPDIR": os.environ.get("RUNNER_TEMP", "/tmp"),
+    }
+    if provider == "gitnexus":
+        environment.update({
+            "GITNEXUS_HOME": str(provider_home),
+            "GITNEXUS_STORAGE_PATH": str(cache_root / "database"),
+            "GITNEXUS_EMBEDDING_MODE": "disabled",
+        })
+        return environment
+    database_file = cache_root / "database" / "falkordb.db"
+    socket_file = cache_root / "database" / "falkordb.sock"
+    environment.update({
         "CGC_RUNTIME_DB_TYPE": "falkordb",
         "CGC_RUNTIME_DB_PATH": str(database_file),
         "DEFAULT_DATABASE": "falkordb",
@@ -356,7 +379,8 @@ def provider_environment(cgc_home: Path, cache_root: Path) -> dict[str, str]:
         "INDEX_SOURCE": "false",
         "PARALLEL_WORKERS": "2",
         "IGNORE_TEST_FILES": "false",
-    }
+    })
+    return environment
 
 
 def parse_provider_json(raw: bytes) -> Any:
@@ -374,24 +398,28 @@ def parse_provider_json(raw: bytes) -> Any:
     raise ValueError("provider output did not end with a JSON array")
 
 
+def limit_query_output() -> None:
+    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_QUERY_OUTPUT_BYTES, MAX_QUERY_OUTPUT_BYTES))
+
+
 def run_provider(
-    executable: Path,
-    arguments: list[str],
+    command: list[str],
     environment: dict[str, str],
     timeout_seconds: int,
     *,
     json_output: bool = False,
 ) -> tuple[bool, Any | None]:
-    with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
+    with tempfile.TemporaryFile() as stdout_file:
         try:
             result = subprocess.run(
-                [str(executable), *arguments],
+                command,
                 check=False,
                 stdin=subprocess.DEVNULL,
-                stdout=stdout_file,
-                stderr=stderr_file,
+                stdout=stdout_file if json_output else subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 env=environment,
                 timeout=timeout_seconds,
+                preexec_fn=limit_query_output if json_output else None,
             )
         except subprocess.TimeoutExpired:
             return False, None
@@ -414,19 +442,54 @@ def cypher_literal(value: str) -> str:
     return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
-def validate_database(executable: Path, environment: dict[str, str], source_root: Path) -> bool:
-    query = (
-        f"MATCH (r:Repository {{path: {cypher_literal(str(source_root))}}}) "
-        "RETURN count(r) AS repository_count LIMIT 1"
+def provider_query_command(
+    provider: str,
+    executable: Path,
+    runtime_executable: Path,
+    query_adapter: Path,
+    source_root: Path,
+    query: str,
+) -> list[str]:
+    if provider == "cgc":
+        return [str(executable), "query", query]
+    module_root = executable.parents[2]
+    return [str(runtime_executable), str(query_adapter), str(module_root), str(source_root), query]
+
+
+def validate_database(
+    provider: str,
+    executable: Path,
+    runtime_executable: Path,
+    query_adapter: Path,
+    environment: dict[str, str],
+    source_root: Path,
+) -> bool:
+    if provider == "cgc":
+        query = (
+            f"MATCH (r:Repository {{path: {cypher_literal(str(source_root))}}}) "
+            "RETURN count(r) AS repository_count LIMIT 1"
+        )
+        expected_key = "repository_count"
+        expected_value = 1
+    else:
+        query = "MATCH (n) RETURN count(n) AS node_count LIMIT 1"
+        expected_key = "node_count"
+        expected_value = None
+    ok, value = run_provider(
+        provider_query_command(provider, executable, runtime_executable, query_adapter, source_root, query),
+        environment,
+        30,
+        json_output=True,
     )
-    ok, value = run_provider(executable, ["query", query], environment, 30, json_output=True)
-    return bool(
+    if not (
         ok
         and isinstance(value, list)
         and len(value) == 1
         and isinstance(value[0], dict)
-        and value[0].get("repository_count") == 1
-    )
+    ):
+        return False
+    result = value[0].get(expected_key)
+    return result == expected_value if expected_value is not None else isinstance(result, int) and result > 0
 
 
 def read_cache_state(path: Path) -> dict[str, Any] | None:
@@ -517,6 +580,12 @@ def clear_database(cache_root: Path) -> None:
     (cache_root / "database").mkdir(parents=True, exist_ok=True)
 
 
+def provider_cache_tree_safe(provider: str, cache_root: Path) -> bool:
+    if not database_tree_safe(cache_root / "database"):
+        return False
+    return provider != "gitnexus" or database_tree_safe(cache_root / "gitnexus-home")
+
+
 def write_cache_state(
     cache_root: Path,
     repository: str,
@@ -539,6 +608,7 @@ def write_cache_state(
 
 
 def prepare_cache(
+    provider: str,
     cache_root: Path,
     repository: str,
     revision: str,
@@ -546,47 +616,62 @@ def prepare_cache(
     source_root: Path,
     diagnostics: list[dict[str, str]],
 ) -> bool:
-    if database_tree_safe(cache_root / "database"):
+    if provider_cache_tree_safe(provider, cache_root):
         write_cache_state(cache_root, repository, revision, configuration_id, source_root)
         return True
-    add_diagnostic(diagnostics, "warning", "cgc-cache-tree-invalid", "The validated database was unsafe to cache.")
+    add_diagnostic(diagnostics, "warning", f"{provider}-cache-tree-invalid", "The validated database was unsafe to cache.")
     clear_database(cache_root)
     return False
 
 
-def query_paths(paths: Iterable[str], source_root: Path) -> tuple[list[str], bool]:
+def query_paths(provider: str, paths: Iterable[str], source_root: Path) -> tuple[list[str], bool]:
     selected: list[str] = []
     used = 0
     for path in paths:
-        absolute = str(source_root / path)
-        literal_size = utf8_size(cypher_literal(absolute)) + 2
+        provider_path = str(source_root / path) if provider == "cgc" else path
+        literal_size = utf8_size(cypher_literal(provider_path)) + 2
         if used + literal_size > MAX_QUERY_BYTES:
             return selected, True
-        selected.append(absolute)
+        selected.append(provider_path)
         used += literal_size
     return selected, False
 
 
-def relationship_query(absolute_paths: list[str], direction: str) -> str:
-    path_list = ", ".join(cypher_literal(path) for path in absolute_paths)
+def relationship_query(provider: str, provider_paths: list[str], direction: str) -> str:
+    path_list = ", ".join(cypher_literal(path) for path in provider_paths)
+    if provider == "cgc":
+        if direction == "outgoing":
+            match = "MATCH (changed)-[:CALLS|HEURISTIC_CALLS]->(related)"
+        else:
+            match = "MATCH (related)-[:CALLS|HEURISTIC_CALLS]->(changed)"
+        return (
+            f"{match} WHERE changed.path IN [{path_list}] "
+            "AND related.path IS NOT NULL AND related.path <> changed.path "
+            "RETURN changed.path AS changed_path, related.path AS related_path, "
+            "related.line_number AS start_line, related.end_line AS end_line "
+            f"LIMIT {QUERY_ROW_LIMIT}"
+        )
     if direction == "outgoing":
-        match = "MATCH (changed)-[:CALLS|HEURISTIC_CALLS]->(related)"
+        match = "MATCH (changed)-[r:CodeRelation]->(related)"
     else:
-        match = "MATCH (related)-[:CALLS|HEURISTIC_CALLS]->(changed)"
+        match = "MATCH (related)-[r:CodeRelation]->(changed)"
     return (
-        f"{match} WHERE changed.path IN [{path_list}] "
-        "AND related.path IS NOT NULL AND related.path <> changed.path "
-        "RETURN changed.path AS changed_path, related.path AS related_path, "
-        "related.line_number AS start_line, related.end_line AS end_line "
+        f"{match} WHERE changed.filePath IN [{path_list}] "
+        "AND r.type IN ['CALLS', 'IMPORTS', 'EXTENDS', 'IMPLEMENTS', 'USES'] "
+        "AND related.filePath IS NOT NULL AND related.filePath <> changed.filePath "
+        "AND related.startLine IS NOT NULL AND related.startLine >= 0 "
+        "RETURN changed.filePath AS changed_path, related.filePath AS related_path, "
+        "related.startLine + 1 AS start_line, related.endLine + 1 AS end_line "
         f"LIMIT {QUERY_ROW_LIMIT}"
     )
 
 
 def normalize_rows(
+    provider: str,
     value: Any,
     direction: str,
     source_root: Path,
-    absolute_to_changed: dict[str, str],
+    provider_to_changed: dict[str, str],
 ) -> tuple[list[dict[str, Any]], bool]:
     if not isinstance(value, list):
         return [], True
@@ -602,7 +687,7 @@ def normalize_rows(
         end_line = raw.get("end_line")
         if (
             not isinstance(changed_absolute, str)
-            or changed_absolute not in absolute_to_changed
+            or changed_absolute not in provider_to_changed
             or not isinstance(related_absolute, str)
             or not isinstance(start_line, int)
             or isinstance(start_line, bool)
@@ -612,16 +697,19 @@ def normalize_rows(
             invalid = True
             continue
         try:
-            related = Path(related_absolute).resolve(strict=True)
-            related_path = repository_path(related.relative_to(source_root.resolve(strict=True)).as_posix())
+            if provider == "cgc":
+                related = Path(related_absolute).resolve(strict=True)
+                related_path = repository_path(related.relative_to(source_root.resolve(strict=True)).as_posix())
+            else:
+                related_path = repository_path(related_absolute)
         except (FileNotFoundError, OSError, ValueError):
             invalid = True
             continue
-        if related_path == absolute_to_changed[changed_absolute]:
+        if related_path == provider_to_changed[changed_absolute]:
             continue
         rows.append(
             {
-                "changedPath": absolute_to_changed[changed_absolute],
+                "changedPath": provider_to_changed[changed_absolute],
                 "path": related_path,
                 "startLine": start_line,
                 "endLine": end_line if end_line is not None else start_line,
@@ -721,14 +809,22 @@ def build_artifact(args: argparse.Namespace) -> bool:
     source_root = Path(args.source_root).resolve(strict=False)
     head_source_root = Path(args.head_source_root).resolve(strict=False)
     cache_root = Path(args.cache_root).resolve(strict=False)
-    cgc_home = Path(args.cgc_home).resolve(strict=False)
+    provider = args.provider
+    provider_home = Path(args.provider_home).resolve(strict=False)
     executable = Path(args.executable).resolve(strict=True)
-    if executable.is_symlink() or not executable.is_file() or not os.access(executable, os.X_OK):
-        raise ValueError("CGC executable is not a regular executable file")
+    runtime_executable = Path(args.runtime_executable).resolve(strict=True)
+    query_adapter = Path(args.query_adapter).resolve(strict=True)
+    if executable.is_symlink() or not executable.is_file() or (provider == "cgc" and not os.access(executable, os.X_OK)):
+        raise ValueError("provider executable is not a regular executable file")
+    if runtime_executable.is_symlink() or not runtime_executable.is_file() or not os.access(runtime_executable, os.X_OK):
+        raise ValueError("provider runtime is not a regular executable file")
+    if query_adapter.is_symlink() or not query_adapter.is_file():
+        raise ValueError("provider query adapter is not a regular file")
 
     export_source(repository_root, base, source_root)
     export_source(repository_root, head, head_source_root)
-    add_diagnostic(diagnostics, "info", "graph-base-revision", f"CGC graph provenance is pull request base revision {base}.")
+    provider_name = "CGC" if provider == "cgc" else "GitNexus"
+    add_diagnostic(diagnostics, "info", "graph-base-revision", f"{provider_name} graph provenance is pull request base revision {base}.")
     changed, changed_paths_truncated = parse_changed_paths(repository_root, base, head, diagnostics)
     files: list[dict[str, Any]] = []
     supported_paths: list[str] = []
@@ -763,20 +859,24 @@ def build_artifact(args: argparse.Namespace) -> bool:
         if any(file_entry["status"] == "partial" for file_entry in files):
             add_diagnostic(diagnostics, "warning", "no-base-query-anchors", "No supported changed file exists in the base graph; exact-head source review remains available.")
         else:
-            add_diagnostic(diagnostics, "info", "no-supported-changed-files", "No head-present changed file uses a language supported by the pinned CGC integration; the base graph was still indexed for cache reuse.")
+            add_diagnostic(diagnostics, "info", "no-supported-changed-files", f"No head-present changed file uses a language supported by the pinned {provider_name} integration; the base graph was still indexed for cache reuse.")
 
-    queryable_paths, query_path_truncated = query_paths(supported_paths, source_root)
+    queryable_paths, query_path_truncated = query_paths(provider, supported_paths, source_root)
     if query_path_truncated:
         add_diagnostic(diagnostics, "warning", "query-path-limit", "Changed source paths exceeded the provider-query byte limit; remaining supported files have partial coverage.")
         queryable = set(queryable_paths)
         for file_entry in files:
-            absolute = str(source_root / file_entry["changedPath"])
-            if file_entry["status"] == "complete" and absolute not in queryable:
+            provider_path = (
+                str(source_root / file_entry["changedPath"])
+                if provider == "cgc"
+                else file_entry["changedPath"]
+            )
+            if file_entry["status"] == "complete" and provider_path not in queryable:
                 file_entry["status"] = "partial"
 
     cache_root.mkdir(parents=True, exist_ok=True)
-    cgc_home.mkdir(parents=True, exist_ok=True)
-    environment = provider_environment(cgc_home, cache_root)
+    provider_home.mkdir(parents=True, exist_ok=True)
+    environment = provider_environment(provider, provider_home, cache_root)
     state_path = cache_root / "state.json"
     database_path = cache_root / "database"
     restored_material = bool(args.cache_matched_key) or database_has_material(database_path)
@@ -785,17 +885,17 @@ def build_artifact(args: argparse.Namespace) -> bool:
     query_started = monotonic_ms()
     cache_valid = (
         restored_material
-        and database_tree_safe(database_path)
+        and provider_cache_tree_safe(provider, cache_root)
         and compatible_cache_state(cached_state, repository, args.configuration_id, source_root)
         and cached_state is not None
         and cached_state.get("revision") == base
-        and validate_database(executable, environment, source_root)
+        and validate_database(provider, executable, runtime_executable, query_adapter, environment, source_root)
     )
     measured["queryMs"] = monotonic_ms() - query_started
     if args.cache_restore_outcome == "failure":
         add_diagnostic(diagnostics, "warning", "cache-restore-failed", "GitHub Actions cache restore failed; indexing continued without the restored database.")
     if restored_material and not cache_valid:
-        add_diagnostic(diagnostics, "warning", "cache-restore-invalid", "The restored CGC database failed identity or query validation and was rebuilt once.")
+        add_diagnostic(diagnostics, "warning", "cache-restore-invalid", f"The restored {provider_name} database failed identity or query validation and was rebuilt once.")
 
     cache_reused = cache_valid
     rebuilt = False
@@ -804,7 +904,7 @@ def build_artifact(args: argparse.Namespace) -> bool:
             diagnostics,
             "info",
             "cache-base-revision",
-            "A validated pull request base CGC database was restored and reused without indexing.",
+            f"A validated pull request base {provider_name} database was restored and reused without indexing.",
         )
         indexed = True
         measured["indexMs"] = 0
@@ -812,31 +912,36 @@ def build_artifact(args: argparse.Namespace) -> bool:
         clear_database(cache_root)
         rebuilt = restored_material
         index_started = monotonic_ms()
-        indexed, _ = run_provider(executable, ["index", str(source_root), "--no-progress"], environment, 180)
+        index_command = (
+            [str(executable), "index", str(source_root), "--no-progress"]
+            if provider == "cgc"
+            else [str(runtime_executable), str(executable), "analyze", str(source_root), "--index-only", "--skip-git", "--skip-fts", "--workers", "2"]
+        )
+        indexed, _ = run_provider(index_command, environment, 180)
         measured["indexMs"] = monotonic_ms() - index_started
 
     if not indexed:
         for file_entry in files:
             if file_entry["status"] != "unsupported":
                 file_entry["status"] = "unavailable"
-        add_diagnostic(diagnostics, "error", "cgc-index-failed", "Pinned CGC could not index the pull request base source; file-only review remains available.")
+        add_diagnostic(diagnostics, "error", f"{provider}-index-failed", f"Pinned {provider_name} could not index the pull request base source; file-only review remains available.")
         write_artifact(output, make_artifact(repository, head, aggregate_status(files), files, diagnostics, measured))
         return False
 
     database_valid = cache_reused
     if not cache_reused:
         validation_started = monotonic_ms()
-        database_valid = validate_database(executable, environment, source_root)
+        database_valid = validate_database(provider, executable, runtime_executable, query_adapter, environment, source_root)
         measured["queryMs"] = int(measured["queryMs"] or 0) + monotonic_ms() - validation_started
     if not database_valid and not rebuilt:
-        add_diagnostic(diagnostics, "warning", "cgc-post-index-invalid", "CGC validation failed after indexing; the database was rebuilt once.")
+        add_diagnostic(diagnostics, "warning", f"{provider}-post-index-invalid", f"{provider_name} validation failed after indexing; the database was rebuilt once.")
         clear_database(cache_root)
         rebuild_started = monotonic_ms()
-        indexed, _ = run_provider(executable, ["index", str(source_root), "--no-progress"], environment, 180)
+        indexed, _ = run_provider(index_command, environment, 180)
         measured["indexMs"] = int(measured["indexMs"] or 0) + monotonic_ms() - rebuild_started
         rebuilt = True
         validation_started = monotonic_ms()
-        database_valid = indexed and validate_database(executable, environment, source_root)
+        database_valid = indexed and validate_database(provider, executable, runtime_executable, query_adapter, environment, source_root)
         measured["queryMs"] = int(measured["queryMs"] or 0) + monotonic_ms() - validation_started
 
     if not database_valid:
@@ -844,31 +949,40 @@ def build_artifact(args: argparse.Namespace) -> bool:
         for file_entry in files:
             if file_entry["status"] != "unsupported":
                 file_entry["status"] = "unavailable"
-        add_diagnostic(diagnostics, "error", "cgc-validation-failed", "CGC could not answer the bounded database validation query after one rebuild.")
+        add_diagnostic(diagnostics, "error", f"{provider}-validation-failed", f"{provider_name} could not answer the bounded database validation query after one rebuild.")
         write_artifact(output, make_artifact(repository, head, aggregate_status(files), files, diagnostics, measured))
         return False
 
     if not supported_paths:
-        cache_ready = False if cache_reused else prepare_cache(cache_root, repository, base, args.configuration_id, source_root, diagnostics)
+        cache_ready = False if cache_reused else prepare_cache(provider, cache_root, repository, base, args.configuration_id, source_root, diagnostics)
         status = "partial" if changed_paths_truncated else aggregate_status(files)
         write_artifact(output, make_artifact(repository, head, status, files, diagnostics, measured))
         return cache_ready
 
-    absolute_to_changed = {str(source_root / path): path for path in supported_paths if str(source_root / path) in queryable_paths}
+    provider_to_changed = {
+        (str(source_root / path) if provider == "cgc" else path): path
+        for path in supported_paths
+        if (str(source_root / path) if provider == "cgc" else path) in queryable_paths
+    }
     all_rows: list[dict[str, Any]] = []
     query_partial = query_path_truncated
     successful_queries = 0
     for direction in ("outgoing", "incoming"):
-        query = relationship_query(queryable_paths, direction)
+        query = relationship_query(provider, queryable_paths, direction)
         query_started = monotonic_ms()
-        ok, value = run_provider(executable, ["query", query], environment, 30, json_output=True)
+        ok, value = run_provider(
+            provider_query_command(provider, executable, runtime_executable, query_adapter, source_root, query),
+            environment,
+            30,
+            json_output=True,
+        )
         measured["queryMs"] = int(measured["queryMs"] or 0) + monotonic_ms() - query_started
         if not ok:
             query_partial = True
-            add_diagnostic(diagnostics, "warning", f"cgc-{direction}-query-failed", f"CGC could not answer the bounded {direction} relationship query.")
+            add_diagnostic(diagnostics, "warning", f"{provider}-{direction}-query-failed", f"{provider_name} could not answer the bounded {direction} relationship query.")
             continue
         successful_queries += 1
-        normalized, invalid = normalize_rows(value, direction, source_root, absolute_to_changed)
+        normalized, invalid = normalize_rows(provider, value, direction, source_root, provider_to_changed)
         all_rows.extend(normalized)
         query_partial = query_partial or invalid
     if successful_queries == 0:
@@ -885,9 +999,9 @@ def build_artifact(args: argparse.Namespace) -> bool:
         if query_partial and file_entry["status"] == "complete":
             file_entry["status"] = "partial"
     if query_partial:
-        add_diagnostic(diagnostics, "warning", "cgc-query-partial", "At least one provider row or query exceeded validation or a deterministic bound.")
+        add_diagnostic(diagnostics, "warning", f"{provider}-query-partial", "At least one provider row or query exceeded validation or a deterministic bound.")
 
-    cache_ready = False if cache_reused else prepare_cache(cache_root, repository, base, args.configuration_id, source_root, diagnostics)
+    cache_ready = False if cache_reused else prepare_cache(provider, cache_root, repository, base, args.configuration_id, source_root, diagnostics)
     write_artifact(output, make_artifact(repository, head, aggregate_status(files), files, diagnostics, measured))
     return cache_ready
 
@@ -931,14 +1045,14 @@ def parser() -> argparse.ArgumentParser:
     commands = root.add_subparsers(dest="command", required=True)
 
     init = commands.add_parser("initialize")
-    for name in ("base", "head", "repository", "output-directory", "workspace", "status", "diagnostic-code", "diagnostic-message"):
+    for name in ("provider", "provider-version", "base", "head", "repository", "output-directory", "workspace", "status", "diagnostic-code", "diagnostic-message"):
         init.add_argument(f"--{name}", required=True)
     init.add_argument("--installation-ms", type=int, required=True)
 
     build_command = commands.add_parser("build")
     for name in (
-        "base", "head", "repository", "output-directory", "workspace", "source-root", "head-source-root",
-        "cache-root", "cgc-home", "executable", "configuration-id", "cache-matched-key", "cache-restore-outcome", "result-file",
+        "provider", "provider-version", "base", "head", "repository", "output-directory", "workspace", "source-root", "head-source-root",
+        "cache-root", "provider-home", "executable", "runtime-executable", "query-adapter", "configuration-id", "cache-matched-key", "cache-restore-outcome", "result-file",
     ):
         build_command.add_argument(f"--{name}", required=True)
     build_command.add_argument("--installation-ms", type=int, required=True)
@@ -953,6 +1067,8 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = parser().parse_args()
+    if args.command != "finalize":
+        select_provider(args.provider, args.provider_version)
     if args.command == "initialize":
         initialize(args)
     elif args.command == "build":

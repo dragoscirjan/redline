@@ -51,6 +51,10 @@ inputs:
     description: Indexed-context mode, enabled or disabled. Enabled builds bounded context inside this action; unavailable context degrades to file-only review.
     required: false
     default: enabled
+  indexing-provider:
+    description: Code-index provider, cgc or gitnexus.
+    required: false
+    default: cgc
   artifact-name:
     description: Base name for the downloadable review artifacts
     required: false
@@ -70,6 +74,7 @@ runs:
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
         INDEXING: ${{ inputs.indexing }}
+        INDEXING_PROVIDER: ${{ inputs.indexing-provider }}
         ARTIFACT_RETENTION_DAYS: ${{ inputs.artifact-retention-days }}
       run: |
         set -euo pipefail
@@ -81,8 +86,14 @@ runs:
         [[ "$HEAD_SHA" =~ ^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$ ]]
         [[ "$HEAD_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
         [[ "$INDEXING" == 'enabled' || "$INDEXING" == 'disabled' ]]
+        [[ "$INDEXING_PROVIDER" == 'cgc' || "$INDEXING_PROVIDER" == 'gitnexus' ]]
         [[ "$ARTIFACT_RETENTION_DAYS" =~ ^[0-9]+$ ]]
         (( ARTIFACT_RETENTION_DAYS >= 1 && ARTIFACT_RETENTION_DAYS <= 90 ))
+
+    - name: Set up pinned Node runtime
+      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+      with:
+        node-version: 24
 
     - name: Build trusted TypeScript
       shell: bash
@@ -174,6 +185,7 @@ runs:
       if: ${{ inputs.indexing == 'enabled' && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
       uses: $/github/code-index
       with:
+        provider: ${{ inputs.indexing-provider }}
         base: ${{ github.event.pull_request.base.sha }}
         head: ${{ github.event.pull_request.head.sha }}
         repository: ${{ github.repository }}

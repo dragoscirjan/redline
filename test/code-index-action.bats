@@ -9,6 +9,10 @@ setup() {
   mkdir -p "$REPOSITORY/src" "$PROVIDER"
   cp "$ROOT/test/fixtures/code-index/fake-cgc.sh" "$PROVIDER/cgc"
   chmod 0755 "$PROVIDER/cgc"
+  GITNEXUS_PROVIDER="$TMP_ROOT/gitnexus-provider"
+  mkdir -p "$GITNEXUS_PROVIDER/dist/cli" "$GITNEXUS_PROVIDER/dist/mcp/local"
+  cp "$ROOT/test/fixtures/code-index/fake-gitnexus-cli.js" "$GITNEXUS_PROVIDER/dist/cli/index.js"
+  cp "$ROOT/test/fixtures/code-index/fake-gitnexus-local-backend.js" "$GITNEXUS_PROVIDER/dist/mcp/local/local-backend.js"
 
   git -C "$REPOSITORY" init -q -b main
   git -C "$REPOSITORY" config user.name redline-test
@@ -43,6 +47,7 @@ EOF
   export GITHUB_WORKSPACE="$REPOSITORY"
   export GITHUB_RUN_ID=123
   export GITHUB_RUN_ATTEMPT=1
+  export REDLINE_CODE_INDEX_PROVIDER=cgc
   export REDLINE_CODE_INDEX_BASE="$BASE"
   export REDLINE_CODE_INDEX_HEAD="$HEAD_REVISION"
   export REDLINE_CODE_INDEX_REPOSITORY='owner/repository'
@@ -76,7 +81,9 @@ prepare_action() {
   run bash "$ACTION_DIR/run.sh" prepare
   [ "$status" -eq 0 ]
   grep -Fq 'available=true' "$GITHUB_OUTPUT"
-  write_relationship_fixture
+  if [[ "$REDLINE_CODE_INDEX_PROVIDER" == 'cgc' ]]; then
+    write_relationship_fixture
+  fi
 }
 
 build_action() {
@@ -96,7 +103,8 @@ import sys
 from pathlib import Path
 import yaml
 action = yaml.safe_load(Path(sys.argv[1]).read_text())
-assert set(action['inputs']) == {'base', 'head', 'repository', 'output-directory'}
+assert set(action['inputs']) == {'provider', 'base', 'head', 'repository', 'output-directory'}
+assert action['inputs']['provider']['default'] == 'cgc'
 steps = action['runs']['steps']
 uses = [step.get('uses') for step in steps]
 sha = 'cdf6c1fa76f9f475f3d7449005a359c84ca0f306'
@@ -253,6 +261,107 @@ assert artifact['files'] == [{
 assert any(item['code'] == 'no-supported-changed-files' for item in artifact['diagnostics'])
 assert artifact['timings']['indexMs'] >= 0
 assert state['revision'] == sys.argv[3]
+PY
+}
+
+@test "cold and restored-base fake-GitNexus runs reuse the validated graph" {
+  export REDLINE_CODE_INDEX_PROVIDER=gitnexus
+  export REDLINE_GITNEXUS_EXECUTABLE="$GITNEXUS_PROVIDER/dist/cli/index.js"
+  export REDLINE_GITNEXUS_RUNTIME
+  REDLINE_GITNEXUS_RUNTIME=$(command -v node)
+  unset REDLINE_CGC_EXECUTABLE
+
+  prepare_action
+  grep -Fq 'redline-code-index-v2-gitnexus-1.6.12-linux-x64-' "$GITHUB_OUTPUT"
+  build_action '' success
+  grep -Fq 'cache-ready=true' "$GITHUB_OUTPUT"
+  grep -Fq "analyze $RUNNER_TEMP/redline-code-index/source --index-only --skip-git --skip-fts --workers 2" "$GITNEXUS_PROVIDER/calls.log"
+  cp "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$TMP_ROOT/gitnexus-cold.json"
+
+  : > "$GITNEXUS_PROVIDER/calls.log"
+  build_action 'redline-code-index-gitnexus-base-cache' success
+  grep -Fq 'cache-ready=false' "$GITHUB_OUTPUT"
+  ! grep -q '^analyze ' "$GITNEXUS_PROVIDER/calls.log"
+  cp "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$TMP_ROOT/gitnexus-warm.json"
+
+  python3 - "$TMP_ROOT/gitnexus-cold.json" "$TMP_ROOT/gitnexus-warm.json" "$HEAD_REVISION" <<'PY'
+import json, sys
+cold = json.load(open(sys.argv[1], encoding='utf-8'))
+warm = json.load(open(sys.argv[2], encoding='utf-8'))
+assert cold['provider'] == {'id': 'gitnexus', 'version': '1.6.12'}
+assert cold['revision'] == sys.argv[3]
+assert cold['status'] == warm['status'] == 'complete'
+assert cold['files'] == warm['files']
+assert warm['timings']['indexMs'] == 0
+assert cold['files'][0]['related'] == [{
+    'path': 'src/user-service.ts',
+    'startLine': 3,
+    'endLine': 5,
+    'reason': 'related-symbol-calls-changed-code',
+}]
+assert any(item['code'] == 'cache-base-revision' for item in warm['diagnostics'])
+PY
+}
+
+@test "fake-GitNexus invalid caches rebuild and relationship failures degrade" {
+  export REDLINE_CODE_INDEX_PROVIDER=gitnexus
+  export REDLINE_GITNEXUS_EXECUTABLE="$GITNEXUS_PROVIDER/dist/cli/index.js"
+  export REDLINE_GITNEXUS_RUNTIME
+  REDLINE_GITNEXUS_RUNTIME=$(command -v node)
+  unset REDLINE_CGC_EXECUTABLE
+
+  prepare_action
+  build_action '' success
+  outside="$TMP_ROOT/gitnexus-outside-cache-target"
+  mkdir -p "$outside"
+  printf 'keep\n' > "$outside/marker"
+  rm -rf "$RUNNER_TEMP/redline-code-index/cache/database"
+  ln -s "$outside" "$RUNNER_TEMP/redline-code-index/cache/database"
+  : > "$GITNEXUS_PROVIDER/calls.log"
+
+  build_action 'redline-code-index-invalid-gitnexus-cache' success
+  [ "$(grep -c '^analyze ' "$GITNEXUS_PROVIDER/calls.log")" -eq 1 ]
+  [ -f "$outside/marker" ]
+  [ ! -L "$RUNNER_TEMP/redline-code-index/cache/database" ]
+
+  printf 'query-fail\n' > "$GITNEXUS_PROVIDER/mode"
+  : > "$GITNEXUS_PROVIDER/calls.log"
+  build_action 'redline-code-index-valid-gitnexus-cache' success
+  grep -Fq 'cache-ready=false' "$GITHUB_OUTPUT"
+  ! grep -q '^analyze ' "$GITNEXUS_PROVIDER/calls.log"
+  python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" <<'PY'
+import json, sys
+artifact = json.load(open(sys.argv[1], encoding='utf-8'))
+assert artifact['provider'] == {'id': 'gitnexus', 'version': '1.6.12'}
+assert artifact['status'] == 'unavailable'
+codes = {item['code'] for item in artifact['diagnostics']}
+assert {'gitnexus-outgoing-query-failed', 'gitnexus-incoming-query-failed'} <= codes
+PY
+}
+
+@test "live pinned GitNexus smoke test is opt-in" {
+  [[ "${REDLINE_LIVE_GITNEXUS_TESTS:-0}" == '1' ]] || skip 'set REDLINE_LIVE_GITNEXUS_TESTS=1 to run the live GitNexus smoke test'
+  export REDLINE_CODE_INDEX_PROVIDER=gitnexus
+  unset REDLINE_GITNEXUS_EXECUTABLE REDLINE_GITNEXUS_RUNTIME REDLINE_CGC_EXECUTABLE
+  : > "$GITHUB_OUTPUT"
+  run bash "$ACTION_DIR/run.sh" prepare
+  [ "$status" -eq 0 ]
+  grep -Fq 'available=true' "$GITHUB_OUTPUT"
+  build_action '' success
+  cp "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$TMP_ROOT/live-gitnexus-cold.json"
+  build_action 'redline-code-index-live-gitnexus-base-cache' success
+  grep -Fq 'cache-ready=false' "$GITHUB_OUTPUT"
+  python3 - "$TMP_ROOT/live-gitnexus-cold.json" "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" <<'PY'
+import json, sys
+cold = json.load(open(sys.argv[1], encoding='utf-8'))
+warm = json.load(open(sys.argv[2], encoding='utf-8'))
+print(json.dumps({'cold': cold, 'warm': warm}, sort_keys=True))
+assert cold['provider'] == warm['provider'] == {'id': 'gitnexus', 'version': '1.6.12'}
+assert cold['status'] == warm['status'] == 'complete'
+assert cold['files'] == warm['files']
+assert cold['timings']['indexMs'] >= 0
+assert warm['timings']['indexMs'] == 0
+assert any(item['code'] == 'cache-base-revision' for item in warm['diagnostics'])
 PY
 }
 

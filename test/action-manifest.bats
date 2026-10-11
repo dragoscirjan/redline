@@ -79,10 +79,15 @@ PY
   grep -Fq "[[ \"\$INDEXING\" == 'enabled' || \"\$INDEXING\" == 'disabled' ]]" "$ACTION"
 }
 
-@test "reusable workflow forwards indexing policy without invoking the index action" {
+@test "reusable workflow composes the matching root action and forwards indexing policy" {
   grep -Fq 'default: enabled' "$REUSABLE_WORKFLOW"
+  grep -Fq 'uses: $/github' "$REUSABLE_WORKFLOW"
   grep -Fq 'indexing: ${{ inputs.indexing }}' "$REUSABLE_WORKFLOW"
+  ! grep -Fq 'uses: dragoscirjan/redline/github@v1' "$REUSABLE_WORKFLOW"
   ! grep -Fq 'uses: $/github/code-index' "$REUSABLE_WORKFLOW"
+  ! grep -Fq 'report-style: ${{ inputs.report-style }}' "$REUSABLE_WORKFLOW"
+  ! grep -Fq 'credential-isolation: ${{ inputs.credential-isolation }}' "$REUSABLE_WORKFLOW"
+  ! grep -Fq 'container-engine: ${{ inputs.container-engine }}' "$REUSABLE_WORKFLOW"
 }
 
 @test "action keeps the context bundle step and both artifact uploads" {

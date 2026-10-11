@@ -26,6 +26,8 @@ jobs:
       model-auth: ${{ secrets.MODEL_CREDENTIALS }}
 ```
 
+The caller pins the reusable workflow. Inside that workflow, `uses: $/github` resolves the Redline action from the same repository commit as the workflow, so its input contract cannot drift from the selected workflow revision. It does not resolve against the caller's checkout.
+
 ## Enabling and disabling review execution
 
 Review execution is enabled only when `backend` and `model-config` are supplied together with a non-empty `model-auth` secret. To run context-only instead, leave **all three** empty together — a partial set (for example a cleared `backend` next to a set `model-config`) is rejected rather than degraded.
@@ -46,7 +48,7 @@ In context-only mode the workflow does not index and uploads only the `<artifact
 | `indexing` | `enabled`, `disabled` | Default `enabled`. The published action owns indexing; `disabled` selects file-only review. |
 | `artifact-name` | name | Default `redline-review-<run id>`. |
 | `artifact-retention-days` | 1–90 | Default `45`. |
-| `report-style`, `credential-isolation`, `container-engine` | legacy | Surface kept while the published `v1` tag still carries the previous action design, whose review mode requires `credential-isolation: direct` and a `container-engine`. The current action ignores them. |
+| `report-style`, `credential-isolation`, `container-engine` | legacy | Accepted at the reusable-workflow boundary for caller compatibility but not forwarded to the current action. |
 
 ## Secrets
 
@@ -60,4 +62,4 @@ Two artifacts: `<artifact-name>-context` with the review context bundle, source-
 
 ## Calling within Redline itself
 
-Redline's own pull requests use the dogfood workflow (`.github/workflows/pr-review.yml` → `dogfood-review.yml`), which calls the action from the local `./github` path at the trusted base revision. External repositories must use this reusable workflow or the published action tag, because a local action path resolves against the caller's repository.
+Redline's own pull requests use the dogfood workflow (`.github/workflows/pr-review.yml` → `dogfood-review.yml`), which calls the action from the local `./github` path at the trusted base revision. External repositories must call this reusable workflow or the published action tag. The reusable workflow uses `$/github` internally so it selects its matching Redline action without depending on the external caller's checkout.

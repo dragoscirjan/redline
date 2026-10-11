@@ -23,7 +23,7 @@ outputs:
     description: Absolute path to the bounded code-context.json artifact.
     value: ${{ steps.finalize.outputs.context-file }}
   status:
-    description: Context coverage status: complete, partial, unsupported, or unavailable.
+    description: "Context coverage status: complete, partial, unsupported, or unavailable."
     value: ${{ steps.finalize.outputs.status }}
   cache-hit:
     description: Whether actions/cache restored an exact-head or compatible earlier database.

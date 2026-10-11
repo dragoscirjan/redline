@@ -10,6 +10,10 @@ python = "3.12"
 description = "Compile TypeScript sources and tests"
 run = "pnpm run build"
 
+[tasks.benchmark]
+description = "Run the deterministic recorded review-quality benchmark"
+run = "pnpm run benchmark"
+
 [tasks.typecheck]
 description = "Check TypeScript types"
 run = "pnpm run typecheck"

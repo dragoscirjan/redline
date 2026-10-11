@@ -538,6 +538,22 @@ def write_cache_state(
     os.replace(temporary, cache_root / "state.json")
 
 
+def prepare_cache(
+    cache_root: Path,
+    repository: str,
+    revision: str,
+    configuration_id: str,
+    source_root: Path,
+    diagnostics: list[dict[str, str]],
+) -> bool:
+    if database_tree_safe(cache_root / "database"):
+        write_cache_state(cache_root, repository, revision, configuration_id, source_root)
+        return True
+    add_diagnostic(diagnostics, "warning", "cgc-cache-tree-invalid", "The validated database was unsafe to cache.")
+    clear_database(cache_root)
+    return False
+
+
 def query_paths(paths: Iterable[str], source_root: Path) -> tuple[list[str], bool]:
     selected: list[str] = []
     used = 0
@@ -730,10 +746,7 @@ def build_artifact(args: argparse.Namespace) -> bool:
                 file_entry["status"] = "partial"
 
     if not supported_paths:
-        add_diagnostic(diagnostics, "info", "no-supported-changed-files", "No head-present changed file uses a language supported by the pinned CGC integration.")
-        status = "partial" if changed_paths_truncated else aggregate_status(files)
-        write_artifact(output, make_artifact(repository, head, status, files, diagnostics, measured))
-        return False
+        add_diagnostic(diagnostics, "info", "no-supported-changed-files", "No head-present changed file uses a language supported by the pinned CGC integration; the exact-head repository graph was still indexed for cache reuse.")
 
     queryable_paths, query_path_truncated = query_paths(supported_paths, source_root)
     if query_path_truncated:
@@ -817,6 +830,12 @@ def build_artifact(args: argparse.Namespace) -> bool:
         write_artifact(output, make_artifact(repository, head, aggregate_status(files), files, diagnostics, measured))
         return False
 
+    if not supported_paths:
+        cache_ready = prepare_cache(cache_root, repository, head, args.configuration_id, source_root, diagnostics)
+        status = "partial" if changed_paths_truncated else aggregate_status(files)
+        write_artifact(output, make_artifact(repository, head, status, files, diagnostics, measured))
+        return cache_ready
+
     absolute_to_changed = {str(source_root / path): path for path in supported_paths if str(source_root / path) in queryable_paths}
     all_rows: list[dict[str, Any]] = []
     query_partial = query_path_truncated
@@ -850,12 +869,7 @@ def build_artifact(args: argparse.Namespace) -> bool:
     if query_partial:
         add_diagnostic(diagnostics, "warning", "cgc-query-partial", "At least one provider row or query exceeded validation or a deterministic bound.")
 
-    cache_ready = database_tree_safe(database_path)
-    if cache_ready:
-        write_cache_state(cache_root, repository, head, args.configuration_id, source_root)
-    else:
-        add_diagnostic(diagnostics, "warning", "cgc-cache-tree-invalid", "The validated query result is usable, but the database tree was unsafe to cache.")
-        clear_database(cache_root)
+    cache_ready = prepare_cache(cache_root, repository, head, args.configuration_id, source_root, diagnostics)
     write_artifact(output, make_artifact(repository, head, aggregate_status(files), files, diagnostics, measured))
     return cache_ready
 

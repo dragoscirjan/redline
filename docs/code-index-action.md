@@ -28,15 +28,16 @@ The review validates the artifact identity and resolves every selected span agai
 
 1. Downloads the pinned CGC binary and verifies its SHA-256 digest.
 2. Restores a CGC FalkorDB database with `actions/cache/restore`.
-3. Exports the exact head commit with `git archive`.
+3. Exports the entire exact pull request head with `git archive`.
 4. Removes symlinks and repository-supplied CGC configuration from the temporary source tree.
-5. Validates a restored database, refreshes it to the head, or deletes and rebuilds it once.
-6. Queries incoming and outgoing cross-file call relationships with fixed result and time limits.
-7. Resolves every selected path and line range against the exported head source.
-8. Writes the bounded artifact atomically.
-9. Saves only a validated database with `actions/cache/save`.
+5. Indexes the full exported repository, regardless of whether the changed files use a CGC-supported language.
+6. Validates a restored database, refreshes it to the head, or deletes and rebuilds it once.
+7. Uses supported changed source files only as bounded relationship-query anchors.
+8. Resolves every selected path and line range against the exported head source.
+9. Writes the bounded artifact atomically.
+10. Saves only a validated exact-head database with `actions/cache/save`.
 
-Repository builds, scripts, package installers, tests, and Git hooks are never run.
+Repository builds, scripts, package installers, tests, and Git hooks are never run. The graph matches the exact pull request head, not the base branch; a compatible earlier cache may be restored, but it is refreshed to the requested head before use.
 
 ## Artifact contract
 
@@ -64,7 +65,7 @@ redline-code-index-v1-cgc-0.5.7-linux-x64-<repository-digest>-<configuration-dig
 
 The save key adds the exact head, workflow run ID, and attempt. Restore prefixes first select the newest database for the exact head, then the newest provider-compatible earlier database. The run suffix allows a validated rebuild to supersede an immutable invalid cache entry.
 
-The cache root contains only the embedded FalkorDB files and a small identity sidecar. The action verifies provider version, repository, configuration, stable source path, and a bounded repository query before reuse. Cache restore or save failure does not invalidate context produced during the current run.
+The cache root contains only the embedded FalkorDB files and a small identity sidecar. The action verifies provider version, repository, configuration, stable source path, and a bounded repository query before reuse. A validated exact-head graph is cached even when none of the changed files can anchor a relationship query; in that case the context artifact remains `unsupported`, but the repository graph can accelerate a later review. Cache restore or save failure does not invalidate context produced during the current run.
 
 ## Tests
 

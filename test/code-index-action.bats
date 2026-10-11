@@ -181,6 +181,38 @@ assert any(item['code'] == 'cgc-index-failed' for item in artifact['diagnostics'
 PY
 }
 
+@test "unsupported changed files still build a reusable exact-head repository cache" {
+  git -C "$REPOSITORY" reset -q --hard "$BASE"
+  mkdir -p "$REPOSITORY/.github/workflows"
+  printf 'name: cache-test\n' > "$REPOSITORY/.github/workflows/cache-test.yml"
+  git -C "$REPOSITORY" add .github/workflows/cache-test.yml
+  git -C "$REPOSITORY" commit -q -m yaml-only-head
+  HEAD_REVISION=$(git -C "$REPOSITORY" rev-parse HEAD)
+  export REDLINE_CODE_INDEX_HEAD="$HEAD_REVISION"
+
+  prepare_action
+  : > "$PROVIDER/calls.log"
+  build_action '' success
+
+  grep -Fq 'cache-ready=true' "$GITHUB_OUTPUT"
+  grep -Fq "index $RUNNER_TEMP/redline-code-index/source --no-progress" "$PROVIDER/calls.log"
+  [ -f "$RUNNER_TEMP/redline-code-index/cache/state.json" ]
+  python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$RUNNER_TEMP/redline-code-index/cache/state.json" "$HEAD_REVISION" <<'PY'
+import json, sys
+artifact = json.load(open(sys.argv[1], encoding='utf-8'))
+state = json.load(open(sys.argv[2], encoding='utf-8'))
+assert artifact['status'] == 'unsupported'
+assert artifact['files'] == [{
+    'changedPath': '.github/workflows/cache-test.yml',
+    'status': 'unsupported',
+    'related': [],
+}]
+assert any(item['code'] == 'no-supported-changed-files' for item in artifact['diagnostics'])
+assert artifact['timings']['indexMs'] >= 0
+assert state['revision'] == sys.argv[3]
+PY
+}
+
 @test "live pinned CGC smoke test is opt-in" {
   [[ "${REDLINE_LIVE_CODE_INDEX_TESTS:-0}" == '1' ]] || skip 'set REDLINE_LIVE_CODE_INDEX_TESTS=1 to run the live pinned-provider smoke test'
   unset REDLINE_CGC_EXECUTABLE

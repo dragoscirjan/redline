@@ -21,6 +21,13 @@
 
 ## Development workflow
 
+- For any architecture, design, implementation, or coding request that does
+  not already have a GitHub issue, invoke `grill-me` before planning or
+  changing files. Continue until the owner explicitly confirms shared
+  understanding. Then create a GitHub issue with the agreed requirements and
+  acceptance criteria. Begin work only after the issue exists.
+- Apply `unslop` to every user-facing response, including questions, progress
+  updates, review replies, and final answers.
 - Read `CONTRIBUTING.md` before changing the repository.
 - For every new feature or issue, create a focused branch from `main`, check
   it out in a dedicated worktree at

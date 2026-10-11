@@ -15,7 +15,39 @@ export {
   type LocalFilesystemArtifactCacheOptions,
 } from './local-filesystem.js';
 export { NoopArtifactCache } from './noop.js';
+export {
+  InstalledToolManager,
+  type InstalledToolAcquisitionRequest,
+  type InstalledToolAcquisitionResult,
+} from './installed-tool-manager.js';
+export {
+  CGC_VERSION,
+  GITNEXUS_VERSION,
+  CgcInstaller,
+  GitNexusInstaller,
+  createCgcDescriptor,
+  createCodeIndexerInstallerRegistry,
+  createGitNexusDescriptor,
+  currentToolPlatform,
+  type CgcInstallerOptions,
+  type CodeIndexerInstallerRegistryOptions,
+  type GitNexusInstallerOptions,
+} from './installers/index.js';
 export { ToolInstallerRegistry } from './registry.js';
+export {
+  createInstalledToolManifest,
+  inspectInstalledToolManifest,
+  installedToolManifestFromCache,
+} from './tool-tree.js';
+export {
+  FetchToolDownloader,
+  assertFileContentDigest,
+  nodeToolCommandRunner,
+  type ToolCommandRequest,
+  type ToolCommandRunner,
+  type ToolDownloadRequest,
+  type ToolDownloader,
+} from './tool-transport.js';
 export {
   ARTIFACT_CACHE_CONTRACT_VERSION,
   ARTIFACT_MANIFEST_VERSION,

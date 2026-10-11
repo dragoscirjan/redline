@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "fixtures": [
+    "fixtures/clean-api-extension.json",
+    "fixtures/clean-local-refactor.json",
+    "fixtures/cross-file-cache-collision.json",
+    "fixtures/local-port-validation.json"
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "corpusVersion": 1,
+  "modes": [
+    {
+      "mode": "file-only",
+      "fixtures": 4,
+      "expectedIssues": 2,
+      "rootCauseMatches": 1,
+      "creditedIssues": 1,
+      "findings": 2,
+      "falsePositives": 1,
+      "duplicateFindings": 0,
+      "cleanFixtures": 2,
+      "cleanFixturesWithFalsePositives": 1,
+      "claimedMatches": 1,
+      "validEvidenceMatches": 1,
+      "promptBytes": 31707,
+      "reviewDurationMs": 39,
+      "cases": [
+        {
+          "fixtureId": "clean-api-extension",
+          "title": "Add an optional name separator",
+          "kind": "clean",
+          "coverage": "complete",
+          "expectedIssues": 0,
+          "rootCauseMatches": 0,
+          "creditedIssues": 0,
+          "unmatchedIssueIds": [],
+          "uncreditedIssueIds": [],
+          "findings": 1,
+          "falsePositives": 1,
+          "duplicateFindings": 0,
+          "claimedMatches": 0,
+          "validEvidenceMatches": 0,
+          "promptBytes": 7913,
+          "reviewDurationMs": 9
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "title": "Rename a local normalization variable",
+          "kind": "clean",
+          "coverage": "complete",
+          "expectedIssues": 0,
+          "rootCauseMatches": 0,
+          "creditedIssues": 0,
+          "unmatchedIssueIds": [],
+          "uncreditedIssueIds": [],
+          "findings": 0,
+          "falsePositives": 0,
+          "duplicateFindings": 0,
+          "claimedMatches": 0,
+          "validEvidenceMatches": 0,
+          "promptBytes": 7902,
+          "reviewDurationMs": 8
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "title": "Keep account identity in user cache keys",
+          "kind": "defect",
+          "coverage": "complete",
+          "expectedIssues": 1,
+          "rootCauseMatches": 0,
+          "creditedIssues": 0,
+          "unmatchedIssueIds": [
+            "cross-account-cache-collision"
+          ],
+          "uncreditedIssueIds": [
+            "cross-account-cache-collision"
+          ],
+          "findings": 0,
+          "falsePositives": 0,
+          "duplicateFindings": 0,
+          "claimedMatches": 0,
+          "validEvidenceMatches": 0,
+          "promptBytes": 7795,
+          "reviewDurationMs": 10
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "title": "Reject non-integer network ports",
+          "kind": "defect",
+          "coverage": "complete",
+          "expectedIssues": 1,
+          "rootCauseMatches": 1,
+          "creditedIssues": 1,
+          "unmatchedIssueIds": [],
+          "uncreditedIssueIds": [],
+          "findings": 1,
+          "falsePositives": 0,
+          "duplicateFindings": 0,
+          "claimedMatches": 1,
+          "validEvidenceMatches": 1,
+          "promptBytes": 8097,
+          "reviewDurationMs": 12
+        }
+      ]
+    }
+  ]
+}

@@ -8,6 +8,7 @@
     "redline-review": "dist/src/review/cli.js"
   },
   "scripts": {
+    "benchmark": "pnpm run build && node dist/src/benchmark/cli.js",
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "docs": "vitepress build docs",
     "docs:preview": "vitepress preview docs",

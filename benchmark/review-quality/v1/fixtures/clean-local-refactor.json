@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "clean-local-refactor",
+  "title": "Rename a local normalization variable",
+  "kind": "clean",
+  "baseRevision": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "headRevision": "ffffffffffffffffffffffffffffffffffffffff",
+  "files": [
+    {
+      "id": "000001",
+      "path": "src/name.ts",
+      "status": "M",
+      "base": "export function normalizeName(value: string): string {\n  const normalized = value.trim();\n  return normalized.toLowerCase();\n}\n",
+      "head": "export function normalizeName(value: string): string {\n  const trimmed = value.trim();\n  return trimmed.toLowerCase();\n}\n",
+      "diff": "diff --git a/src/name.ts b/src/name.ts\n--- a/src/name.ts\n+++ b/src/name.ts\n@@ -1,4 +1,4 @@\n export function normalizeName(value: string): string {\n-  const normalized = value.trim();\n-  return normalized.toLowerCase();\n+  const trimmed = value.trim();\n+  return trimmed.toLowerCase();\n }\n"
+    }
+  ],
+  "additionalHeadFiles": {},
+  "expectedIssues": [],
+  "recordings": [
+    {
+      "mode": "file-only",
+      "responses": [
+        {
+          "fileId": "000001",
+          "durationMs": 8,
+          "document": {
+            "version": 2,
+            "fileId": "000001",
+            "outcome": "clean",
+            "findings": []
+          }
+        }
+      ],
+      "judgments": []
+    }
+  ]
+}

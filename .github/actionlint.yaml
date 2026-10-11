@@ -1,0 +1,6 @@
+# actionlint 1.7.12 predates GitHub's official $/ self-repository
+# reference. Keep this exception scoped to the one workflow and exact action.
+paths:
+  .github/workflows/code-review.yml:
+    ignore:
+      - '^specifying action "\$/github" in invalid format because ref is missing\.'

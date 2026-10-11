@@ -3,6 +3,7 @@
 setup() {
   ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   ACTION="$ROOT/github/action.yaml"
+  REUSABLE_WORKFLOW="$ROOT/.github/workflows/code-review.yml"
 }
 
 @test "action declares the fixed review input surface" {
@@ -19,13 +20,13 @@ action = yaml.safe_load(Path(sys.argv[1]).read_text())
 inputs = action['inputs']
 assert set(inputs) == {
     'backend', 'model-config', 'model-auth', 'finding-scope',
-    'timeout', 'verbosity', 'code-context', 'artifact-name', 'artifact-retention-days',
+    'timeout', 'verbosity', 'indexing', 'artifact-name', 'artifact-retention-days',
     'github-token', 'github-app-id', 'github-app-key',
 }, f'unexpected input surface: {sorted(inputs)}'
 assert inputs['finding-scope']['default'] == 'defects'
 assert inputs['timeout']['default'] == '30m'
 assert inputs['verbosity']['default'] == 'progress'
-assert inputs['code-context']['default'] == ''
+assert inputs['indexing']['default'] == 'enabled'
 assert inputs['github-token']['default'] == ''
 assert inputs['github-token']['required'] is False
 runs = action['runs']
@@ -41,6 +42,7 @@ for expected in [
     'Build trusted TypeScript',
     'Validate action inputs with trusted TypeScript',
     'Fetch pull request commits as data',
+    'Build bounded code index',
     'Build review context bundle',
     'Upload review context artifact',
     'Ensure harness binary',
@@ -61,10 +63,31 @@ PY
   grep -Fq 'REDLINE_REVIEW_DIR: ${{ github.workspace }}/review' "$ACTION"
   grep -Fq 'REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head' "$ACTION"
   grep -Fq 'REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews' "$ACTION"
-  count=$(grep -cF 'REDLINE_CODE_CONTEXT: ${{ inputs.code-context }}' "$ACTION")
-  [ "$count" -eq 2 ]
-  count=$(grep -cF "REDLINE_CODE_CONTEXT_REPOSITORY: \${{ inputs.code-context != '' && github.repository || '' }}" "$ACTION")
-  [ "$count" -eq 2 ]
+  grep -Fq 'REDLINE_CODE_CONTEXT: ${{ steps.code-index.outputs.context-file }}' "$ACTION"
+  grep -Fq "REDLINE_CODE_CONTEXT_REPOSITORY: \${{ steps.code-index.outputs.context-file != '' && github.repository || '' }}" "$ACTION"
+  ! grep -Fq 'inputs.code-context' "$ACTION"
+}
+
+@test "action composes its code-index action at the same running commit" {
+  grep -Fq 'uses: $/github/code-index' "$ACTION"
+  grep -Fq "if: \${{ inputs.indexing == 'enabled' && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}" "$ACTION"
+  grep -Fq 'base: ${{ github.event.pull_request.base.sha }}' "$ACTION"
+  grep -Fq 'head: ${{ github.event.pull_request.head.sha }}' "$ACTION"
+  grep -Fq 'repository: ${{ github.repository }}' "$ACTION"
+  grep -Fq 'output-directory: ${{ github.workspace }}/code-index' "$ACTION"
+  grep -Fq 'code-index/code-context.json' "$ACTION"
+  grep -Fq "[[ \"\$INDEXING\" == 'enabled' || \"\$INDEXING\" == 'disabled' ]]" "$ACTION"
+}
+
+@test "reusable workflow composes the matching root action and forwards indexing policy" {
+  grep -Fq 'default: enabled' "$REUSABLE_WORKFLOW"
+  grep -Fq 'uses: $/github' "$REUSABLE_WORKFLOW"
+  grep -Fq 'indexing: ${{ inputs.indexing }}' "$REUSABLE_WORKFLOW"
+  ! grep -Fq 'uses: dragoscirjan/redline/github@v1' "$REUSABLE_WORKFLOW"
+  ! grep -Fq 'uses: $/github/code-index' "$REUSABLE_WORKFLOW"
+  ! grep -Fq 'report-style: ${{ inputs.report-style }}' "$REUSABLE_WORKFLOW"
+  ! grep -Fq 'credential-isolation: ${{ inputs.credential-isolation }}' "$REUSABLE_WORKFLOW"
+  ! grep -Fq 'container-engine: ${{ inputs.container-engine }}' "$REUSABLE_WORKFLOW"
 }
 
 @test "action keeps the context bundle step and both artifact uploads" {

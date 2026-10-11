@@ -17,6 +17,7 @@ jobs:
       backend: pi
       model-config: '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}'
       finding-scope: defects
+      indexing: enabled # default; set disabled for file-only review
       credential-isolation: direct
       container-engine: docker
       timeout: 30m
@@ -25,11 +26,15 @@ jobs:
       model-auth: ${{ secrets.MODEL_CREDENTIALS }}
 ```
 
+The caller pins the reusable workflow. Inside that workflow, `uses: $/github` resolves the Redline action from the same repository commit as the workflow, so its input contract cannot drift from the selected workflow revision. It does not resolve against the caller's checkout.
+
 ## Enabling and disabling review execution
 
 Review execution is enabled only when `backend` and `model-config` are supplied together with a non-empty `model-auth` secret. To run context-only instead, leave **all three** empty together — a partial set (for example a cleared `backend` next to a set `model-config`) is rejected rather than degraded.
 
-In context-only mode the workflow uploads only the `<artifact-name>-context` artifact with the review context bundle and the source-at-head export. The `<artifact-name>-reviews` artifact with per-file review records is produced only when review execution is enabled.
+Configured reviews build indexed context inside the published Redline action by default. Set `indexing: disabled` for file-only review. The reusable workflow only forwards this policy value; it does not invoke or configure the index provider.
+
+In context-only mode the workflow does not index and uploads only the `<artifact-name>-context` artifact with the review context bundle and the source-at-head export. The `<artifact-name>-reviews` artifact with per-file review records is produced only when review execution is enabled.
 
 ## Inputs
 
@@ -40,9 +45,10 @@ In context-only mode the workflow uploads only the `<artifact-name>-context` art
 | `finding-scope` | `defects`, `defects-and-risks` | Default `defects`. |
 | `timeout` | duration | Default `30m`, capped at `360m`. |
 | `verbosity` | `silent`, `progress`, `full-output` | Live model stream in the run log. Default `progress` (dots). |
+| `indexing` | `enabled`, `disabled` | Default `enabled`. The published action owns indexing; `disabled` selects file-only review. |
 | `artifact-name` | name | Default `redline-review-<run id>`. |
 | `artifact-retention-days` | 1–90 | Default `45`. |
-| `report-style`, `credential-isolation`, `container-engine` | legacy | Surface kept while the published `v1` tag still carries the previous action design, whose review mode requires `credential-isolation: direct` and a `container-engine`. The current action ignores them. |
+| `report-style`, `credential-isolation`, `container-engine` | legacy | Accepted at the reusable-workflow boundary for caller compatibility but not forwarded to the current action. |
 
 ## Secrets
 
@@ -52,8 +58,8 @@ In context-only mode the workflow uploads only the `<artifact-name>-context` art
 
 ## What the run produces
 
-Two artifacts: `<artifact-name>-context` with the review context bundle and source-at-head export, and `<artifact-name>-reviews` with the per-file review records and run summary described in [review output](/review-reporting) (the latter only when review execution is enabled). When `github-token` is supplied, publication adds one review per file with findings and a managed summary comment to the pull request; see [publication](/github-composite-action#publication).
+Two artifacts: `<artifact-name>-context` with the review context bundle, source-at-head export, and bounded `code-context.json` when indexing runs; and `<artifact-name>-reviews` with the per-file review records and run summary described in [review output](/review-reporting) (the latter only when review execution is enabled). When `github-token` is supplied, publication adds one review per file with findings and a managed summary comment to the pull request; see [publication](/github-composite-action#publication).
 
 ## Calling within Redline itself
 
-Redline's own pull requests use the dogfood workflow (`.github/workflows/pr-review.yml` → `dogfood-review.yml`), which calls the action from the local `./github` path at the trusted base revision. External repositories must use this reusable workflow or the published action tag, because a local action path resolves against the caller's repository.
+Redline's own pull requests use the dogfood workflow (`.github/workflows/pr-review.yml` → `dogfood-review.yml`), which calls the action from the local `./github` path at the trusted base revision. External repositories must call this reusable workflow or the published action tag. The reusable workflow uses `$/github` internally so it selects its matching Redline action without depending on the external caller's checkout.

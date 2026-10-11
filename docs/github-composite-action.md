@@ -1,6 +1,6 @@
 # GitHub composite action
 
-`github/action.yaml` is a composite action. It builds the review context bundle for a pull request's exact base and head commits and, when review inputs are supplied, runs the harness review and uploads its output as artifacts.
+`github/action.yaml` is a composite action. It builds the review context bundle for a pull request's exact base and head commits and, when review inputs are supplied, builds bounded indexed context, runs the harness review, and uploads its output as artifacts.
 
 ## Inputs
 
@@ -14,14 +14,14 @@ Inputs are fixed enums and data. No input accepts free-form review instructions.
 | `finding-scope` | `defects`, `defects-and-risks` | Default `defects`. |
 | `timeout` | duration | Review deadline per run, for example `10m` or `2h`. Capped at 360m. Default `30m`. |
 | `verbosity` | `silent`, `progress`, `full-output` | Live model stream in the run log: `silent` keeps per-file lines only, `progress` prints one dot per model text chunk, `full-output` prints the readable stream text. Default `progress`. |
-| `code-context` | file path | Optional `code-context.json` from `github/code-index`. The artifact must identify this repository and exact head. Missing, invalid, unsupported, or unavailable context keeps file-only review and records degraded coverage. |
+| `indexing` | `enabled`, `disabled` | Default `enabled`. The action invokes its bundled `github/code-index` action at the same Redline commit. `disabled` preserves byte-identical file-only prompting. Missing, invalid, unsupported, or unavailable generated context keeps file-only review and records degraded coverage. |
 | `artifact-name` | name | Base name for artifacts. Default `redline-review-<run id>`. |
 | `artifact-retention-days` | 1–90 | Default `45`. |
 | `github-token` | secret | Fallback publication token (PAT), used when the App inputs are unset. An installation token generated outside the workflow is also accepted. Publication never uses the Actions `GITHUB_TOKEN`. Empty keeps artifact-only mode. |
 | `github-app-id` | secret | Redline GitHub App id; with `github-app-key`, installation tokens are generated for the publication phases and preferred over the fallback. |
 | `github-app-key` | secret | Redline GitHub App private key (PEM). |
 
-Review execution is enabled only when `backend`, `model-config`, and `model-auth` are all supplied. Without them the action keeps the context-bundle-only behavior. `code-context` is optional but is accepted only with review execution.
+Review execution is enabled only when `backend`, `model-config`, and `model-auth` are all supplied. Without them the action keeps the context-bundle-only behavior and does not index. Configured reviews index by default; set `indexing: disabled` for file-only review.
 
 ## Publication
 
@@ -43,15 +43,16 @@ Re-runs on the same head are idempotent: an existing actor-owned review with the
 3. **Generate Redline App token for review start** — token 1, used by the announce and failure-notification steps; the publication token falls back to `github-token` when the App inputs are unset.
 4. **Validate action inputs with trusted TypeScript** — the review CLI runs `--validate-only` against the `REDLINE_*` environment contract; invalid optional inputs fail even in context-only mode.
 5. **Fetch pull request commits as data** — base and head commits are fetched as Git objects and verified.
-6. **Build review context bundle** — `src/context-bundle.sh` produces the manifest, diffs, base files, and a source-at-head export; a PR requirements file is folded in when present.
-7. **Upload review context artifact** — `<artifact-name>-context` with `source-at-head/` and `review/`.
-8. **Ensure harness binary** — installs the selected harness's fixed npm package when review execution is enabled and the binary is not already present (`pi` or `opencode`; `echo` needs nothing). This is trusted workflow tooling, never pull request code.
-9. **Announce review start** — publishes the "review in progress" comment (continue-on-error; a failed notification never blocks the review). Token 1 covers this and the failure notification.
-10. **Run harness review** — token-free by design: the review process carries no publication credential. The CLI loads the bundle, validates and resolves optional indexed spans from captured head source, runs one prompt per reviewed file through the harness, validates every finding, and writes per-file review records.
-11. **Generate Redline App token for publication** — token 2, minted after the review completes; it covers only the publication itself, so the token lifetime never bounds the review duration.
-12. **Publish review** — `--publish-only` re-reads the written records and summary from the output directory and publishes them (stale-head guard, run-to-head match, caps, per-file failure accounting).
-13. **Notify review failure** — when the harness review step failed, replaces the "review in progress" comment with the failure state (continue-on-error); prefers the fresh publication token when one was minted.
-14. **Upload review output artifact** — `<artifact-name>-reviews` with the per-file JSON and Markdown records and the run summary.
+6. **Build bounded code index** — for configured reviews with indexing enabled, the root action invokes `$/github/code-index`. GitHub resolves this self-repository reference at the root action's exact running commit. The child action exports the head as data, restores or builds its bounded CGC database, and writes `code-index/code-context.json`.
+7. **Build review context bundle** — `src/context-bundle.sh` produces the manifest, diffs, base files, and a source-at-head export; a PR requirements file is folded in when present.
+8. **Upload review context artifact** — `<artifact-name>-context` with the bounded `code-context.json` when generated, `source-at-head/`, and `review/`.
+9. **Ensure harness binary** — installs the selected harness's fixed npm package when review execution is enabled and the binary is not already present (`pi` or `opencode`; `echo` needs nothing). This is trusted workflow tooling, never pull request code.
+10. **Announce review start** — publishes the "review in progress" comment (continue-on-error; a failed notification never blocks the review). Token 1 covers this and the failure notification.
+11. **Run harness review** — token-free by design: the review process carries no publication credential. The CLI loads the bundle, validates and resolves generated indexed spans from captured head source, runs one prompt per reviewed file through the harness, validates every finding, and writes per-file review records.
+12. **Generate Redline App token for publication** — token 2, minted after the review completes; it covers only the publication itself, so the token lifetime never bounds the review duration.
+13. **Publish review** — `--publish-only` re-reads the written records and summary from the output directory and publishes them (stale-head guard, run-to-head match, caps, per-file failure accounting).
+14. **Notify review failure** — when the harness review step failed, replaces the "review in progress" comment with the failure state (continue-on-error); prefers the fresh publication token when one was minted.
+15. **Upload review output artifact** — `<artifact-name>-reviews` with the per-file JSON and Markdown records and the run summary.
 
 ## Boundaries
 
@@ -59,7 +60,8 @@ Re-runs on the same head are idempotent: an existing actor-owned review with the
 - The harness runs with tools disabled and a constructed environment; no GitHub token or ambient credentials reach it. The publication token is consumed only by the publication layer after the review artifacts are written.
 - Model output must validate against the authoritative diff — path, side, line, and byte-identical evidence — or the finding is rejected. Persisted reasons and raw model output are redacted against the selected credential before artifacts are written.
 - Indexed relationships only select candidates. Every injected span carries its path, line range, repository revision, provider/version, selection reason, and coverage status, and is re-resolved from the captured exact-head source with symlink and strict UTF-8 checks. Source files are capped at 2 MiB, selected content at 24 KiB per changed file and 48 KiB per run. Indexed context can never provide the published finding location.
-- In context-only mode (review inputs empty) the action uploads only `<artifact-name>-context`; the `<artifact-name>-reviews` artifact is produced only when review execution is enabled.
+- Internal action composition uses GitHub.com's `$/` self-repository reference. GitHub Enterprise Server does not support this syntax; Forgejo and Gitea remain separate future entry points.
+- In context-only mode (review inputs empty) the action does not index and uploads only `<artifact-name>-context`; the `<artifact-name>-reviews` artifact is produced only when review execution is enabled.
 - Release tags must contain the built `dist/` output of the exact reviewed source; the action verifies it exists and builds nothing from pull request revisions.
 
 See [runnable review configuration](/runnable-review-configuration) for the environment contract, [harness executor](/harness-executor) for harness specifics, and [review output](/review-reporting) for the record schema.

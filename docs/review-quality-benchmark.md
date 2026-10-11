@@ -88,13 +88,13 @@ This exercises the production `github/code-index` path against the cross-file ca
 
 The checked-in live result is under `benchmark/review-quality/v2/live-indexer/`. In the measured cold run, CGC 0.5.7 indexed the fixture but returned partial coverage with no related span because the incoming relationship query failed. Installation took 2,036 ms, restore bookkeeping 67 ms, indexing 8,023 ms, and bounded queries 18,063 ms. Save was not attempted after the failed assertion.
 
-## Decision
+## Evidence and subsequent enablement
 
-Do not enable `github/code-index` in reusable or dogfood workflows from this comparison.
+This comparison did not provide evidence for enabling `github/code-index`. The deterministic recordings show an upper-bound benefit when useful related source is supplied, but the live model already found every expected defect without that source. Indexed context did not improve measured quality. More importantly, the live production indexer returned partial coverage and no related caller for the cross-file fixture. The measured path added installation, indexing, query, prompt-size, and cache complexity without a demonstrated review-quality gain.
 
-The deterministic recordings show an upper-bound benefit when useful related source is supplied. The live model already found every expected defect without that source, so indexed context did not improve measured quality. More importantly, the live production indexer returned partial coverage and no related caller for the cross-file fixture. The current path therefore adds installation, indexing, query, prompt-size, and cache complexity without a demonstrated review-quality gain.
+After that measurement, the owner chose to continue the indexing investment and make the published Redline action invoke its bundled index action by default. This product direction does not reinterpret the benchmark or claim a quality improvement. File-only review remains available through `indexing: disabled`, and unavailable generated context still degrades to file-only review with recorded coverage.
 
-A later provider/query change must first recover the expected live relationship, then repeat both live evaluations before workflow enablement. The current result does not justify a second provider, base index, graph delta, dynamic review query, or full impact planner.
+A provider or query change must recover the expected live relationship and repeat both live evaluations before Redline claims an indexed-context quality benefit. The current result still does not justify a second provider, base index, graph delta, dynamic review query, or full impact planner.
 
 ## Adding a fixture
 

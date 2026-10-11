@@ -25,6 +25,11 @@ on:
         required: false
         type: string
         default: progress
+      indexing:
+        description: Indexed-context mode, enabled or disabled. Default enabled.
+        required: false
+        type: string
+        default: enabled
       report-style:
         description: Report style, single-block or inline. Legacy input kept for the previously published action; the current action ignores it.
         required: false
@@ -100,21 +105,18 @@ jobs:
             printf 'PR #%s: %s\n\n%s\n\n%s\n' "$PR_NUMBER" "$PR_TITLE" "$PR_BODY" "$PR_URL"
           } > pr-requirements.md
 
-      # A local ./github path would resolve against the caller repository when
-      # this reusable workflow runs elsewhere. The call must target the
-      # published Redline action at the v1 major alias maintained by the
-      # guarded release workflow. Callers requiring a permanently fixed
-      # revision should call the composite action directly with the immutable
-      # full-version tag instead.
+      # `$/` resolves against the called workflow's repository at the same
+      # running commit. Unlike `./github`, it never resolves against the
+      # external caller's workspace, and unlike an @v1 self-call, it cannot
+      # drift from this workflow revision.
       #
-      # The github-token, credential-isolation, container-engine, and
-      # report-style inputs are legacy surface kept while the published v1
-      # tag still carries the previous action design, whose review mode
-      # requires them. The current action ignores them. Leave backend,
-      # model-config, and the model-auth secret empty together for
-      # context-only mode; a partial set is rejected.
+      # report-style, credential-isolation, and container-engine remain on the
+      # reusable-workflow surface for caller compatibility but are not
+      # forwarded to the current action. Leave backend, model-config, and the
+      # model-auth secret empty together for context-only mode; a partial set
+      # is rejected.
       - name: Run Redline review action
-        uses: dragoscirjan/redline/github@v1
+        uses: $/github
         with:
           backend: ${{ inputs.backend }}
           model-config: ${{ inputs.model-config }}
@@ -122,9 +124,7 @@ jobs:
           github-token: ${{ secrets.github-token }}
           finding-scope: ${{ inputs.finding-scope }}
           verbosity: ${{ inputs.verbosity }}
-          report-style: ${{ inputs.report-style }}
+          indexing: ${{ inputs.indexing }}
           timeout: ${{ inputs.timeout }}
-          credential-isolation: ${{ inputs.credential-isolation }}
-          container-engine: ${{ inputs.container-engine }}
           artifact-name: ${{ inputs.artifact-name }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

@@ -28,6 +28,7 @@ export default defineConfig({
         text: 'Reference',
         items: [
           { text: 'GitHub composite action', link: '/github-composite-action' },
+          { text: 'Code-index action', link: '/code-index-action' },
           { text: 'Runnable review configuration', link: '/runnable-review-configuration' },
           { text: 'Harness executor', link: '/harness-executor' },
           { text: 'Review-quality benchmark', link: '/review-quality-benchmark' },

@@ -40,7 +40,7 @@ export class EchoHarnessExecutor implements HarnessExecutor {
     _options?: HarnessExecuteOptions,
   ): Promise<HarnessRun> {
     const fileId = FILE_ID_PATTERN.exec(prompt.user)?.[1] ?? '000000';
-    const text = JSON.stringify({ version: 2, fileId, outcome: 'clean', findings: [] });
+    const text = JSON.stringify({ version: 3, fileId, outcome: 'clean', findings: [] });
     return {
       status: 'succeeded',
       harness: 'echo',

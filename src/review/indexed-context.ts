@@ -3,8 +3,10 @@ import { TextDecoder } from 'node:util';
 import {
   loadCodeContextArtifact,
   type CodeContextArtifact,
+  type CodeContextDiagnostic,
   type CodeContextProvider,
   type CodeContextStatus,
+  type CodeContextTimings,
   type RelatedCodeSpan,
 } from '../code-context/artifact.js';
 import { checkedFile, type ReviewBundle, type ReviewManifestFile } from './bundle.js';
@@ -46,6 +48,8 @@ interface ResolvedFileCodeContext {
 export interface LoadedReviewCodeContext {
   readonly coverage: ReviewCodeContextRunCoverage;
   readonly files: ReadonlyMap<string, ResolvedFileCodeContext>;
+  readonly diagnostics: readonly CodeContextDiagnostic[];
+  readonly timings: CodeContextTimings | null;
 }
 
 export interface FileReviewCodeContext {
@@ -79,6 +83,8 @@ function emptyLoaded(
       filesWithContext: 0,
     },
     files: new Map(),
+    diagnostics: [],
+    timings: null,
   };
 }
 
@@ -261,6 +267,8 @@ async function resolveArtifact(
       filesWithContext,
     },
     files,
+    diagnostics: artifact.diagnostics,
+    timings: artifact.timings,
   };
 }
 

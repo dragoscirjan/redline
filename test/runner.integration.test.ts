@@ -10,6 +10,7 @@ import {
   HEAD_SHA,
   type BundleFixture,
 } from './helpers/bundle.js';
+import { reviewFinding } from './helpers/finding.js';
 
 /** Scripted executor double: answers prompts from a queue of runs. */
 class ScriptedExecutor implements HarnessExecutor {
@@ -112,7 +113,7 @@ describe('runFileReviews', () => {
       const record = JSON.parse(
         await readFile(join(fixture.output, 'reviews', '000001.json'), 'utf8'),
       ) as { version: number; outcome: string; rawModelOutput?: string };
-      expect(record.version).toBe(3);
+      expect(record.version).toBe(4);
       expect(record.outcome).toBe('clean');
       expect(record.rawModelOutput).toBeDefined();
       await expect(readFile(join(fixture.output, 'reviews', '000001.md'), 'utf8')).resolves.toContain(
@@ -125,6 +126,15 @@ describe('runFileReviews', () => {
       expect(summary.reviewedFiles).toBe(1);
       expect(summary.findings).toBe(0);
       expect(summary.files[0]?.outcome).toBe('clean');
+
+      const review = JSON.parse(
+        await readFile(join(fixture.output, 'reviews', 'review.json'), 'utf8'),
+      ) as { version: number; verdict: { status: string }; coverage: { files: { status: string } } };
+      expect(review).toMatchObject({
+        version: 1,
+        verdict: { status: 'mergeable' },
+        coverage: { files: { status: 'completed' } },
+      });
     } finally {
       await fixture.cleanup();
     }
@@ -209,24 +219,26 @@ describe('runFileReviews', () => {
       executor.script([
         {
           text: reviewDocument({
-            version: 2,
+            version: 3,
             fileId: '000001',
             outcome: 'findings',
-            findings: [
-              {
-                category: 'correctness',
-                classification: 'defect',
-                severity: 'high',
-                confidence: 0.9,
-                side: 'RIGHT',
-                startLine: 1,
-                endLine: 1,
-                evidence: 'new line',
-                impact: 'Wrong result.',
-                fix: 'Restore the check.',
-                suggestedChange: 'guarded line',
-              },
-            ],
+            findings: [reviewFinding({
+              title: 'Missing guard returns the wrong result',
+              severity: 'high',
+              startLine: 1,
+              endLine: 1,
+              evidence: 'new line',
+              behavioralContract: 'The guard must reject the unsupported input.',
+              failureScenario: 'The unsupported input reaches the changed line.',
+              reachability: 'The public entry point calls this function.',
+              rootCause: 'The changed line bypasses the guard.',
+              impact: 'Wrong result.',
+              blastRadius: 'All callers passing the unsupported input.',
+              fix: 'Restore the check.',
+              regressionTest: 'Exercise the unsupported input before and after the fix.',
+              suggestedChange: 'guarded line',
+              remediationStatus: 'proposed',
+            })],
           }),
         },
       ]);
@@ -261,11 +273,51 @@ describe('runFileReviews', () => {
       expect(finding.suggestedChange).toBeUndefined();
 
       const markdown = await readFile(join(fixture.output, 'reviews', '000001.md'), 'utf8');
-      expect(markdown).toContain('— src/example.ts:1');
+      expect(markdown).toContain('- **Location:** src/example.ts:1 (side RIGHT)');
       expect(markdown).toContain('-new line');
       expect(markdown).toContain('+guarded line');
       const summaryMarkdown = await readFile(join(fixture.output, 'reviews', 'summary.md'), 'utf8');
       expect(summaryMarkdown).toContain('| src/example.ts | findings | 1 (1) | disabled (0 spans) |');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('publishes a valid sibling while recording an independently rejected candidate', async () => {
+    const fixture = await createBundleFixture({
+      diff: 'diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1 +1 @@\n-old\n+new line\n',
+      headContent: 'new line\n',
+    });
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      const candidate = {
+        category: 'correctness',
+        classification: 'defect',
+        severity: 'high',
+        confidence: 0.9,
+        side: 'RIGHT',
+        startLine: 1,
+        endLine: 1,
+        evidence: 'new line',
+        impact: 'Wrong result.',
+        fix: 'Restore the check.',
+      };
+      executor.script([{ text: reviewDocument({
+        version: 2,
+        fileId: '000001',
+        outcome: 'findings',
+        findings: [candidate, { ...candidate, evidence: 'invented line' }],
+      }) }]);
+
+      const result = await runFileReviews({ environment: environment.review!, executor });
+      expect(result.exitCode).toBe(0);
+      expect(result.records[0]?.outcome).toBe('findings');
+      expect(result.records[0]?.findings).toHaveLength(1);
+      expect(result.records[0]?.rejectedCandidates).toHaveLength(1);
+      expect(result.review.rejectedCandidates).toHaveLength(1);
+      expect(result.review.coverage.specialists[0]?.status).toBe('incomplete');
+      expect(result.review.verdict.status).toBe('blocked');
     } finally {
       await fixture.cleanup();
     }

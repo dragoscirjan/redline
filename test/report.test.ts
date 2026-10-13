@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FileReviewValidator, parseChangedLines, parseFileReviewDocument } from '../src/review/report.js';
 import type { ReviewFinding } from '../src/review/types.js';
 import type { ReviewManifestFile } from '../src/review/bundle.js';
+import { reviewFinding } from './helpers/finding.js';
 
 const DIFF =
   'diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1,4 +1,4 @@\n context\n-old line\n+new line\n more context\n';
@@ -24,6 +25,18 @@ function manifestFile(overrides: Partial<ReviewManifestFile> = {}): ReviewManife
 }
 
 function finding(overrides: Partial<ReviewFinding> = {}): ReviewFinding {
+  return reviewFinding({
+    severity: 'high',
+    startLine: 2,
+    endLine: 2,
+    evidence: 'new line',
+    impact: 'Returns the wrong value.',
+    fix: 'Restore the required value.',
+    ...overrides,
+  });
+}
+
+function legacyFinding(overrides: Record<string, unknown> = {}) {
   return {
     category: 'correctness',
     classification: 'defect',
@@ -129,10 +142,10 @@ describe('parseFileReviewDocument', () => {
     expect(findingsWithEmptyReason.reason).toBeUndefined();
     expect(findingsWithEmptyReason.findings).toHaveLength(1);
     expect(() => parseFileReviewDocument(base({ outcome: 'findings', findings: [] }))).toThrow(
-      /requires at least one finding/u,
+      /requires at least one candidate finding/u,
     );
     expect(() => parseFileReviewDocument(base({ outcome: 'clean', findings: [document()] }))).toThrow(
-      /inconsistent with findings/u,
+      /inconsistent with candidate findings/u,
     );
     expect(() => parseFileReviewDocument(base({ extra: 1 }))).toThrow(/unsupported fields/u);
   });
@@ -144,7 +157,7 @@ describe('parseFileReviewDocument', () => {
       outcome: 'findings',
       findings: [
         {
-          ...finding({ startLine: 2, endLine: 2 }),
+          ...legacyFinding({ startLine: 2, endLine: 2 }),
           suggestedChange: 'new line (guarded)',
         },
       ],
@@ -155,32 +168,36 @@ describe('parseFileReviewDocument', () => {
     expect(parsed.findings[0]?.suggestedChange).toBe('new line (guarded)');
   });
 
-  it('rejects inverted spans and invalid suggested changes', () => {
+  it('isolates inverted spans and invalid suggested changes as candidate rejections', () => {
     const raw = (findingOverrides: Record<string, unknown>) =>
       JSON.stringify({ version: 2, fileId: '000001', outcome: 'findings', findings: [findingOverrides] });
-    expect(() => parseFileReviewDocument(raw({ ...finding(), startLine: 3, endLine: 2 }))).toThrow(
-      /startLine must not exceed finding\.endLine/u,
-    );
-    expect(() => parseFileReviewDocument(raw({ ...finding(), suggestedChange: '' }))).toThrow(
-      /suggestedChange is invalid/u,
-    );
-    expect(() => parseFileReviewDocument(raw({ ...finding(), suggestedChange: 'x'.repeat(9 * 1024) }))).toThrow(
-      /suggestedChange is invalid/u,
-    );
+    for (const candidate of [
+      legacyFinding({ startLine: 3, endLine: 2 }),
+      legacyFinding({ suggestedChange: '' }),
+      legacyFinding({ suggestedChange: 'x'.repeat(9 * 1024) }),
+    ]) {
+      const parsed = parseFileReviewDocument(raw(candidate));
+      expect(parsed.findings).toEqual([]);
+      expect(parsed.rejectedCandidates).toHaveLength(1);
+      expect(parsed.rejectedCandidates[0]?.stage).toBe('parse');
+    }
   });
 
-  it('rejects malformed findings', () => {
+  it('keeps valid candidates when another candidate is malformed', () => {
     const raw = JSON.stringify({
       version: 2,
       fileId: '000001',
       outcome: 'findings',
-      findings: [finding({ confidence: 1.5 })],
+      findings: [legacyFinding(), legacyFinding({ confidence: 1.5 })],
     });
-    expect(() => parseFileReviewDocument(raw)).toThrow(/between 0 and 1/u);
+    const parsed = parseFileReviewDocument(raw);
+    expect(parsed.findings).toHaveLength(1);
+    expect(parsed.rejectedCandidates).toHaveLength(1);
+    expect(parsed.rejectedCandidates[0]?.reason).toMatch(/between 0 and 1/u);
   });
 
   it('enforces the ten-finding cap', () => {
-    const findings = Array.from({ length: 11 }, () => finding());
+    const findings = Array.from({ length: 11 }, () => legacyFinding());
     const raw = JSON.stringify({ version: 2, fileId: '000001', outcome: 'findings', findings });
     expect(() => parseFileReviewDocument(raw)).toThrow(/finding limit/u);
   });
@@ -257,8 +274,21 @@ describe('FileReviewValidator', () => {
   it('deduplicates identical findings', () => {
     const validator = new FileReviewValidator(manifestFile(), DIFF, 'defects');
     const validated = validator.validateFindings([finding(), finding({ severity: 'low' })]);
-    // finding() twice → one entry; the severity variant is a distinct finding.
     expect(validated).toHaveLength(2);
     expect(new Set(validated.map((item) => item.id)).size).toBe(2);
+  });
+
+  it('rejects conflicting claims on one trigger while preserving original candidate indexes', () => {
+    const validator = new FileReviewValidator(manifestFile(), DIFF, 'defects');
+    const result = validator.validateCandidates(
+      [finding(), finding({ rootCause: 'A conflicting root-cause claim.' })],
+      [3, 7],
+    );
+    expect(result.findings).toEqual([]);
+    expect(result.candidateIndices).toEqual([]);
+    expect(result.rejectedCandidates).toEqual([
+      expect.objectContaining({ index: 3, code: 'candidate-conflict' }),
+      expect.objectContaining({ index: 7, code: 'candidate-conflict' }),
+    ]);
   });
 });

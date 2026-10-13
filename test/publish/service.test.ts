@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { PublicationService } from '../../src/publish/service.js';
 import type { FileReviewPublication, ReviewPublisher, ReviewScope } from '../../src/publish/types.js';
-import type { FileReviewRecord, ReviewRunSummary } from '../../src/review/types.js';
+import type { FileReviewRecord, PullRequestReviewRecord } from '../../src/review/types.js';
+import { publishedFinding, pullRequestReview } from '../helpers/finding.js';
 
 const HEAD = 'b'.repeat(40);
 const SCOPE: ReviewScope = { repository: 'owner/repository', pullRequest: 14, head: HEAD };
@@ -48,7 +49,7 @@ function fakePublisher(options: { head?: string; publishError?: Error } = {}): {
 
 function record(overrides: Partial<FileReviewRecord> = {}): FileReviewRecord {
   return {
-    version: 3,
+    version: 4,
     fileId: '000001',
     path: 'src/example.ts',
     status: 'M',
@@ -56,58 +57,48 @@ function record(overrides: Partial<FileReviewRecord> = {}): FileReviewRecord {
     model: 'test-model',
     codeContext: DISABLED_CONTEXT,
     outcome: 'findings',
-    findings: [
-      {
-        id: 'f-1',
-        category: 'correctness',
-        classification: 'defect',
-        severity: 'high',
-        confidence: 0.9,
-        side: 'RIGHT',
-        startLine: 3,
-        endLine: 3,
-        evidence: 'evidence',
-        impact: 'impact',
-        fix: 'fix',
-        fixPrompt: 'fix prompt',
-      },
-    ],
+    findings: [publishedFinding({
+      id: 'f-1',
+      severity: 'high',
+      startLine: 3,
+      endLine: 3,
+      evidence: 'evidence',
+      impact: 'impact',
+      fix: 'fix',
+      fixPrompt: 'fix prompt',
+    })],
+    rejectedCandidates: [],
     durationMs: 10,
     ...overrides,
   };
 }
 
-function summary(overrides: Partial<ReviewRunSummary> = {}): ReviewRunSummary {
-  return {
-    version: 3,
-    harness: 'pi',
-    model: 'test-model',
-    provider: 'test',
-    findingScope: 'defects',
-    base: 'a'.repeat(40),
+function review(overrides: Partial<PullRequestReviewRecord> = {}): PullRequestReviewRecord {
+  return pullRequestReview({
     head: HEAD,
-    manifestFiles: 1,
-    reviewedFiles: 1,
-    omittedFiles: 0,
-    findings: 1,
-    codeContext: { ...DISABLED_CONTEXT, filesWithContext: 0 },
+    findings: [{
+      ...publishedFinding({ id: 'f-1', severity: 'high', startLine: 3, endLine: 3 }),
+      triggerFileId: '000001',
+      triggerPath: 'src/example.ts',
+    }],
+    verdict: { status: 'blocked', reasons: ['f-1: unresolved high defect'] },
     files: [{
       fileId: '000001',
       path: 'src/example.ts',
       outcome: 'findings',
+      findingIds: ['f-1'],
+      rejectedCandidates: 0,
       codeContext: DISABLED_CONTEXT,
-      findingCount: 1,
-      findingSpans: ['3-3'],
     }],
     ...overrides,
-  };
+  });
 }
 
 describe('PublicationService', () => {
   it('publishes one review per file with findings plus the summary', async () => {
     const { publisher, calls, publications } = fakePublisher();
     const service = new PublicationService(publisher, SCOPE);
-    const outcome = await service.publish([record()], summary());
+    const outcome = await service.publish([record()], review());
 
     expect(calls.currentHead).toBe(1);
     expect(calls.publishFileReview).toBe(1);
@@ -122,7 +113,10 @@ describe('PublicationService', () => {
   it('publishes only the summary when every file is clean', async () => {
     const { publisher, calls } = fakePublisher();
     const service = new PublicationService(publisher, SCOPE);
-    const outcome = await service.publish([record({ outcome: 'clean', findings: [] })], summary({ findings: 0 }));
+    const outcome = await service.publish(
+      [record({ outcome: 'clean', findings: [] })],
+      review({ findings: [], verdict: { status: 'mergeable', reasons: ['review complete'] } }),
+    );
 
     expect(calls.publishFileReview).toBe(0);
     expect(calls.upsertSummary).toBe(1);
@@ -133,7 +127,7 @@ describe('PublicationService', () => {
   it('aborts before publishing when the pull request head moved', async () => {
     const { publisher, calls } = fakePublisher({ head: 'c'.repeat(40) });
     const service = new PublicationService(publisher, SCOPE);
-    await expect(service.publish([record()], summary())).rejects.toThrow(/head changed/u);
+    await expect(service.publish([record()], review())).rejects.toThrow(/head changed/u);
     expect(calls.publishFileReview).toBe(0);
     expect(calls.upsertSummary).toBe(0);
   });
@@ -150,7 +144,7 @@ describe('PublicationService', () => {
       },
     };
     const service = new PublicationService(failing, SCOPE);
-    const outcome = await service.publish([record(), record({ fileId: '000002', path: 'src/other.ts' })], summary({ findings: 2 }));
+    const outcome = await service.publish([record(), record({ fileId: '000002', path: 'src/other.ts' })], review());
 
     expect(calls.upsertSummary).toBe(1);
     expect(outcome.publishedFileReviews).toBe(1);
@@ -166,7 +160,7 @@ describe('PublicationService', () => {
     const many = Array.from({ length: 30 }, (_value, index) =>
       record({ fileId: String(index + 1).padStart(6, '0'), path: `src/file-${index}.ts` }),
     );
-    const outcome = await service.publish(many, summary());
+    const outcome = await service.publish(many, review());
 
     expect(publications).toHaveLength(25);
     expect(outcome.publishedFileReviews).toBe(25);
@@ -183,13 +177,10 @@ describe('PublicationService', () => {
       record({
         fileId: String(index + 1).padStart(6, '0'),
         path: `src/file-${index}.ts`,
-        findings: Array.from({ length: 12 }, (_unused, findingIndex) => ({
+        findings: Array.from({ length: 12 }, (_unused, findingIndex) => publishedFinding({
           id: `f-${index}-${findingIndex}`,
-          category: 'correctness',
-          classification: 'defect',
           severity: 'low',
           confidence: 0.5,
-          side: 'RIGHT' as const,
           startLine: findingIndex + 1,
           endLine: findingIndex + 1,
           evidence: 'evidence',
@@ -199,7 +190,7 @@ describe('PublicationService', () => {
         })),
       }),
     );
-    const outcome = await service.publish(spread, summary());
+    const outcome = await service.publish(spread, review());
 
     const totalComments = publications.reduce((total, publication) => total + publication.comments.length, 0);
     expect(totalComments).toBe(100);

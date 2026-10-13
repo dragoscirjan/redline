@@ -3,6 +3,10 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createReviewWriter } from '../src/review/writer.js';
 import type { FileReviewRecord, PublishedFinding, ReviewRunSummary } from '../src/review/types.js';
+import {
+  publishedFinding as basePublishedFinding,
+  pullRequestReview,
+} from './helpers/finding.js';
 
 const DISABLED_CONTEXT = {
   status: 'disabled' as const,
@@ -20,13 +24,10 @@ const FIX_PROMPT = [
 ].join('\n');
 
 function publishedFinding(overrides: Partial<PublishedFinding> = {}): PublishedFinding {
-  return {
+  return basePublishedFinding({
     id: 'f-abc',
-    category: 'correctness',
-    classification: 'defect',
+    title: 'Missing guard returns the wrong value',
     severity: 'high',
-    confidence: 0.9,
-    side: 'RIGHT',
     startLine: 3,
     endLine: 5,
     evidence: 'const value = compute(input);',
@@ -35,7 +36,7 @@ function publishedFinding(overrides: Partial<PublishedFinding> = {}): PublishedF
     suggestion: '-const value = compute(input);\n-context line\n+const value = guarded(input);',
     fixPrompt: FIX_PROMPT,
     ...overrides,
-  };
+  });
 }
 
 describe('createReviewWriter', () => {
@@ -46,7 +47,7 @@ describe('createReviewWriter', () => {
     try {
       const writer = createReviewWriter(output);
       const record: FileReviewRecord = {
-        version: 3,
+        version: 4,
         fileId: '000001',
         path: 'src/example.ts',
         status: 'M',
@@ -55,6 +56,7 @@ describe('createReviewWriter', () => {
         codeContext: DISABLED_CONTEXT,
         outcome: 'findings',
         findings: [publishedFinding()],
+        rejectedCandidates: [],
         durationMs: 5,
       };
       await writer.writeFileReview({ ...record, rawModelOutput: 'x'.repeat(20 * 1024) });
@@ -64,7 +66,7 @@ describe('createReviewWriter', () => {
         findings: Array<PublishedFinding & { suggestedChange?: unknown }>;
         rawModelOutput?: string;
       };
-      expect(json.version).toBe(3);
+      expect(json.version).toBe(4);
       expect(json.outcome).toBe('findings');
       expect(json.findings).toHaveLength(1);
       expect(json.findings[0]?.startLine).toBe(3);
@@ -80,7 +82,7 @@ describe('createReviewWriter', () => {
 
       const markdown = await readFile(join(output, 'reviews', '000001.md'), 'utf8');
       expect(markdown).toContain('# Review: src/example.ts');
-      expect(markdown).toContain('### Finding 1: high defect (correctness) — src/example.ts:3-5');
+      expect(markdown).toContain('### Finding 1: Missing guard returns the wrong value');
       expect(markdown).toContain('- **Location:** src/example.ts:3-5 (side RIGHT)');
       expect(markdown).toContain('- **Evidence (line 3):** `const value = compute(input);`');
       expect(markdown).toContain('**Suggested change** for src/example.ts:3-5 (side RIGHT):');
@@ -125,6 +127,28 @@ describe('createReviewWriter', () => {
       const summaryMarkdown = await readFile(join(output, 'reviews', 'summary.md'), 'utf8');
       expect(summaryMarkdown).toContain('# Review run summary');
       expect(summaryMarkdown).toContain('| src/example.ts | findings | 1 (3-5) | disabled (0 spans) |');
+
+      const review = pullRequestReview({
+        findings: [{ ...publishedFinding(), triggerFileId: '000001', triggerPath: 'src/example.ts' }],
+        verdict: { status: 'blocked', reasons: ['f-abc: unresolved high defect'] },
+      });
+      await writer.writePullRequestReview(review);
+      const reviewJson = JSON.parse(await readFile(join(output, 'reviews', 'review.json'), 'utf8')) as {
+        version: number;
+        verdict: { status: string };
+        findings: unknown[];
+        coverage: { files: { status: string } };
+      };
+      expect(reviewJson).toMatchObject({
+        version: 1,
+        verdict: { status: 'blocked' },
+        coverage: { files: { status: 'completed' } },
+      });
+      expect(reviewJson.findings).toHaveLength(1);
+      const reviewMarkdown = await readFile(join(output, 'reviews', 'review.md'), 'utf8');
+      expect(reviewMarkdown).toContain('# Pull request review');
+      expect(reviewMarkdown).toContain('- **Verdict:** blocked');
+      expect(reviewMarkdown).toContain('- **Graph queries:** not-applicable');
     } finally {
       await rm(output, { recursive: true, force: true });
     }

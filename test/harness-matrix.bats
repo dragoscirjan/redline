@@ -34,6 +34,8 @@ teardown() {
   # exist for every harness, echo included.
   [ -f "$OUTPUT/reviews/000001.json" ]
   [ -f "$OUTPUT/reviews/000001.md" ]
+  [ -f "$OUTPUT/reviews/review.json" ]
+  [ -f "$OUTPUT/reviews/review.md" ]
   [ -f "$OUTPUT/reviews/summary.json" ]
   [ -f "$OUTPUT/reviews/summary.md" ]
   grep -Fq '"outcome": "clean"' "$OUTPUT/reviews/000001.json"

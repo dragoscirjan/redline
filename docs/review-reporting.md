@@ -1,135 +1,122 @@
 # Review output
 
-The review tool writes per-file records and a run summary into `REDLINE_OUTPUT_DIR` under `reviews/`. The JSON records are the machine-readable contract for GitHub publication; the Markdown records are the human-readable counterpart. The output always travels as the `<artifact-name>-reviews` artifact. When the action's `github-token` input is supplied, the publication layer also publishes the records to GitHub — one review per file with findings plus a managed summary comment (see [GitHub composite action](/github-composite-action#publication)).
+Redline writes its review contract under `REDLINE_OUTPUT_DIR/reviews/`. The PR-level record is authoritative. Per-file records and the legacy run summary remain for inline publication, diagnostics, benchmark compatibility, and migration.
 
-## Presenting findings: `file:x-y` spans
+| Files | Purpose |
+| --- | --- |
+| `review.json`, `review.md` | Authoritative PR-level findings, coverage, limitations, and verdict |
+| `<fileId>.json`, `<fileId>.md` | Validated per-file triggers, remediation guidance, and candidate diagnostics |
+| `summary.json`, `summary.md` | Version-3 compatibility summary for existing benchmark/report consumers |
 
-A file with multiple issues carries multiple findings, one span each. Every finding identifies its affected region as a line span — presented as `src/example.ts:3-5` throughout the output (a single line renders as `src/example.ts:3`). The span endpoints must both be changed lines of the claimed side; the span may include unchanged lines between them.
+The output travels in the `<artifact-name>-reviews` artifact. When a publication token is supplied, the publisher consumes `review.json` for the managed PR summary and the per-file records for diff-anchored inline comments.
 
-## Per-file record
+## PR-level record
 
-`reviews/<fileId>.json` and `reviews/<fileId>.md`:
-
-```json
-{
-  "version": 3,
-  "fileId": "000001",
-  "path": "src/example.ts",
-  "status": "M",
-  "harness": "pi",
-  "model": "z-ai/glm-5.3-flash",
-  "codeContext": {
-    "status": "complete",
-    "provider": { "id": "cgc", "version": "0.5.7" },
-    "revision": "…40-hex…",
-    "relatedSpans": 2,
-    "sourceBytes": 1840,
-    "reason": null
-  },
-  "outcome": "findings",
-  "errorKind": null,
-  "reason": null,
-  "findings": [
-    {
-      "id": "f-3f9a…",
-      "category": "correctness",
-      "classification": "defect",
-      "severity": "high",
-      "confidence": 0.9,
-      "side": "RIGHT",
-      "startLine": 3,
-      "endLine": 5,
-      "evidence": "const value = compute(input);",
-      "impact": "Returns the wrong value for empty input.",
-      "fix": "Restore the empty-input guard.",
-      "suggestion": "-const value = compute(input);\n-context\n+const value = guarded(input);",
-      "fixPrompt": "Fix one code-review finding.\n…"
-    }
-  ],
-  "durationMs": 4210,
-  "rawModelOutput": "{ … the model's review document … }"
-}
-```
-
-- `outcome` is `clean`, `findings`, or `omitted`. A file is `omitted` when it cannot be fully reviewed: binary content, a harness failure or timeout, model output that failed validation, or a preparation failure (an unreadable diff or a prompt that exceeds its byte limit).
-- `codeContext` records actual indexed coverage for this file. Status is `disabled`, `complete`, `partial`, `unsupported`, or `unavailable`; provider and revision are null when context was not configured or could not be parsed. `reason` distinguishes identity mismatch, invalid artifacts, provider coverage loss, missing file entries, and byte-limit truncation.
-- `errorKind` distinguishes `harness-failed`, `harness-timeout`, `invalid-output`, and `preparation-failed` when present.
-- `side` is `LEFT` for removed lines (old file) and `RIGHT` for added lines (new file); `startLine`/`endLine` are line numbers on that side.
-- `evidence` is the exact content of `startLine` on that side, without its diff marker.
-- `id` is a stable hash of the finding's normalized fields, used for deduplication.
-- `rawModelOutput` keeps the bounded model document for debugging; it is not published.
-
-## Change suggestions
-
-Each finding may carry a `suggestion`: a unified-diff-style block — `-` the current span lines, `+` the proposed replacement — rendered from authoritative content. The span content comes from the review diff itself (its changed and context lines) or, when the span reaches beyond it, from the head file (RIGHT side) or the captured base file (LEFT side). Suggestions are produced only when the model proposed a concrete replacement in its review document and the replacement actually changes the span; a proposal identical to the current content is dropped. Humans can apply the suggestion directly; coding agents can consume it verbatim, and the GitHub publisher renders it as a `suggestion` block in the inline comment because the path, side, and span travel with the finding.
-
-## Fix prompts
-
-Each finding also carries a `fixPrompt`: a deterministic, ready-to-use prompt for a coding LLM that applies the fix. It embeds the `file:x-y` span, the finding's evidence, impact, and fix guidance, the current span content when resolvable, and the proposed change when present, followed by rules that keep the change minimal. The finding text is quoted data: the prompt instructs the agent to verify it against the cited lines before changing anything. Spans longer than 200 lines or 16 KiB are cited but not embedded.
-
-## Findings
-
-A finding is accepted only after validation against the authoritative diff:
-
-- the file is not binary;
-- the classification respects the configured finding scope (`risk` requires `defects-and-risks`);
-- both `startLine` and `endLine` are changed lines on the claimed side, with `startLine <= endLine`;
-- `evidence` is byte-identical to the `startLine` content on that side;
-- at most 10 findings per file, deduplicated by their stable id.
-
-Model output that fails schema or diff validation marks the file `invalid-output`/`omitted`; unvalidated findings are never written. All persisted model-derived text — reasons, diagnostics, raw output, suggestions, and fix prompts — is redacted against the selected credential before artifacts are written.
-
-## Run summary
-
-`reviews/summary.json` and `reviews/summary.md`:
+`review.json` is version 1. Its top-level shape is:
 
 ```json
 {
-  "version": 3,
-  "harness": "pi",
-  "model": "z-ai/glm-5.3-flash",
-  "provider": "openrouter",
-  "findingScope": "defects",
-  "base": "…40-hex…",
-  "head": "…40-hex…",
-  "manifestFiles": 12,
-  "reviewedFiles": 10,
-  "omittedFiles": 2,
-  "findings": 3,
-  "codeContext": {
-    "status": "partial",
-    "provider": { "id": "cgc", "version": "0.5.7" },
-    "revision": "…40-hex…",
-    "relatedSpans": 6,
-    "sourceBytes": 7320,
-    "reason": "provider-partial",
-    "filesWithContext": 3
+  "version": 1,
+  "base": "…full base commit…",
+  "head": "…full head commit…",
+  "findings": [],
+  "rejectedCandidates": [],
+  "coverage": {},
+  "limitations": [],
+  "verdict": {
+    "status": "mergeable | mergeable-after-verified-fixes | human-decision-required | inconclusive | blocked",
+    "reasons": []
   },
-  "files": [
-    {
-      "fileId": "000001",
-      "path": "src/example.ts",
-      "outcome": "findings",
-      "codeContext": {
-        "status": "complete",
-        "provider": { "id": "cgc", "version": "0.5.7" },
-        "revision": "…40-hex…",
-        "relatedSpans": 2,
-        "sourceBytes": 1840,
-        "reason": null
-      },
-      "findingCount": 1,
-      "findingSpans": ["3-5"]
-    }
-  ]
+  "files": [],
+  "legacySummaryVersion": 3
 }
 ```
 
-The summary counts every manifest file; `findingSpans` lists each published finding's span. Files the bundle excluded from review are absent from `files`; `manifestFiles - reviewedFiles` is that excluded count. Top-level `codeContext` aggregates files with resolved context, selected spans, source bytes, and degraded coverage.
+Each PR finding keeps exactly one changed-diff trigger through `triggerFileId`, `triggerPath`, `side`, `startLine`, `endLine`, and byte-identical `evidence`. A single finding can also carry:
 
-## Schema versions
+- multiple `supportingEvidence` locations at the exact base or head revision;
+- bounded provider-derived `graphReferences`;
+- a source- or graph-backed `impactPath`;
+- dimensions, classification, severity, and confidence;
+- behavioral contract, failure scenario, reachability, root cause, impact, blast radius, and reversibility;
+- assumptions, counter-evidence, and remaining uncertainty;
+- remediation guidance, a regression-test proposal, and explicit verification/remediation states.
 
-- Review document (harness output): version 2 — introduced spans (`startLine`/`endLine`) and `suggestedChange`.
-- Per-file record: version 3 — adds deterministic indexed-context coverage and source-byte measurements; version 2 introduced spans, rendered `suggestion`, and `fixPrompt`.
-- Run summary: version 3 — adds aggregate and per-file indexed-context coverage; version 2 introduced `findingSpans`.
-- Review policy: `redline-file-review/v2`, hosted in `prompts/v4/`. The directory number tracks the repository's policy lineage (v1–v3 are prior designs); the policy ID tracks the per-file review contract.
+This permits one cross-file finding without moving its publication anchor away from the authoritative diff.
+
+## Evidence validation
+
+The trigger remains subject to the strict diff validator:
+
+- the file must be textual;
+- both span endpoints must be changed lines on the declared side;
+- `evidence` must exactly equal the trigger start line;
+- the classification must respect the configured finding scope.
+
+Supporting source evidence is re-read from captured repository content. Head evidence resolves from exact-head source. Base evidence resolves from captured base files, including deleted and renamed paths. The revision must equal the reviewed base or head commit, the path must be normalized and captured, the span must exist, and its start-line evidence must match exactly.
+
+Graph references are provenance, not source authority. The discovery contract accepts them only when they carry the selected provider and exact version, the reviewed base snapshot, the declared `related-spans` capability, a bounded query and relationship, and a SHA-256 digest matching the complete graph-fact identity. They never determine inline comment paths or line numbers. Current action-owned indexes are base-revision graphs; a claimed head graph snapshot is rejected rather than guessed.
+
+Impact-path steps index either `supportingEvidence` or `graphReferences`. A complete path needs at least one valid step. Partial or unresolved paths require an explicit limitation.
+
+## Independent candidate handling
+
+Harness output uses review-document version 3. Candidates are parsed and validated independently. One malformed schema, invalid trigger, mismatched source location, unsupported provider claim, or bad graph digest produces a bounded `rejectedCandidates` entry; it does not erase unrelated valid siblings. A rejected candidate is never published.
+
+If every candidate fails, the file is `omitted` with `invalid-output`. Mixed valid and invalid candidates retain the valid findings while the rejected count makes required baseline coverage incomplete, preventing a clean verdict.
+
+Raw model output remains a bounded diagnostic field in the per-file artifact. It is not part of the publishable finding contract.
+
+## Coverage and limitations
+
+Coverage facets use only these states: `completed`, `incomplete`, `unavailable`, and `not-applicable`. Absence is never treated as success.
+
+The PR record states:
+
+- considered and omitted files;
+- changed-symbol availability;
+- diff, base-source, head-source, and indexed-context retrieval;
+- required baseline specialist completion;
+- whether tests, contracts, schemas, and configuration were independently inspected;
+- selected code-intelligence provider, version, base/head snapshots, capabilities, cache state, and bounded diagnostics;
+- graph-query and impact-traversal status;
+- source-confirmed and provider-derived relationship counts;
+- provider disagreement, unresolved symbols, unsupported languages, and dynamic-behavior uncertainty;
+- truncation, finding, source-byte, and related-span budgets;
+- rejected candidates, remediation availability, and fix-verification availability.
+
+Unavailable optional code intelligence is explicit but does not by itself make the run inconclusive. An omitted required file or rejected candidate makes required baseline coverage incomplete.
+
+## Deterministic verdicts
+
+The model cannot select the PR verdict. Redline derives it from validated findings and coverage:
+
+- `blocked`: at least one unresolved validated defect remains;
+- `human-decision-required`: unresolved evidenced risks, test gaps, design debt, or questions remain without a defect blocker;
+- `inconclusive`: required coverage is incomplete or any candidate was rejected, and no stronger finding consequence applies;
+- `mergeable-after-verified-fixes`: findings remain in the record, but each finding and remediation is independently confirmed/verified;
+- `mergeable`: no validated findings remain and every required coverage facet completed.
+
+The discovery stage accepts only `verification.status: unverified` and remediation status `guidance` or `proposed`. It cannot verify itself. Independent verification is deliberately deferred to its own stage; the contract already represents that future result without claiming it happened.
+
+## Per-file records and remediation
+
+Per-file records are version 4. Every record includes `rejectedCandidates` and rich findings. Each accepted finding receives:
+
+- an optional `suggestion` rendered from authoritative span content plus the model's bounded replacement text;
+- a deterministic `fixPrompt` that cites the validated location, evidence, impact, current source, and remediation guidance.
+
+GitHub inline comments remain anchored only to the validated trigger. Supporting evidence, graph references, and impact paths explain the finding but cannot relocate publication.
+
+## Compatibility and migration
+
+Migration is explicit:
+
+- Harness review document version 3 is the current rich contract.
+- Version-2 harness documents remain accepted during migration. Redline maps their validated fields into version 4 records and labels every unavailable rich field as legacy-derived or unresolved; it does not reinterpret missing evidence as completed analysis.
+- Per-file record version 4 adds the rich finding and rejected-candidate contract.
+- PR-level record version 1 is the authoritative publication summary.
+- Run summary version 3 remains unchanged as a subordinate compatibility artifact.
+- Review policy `redline-file-review/v3` lives in `prompts/v5/`.
+
+The extra verification, specialist, remediation-execution, and learning stages are not implemented by this contract change.

@@ -7,8 +7,9 @@ import {
   renderSummaryBody,
   summaryMarker,
 } from '../../src/publish/render.js';
-import type { FileReviewRecord, PublishedFinding, ReviewRunSummary } from '../../src/review/types.js';
+import type { FileReviewRecord, PublishedFinding } from '../../src/review/types.js';
 import type { ReviewScope } from '../../src/publish/types.js';
+import { publishedFinding, pullRequestReview } from '../helpers/finding.js';
 
 const HEAD = 'b'.repeat(40);
 const SCOPE: ReviewScope = { repository: 'owner/repository', pullRequest: 14, head: HEAD };
@@ -22,13 +23,10 @@ const DISABLED_CONTEXT = {
 };
 
 function finding(overrides: Partial<PublishedFinding> = {}): PublishedFinding {
-  return {
+  return publishedFinding({
     id: 'f-abc123',
-    category: 'correctness',
-    classification: 'defect',
+    title: 'Missing guard returns the wrong value',
     severity: 'high',
-    confidence: 0.9,
-    side: 'RIGHT',
     startLine: 3,
     endLine: 5,
     evidence: 'const value = compute(input);',
@@ -37,11 +35,11 @@ function finding(overrides: Partial<PublishedFinding> = {}): PublishedFinding {
     suggestion: '-const value = compute(input);\n+const value = guarded(input);',
     fixPrompt: 'Fix one code-review finding.\n\nLocation: src/example.ts:3-5',
     ...overrides,
-  };
+  });
 }
 
 const RECORD: FileReviewRecord = {
-  version: 3,
+  version: 4,
   fileId: '000001',
   path: 'src/example.ts',
   status: 'M',
@@ -50,41 +48,35 @@ const RECORD: FileReviewRecord = {
   codeContext: DISABLED_CONTEXT,
   outcome: 'findings',
   findings: [finding()],
+  rejectedCandidates: [],
   durationMs: 900,
 };
 
-const SUMMARY: ReviewRunSummary = {
-  version: 3,
-  harness: 'pi',
+const REVIEW = pullRequestReview({
   model: 'z-ai/glm-5.3-flash',
   provider: 'openrouter',
-  findingScope: 'defects',
-  base: 'a'.repeat(40),
   head: HEAD,
-  manifestFiles: 3,
-  reviewedFiles: 2,
-  omittedFiles: 0,
-  findings: 1,
-  codeContext: { ...DISABLED_CONTEXT, filesWithContext: 0 },
+  findings: [{ ...finding(), triggerFileId: '000001', triggerPath: 'src/example.ts' }],
+  verdict: { status: 'blocked', reasons: ['f-abc123: unresolved high defect'] },
   files: [
     {
       fileId: '000001',
       path: 'src/example.ts',
       outcome: 'findings',
+      findingIds: ['f-abc123'],
+      rejectedCandidates: 0,
       codeContext: DISABLED_CONTEXT,
-      findingCount: 1,
-      findingSpans: ['3-5'],
     },
     {
       fileId: '000002',
       path: 'src/other.ts',
       outcome: 'clean',
+      findingIds: [],
+      rejectedCandidates: 0,
       codeContext: DISABLED_CONTEXT,
-      findingCount: 0,
-      findingSpans: [],
     },
   ],
-};
+});
 
 describe('markers', () => {
   it('embeds scope and ownership into machine-readable markers', () => {
@@ -97,7 +89,7 @@ describe('markers', () => {
 describe('renderFindingComment', () => {
   it('renders explanation, GitHub-format suggestion block, fix prompt, and the marker', () => {
     const body = renderFindingComment(SCOPE, 'src/example.ts', finding());
-    expect(body).toContain('**high defect (correctness)** — `src/example.ts:3-5` (side RIGHT), confidence 0.9');
+    expect(body).toContain('**Missing guard returns the wrong value** — `src/example.ts:3-5` (side RIGHT)');
     expect(body).toContain('- **Evidence (line 3):** `const value = compute(input);`');
     expect(body).toContain('- **Impact:** Wrong value returned.');
     expect(body).toContain('**Suggested change** (apply-able):');
@@ -147,18 +139,19 @@ describe('renderFileReviewBody', () => {
 
 describe('renderSummaryBody', () => {
   it('renders run counts, per-file outcomes, and publication notes', () => {
-    const body = renderSummaryBody(SCOPE, SUMMARY, { publishedFileReviews: 1, failedFileReviews: 0, failedInlineComments: 0 });
-    expect(body).toContain('## Redline review summary');
-    expect(body).toContain('- **Files:** 3 in the manifest · 2 reviewed · 0 omitted');
+    const body = renderSummaryBody(SCOPE, REVIEW, { publishedFileReviews: 1, failedFileReviews: 0, failedInlineComments: 0 });
+    expect(body).toContain('## Redline pull request review');
+    expect(body).toContain('- **Verdict:** blocked');
+    expect(body).toContain('- **Files:** 2 reviewed · 0 omitted');
     expect(body).toContain('- **Findings:** 1');
-    expect(body).toContain('- `src/example.ts`: findings — `3-5`');
+    expect(body).toContain('- `src/example.ts`: findings — 1 finding(s)');
     expect(body).toContain('- `src/other.ts`: clean');
     expect(body).toContain('**Publication:** 1 file review published.');
     expect(body.trimEnd().split('\n').at(-1)).toBe(summaryMarker(SCOPE));
   });
 
   it('reports publication failures when present', () => {
-    const body = renderSummaryBody(SCOPE, SUMMARY, { publishedFileReviews: 0, failedFileReviews: 2, failedInlineComments: 3 });
+    const body = renderSummaryBody(SCOPE, REVIEW, { publishedFileReviews: 0, failedFileReviews: 2, failedInlineComments: 3 });
     expect(body).toContain('**Publication:** no file reviews to publish.');
     expect(body).toContain('**Publication failures:** 2 file reviews, 3 inline comments.');
   });

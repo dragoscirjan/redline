@@ -15,7 +15,7 @@
       "cleanFixturesWithFalsePositives": 1,
       "claimedMatches": 1,
       "validEvidenceMatches": 1,
-      "promptBytes": 31707,
+      "promptBytes": 43619,
       "reviewDurationMs": 39,
       "codeContextCoverage": {
         "disabled": 4,
@@ -54,7 +54,7 @@
           "duplicateFindings": 0,
           "claimedMatches": 0,
           "validEvidenceMatches": 0,
-          "promptBytes": 7913,
+          "promptBytes": 10891,
           "reviewDurationMs": 9
         },
         {
@@ -82,7 +82,7 @@
           "duplicateFindings": 0,
           "claimedMatches": 0,
           "validEvidenceMatches": 0,
-          "promptBytes": 7902,
+          "promptBytes": 10880,
           "reviewDurationMs": 8
         },
         {
@@ -114,7 +114,7 @@
           "duplicateFindings": 0,
           "claimedMatches": 0,
           "validEvidenceMatches": 0,
-          "promptBytes": 7795,
+          "promptBytes": 10773,
           "reviewDurationMs": 10
         },
         {
@@ -142,7 +142,7 @@
           "duplicateFindings": 0,
           "claimedMatches": 1,
           "validEvidenceMatches": 1,
-          "promptBytes": 8097,
+          "promptBytes": 11075,
           "reviewDurationMs": 12
         }
       ]
@@ -160,7 +160,7 @@
       "cleanFixturesWithFalsePositives": 0,
       "claimedMatches": 2,
       "validEvidenceMatches": 2,
-      "promptBytes": 32746,
+      "promptBytes": 44658,
       "reviewDurationMs": 39,
       "codeContextCoverage": {
         "disabled": 0,
@@ -214,7 +214,7 @@
           "duplicateFindings": 0,
           "claimedMatches": 0,
           "validEvidenceMatches": 0,
-          "promptBytes": 8425,
+          "promptBytes": 11403,
           "reviewDurationMs": 9
         },
         {
@@ -251,7 +251,7 @@
           "duplicateFindings": 0,
           "claimedMatches": 0,
           "validEvidenceMatches": 0,
-          "promptBytes": 7902,
+          "promptBytes": 10880,
           "reviewDurationMs": 8
         },
         {
@@ -288,7 +288,7 @@
           "duplicateFindings": 0,
           "claimedMatches": 1,
           "validEvidenceMatches": 1,
-          "promptBytes": 8322,
+          "promptBytes": 11300,
           "reviewDurationMs": 10
         },
         {
@@ -325,7 +325,7 @@
           "duplicateFindings": 0,
           "claimedMatches": 1,
           "validEvidenceMatches": 1,
-          "promptBytes": 8097,
+          "promptBytes": 11075,
           "reviewDurationMs": 12
         }
       ]

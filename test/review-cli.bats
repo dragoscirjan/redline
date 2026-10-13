@@ -67,6 +67,8 @@ build_bundle() {
   [[ "$output" == *'"reviewedFiles":1'* ]]
   [ -f "$TMP/output/reviews/000001.json" ]
   [ -f "$TMP/output/reviews/000001.md" ]
+  [ -f "$TMP/output/reviews/review.json" ]
+  [ -f "$TMP/output/reviews/review.md" ]
   [ -f "$TMP/output/reviews/summary.json" ]
   [ -f "$TMP/output/reviews/summary.md" ]
   grep -Fq '"outcome": "clean"' "$TMP/output/reviews/000001.json"

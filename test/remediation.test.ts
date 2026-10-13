@@ -13,22 +13,21 @@ import {
 } from '../src/review/remediation.js';
 import type { ValidatedFinding } from '../src/review/types.js';
 import { createBundleFixture } from './helpers/bundle.js';
+import { reviewFinding } from './helpers/finding.js';
 
 const MULTI_LINE_DIFF =
   'diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1,4 +1,4 @@\n context\n-old1\n-old2\n+new1\n+new2\n ctx2\n';
 
 function validatedFinding(overrides: Partial<ValidatedFinding> = {}): ValidatedFinding {
   return {
-    category: 'correctness',
-    classification: 'defect',
-    severity: 'high',
-    confidence: 0.9,
-    side: 'RIGHT',
-    startLine: 2,
-    endLine: 3,
-    evidence: 'new1',
-    impact: 'Wrong result.',
-    fix: 'Restore the guard.',
+    ...reviewFinding({
+      severity: 'high',
+      startLine: 2,
+      endLine: 3,
+      evidence: 'new1',
+      impact: 'Wrong result.',
+      fix: 'Restore the guard.',
+    }),
     id: 'f-abc123',
     ...overrides,
   };

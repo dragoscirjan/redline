@@ -1,43 +1,66 @@
 /**
- * Parses and validates the per-file review document a harness returns.
- *
- * Model output is untrusted and rejected rather than guessed: the document
- * must match the exact schema, target the file under review, and every
- * finding must anchor to changed lines of the authoritative diff — both
- * span endpoints must be changed lines and the evidence must be
- * byte-identical to the start line. Findings that fail validation
- * invalidate the whole document (the caller records an invalid-output
- * outcome instead of publishing an unvalidated finding).
+ * Parses untrusted per-file review documents and validates changed-line
+ * triggers against the authoritative diff. Candidate failures are isolated:
+ * one malformed or ungrounded finding cannot erase unrelated valid ones.
  */
 
 import { createHash } from 'node:crypto';
 import { assertOnlyKeys, isRecord, type ReviewManifestFile } from './bundle.js';
 import type {
+  EvidenceRole,
   FindingCategory,
   FindingClassification,
+  FindingReversibility,
   FindingScope,
   FindingSeverity,
   FindingSide,
+  GraphReference,
+  ImpactPath,
+  RejectedCandidate,
+  RemediationStatus,
+  ReviewDimension,
   ReviewFinding,
+  SourceEvidence,
   ValidatedFinding,
 } from './types.js';
 
-export const FILE_REVIEW_DOCUMENT_VERSION = 2 as const;
+export const FILE_REVIEW_DOCUMENT_VERSION = 3 as const;
+export const LEGACY_FILE_REVIEW_DOCUMENT_VERSION = 2 as const;
 export const MAX_FILE_FINDINGS = 10;
 export const MAX_SUGGESTED_CHANGE_CHARS = 8 * 1024;
 
 const CATEGORIES = ['correctness', 'security', 'regression', 'testing', 'operational', 'maintainability'] as const;
-const CLASSIFICATIONS = ['defect', 'risk'] as const;
+const DIMENSIONS = [...CATEGORIES, 'compatibility', 'data-integrity', 'architecture'] as const;
+const CLASSIFICATIONS = ['defect', 'risk', 'test-gap', 'design-debt', 'question'] as const;
 const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 const SIDES = ['LEFT', 'RIGHT'] as const;
 const OUTCOMES = ['clean', 'findings', 'omitted'] as const;
+const EVIDENCE_ROLES = ['missing-guard', 'caller-assumption', 'contract', 'schema', 'test-gap', 'impact-path'] as const;
+const REVERSIBILITY = ['reversible', 'partially-reversible', 'irreversible', 'unknown'] as const;
+const GRAPH_RESOLUTIONS = ['exact', 'approximate', 'unresolved'] as const;
+const COMMIT_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
+const SHA256_PATTERN = /^sha256:[0-9a-f]{64}$/u;
+const MAX_SUPPORTING_EVIDENCE = 12;
+const MAX_GRAPH_REFERENCES = 8;
+const MAX_IMPACT_PATH_STEPS = 16;
+const MAX_TEXT_LIST = 8;
 
 export interface FileReviewDocument {
-  readonly version: typeof FILE_REVIEW_DOCUMENT_VERSION;
+  readonly version: typeof FILE_REVIEW_DOCUMENT_VERSION | typeof LEGACY_FILE_REVIEW_DOCUMENT_VERSION;
   readonly fileId: string;
   readonly outcome: 'clean' | 'findings' | 'omitted';
   readonly reason: string | undefined;
   readonly findings: readonly ReviewFinding[];
+  /** Original raw-array index for each successfully parsed finding. */
+  readonly candidateIndices: readonly number[];
+  readonly rejectedCandidates: readonly RejectedCandidate[];
+}
+
+export interface CandidateValidationResult {
+  readonly findings: readonly ValidatedFinding[];
+  /** Original raw-array index for each validated finding. */
+  readonly candidateIndices: readonly number[];
+  readonly rejectedCandidates: readonly RejectedCandidate[];
 }
 
 function enumValue<const T extends readonly string[]>(value: unknown, values: T, label: string): T[number] {
@@ -59,11 +82,152 @@ function positiveInteger(value: unknown, label: string): number {
   return value as number;
 }
 
-function parseFinding(value: unknown): ReviewFinding {
+function nonNegativeInteger(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw new Error(`${label} must be a non-negative integer`);
+  }
+  return value as number;
+}
+
+function lineRange(value: Record<string, unknown>, label: string): { startLine: number; endLine: number } {
+  const startLine = positiveInteger(value.startLine, `${label}.startLine`);
+  const endLine = positiveInteger(value.endLine, `${label}.endLine`);
+  if (startLine > endLine) throw new Error(`${label}.startLine must not exceed endLine`);
+  return { startLine, endLine };
+}
+
+function stringList(value: unknown, label: string): readonly string[] {
+  if (!Array.isArray(value) || value.length > MAX_TEXT_LIST) throw new Error(`${label} must be a bounded array`);
+  return value.map((item, index) => boundedString(item, `${label}[${index}]`, 1_024));
+}
+
+function enumList<const T extends readonly string[]>(
+  value: unknown,
+  values: T,
+  label: string,
+): readonly T[number][] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > values.length) {
+    throw new Error(`${label} must be a non-empty bounded array`);
+  }
+  const parsed = value.map((item, index) => enumValue(item, values, `${label}[${index}]`));
+  if (new Set(parsed).size !== parsed.length) throw new Error(`${label} must be unique`);
+  return parsed;
+}
+
+function parseSourceEvidence(value: unknown, label: string): SourceEvidence {
+  if (!isRecord(value)) throw new Error(`${label} must be an object`);
+  assertOnlyKeys(value, ['role', 'revision', 'path', 'startLine', 'endLine', 'evidence'], label);
+  const revision = boundedString(value.revision, `${label}.revision`, 64);
+  if (!COMMIT_PATTERN.test(revision)) throw new Error(`${label}.revision must be a full commit identifier`);
+  const range = lineRange(value, label);
+  return {
+    role: enumValue(value.role, EVIDENCE_ROLES, `${label}.role`) as EvidenceRole,
+    revision,
+    path: boundedString(value.path, `${label}.path`, 4_096),
+    ...range,
+    evidence: boundedString(value.evidence, `${label}.evidence`, 4_096),
+  };
+}
+
+export function graphReferenceDigest(
+  reference: Omit<GraphReference, 'graphFactDigest'>,
+): `sha256:${string}` {
+  const canonical = JSON.stringify({
+    provider: reference.provider,
+    providerVersion: reference.providerVersion,
+    snapshotRevision: reference.snapshotRevision,
+    capability: reference.capability,
+    query: reference.query,
+    relationship: reference.relationship,
+    resolution: reference.resolution,
+  });
+  return `sha256:${createHash('sha256').update(canonical, 'utf8').digest('hex')}`;
+}
+
+function parseGraphReference(value: unknown, label: string): GraphReference {
+  if (!isRecord(value)) throw new Error(`${label} must be an object`);
+  assertOnlyKeys(
+    value,
+    [
+      'provider',
+      'providerVersion',
+      'snapshotRevision',
+      'capability',
+      'query',
+      'relationship',
+      'resolution',
+      'graphFactDigest',
+    ],
+    label,
+  );
+  const snapshotRevision = boundedString(value.snapshotRevision, `${label}.snapshotRevision`, 64);
+  if (!COMMIT_PATTERN.test(snapshotRevision)) {
+    throw new Error(`${label}.snapshotRevision must be a full commit identifier`);
+  }
+  const graphFactDigest = boundedString(value.graphFactDigest, `${label}.graphFactDigest`, 71);
+  if (!SHA256_PATTERN.test(graphFactDigest)) throw new Error(`${label}.graphFactDigest must be sha256`);
+  const reference: GraphReference = {
+    provider: boundedString(value.provider, `${label}.provider`, 64),
+    providerVersion: boundedString(value.providerVersion, `${label}.providerVersion`, 128),
+    snapshotRevision,
+    capability: boundedString(value.capability, `${label}.capability`, 128),
+    query: boundedString(value.query, `${label}.query`, 2_048),
+    relationship: boundedString(value.relationship, `${label}.relationship`, 256),
+    resolution: enumValue(value.resolution, GRAPH_RESOLUTIONS, `${label}.resolution`),
+    graphFactDigest: graphFactDigest as `sha256:${string}`,
+  };
+  if (reference.graphFactDigest !== graphReferenceDigest(reference)) {
+    throw new Error(`${label}.graphFactDigest does not match the graph fact identity`);
+  }
+  return reference;
+}
+
+function parseImpactPath(
+  value: unknown,
+  supportingEvidenceCount: number,
+  graphReferenceCount: number,
+): ImpactPath {
+  if (!isRecord(value)) throw new Error('finding.impactPath must be an object');
+  assertOnlyKeys(value, ['status', 'steps', 'limitation'], 'finding.impactPath');
+  const status = enumValue(value.status, ['complete', 'partial', 'unresolved'] as const, 'finding.impactPath.status');
+  if (!Array.isArray(value.steps) || value.steps.length > MAX_IMPACT_PATH_STEPS) {
+    throw new Error('finding.impactPath.steps must be a bounded array');
+  }
+  const steps = value.steps.map((item, index) => {
+    const label = `finding.impactPath.steps[${index}]`;
+    if (!isRecord(item)) throw new Error(`${label} must be an object`);
+    assertOnlyKeys(item, ['from', 'to', 'relationship', 'evidence', 'referenceIndex'], label);
+    const evidence = enumValue(item.evidence, ['source', 'graph'] as const, `${label}.evidence`);
+    const referenceIndex = nonNegativeInteger(item.referenceIndex, `${label}.referenceIndex`);
+    const available = evidence === 'source' ? supportingEvidenceCount : graphReferenceCount;
+    if (referenceIndex >= available) throw new Error(`${label}.referenceIndex is out of range`);
+    return {
+      from: boundedString(item.from, `${label}.from`, 512),
+      to: boundedString(item.to, `${label}.to`, 512),
+      relationship: boundedString(item.relationship, `${label}.relationship`, 512),
+      evidence,
+      referenceIndex,
+    };
+  });
+  if (status === 'complete' && steps.length === 0) {
+    throw new Error('finding.impactPath.steps must not be empty when status is complete');
+  }
+  const limitation = value.limitation === undefined
+    ? undefined
+    : boundedString(value.limitation, 'finding.impactPath.limitation', 2_048);
+  if (status !== 'complete' && limitation === undefined) {
+    throw new Error('finding.impactPath.limitation is required unless status is complete');
+  }
+  return { status, steps, ...(limitation === undefined ? {} : { limitation }) };
+}
+
+function parseRichFinding(value: unknown): ReviewFinding {
   if (!isRecord(value)) throw new Error('finding must be an object');
   assertOnlyKeys(
     value,
     [
+      'title',
+      'dimensions',
       'category',
       'classification',
       'severity',
@@ -72,8 +236,23 @@ function parseFinding(value: unknown): ReviewFinding {
       'startLine',
       'endLine',
       'evidence',
+      'supportingEvidence',
+      'graphReferences',
+      'impactPath',
+      'behavioralContract',
+      'failureScenario',
+      'reachability',
+      'rootCause',
       'impact',
+      'blastRadius',
+      'reversibility',
+      'assumptions',
+      'counterEvidence',
+      'uncertainty',
       'fix',
+      'regressionTest',
+      'verification',
+      'remediationStatus',
       'suggestedChange',
     ],
     'finding',
@@ -84,45 +263,130 @@ function parseFinding(value: unknown): ReviewFinding {
   if (value.confidence < 0 || value.confidence > 1) {
     throw new Error('finding.confidence must be between 0 and 1');
   }
-  const startLine = positiveInteger(value.startLine, 'finding.startLine');
-  const endLine = positiveInteger(value.endLine, 'finding.endLine');
-  if (startLine > endLine) {
-    throw new Error('finding.startLine must not exceed finding.endLine');
+  const range = lineRange(value, 'finding');
+  if (!Array.isArray(value.supportingEvidence) || value.supportingEvidence.length > MAX_SUPPORTING_EVIDENCE) {
+    throw new Error('finding.supportingEvidence must be a bounded array');
   }
-  const suggestedChange =
-    value.suggestedChange === undefined
-      ? undefined
-      : boundedString(value.suggestedChange, 'finding.suggestedChange', MAX_SUGGESTED_CHANGE_CHARS);
+  if (!Array.isArray(value.graphReferences) || value.graphReferences.length > MAX_GRAPH_REFERENCES) {
+    throw new Error('finding.graphReferences must be a bounded array');
+  }
+  if (!isRecord(value.verification)) throw new Error('finding.verification must be an object');
+  assertOnlyKeys(value.verification, ['status', 'reason'], 'finding.verification');
+  if (value.verification.status !== 'unverified') {
+    throw new Error('finding.verification.status must be unverified during discovery');
+  }
+  const remediationStatus = enumValue(
+    value.remediationStatus,
+    ['guidance', 'proposed'] as const,
+    'finding.remediationStatus',
+  ) as RemediationStatus;
+  const supportingEvidence = value.supportingEvidence.map((item, index) =>
+    parseSourceEvidence(item, `finding.supportingEvidence[${index}]`));
+  const graphReferences = value.graphReferences.map((item, index) =>
+    parseGraphReference(item, `finding.graphReferences[${index}]`));
+  const impactPath = parseImpactPath(value.impactPath, supportingEvidence.length, graphReferences.length);
+  const suggestedChange = value.suggestedChange === undefined
+    ? undefined
+    : boundedString(value.suggestedChange, 'finding.suggestedChange', MAX_SUGGESTED_CHANGE_CHARS);
   return {
-    category: enumValue(value.category, CATEGORIES, 'finding.category'),
-    classification: enumValue(value.classification, CLASSIFICATIONS, 'finding.classification'),
-    severity: enumValue(value.severity, SEVERITIES, 'finding.severity'),
+    title: boundedString(value.title, 'finding.title', 200),
+    dimensions: enumList(value.dimensions, DIMENSIONS, 'finding.dimensions') as readonly ReviewDimension[],
+    category: enumValue(value.category, CATEGORIES, 'finding.category') as FindingCategory,
+    classification: enumValue(value.classification, CLASSIFICATIONS, 'finding.classification') as FindingClassification,
+    severity: enumValue(value.severity, SEVERITIES, 'finding.severity') as FindingSeverity,
     confidence: value.confidence,
-    side: enumValue(value.side, SIDES, 'finding.side'),
-    startLine,
-    endLine,
+    side: enumValue(value.side, SIDES, 'finding.side') as FindingSide,
+    ...range,
     evidence: boundedString(value.evidence, 'finding.evidence', 4_096),
+    supportingEvidence,
+    graphReferences,
+    impactPath,
+    behavioralContract: boundedString(value.behavioralContract, 'finding.behavioralContract', 4_096),
+    failureScenario: boundedString(value.failureScenario, 'finding.failureScenario', 4_096),
+    reachability: boundedString(value.reachability, 'finding.reachability', 4_096),
+    rootCause: boundedString(value.rootCause, 'finding.rootCause', 4_096),
     impact: boundedString(value.impact, 'finding.impact', 4_096),
+    blastRadius: boundedString(value.blastRadius, 'finding.blastRadius', 4_096),
+    reversibility: enumValue(value.reversibility, REVERSIBILITY, 'finding.reversibility') as FindingReversibility,
+    assumptions: stringList(value.assumptions, 'finding.assumptions'),
+    counterEvidence: stringList(value.counterEvidence, 'finding.counterEvidence'),
+    uncertainty: boundedString(value.uncertainty, 'finding.uncertainty', 4_096),
     fix: boundedString(value.fix, 'finding.fix', 4_096),
+    regressionTest: boundedString(value.regressionTest, 'finding.regressionTest', 4_096),
+    verification: {
+      status: 'unverified',
+      reason: boundedString(value.verification.reason, 'finding.verification.reason', 1_024),
+    },
+    remediationStatus,
     ...(suggestedChange !== undefined ? { suggestedChange } : {}),
   };
 }
 
-/**
- * Models frequently wrap a JSON payload in a markdown code fence even when
- * instructed not to. When the entire payload is exactly one fenced block,
- * unwrap it — inner fences inside string values are fine because the
- * closing fence is anchored to the end of the payload. Anything that does
- * not match stays unwrapped and fails the strict JSON parse below.
- * Validation is unchanged — this only normalizes the container.
- */
+function parseLegacyFinding(value: unknown): ReviewFinding {
+  if (!isRecord(value)) throw new Error('finding must be an object');
+  assertOnlyKeys(
+    value,
+    ['category', 'classification', 'severity', 'confidence', 'side', 'startLine', 'endLine', 'evidence', 'impact', 'fix', 'suggestedChange'],
+    'finding',
+  );
+  if (typeof value.confidence !== 'number' || !Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1) {
+    throw new Error('finding.confidence must be between 0 and 1');
+  }
+  const range = lineRange(value, 'finding');
+  const category = enumValue(value.category, CATEGORIES, 'finding.category') as FindingCategory;
+  const classification = enumValue(value.classification, ['defect', 'risk'] as const, 'finding.classification');
+  const impact = boundedString(value.impact, 'finding.impact', 4_096);
+  const fix = boundedString(value.fix, 'finding.fix', 4_096);
+  const suggestedChange = value.suggestedChange === undefined
+    ? undefined
+    : boundedString(value.suggestedChange, 'finding.suggestedChange', MAX_SUGGESTED_CHANGE_CHARS);
+  return {
+    title: `${classification === 'defect' ? 'Defect' : 'Risk'}: ${impact.slice(0, 160)}`,
+    dimensions: [category],
+    category,
+    classification,
+    severity: enumValue(value.severity, SEVERITIES, 'finding.severity') as FindingSeverity,
+    confidence: value.confidence,
+    side: enumValue(value.side, SIDES, 'finding.side') as FindingSide,
+    ...range,
+    evidence: boundedString(value.evidence, 'finding.evidence', 4_096),
+    supportingEvidence: [],
+    graphReferences: [],
+    impactPath: {
+      status: 'unresolved',
+      steps: [],
+      limitation: 'Legacy v2 review document did not include a validated impact path.',
+    },
+    behavioralContract: 'Legacy v2 review document did not state the behavioral contract separately.',
+    failureScenario: impact,
+    reachability: 'Legacy v2 review document did not state reachability separately.',
+    rootCause: impact,
+    impact,
+    blastRadius: impact,
+    reversibility: 'unknown',
+    assumptions: [],
+    counterEvidence: [],
+    uncertainty: 'Legacy v2 review document omitted structured uncertainty.',
+    fix,
+    regressionTest: 'Add a regression test that reproduces the stated impact before the fix and passes after it.',
+    verification: { status: 'unverified', reason: 'Independent verification has not run.' },
+    remediationStatus: suggestedChange === undefined ? 'guidance' : 'proposed',
+    ...(suggestedChange !== undefined ? { suggestedChange } : {}),
+  };
+}
+
 function unwrapCodeFence(raw: string): string {
   const trimmed = raw.trim();
   const match = /^```[^\n]*\n([\s\S]*?)\n?```$/u.exec(trimmed);
   return match === null ? trimmed : (match[1] as string);
 }
 
-/** Parses the raw model text as exactly one review document. */
+function rejection(index: number, stage: RejectedCandidate['stage'], code: string, error: unknown): RejectedCandidate {
+  const message = error instanceof Error ? error.message : String(error);
+  return { index, stage, code, reason: message.slice(0, 500) };
+}
+
+/** Parses one v3 document or intentionally migrates a v2 document in memory. */
 export function parseFileReviewDocument(raw: string): FileReviewDocument {
   let decoded: unknown;
   try {
@@ -132,24 +396,15 @@ export function parseFileReviewDocument(raw: string): FileReviewDocument {
   }
   if (!isRecord(decoded)) throw new Error('review document must be an object');
   assertOnlyKeys(decoded, ['version', 'fileId', 'outcome', 'reason', 'findings'], 'review document');
-  if (decoded.version !== FILE_REVIEW_DOCUMENT_VERSION) {
+  if (decoded.version !== FILE_REVIEW_DOCUMENT_VERSION && decoded.version !== LEGACY_FILE_REVIEW_DOCUMENT_VERSION) {
     throw new Error('review document uses an unsupported version');
   }
+  const version = decoded.version;
   const fileId = boundedString(decoded.fileId, 'review document.fileId', 6);
   const outcome = enumValue(decoded.outcome, OUTCOMES, 'review document.outcome');
-  // Envelope tolerances for local and small models (the v2 schema is
-  // enforced on everything that carries meaning): a reason on a
-  // non-omitted outcome is dropped — only omission carries a reason in
-  // records — and an absent findings array on a non-findings outcome
-  // defaults to empty. Findings themselves, span anchoring, and evidence
-  // keep full strict validation.
   let reason: string | undefined;
-  if (
-    (typeof decoded.reason === 'string' && decoded.reason.trim().length === 0) ||
-    decoded.reason === null
-  ) {
-    // Empty-string or null reason: absent, whatever the outcome. Models
-    // emit these routinely alongside findings.
+  if ((typeof decoded.reason === 'string' && decoded.reason.trim().length === 0) || decoded.reason === null) {
+    // Empty omission reasons are treated as absent.
   } else if (decoded.reason !== undefined) {
     const provided = boundedString(decoded.reason, 'review document.reason', 500);
     if (outcome === 'omitted') reason = provided;
@@ -162,23 +417,27 @@ export function parseFileReviewDocument(raw: string): FileReviewDocument {
   if (rawFindings.length > MAX_FILE_FINDINGS) {
     throw new Error(`review document.findings exceeds the ${MAX_FILE_FINDINGS}-finding limit`);
   }
-  const findings = rawFindings.map((item) => parseFinding(item));
-  if (outcome === 'clean' && findings.length > 0) {
-    throw new Error('clean outcome is inconsistent with findings');
+  if (outcome === 'clean' && rawFindings.length > 0) {
+    throw new Error('clean outcome is inconsistent with candidate findings');
   }
-  if (outcome === 'findings' && findings.length === 0) {
-    throw new Error('findings outcome requires at least one finding');
+  if (outcome === 'findings' && rawFindings.length === 0) {
+    throw new Error('findings outcome requires at least one candidate finding');
   }
-  return Object.freeze({ version: FILE_REVIEW_DOCUMENT_VERSION, fileId, outcome, reason, findings });
+
+  const findings: ReviewFinding[] = [];
+  const candidateIndices: number[] = [];
+  const rejectedCandidates: RejectedCandidate[] = [];
+  rawFindings.forEach((item, index) => {
+    try {
+      findings.push(version === FILE_REVIEW_DOCUMENT_VERSION ? parseRichFinding(item) : parseLegacyFinding(item));
+      candidateIndices.push(index);
+    } catch (error) {
+      rejectedCandidates.push(rejection(index, 'parse', 'candidate-schema-invalid', error));
+    }
+  });
+  return Object.freeze({ version, fileId, outcome, reason, findings, candidateIndices, rejectedCandidates });
 }
 
-/**
- * A unified diff mapped to its lines: `left` holds removed lines keyed by
- * old-file line number, `right` holds added lines keyed by new-file line
- * number, and the context maps hold the unchanged lines each side carries
- * inside hunks, keyed per side (context lines sit at different numbers on
- * the two sides when a hunk adds or removes lines above them).
- */
 export interface ChangedLines {
   readonly left: ReadonlyMap<number, string>;
   readonly right: ReadonlyMap<number, string>;
@@ -186,9 +445,6 @@ export interface ChangedLines {
   readonly contextRight: ReadonlyMap<number, string>;
 }
 
-/**
- * Maps a unified diff to its changed lines and hunk context lines.
- */
 export function parseChangedLines(diff: string, label: string): ChangedLines {
   const left = new Map<number, string>();
   const right = new Map<number, string>();
@@ -197,7 +453,6 @@ export function parseChangedLines(diff: string, label: string): ChangedLines {
   let oldLine = 0;
   let newLine = 0;
   let inHunk = false;
-
   for (const rawLine of diff.split('\n')) {
     const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/u.exec(rawLine);
     if (hunk) {
@@ -227,34 +482,19 @@ export function parseChangedLines(diff: string, label: string): ChangedLines {
       inHunk = false;
     }
   }
-
   return { left, right, contextLeft, contextRight };
 }
 
 function stableFindingId(finding: ReviewFinding, manifestFile: ReviewManifestFile): string {
   const normalized = JSON.stringify({
-    category: finding.category,
-    classification: finding.classification,
-    severity: finding.severity,
-    confidence: finding.confidence,
+    ...finding,
+    suggestedChange: undefined,
     fileId: manifestFile.id,
     path: manifestFile.newPath ?? manifestFile.oldPath,
-    side: finding.side,
-    startLine: finding.startLine,
-    endLine: finding.endLine,
-    evidence: finding.evidence,
-    impact: finding.impact,
-    fix: finding.fix,
   });
   return `f-${createHash('sha256').update(normalized, 'utf8').digest('hex').slice(0, 24)}`;
 }
 
-/**
- * Validates findings for one file against its manifest entry and the
- * authoritative diff. A finding is accepted only when both span endpoints
- * resolve to changed lines on the claimed side and its evidence is
- * byte-identical to the start line of that side.
- */
 export class FileReviewValidator {
   readonly changed: ChangedLines;
   readonly #manifestFile: ReviewManifestFile;
@@ -271,10 +511,12 @@ export class FileReviewValidator {
   }
 
   validateFinding(finding: ReviewFinding): ValidatedFinding {
-    const manifestFile = this.#manifestFile;
-    if (manifestFile.binary) throw new Error('finding cannot target a binary diff');
-    if (this.#findingScope === 'defects' && finding.classification === 'risk') {
-      throw new Error('risk finding is disabled by the configured finding scope');
+    if (this.#manifestFile.binary) throw new Error('finding cannot target a binary diff');
+    if (
+      this.#findingScope === 'defects'
+      && (finding.classification === 'risk' || finding.classification === 'design-debt')
+    ) {
+      throw new Error(`${finding.classification} finding is disabled by the configured finding scope`);
     }
     const changed = finding.side === 'RIGHT' ? this.changed.right : this.changed.left;
     const startEvidence = changed.get(finding.startLine);
@@ -287,19 +529,66 @@ export class FileReviewValidator {
     if (finding.evidence !== startEvidence) {
       throw new Error('finding evidence does not match the authoritative diff line');
     }
-    return { ...finding, id: stableFindingId(finding, manifestFile) };
+    return { ...finding, id: stableFindingId(finding, this.#manifestFile) };
   }
 
-  /** Validates and deduplicates the findings of one review document. */
-  validateFindings(findings: readonly ReviewFinding[]): readonly ValidatedFinding[] {
-    const validated: ValidatedFinding[] = [];
-    const seen = new Set<string>();
-    for (const finding of findings) {
-      const checked = this.validateFinding(finding);
-      if (seen.has(checked.id)) continue;
-      seen.add(checked.id);
-      validated.push(checked);
+  validateCandidates(
+    findings: readonly ReviewFinding[],
+    candidateIndices: readonly number[] = findings.map((_finding, index) => index),
+  ): CandidateValidationResult {
+    if (candidateIndices.length !== findings.length) {
+      throw new Error('candidate index mapping does not match parsed findings');
     }
-    return validated;
+    const checked: Array<{ finding: ValidatedFinding; index: number }> = [];
+    const rejectedCandidates: RejectedCandidate[] = [];
+    findings.forEach((finding, position) => {
+      const index = candidateIndices[position] as number;
+      try {
+        checked.push({ finding: this.validateFinding(finding), index });
+      } catch (error) {
+        rejectedCandidates.push(rejection(index, 'validation', 'candidate-trigger-invalid', error));
+      }
+    });
+
+    const byTrigger = new Map<string, Array<{ finding: ValidatedFinding; index: number }>>();
+    for (const item of checked) {
+      const key = JSON.stringify({
+        side: item.finding.side,
+        startLine: item.finding.startLine,
+        endLine: item.finding.endLine,
+        evidence: item.finding.evidence,
+      });
+      const group = byTrigger.get(key) ?? [];
+      group.push(item);
+      byTrigger.set(key, group);
+    }
+
+    const validated: ValidatedFinding[] = [];
+    const validatedIndices: number[] = [];
+    for (const group of byTrigger.values()) {
+      const distinct = new Map(group.map((item) => [item.finding.id, item]));
+      if (distinct.size > 1) {
+        for (const item of group) {
+          rejectedCandidates.push({
+            index: item.index,
+            stage: 'validation',
+            code: 'candidate-conflict',
+            reason: 'multiple candidates make conflicting claims about the same changed trigger',
+          });
+        }
+        continue;
+      }
+      const first = group[0];
+      if (first !== undefined) {
+        validated.push(first.finding);
+        validatedIndices.push(first.index);
+      }
+    }
+    return { findings: validated, candidateIndices: validatedIndices, rejectedCandidates };
+  }
+
+  /** Compatibility helper for callers that still require all-or-nothing validation. */
+  validateFindings(findings: readonly ReviewFinding[]): readonly ValidatedFinding[] {
+    return findings.map((finding) => this.validateFinding(finding));
   }
 }

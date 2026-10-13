@@ -26,7 +26,7 @@ Consumers invoke only the published Redline action. A configured review enables 
 
 Inside `github/action.yaml`, the root composite invokes `uses: $/github/code-index` after fetching the exact base and head commits. GitHub.com's `$/` self-repository reference resolves the child action at the root action's exact running commit, so a consumer pinned to a version tag or commit cannot receive a different index action. It also avoids `./`, which would resolve against the consumer's workspace. GitHub Enterprise Server does not support `$/`; it is outside this action's current platform scope.
 
-The child writes `code-context.json` and exposes its absolute path and coverage status to the root action. The root passes that generated path through the internal review environment contract and includes the artifact in the downloadable context bundle. Consuming workflows do not supply a context path or provider configuration.
+The child writes `code-context.json` and exposes its absolute path and coverage status to the root action. The root passes that generated path through the internal review environment contract and includes the artifact in the downloadable context bundle. Consuming workflows select `cgc` or `gitnexus` through `indexing-provider`; they do not supply a context path or provider-internal commands, storage paths, or execution settings.
 
 The review validates the artifact identity and resolves every selected span again from its captured exact-head source. Missing, invalid, unsupported, or unavailable context remains file-only review with explicit degraded coverage.
 

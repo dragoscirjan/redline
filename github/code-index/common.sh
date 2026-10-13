@@ -87,7 +87,8 @@ finalize() {
   python3 "$SCRIPT_DIR/export.py" finalize \
     --output-directory "${REDLINE_CODE_INDEX_OUTPUT_DIRECTORY}" \
     --save-ms "$save_ms" \
-    --save-outcome "$save_outcome"
+    --save-outcome "$save_outcome" \
+    || return $?
 
   context_file=$(python3 -c 'import os,sys; print(os.path.realpath(os.path.join(sys.argv[1], "code-context.json")))' \
     "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY")

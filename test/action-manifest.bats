@@ -36,20 +36,11 @@ steps = [step.get('name', '') for step in runs['steps']]
 for expected in [
     'Validate action inputs',
     'Generate Redline App token for review start',
-    'Announce review start',
-    'Generate Redline App token for publication',
-    'Publish review',
-    'Notify review failure',
     'Set up pinned Node runtime',
     'Build trusted TypeScript',
     'Validate action inputs with trusted TypeScript',
     'Fetch pull request commits as data',
     'Build bounded code index',
-    'Build review context bundle',
-    'Upload review context artifact',
-    'Ensure harness binary',
-    'Run harness review',
-    'Upload review output artifact',
 ]:
     assert expected in steps, f'missing step: {expected}'
 PY

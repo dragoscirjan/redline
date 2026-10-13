@@ -42,6 +42,8 @@ EOF
   HEAD_REVISION=$(git -C "$REPOSITORY" rev-parse HEAD)
 
   export RUNNER_TEMP="$TMP_ROOT/runtime"
+  GITNEXUS_CONTROL="$RUNNER_TEMP/fake-gitnexus-control"
+  mkdir -p "$GITNEXUS_CONTROL"
   export RUNNER_OS=Linux
   export RUNNER_ARCH=X64
   export GITHUB_WORKSPACE="$REPOSITORY"
@@ -232,6 +234,18 @@ assert any(item['code'] == 'cgc-index-failed' for item in artifact['diagnostics'
 PY
 }
 
+@test "finalize propagates exporter failures" {
+  prepare_action
+  printf 'not-json\n' > "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json"
+  : > "$GITHUB_OUTPUT"
+
+  run bash "$ACTION_DIR/run.sh" finalize
+
+  [ "$status" -ne 0 ]
+  ! grep -Fq 'context-file=' "$GITHUB_OUTPUT"
+  ! grep -Fq 'status=' "$GITHUB_OUTPUT"
+}
+
 @test "unsupported changed files still build a reusable base-revision repository cache" {
   git -C "$REPOSITORY" reset -q --hard "$BASE"
   mkdir -p "$REPOSITORY/.github/workflows"
@@ -275,13 +289,13 @@ PY
   grep -Fq 'redline-code-index-v2-gitnexus-1.6.12-linux-x64-' "$GITHUB_OUTPUT"
   build_action '' success
   grep -Fq 'cache-ready=true' "$GITHUB_OUTPUT"
-  grep -Fq "analyze $RUNNER_TEMP/redline-code-index/source --index-only --skip-git --skip-fts --workers 2" "$GITNEXUS_PROVIDER/calls.log"
+  grep -Fq "analyze $RUNNER_TEMP/redline-code-index/source --index-only --skip-git --skip-fts --workers 2" "$GITNEXUS_CONTROL/calls.log"
   cp "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$TMP_ROOT/gitnexus-cold.json"
 
-  : > "$GITNEXUS_PROVIDER/calls.log"
+  : > "$GITNEXUS_CONTROL/calls.log"
   build_action 'redline-code-index-gitnexus-base-cache' success
   grep -Fq 'cache-ready=false' "$GITHUB_OUTPUT"
-  ! grep -q '^analyze ' "$GITNEXUS_PROVIDER/calls.log"
+  ! grep -q '^analyze ' "$GITNEXUS_CONTROL/calls.log"
   cp "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$TMP_ROOT/gitnexus-warm.json"
 
   python3 - "$TMP_ROOT/gitnexus-cold.json" "$TMP_ROOT/gitnexus-warm.json" "$HEAD_REVISION" <<'PY'
@@ -317,18 +331,18 @@ PY
   printf 'keep\n' > "$outside/marker"
   rm -rf "$RUNNER_TEMP/redline-code-index/cache/database"
   ln -s "$outside" "$RUNNER_TEMP/redline-code-index/cache/database"
-  : > "$GITNEXUS_PROVIDER/calls.log"
+  : > "$GITNEXUS_CONTROL/calls.log"
 
   build_action 'redline-code-index-invalid-gitnexus-cache' success
-  [ "$(grep -c '^analyze ' "$GITNEXUS_PROVIDER/calls.log")" -eq 1 ]
+  [ "$(grep -c '^analyze ' "$GITNEXUS_CONTROL/calls.log")" -eq 1 ]
   [ -f "$outside/marker" ]
   [ ! -L "$RUNNER_TEMP/redline-code-index/cache/database" ]
 
-  printf 'query-fail\n' > "$GITNEXUS_PROVIDER/mode"
-  : > "$GITNEXUS_PROVIDER/calls.log"
+  printf 'query-fail\n' > "$GITNEXUS_CONTROL/mode"
+  : > "$GITNEXUS_CONTROL/calls.log"
   build_action 'redline-code-index-valid-gitnexus-cache' success
   grep -Fq 'cache-ready=false' "$GITHUB_OUTPUT"
-  ! grep -q '^analyze ' "$GITNEXUS_PROVIDER/calls.log"
+  ! grep -q '^analyze ' "$GITNEXUS_CONTROL/calls.log"
   python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" <<'PY'
 import json, sys
 artifact = json.load(open(sys.argv[1], encoding='utf-8'))

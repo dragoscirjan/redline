@@ -1,9 +1,11 @@
 'use strict';
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
-const control = path.resolve(__dirname, '..', '..', '..');
+const control = path.join(process.env.TMPDIR || os.tmpdir(), 'fake-gitnexus-control');
+fs.mkdirSync(control, { recursive: true });
 
 class LocalBackend {
   async executeCypher(_repository, query) {

@@ -2,9 +2,11 @@
 'use strict';
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
-const control = path.resolve(__dirname, '..', '..');
+const control = path.join(process.env.TMPDIR || os.tmpdir(), 'fake-gitnexus-control');
+fs.mkdirSync(control, { recursive: true });
 const modePath = path.join(control, 'mode');
 const mode = fs.existsSync(modePath) ? fs.readFileSync(modePath, 'utf8').trim() : 'ok';
 fs.appendFileSync(path.join(control, 'calls.log'), `${process.argv.slice(2).join(' ')}\n`);

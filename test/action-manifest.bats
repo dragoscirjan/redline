@@ -41,6 +41,15 @@ for expected in [
     'Validate action inputs with trusted TypeScript',
     'Fetch pull request commits as data',
     'Build bounded code index',
+    'Build review context bundle',
+    'Upload review context artifact',
+    'Ensure harness binary',
+    'Announce review start',
+    'Run harness review',
+    'Generate Redline App token for publication',
+    'Publish review',
+    'Notify review failure',
+    'Upload review output artifact',
 ]:
     assert expected in steps, f'missing step: {expected}'
 PY

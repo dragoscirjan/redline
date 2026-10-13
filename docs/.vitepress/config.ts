@@ -34,7 +34,6 @@ export default defineConfig({
           { text: 'Review-quality benchmark', link: '/review-quality-benchmark' },
           { text: 'Change-impact planning', link: '/change-impact' },
           { text: 'Code intelligence', link: '/code-intelligence' },
-          { text: 'Artifact cache', link: '/artifact-cache' },
           { text: 'Review output', link: '/review-reporting' },
         ],
       },

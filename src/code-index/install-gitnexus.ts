@@ -1,9 +1,6 @@
-import { lstat, mkdir } from 'node:fs/promises';
-import { delimiter, dirname, isAbsolute, join } from 'node:path';
-import {
-  GitNexusInstaller,
-  createGitNexusDescriptor,
-} from '../artifact-cache/installers/gitnexus.js';
+import { mkdir } from 'node:fs/promises';
+import { delimiter, dirname, isAbsolute } from 'node:path';
+import { installGitNexus } from './gitnexus-installer.js';
 
 const INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -24,7 +21,6 @@ async function main(): Promise<void> {
   const tarExecutable = requiredAbsolutePath(tarValue, 'tar executable');
   await mkdir(workDirectory, { recursive: true, mode: 0o755 });
 
-  const descriptor = createGitNexusDescriptor();
   const safePath = [...new Set([
     dirname(nodeExecutable),
     dirname(npmExecutable),
@@ -33,10 +29,13 @@ async function main(): Promise<void> {
     '/usr/bin',
     '/bin',
   ])].join(delimiter);
-  const installer = new GitNexusInstaller({
+  const executable = await installGitNexus({
+    destinationDirectory,
+    workDirectory,
     nodeExecutable,
     npmExecutable,
     tarExecutable,
+    timeoutMs: INSTALL_TIMEOUT_MS,
     environment: {
       HOME: workDirectory,
       PATH: safePath,
@@ -45,30 +44,6 @@ async function main(): Promise<void> {
       TMPDIR: workDirectory,
     },
   });
-  const installed = await installer.install({
-    descriptor,
-    destinationDirectory,
-    workDirectory,
-    timeoutMs: INSTALL_TIMEOUT_MS,
-  });
-  if (installed.status !== 'installed') {
-    throw new Error(`GitNexus installation ended with status ${installed.status}`);
-  }
-  const validated = await installer.validate({
-    descriptor,
-    installationDirectory: destinationDirectory,
-    manifest: installed.manifest,
-    timeoutMs: 60_000,
-  });
-  if (validated.status !== 'valid') {
-    throw new Error(`GitNexus validation ended with status ${validated.status}`);
-  }
-
-  const executable = join(destinationDirectory, 'dist', 'cli', 'index.js');
-  const info = await lstat(executable);
-  if (!info.isFile() || info.isSymbolicLink()) {
-    throw new Error('GitNexus CLI is not a regular file');
-  }
   process.stdout.write(`${executable}\n`);
 }
 

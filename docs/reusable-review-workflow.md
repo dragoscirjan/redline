@@ -18,6 +18,7 @@ jobs:
       model-config: '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}'
       finding-scope: defects
       indexing: enabled # default; set disabled for file-only review
+      indexing-provider: cgc # default; or gitnexus
       credential-isolation: direct
       container-engine: docker
       timeout: 30m
@@ -32,7 +33,7 @@ The caller pins the reusable workflow. Inside that workflow, `uses: $/github` re
 
 Review execution is enabled only when `backend` and `model-config` are supplied together with a non-empty `model-auth` secret. To run context-only instead, leave **all three** empty together — a partial set (for example a cleared `backend` next to a set `model-config`) is rejected rather than degraded.
 
-Configured reviews build indexed context inside the published Redline action by default. Set `indexing: disabled` for file-only review. The reusable workflow only forwards this policy value; it does not invoke or configure the index provider.
+Configured reviews build indexed context inside the published Redline action by default. Set `indexing: disabled` for file-only review. The reusable workflow forwards `indexing` and `indexing-provider`; the published action still owns acquisition, provider execution, cache lifecycle, and bounded normalization.
 
 In context-only mode the workflow does not index and uploads only the `<artifact-name>-context` artifact with the review context bundle and the source-at-head export. The `<artifact-name>-reviews` artifact with per-file review records is produced only when review execution is enabled.
 
@@ -46,6 +47,7 @@ In context-only mode the workflow does not index and uploads only the `<artifact
 | `timeout` | duration | Default `30m`, capped at `360m`. |
 | `verbosity` | `silent`, `progress`, `full-output` | Live model stream in the run log. Default `progress` (dots). |
 | `indexing` | `enabled`, `disabled` | Default `enabled`. The published action owns indexing; `disabled` selects file-only review. |
+| `indexing-provider` | `cgc`, `gitnexus` | Default `cgc`. GitNexus is PolyForm Noncommercial 1.0.0 licensed; confirm suitability before selecting it. |
 | `artifact-name` | name | Default `redline-review-<run id>`. |
 | `artifact-retention-days` | 1–90 | Default `45`. |
 | `report-style`, `credential-isolation`, `container-engine` | legacy | Accepted at the reusable-workflow boundary for caller compatibility but not forwarded to the current action. |

@@ -5,6 +5,10 @@ description: Build bounded, source-validated code context for an exact pull requ
 author: dragoscirjan
 
 inputs:
+  provider:
+    description: Code-index provider, cgc or gitnexus.
+    required: false
+    default: cgc
   base:
     description: Exact pull request base commit (full SHA-1 or SHA-256 identifier).
     required: true
@@ -26,23 +30,24 @@ outputs:
     description: "Context coverage status: complete, partial, unsupported, or unavailable."
     value: ${{ steps.finalize.outputs.status }}
   cache-hit:
-    description: Whether actions/cache restored an exact-head or compatible earlier database.
+    description: Whether actions/cache restored the exact pull request base-revision database.
     value: ${{ steps.finalize.outputs.cache-hit }}
 
 runs:
   using: composite
   steps:
-    - name: Prepare pinned CGC and cache identity
+    - name: Prepare pinned provider and cache identity
       id: prepare
       shell: bash
       env:
+        REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
         REDLINE_CODE_INDEX_BASE: ${{ inputs.base }}
         REDLINE_CODE_INDEX_HEAD: ${{ inputs.head }}
         REDLINE_CODE_INDEX_REPOSITORY: ${{ inputs.repository }}
         REDLINE_CODE_INDEX_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
       run: bash "${{ github.action_path }}/run.sh" prepare
 
-    - name: Restore CGC database
+    - name: Restore provider database
       id: cache-restore
       if: ${{ steps.prepare.outputs.available == 'true' }}
       continue-on-error: true
@@ -51,14 +56,14 @@ runs:
         path: ${{ steps.prepare.outputs.cache-path }}
         key: ${{ steps.prepare.outputs.cache-primary-key }}
         restore-keys: |
-          ${{ steps.prepare.outputs.cache-exact-prefix }}
-          ${{ steps.prepare.outputs.cache-compatible-prefix }}
+          ${{ steps.prepare.outputs.cache-base-prefix }}
 
-    - name: Index head and export bounded context
+    - name: Reuse cached base graph or index base
       id: build
       if: ${{ steps.prepare.outputs.available == 'true' }}
       shell: bash
       env:
+        REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
         REDLINE_CODE_INDEX_BASE: ${{ inputs.base }}
         REDLINE_CODE_INDEX_HEAD: ${{ inputs.head }}
         REDLINE_CODE_INDEX_REPOSITORY: ${{ inputs.repository }}
@@ -70,9 +75,11 @@ runs:
     - name: Start cache-save timing
       if: ${{ steps.build.outputs.cache-ready == 'true' }}
       shell: bash
+      env:
+        REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
       run: bash "${{ github.action_path }}/run.sh" save-start
 
-    - name: Save validated CGC database
+    - name: Save validated provider database
       id: cache-save
       if: ${{ steps.build.outputs.cache-ready == 'true' }}
       continue-on-error: true
@@ -86,6 +93,7 @@ runs:
       if: ${{ always() && steps.prepare.outcome == 'success' }}
       shell: bash
       env:
+        REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
         REDLINE_CODE_INDEX_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
         REDLINE_CODE_INDEX_CACHE_MATCHED_KEY: ${{ steps.cache-restore.outputs.cache-matched-key }}
         REDLINE_CODE_INDEX_CACHE_SAVE_OUTCOME: ${{ steps.cache-save.outcome }}

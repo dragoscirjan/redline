@@ -20,13 +20,14 @@ action = yaml.safe_load(Path(sys.argv[1]).read_text())
 inputs = action['inputs']
 assert set(inputs) == {
     'backend', 'model-config', 'model-auth', 'finding-scope',
-    'timeout', 'verbosity', 'indexing', 'artifact-name', 'artifact-retention-days',
+    'timeout', 'verbosity', 'indexing', 'indexing-provider', 'artifact-name', 'artifact-retention-days',
     'github-token', 'github-app-id', 'github-app-key',
 }, f'unexpected input surface: {sorted(inputs)}'
 assert inputs['finding-scope']['default'] == 'defects'
 assert inputs['timeout']['default'] == '30m'
 assert inputs['verbosity']['default'] == 'progress'
 assert inputs['indexing']['default'] == 'enabled'
+assert inputs['indexing-provider']['default'] == 'cgc'
 assert inputs['github-token']['default'] == ''
 assert inputs['github-token']['required'] is False
 runs = action['runs']
@@ -35,24 +36,21 @@ steps = [step.get('name', '') for step in runs['steps']]
 for expected in [
     'Validate action inputs',
     'Generate Redline App token for review start',
-    'Announce review start',
-    'Generate Redline App token for publication',
-    'Publish review',
-    'Notify review failure',
+    'Set up pinned Node runtime',
     'Build trusted TypeScript',
     'Validate action inputs with trusted TypeScript',
     'Fetch pull request commits as data',
     'Build bounded code index',
-    'Build review context bundle',
-    'Upload review context artifact',
-    'Ensure harness binary',
-    'Run harness review',
-    'Upload review output artifact',
 ]:
     assert expected in steps, f'missing step: {expected}'
 PY
   printf '%s\n' "$output"
   [ "$status" -eq 0 ]
+}
+
+@test "action pins a GitNexus-compatible Node runtime" {
+  grep -Fq 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0' "$ACTION"
+  grep -Fq 'node-version: 24' "$ACTION"
 }
 
 @test "action runs the review CLI through the REDLINE environment contract" {
@@ -71,6 +69,7 @@ PY
 @test "action composes its code-index action at the same running commit" {
   grep -Fq 'uses: $/github/code-index' "$ACTION"
   grep -Fq "if: \${{ inputs.indexing == 'enabled' && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}" "$ACTION"
+  grep -Fq 'provider: ${{ inputs.indexing-provider }}' "$ACTION"
   grep -Fq 'base: ${{ github.event.pull_request.base.sha }}' "$ACTION"
   grep -Fq 'head: ${{ github.event.pull_request.head.sha }}' "$ACTION"
   grep -Fq 'repository: ${{ github.repository }}' "$ACTION"
@@ -83,6 +82,7 @@ PY
   grep -Fq 'default: enabled' "$REUSABLE_WORKFLOW"
   grep -Fq 'uses: $/github' "$REUSABLE_WORKFLOW"
   grep -Fq 'indexing: ${{ inputs.indexing }}' "$REUSABLE_WORKFLOW"
+  grep -Fq 'indexing-provider: ${{ inputs.indexing-provider }}' "$REUSABLE_WORKFLOW"
   ! grep -Fq 'uses: dragoscirjan/redline/github@v1' "$REUSABLE_WORKFLOW"
   ! grep -Fq 'uses: $/github/code-index' "$REUSABLE_WORKFLOW"
   ! grep -Fq 'report-style: ${{ inputs.report-style }}' "$REUSABLE_WORKFLOW"

@@ -15,6 +15,7 @@ Inputs are fixed enums and data. No input accepts free-form review instructions.
 | `timeout` | duration | Review deadline per run, for example `10m` or `2h`. Capped at 360m. Default `30m`. |
 | `verbosity` | `silent`, `progress`, `full-output` | Live model stream in the run log: `silent` keeps per-file lines only, `progress` prints one dot per model text chunk, `full-output` prints the readable stream text. Default `progress`. |
 | `indexing` | `enabled`, `disabled` | Default `enabled`. The action invokes its bundled `github/code-index` action at the same Redline commit. `disabled` preserves byte-identical file-only prompting. Missing, invalid, unsupported, or unavailable generated context keeps file-only review and records degraded coverage. |
+| `indexing-provider` | `cgc`, `gitnexus` | Default `cgc`. Selects the action-owned pinned index provider. GitNexus is PolyForm Noncommercial 1.0.0 licensed; confirm suitability before selecting it. Provider-specific data never crosses the bounded artifact boundary. |
 | `artifact-name` | name | Base name for artifacts. Default `redline-review-<run id>`. |
 | `artifact-retention-days` | 1–90 | Default `45`. |
 | `github-token` | secret | Fallback publication token (PAT), used when the App inputs are unset. An installation token generated outside the workflow is also accepted. Publication never uses the Actions `GITHUB_TOKEN`. Empty keeps artifact-only mode. |
@@ -39,11 +40,11 @@ Re-runs on the same head are idempotent: an existing actor-owned review with the
 ## Pipeline
 
 1. **Validate action inputs** — the event must be a `pull_request` with full base and head commit identifiers; the artifact settings and the all-or-nothing review-input rule are enforced.
-2. **Build trusted TypeScript** — the action checkout (the trusted base revision for `pull_request` events) is installed and built; pull request code is never installed, built, or executed.
+2. **Set up Node and build trusted TypeScript** — pinned Node 24 is installed, then the action checkout (the trusted base revision for `pull_request` events) is installed and built; pull request code is never installed, built, or executed. Node 24 also satisfies the selected GitNexus runtime contract.
 3. **Generate Redline App token for review start** — token 1, used by the announce and failure-notification steps; the publication token falls back to `github-token` when the App inputs are unset.
 4. **Validate action inputs with trusted TypeScript** — the review CLI runs `--validate-only` against the `REDLINE_*` environment contract; invalid optional inputs fail even in context-only mode.
 5. **Fetch pull request commits as data** — base and head commits are fetched as Git objects and verified.
-6. **Build bounded code index** — for configured reviews with indexing enabled, the root action invokes `$/github/code-index`. GitHub resolves this self-repository reference at the root action's exact running commit. The child action exports the head as data, restores or builds its bounded CGC database, and writes `code-index/code-context.json`.
+6. **Build bounded code index** — for configured reviews with indexing enabled, the root action invokes `$/github/code-index`. GitHub resolves this self-repository reference at the root action's exact running commit. The child action exports the head as data, restores or builds the selected provider's bounded base-revision database, and writes provider-neutral `code-index/code-context.json`.
 7. **Build review context bundle** — `src/context-bundle.sh` produces the manifest, diffs, base files, and a source-at-head export; a PR requirements file is folded in when present.
 8. **Upload review context artifact** — `<artifact-name>-context` with the bounded `code-context.json` when generated, `source-at-head/`, and `review/`.
 9. **Ensure harness binary** — installs the selected harness's fixed npm package when review execution is enabled and the binary is not already present (`pi` or `opencode`; `echo` needs nothing). This is trusted workflow tooling, never pull request code.

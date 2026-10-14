@@ -5,6 +5,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { codeContextGraphFactDigest } from '../code-context/artifact.js';
 import { assertOnlyKeys, isRecord, type ReviewManifestFile } from './bundle.js';
 import type {
   EvidenceRole,
@@ -132,16 +133,7 @@ function parseSourceEvidence(value: unknown, label: string): SourceEvidence {
 export function graphReferenceDigest(
   reference: Omit<GraphReference, 'graphFactDigest'>,
 ): `sha256:${string}` {
-  const canonical = JSON.stringify({
-    provider: reference.provider,
-    providerVersion: reference.providerVersion,
-    snapshotRevision: reference.snapshotRevision,
-    capability: reference.capability,
-    query: reference.query,
-    relationship: reference.relationship,
-    resolution: reference.resolution,
-  });
-  return `sha256:${createHash('sha256').update(canonical, 'utf8').digest('hex')}`;
+  return codeContextGraphFactDigest(reference);
 }
 
 function parseGraphReference(value: unknown, label: string): GraphReference {
@@ -565,23 +557,39 @@ export class FileReviewValidator {
 
     const validated: ValidatedFinding[] = [];
     const validatedIndices: number[] = [];
-    for (const group of byTrigger.values()) {
-      const distinct = new Map(group.map((item) => [item.finding.id, item]));
-      if (distinct.size > 1) {
-        for (const item of group) {
-          rejectedCandidates.push({
-            index: item.index,
-            stage: 'validation',
-            code: 'candidate-conflict',
-            reason: 'multiple candidates make conflicting claims about the same changed trigger',
-          });
-        }
-        continue;
+    for (const triggerGroup of byTrigger.values()) {
+      const exact = new Map<string, { finding: ValidatedFinding; index: number }>();
+      for (const item of triggerGroup) {
+        if (!exact.has(item.finding.id)) exact.set(item.finding.id, item);
       }
-      const first = group[0];
-      if (first !== undefined) {
-        validated.push(first.finding);
-        validatedIndices.push(first.index);
+
+      const byClaim = new Map<string, Array<{ finding: ValidatedFinding; index: number }>>();
+      for (const item of exact.values()) {
+        const title = item.finding.title.trim().toLocaleLowerCase('en-US').replace(/\s+/gu, ' ');
+        const key = JSON.stringify({ category: item.finding.category, title });
+        const group = byClaim.get(key) ?? [];
+        group.push(item);
+        byClaim.set(key, group);
+      }
+
+      for (const claimGroup of byClaim.values()) {
+        const classifications = new Set(claimGroup.map((item) => item.finding.classification));
+        const severities = new Set(claimGroup.map((item) => item.finding.severity));
+        if (classifications.size > 1 || severities.size > 1) {
+          for (const item of claimGroup) {
+            rejectedCandidates.push({
+              index: item.index,
+              stage: 'validation',
+              code: 'candidate-conflict',
+              reason: 'candidates with the same root-cause identity claim incompatible classification or severity',
+            });
+          }
+          continue;
+        }
+        for (const item of claimGroup) {
+          validated.push(item.finding);
+          validatedIndices.push(item.index);
+        }
       }
     }
     return { findings: validated, candidateIndices: validatedIndices, rejectedCandidates };

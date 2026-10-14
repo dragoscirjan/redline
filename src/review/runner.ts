@@ -202,10 +202,14 @@ async function reviewOneFile(
   }
 
   const triggerValidation = validator.validateCandidates(document.findings, document.candidateIndices);
+  const sanitizeRejection = (candidate: RejectedCandidate): RejectedCandidate => ({
+    ...candidate,
+    reason: boundedReason(redact(candidate.reason)),
+  });
   const rejectedCandidates: RejectedCandidate[] = [
     ...document.rejectedCandidates,
     ...triggerValidation.rejectedCandidates,
-  ];
+  ].map(sanitizeRejection);
   const findings: ValidatedFinding[] = [];
   for (const [position, finding] of triggerValidation.findings.entries()) {
     const index = triggerValidation.candidateIndices[position] as number;

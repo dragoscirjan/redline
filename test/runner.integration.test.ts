@@ -511,6 +511,41 @@ describe('runFileReviews', () => {
     }
   });
 
+  it('redacts the selected credential from persisted candidate rejection reasons', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      executor.script([{ text: reviewDocument({
+        version: 2,
+        fileId: '000001',
+        outcome: 'findings',
+        findings: [{
+          category: 'correctness',
+          classification: 'defect',
+          severity: 'high',
+          confidence: 0.9,
+          side: 'RIGHT',
+          startLine: 1,
+          endLine: 1,
+          evidence: 'new',
+          impact: 'Wrong result.',
+          fix: 'Restore the check.',
+          'test-key': true,
+        }],
+      }) }]);
+      await runFileReviews({ environment: environment.review!, executor });
+      const record = JSON.parse(await readFile(join(fixture.output, 'reviews', '000001.json'), 'utf8')) as {
+        rejectedCandidates: Array<{ reason: string }>;
+      };
+      expect(record.rejectedCandidates).toHaveLength(1);
+      expect(record.rejectedCandidates[0]?.reason).not.toContain('test-key');
+      expect(record.rejectedCandidates[0]?.reason).toContain('[redacted]');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('redacts the selected credential from derived suggestions and fix prompts', async () => {
     const fixture = await createBundleFixture();
     try {

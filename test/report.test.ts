@@ -278,10 +278,32 @@ describe('FileReviewValidator', () => {
     expect(new Set(validated.map((item) => item.id)).size).toBe(2);
   });
 
-  it('rejects conflicting claims on one trigger while preserving original candidate indexes', () => {
+  it('retains distinct findings that share one changed trigger', () => {
     const validator = new FileReviewValidator(manifestFile(), DIFF, 'defects');
     const result = validator.validateCandidates(
-      [finding(), finding({ rootCause: 'A conflicting root-cause claim.' })],
+      [
+        finding({ title: 'Missing authorization guard' }),
+        finding({ title: 'Off-by-one range check', rootCause: 'The upper bound is inclusive.' }),
+      ],
+      [3, 7],
+    );
+    expect(result.findings).toHaveLength(2);
+    expect(result.candidateIndices).toEqual([3, 7]);
+    expect(result.rejectedCandidates).toEqual([]);
+  });
+
+  it('deduplicates byte-identical claims on one trigger', () => {
+    const validator = new FileReviewValidator(manifestFile(), DIFF, 'defects');
+    const result = validator.validateCandidates([finding(), finding()], [3, 7]);
+    expect(result.findings).toHaveLength(1);
+    expect(result.candidateIndices).toEqual([3]);
+    expect(result.rejectedCandidates).toEqual([]);
+  });
+
+  it('rejects incompatible claims with one root-cause identity while preserving candidate indexes', () => {
+    const validator = new FileReviewValidator(manifestFile(), DIFF, 'defects');
+    const result = validator.validateCandidates(
+      [finding(), finding({ severity: 'low', rootCause: 'A conflicting root-cause claim.' })],
       [3, 7],
     );
     expect(result.findings).toEqual([]);

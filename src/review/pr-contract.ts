@@ -80,18 +80,24 @@ function validateGraphReferences(
 ): void {
   if (finding.graphReferences.length === 0) return;
   const provider = context.coverage.provider;
-  const sourceRevision = context.coverage.revision;
-  if (provider === null || sourceRevision === null) {
+  const graphSnapshotRevision = context.graphSnapshotRevision;
+  if (provider === null || graphSnapshotRevision === null) {
     throw new Error('graph reference is present without validated indexed context');
+  }
+  if (graphSnapshotRevision !== bundle.manifest.base) {
+    throw new Error('validated indexed context does not match the reviewed base snapshot');
   }
   for (const reference of finding.graphReferences) {
     if (
       reference.provider !== provider.id
       || reference.providerVersion !== provider.version
-      || reference.snapshotRevision !== bundle.manifest.base
+      || reference.snapshotRevision !== graphSnapshotRevision
       || reference.capability !== 'related-spans'
     ) {
       throw new Error('graph reference does not match the validated base provider snapshot');
+    }
+    if (!context.graphFactDigests.has(reference.graphFactDigest)) {
+      throw new Error('graph reference is not an action-produced fact from the loaded indexed context');
     }
   }
 }

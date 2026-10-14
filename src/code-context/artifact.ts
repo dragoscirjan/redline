@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { lstat, readFile } from 'node:fs/promises';
 
 export const CODE_CONTEXT_VERSION = 1 as const;
@@ -13,6 +14,7 @@ const MAX_DIAGNOSTIC_BYTES = 512;
 const COMMIT_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const IDENTIFIER_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/u;
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
+const SHA256_PATTERN = /^sha256:[0-9a-f]{64}$/u;
 
 export type CodeContextStatus = 'complete' | 'partial' | 'unsupported' | 'unavailable';
 export type CodeContextDiagnosticLevel = 'info' | 'warning' | 'error';
@@ -22,11 +24,24 @@ export interface CodeContextProvider {
   version: string;
 }
 
+export interface CodeContextGraphReference {
+  provider: string;
+  providerVersion: string;
+  snapshotRevision: string;
+  capability: string;
+  query: string;
+  relationship: string;
+  resolution: 'exact' | 'approximate' | 'unresolved';
+  graphFactDigest: `sha256:${string}`;
+}
+
 export interface RelatedCodeSpan {
   path: string;
   startLine: number;
   endLine: number;
   reason: string;
+  /** Action-produced identity for this exact provider fact, when available. */
+  graphReference?: CodeContextGraphReference | undefined;
 }
 
 export interface ChangedFileCodeContext {
@@ -54,6 +69,8 @@ export interface CodeContextArtifact {
   provider: CodeContextProvider;
   repository: string;
   revision: string;
+  /** Exact provider graph snapshot. Legacy v1 artifacts may omit it. */
+  baseRevision?: string | undefined;
   status: CodeContextStatus;
   files: ChangedFileCodeContext[];
   diagnostics: CodeContextDiagnostic[];
@@ -97,6 +114,27 @@ function repositoryPath(value: unknown, label: string): string {
   return parsed;
 }
 
+function commit(value: unknown, label: string): string {
+  const parsed = boundedString(value, label, 64);
+  if (!COMMIT_PATTERN.test(parsed)) throw new Error(`${label} must be a full commit identifier`);
+  return parsed;
+}
+
+export function codeContextGraphFactDigest(
+  reference: Omit<CodeContextGraphReference, 'graphFactDigest'>,
+): `sha256:${string}` {
+  const canonical = JSON.stringify({
+    provider: reference.provider,
+    providerVersion: reference.providerVersion,
+    snapshotRevision: reference.snapshotRevision,
+    capability: reference.capability,
+    query: reference.query,
+    relationship: reference.relationship,
+    resolution: reference.resolution,
+  });
+  return `sha256:${createHash('sha256').update(canonical, 'utf8').digest('hex')}`;
+}
+
 function status(value: unknown, label: string): CodeContextStatus {
   if (value === 'complete' || value === 'partial' || value === 'unsupported' || value === 'unavailable') return value;
   throw new Error(`${label} is unsupported`);
@@ -127,23 +165,70 @@ function assertStrictlySorted(values: readonly string[], label: string): void {
   }
 }
 
+function parseGraphReference(value: unknown, label: string): CodeContextGraphReference {
+  const input = record(value, label);
+  onlyKeys(
+    input,
+    [
+      'provider',
+      'providerVersion',
+      'snapshotRevision',
+      'capability',
+      'query',
+      'relationship',
+      'resolution',
+      'graphFactDigest',
+    ],
+    label,
+  );
+  const resolution = input['resolution'];
+  if (resolution !== 'exact' && resolution !== 'approximate' && resolution !== 'unresolved') {
+    throw new Error(`${label}.resolution is unsupported`);
+  }
+  const digest = boundedString(input['graphFactDigest'], `${label}.graphFactDigest`, 71);
+  if (!SHA256_PATTERN.test(digest)) throw new Error(`${label}.graphFactDigest must be sha256`);
+  const reference: CodeContextGraphReference = {
+    provider: boundedString(input['provider'], `${label}.provider`, 64),
+    providerVersion: boundedString(input['providerVersion'], `${label}.providerVersion`, 128),
+    snapshotRevision: commit(input['snapshotRevision'], `${label}.snapshotRevision`),
+    capability: boundedString(input['capability'], `${label}.capability`, 128),
+    query: boundedString(input['query'], `${label}.query`, 2_048),
+    relationship: boundedString(input['relationship'], `${label}.relationship`, 256),
+    resolution,
+    graphFactDigest: digest as `sha256:${string}`,
+  };
+  if (reference.graphFactDigest !== codeContextGraphFactDigest(reference)) {
+    throw new Error(`${label}.graphFactDigest does not match the graph fact identity`);
+  }
+  return reference;
+}
+
 function parseRelatedSpan(value: unknown, label: string): RelatedCodeSpan {
   const input = record(value, label);
-  onlyKeys(input, ['path', 'startLine', 'endLine', 'reason'], label);
+  onlyKeys(input, ['path', 'startLine', 'endLine', 'reason', 'graphReference'], label);
   const startLine = positiveInteger(input['startLine'], `${label}.startLine`);
   const endLine = positiveInteger(input['endLine'], `${label}.endLine`);
   if (endLine < startLine) throw new Error(`${label}.endLine must not precede startLine`);
   if (endLine - startLine + 1 > MAX_CONTEXT_LINES) throw new Error(`${label} exceeds the line limit`);
+  const graphReference = input['graphReference'] === undefined
+    ? undefined
+    : parseGraphReference(input['graphReference'], `${label}.graphReference`);
   return {
     path: repositoryPath(input['path'], `${label}.path`),
     startLine,
     endLine,
     reason: boundedString(input['reason'], `${label}.reason`, 256),
+    ...(graphReference === undefined ? {} : { graphReference }),
   };
 }
 
 function relatedIdentity(value: RelatedCodeSpan): string {
   return `${value.path}\0${String(value.startLine).padStart(16, '0')}\0${String(value.endLine).padStart(16, '0')}\0${value.reason}`;
+}
+
+function relatedSpanQuery(changedPath: string, span: RelatedCodeSpan): string {
+  const endpoint = JSON.stringify([changedPath, span.path, span.startLine, span.endLine]);
+  return `related-span:sha256:${createHash('sha256').update(endpoint, 'utf8').digest('hex')}`;
 }
 
 function parseFile(value: unknown, label: string): ChangedFileCodeContext {
@@ -155,6 +240,16 @@ function parseFile(value: unknown, label: string): ChangedFileCodeContext {
   const related = input['related'].map((item, index) => parseRelatedSpan(item, `${label}.related[${index}]`));
   for (const [index, span] of related.entries()) {
     if (span.path === changedPath) throw new Error(`${label}.related[${index}].path must identify a different file`);
+    if (
+      span.graphReference !== undefined
+      && (
+        span.graphReference.query !== relatedSpanQuery(changedPath, span)
+        || span.graphReference.relationship !== span.reason
+        || span.graphReference.resolution !== 'exact'
+      )
+    ) {
+      throw new Error(`${label}.related[${index}].graphReference does not identify the exact related span`);
+    }
   }
   assertStrictlySorted(related.map(relatedIdentity), `${label}.related`);
   return { changedPath, status: status(input['status'], `${label}.status`), related };
@@ -198,17 +293,20 @@ function expectedAggregateStatus(files: readonly ChangedFileCodeContext[]): Code
 /** Strictly parses the compact provider-neutral artifact emitted by github/code-index. */
 export function parseCodeContextArtifact(value: unknown): CodeContextArtifact {
   const input = record(value, 'code-context');
-  onlyKeys(input, ['version', 'provider', 'repository', 'revision', 'status', 'files', 'diagnostics', 'timings'], 'code-context');
+  onlyKeys(input, ['version', 'provider', 'repository', 'revision', 'baseRevision', 'status', 'files', 'diagnostics', 'timings'], 'code-context');
   if (input['version'] !== CODE_CONTEXT_VERSION) throw new Error(`code-context.version must be ${CODE_CONTEXT_VERSION}`);
 
   const provider = record(input['provider'], 'code-context.provider');
   onlyKeys(provider, ['id', 'version'], 'code-context.provider');
   const providerId = boundedString(provider['id'], 'code-context.provider.id', 64);
   if (!IDENTIFIER_PATTERN.test(providerId)) throw new Error('code-context.provider.id is invalid');
+  const providerVersion = boundedString(provider['version'], 'code-context.provider.version', 128);
   const repository = boundedString(input['repository'], 'code-context.repository', 512);
   if (!REPOSITORY_PATTERN.test(repository)) throw new Error('code-context.repository must use owner/name form');
-  const revision = boundedString(input['revision'], 'code-context.revision', 64);
-  if (!COMMIT_PATTERN.test(revision)) throw new Error('code-context.revision must be a full commit identifier');
+  const revision = commit(input['revision'], 'code-context.revision');
+  const baseRevision = input['baseRevision'] === undefined
+    ? undefined
+    : commit(input['baseRevision'], 'code-context.baseRevision');
 
   if (!Array.isArray(input['files'])) throw new Error('code-context.files must be an array');
   if (input['files'].length > MAX_FILES) throw new Error('code-context.files exceeds the file limit');
@@ -216,6 +314,21 @@ export function parseCodeContextArtifact(value: unknown): CodeContextArtifact {
   assertStrictlySorted(files.map((file) => file.changedPath), 'code-context.files');
   const contextCount = files.reduce((count, file) => count + file.related.length, 0);
   if (contextCount > MAX_CONTEXTS) throw new Error('code-context related spans exceed the artifact limit');
+  for (const file of files) {
+    for (const span of file.related) {
+      const reference = span.graphReference;
+      if (reference === undefined) continue;
+      if (
+        baseRevision === undefined
+        || reference.provider !== providerId
+        || reference.providerVersion !== providerVersion
+        || reference.snapshotRevision !== baseRevision
+        || reference.capability !== 'related-spans'
+      ) {
+        throw new Error('code-context graph reference does not match its provider base snapshot');
+      }
+    }
+  }
 
   if (!Array.isArray(input['diagnostics'])) throw new Error('code-context.diagnostics must be an array');
   if (input['diagnostics'].length > MAX_DIAGNOSTICS) throw new Error('code-context.diagnostics exceeds the limit');
@@ -233,12 +346,10 @@ export function parseCodeContextArtifact(value: unknown): CodeContextArtifact {
 
   return {
     version: CODE_CONTEXT_VERSION,
-    provider: {
-      id: providerId,
-      version: boundedString(provider['version'], 'code-context.provider.version', 128),
-    },
+    provider: { id: providerId, version: providerVersion },
     repository,
     revision,
+    ...(baseRevision === undefined ? {} : { baseRevision }),
     status: artifactStatus,
     files,
     diagnostics,

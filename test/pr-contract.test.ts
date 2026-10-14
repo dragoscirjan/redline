@@ -20,6 +20,7 @@ import { publishedFinding, pullRequestReview, reviewFinding } from './helpers/fi
 
 function context(
   overrides: Partial<LoadedReviewCodeContext['coverage']> = {},
+  graphReferences: readonly GraphReference[] = [graphReference()],
 ): LoadedReviewCodeContext {
   return {
     coverage: {
@@ -35,6 +36,8 @@ function context(
     files: new Map(),
     diagnostics: [],
     timings: null,
+    graphSnapshotRevision: BASE_SHA,
+    graphFactDigests: new Set(graphReferences.map((reference) => reference.graphFactDigest)),
   };
 }
 
@@ -192,6 +195,13 @@ describe('PR finding evidence validation', () => {
         { ...accepted, graphReferences: [otherProvider] },
         context(),
       )).rejects.toThrow(/base provider snapshot/u);
+
+      const invented = graphReference({ query: 'changed-symbol:invented' });
+      await expect(validateFindingReferences(
+        bundle,
+        { ...accepted, graphReferences: [invented] },
+        context(),
+      )).rejects.toThrow(/not an action-produced fact/u);
     } finally {
       await fixture.cleanup();
     }

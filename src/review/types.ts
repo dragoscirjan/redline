@@ -2,7 +2,11 @@
  * Forge- and harness-independent review contracts.
  */
 
-import type { CodeContextProvider, CodeContextStatus } from '../code-context/artifact.js';
+import type {
+  CodeContextGraphReference,
+  CodeContextProvider,
+  CodeContextStatus,
+} from '../code-context/artifact.js';
 
 export type FindingScope = 'defects' | 'defects-and-risks';
 export const FINDING_SCOPES: readonly FindingScope[] = ['defects', 'defects-and-risks'];
@@ -33,16 +37,7 @@ export interface SourceEvidence {
   readonly evidence: string;
 }
 
-export interface GraphReference {
-  readonly provider: string;
-  readonly providerVersion: string;
-  readonly snapshotRevision: string;
-  readonly capability: string;
-  readonly query: string;
-  readonly relationship: string;
-  readonly resolution: 'exact' | 'approximate' | 'unresolved';
-  readonly graphFactDigest: `sha256:${string}`;
-}
+export type GraphReference = Readonly<CodeContextGraphReference>;
 
 export type ImpactPathStatus = 'complete' | 'partial' | 'unresolved';
 

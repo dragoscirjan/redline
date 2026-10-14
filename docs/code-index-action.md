@@ -50,10 +50,11 @@ Repository builds, scripts, package installers, tests, and Git hooks are never r
 The version 1 artifact contains:
 
 - provider ID and exact version;
-- repository and exact head revision;
+- repository, exact head revision, and the exact base graph revision when graph facts are present;
 - top-level coverage status;
 - per-changed-file coverage;
 - related repository path, one-based line range, and fixed selection reason;
+- for each source-resolved provider result, a bounded action-produced graph reference whose digest binds the provider, version, base snapshot, capability, query identity, relationship, and resolution to that exact span;
 - bounded diagnostics;
 - separate installation, restore, index, query, and save timings.
 

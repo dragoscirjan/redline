@@ -55,13 +55,13 @@ The trigger remains subject to the strict diff validator:
 
 Supporting source evidence is re-read from captured repository content. Head evidence resolves from exact-head source. Base evidence resolves from captured base files, including deleted and renamed paths. The revision must equal the reviewed base or head commit, the path must be normalized and captured, the span must exist, and its start-line evidence must match exactly.
 
-Graph references are provenance, not source authority. The discovery contract accepts them only when they carry the selected provider and exact version, the reviewed base snapshot, the declared `related-spans` capability, a bounded query and relationship, and a SHA-256 digest matching the complete graph-fact identity. They never determine inline comment paths or line numbers. Current action-owned indexes are base-revision graphs; a claimed head graph snapshot is rejected rather than guessed.
+Graph references are provenance, not source authority. The discovery contract accepts them only when they carry the selected provider and exact version, the loaded base snapshot, the declared `related-spans` capability, a bounded query and relationship, and an action-produced SHA-256 digest from the source-resolved context. The artifact parser binds each query, relationship, resolution, and digest to its exact related span; the review validator then requires that digest to belong to the loaded fact set. A model-generated, self-consistent digest is rejected. Graph references never determine inline comment paths or line numbers. Current action-owned indexes are base-revision graphs; a claimed head graph snapshot is rejected rather than guessed.
 
 Impact-path steps index either `supportingEvidence` or `graphReferences`. A complete path needs at least one valid step. Partial or unresolved paths require an explicit limitation.
 
 ## Independent candidate handling
 
-Harness output uses review-document version 3. Candidates are parsed and validated independently. One malformed schema, invalid trigger, mismatched source location, unsupported provider claim, or bad graph digest produces a bounded `rejectedCandidates` entry; it does not erase unrelated valid siblings. A rejected candidate is never published.
+Harness output uses review-document version 3. Candidates are parsed and validated independently. One malformed schema, invalid trigger, mismatched source location, unsupported provider claim, or bad graph digest produces a bounded `rejectedCandidates` entry; it does not erase unrelated valid siblings. Findings may share a changed trigger: exact duplicates collapse, while distinct category/title identities remain separate. Only claims with the same category/title identity and incompatible classifications or severities are rejected as conflicts. A rejected candidate is never published.
 
 If every candidate fails, the file is `omitted` with `invalid-output`. Mixed valid and invalid candidates retain the valid findings while the rejected count makes required baseline coverage incomplete, preventing a clean verdict.
 

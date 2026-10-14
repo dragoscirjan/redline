@@ -109,14 +109,14 @@ async function runSinglePurposeMode(
       // directory left over from an earlier attempt would otherwise pass
       // the PR stale-head check while publishing another commit's
       // findings.
-      if (run.summary.head !== parsed.publication.head) {
+      if (run.review.head !== parsed.publication.head) {
         throw new Error(
-          `review output belongs to head ${run.summary.head.slice(0, 12)}, not the publication head ${parsed.publication.head.slice(0, 12)}`,
+          `review output belongs to head ${run.review.head.slice(0, 12)}, not the publication head ${parsed.publication.head.slice(0, 12)}`,
         );
       }
       const outcome = await publishRecords({
         records: run.records,
-        summary: run.summary,
+        review: run.review,
         publication: parsed.publication,
         publisher,
       });
@@ -267,7 +267,7 @@ export async function main(
 
       let exitCode = result.exitCode;
       try {
-        const publication = await service.publish(result.records, result.summary);
+        const publication = await service.publish(result.records, result.review);
         writeLine(process.stdout, JSON.stringify(publicationReport(publication)));
         const requested = publication.files.length;
         if (requested > 0 && publication.publishedFileReviews === 0 && publication.failedFileReviews > 0) {

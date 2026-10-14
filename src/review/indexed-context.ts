@@ -3,12 +3,15 @@ import { TextDecoder } from 'node:util';
 import {
   loadCodeContextArtifact,
   type CodeContextArtifact,
+  type CodeContextDiagnostic,
   type CodeContextProvider,
   type CodeContextStatus,
+  type CodeContextTimings,
   type RelatedCodeSpan,
 } from '../code-context/artifact.js';
 import { checkedFile, type ReviewBundle, type ReviewManifestFile } from './bundle.js';
 import type {
+  GraphReference,
   ReviewCodeContextCoverage,
   ReviewCodeContextReason,
   ReviewCodeContextRunCoverage,
@@ -46,6 +49,10 @@ interface ResolvedFileCodeContext {
 export interface LoadedReviewCodeContext {
   readonly coverage: ReviewCodeContextRunCoverage;
   readonly files: ReadonlyMap<string, ResolvedFileCodeContext>;
+  readonly diagnostics: readonly CodeContextDiagnostic[];
+  readonly timings: CodeContextTimings | null;
+  readonly graphSnapshotRevision: string | null;
+  readonly graphFactDigests: ReadonlySet<GraphReference['graphFactDigest']>;
 }
 
 export interface FileReviewCodeContext {
@@ -79,6 +86,10 @@ function emptyLoaded(
       filesWithContext: 0,
     },
     files: new Map(),
+    diagnostics: [],
+    timings: null,
+    graphSnapshotRevision: null,
+    graphFactDigests: new Set(),
   };
 }
 
@@ -185,6 +196,7 @@ async function resolveArtifact(
   let totalRelatedSpans = 0;
   let filesWithContext = 0;
   let anyByteLimit = false;
+  const graphFactDigests = new Set<GraphReference['graphFactDigest']>();
 
   for (const file of artifact.files) {
     const owner = pathOwners.get(file.changedPath);
@@ -209,6 +221,9 @@ async function resolveArtifact(
         continue;
       }
       related.push(resolved.span);
+      if (candidate.graphReference !== undefined) {
+        graphFactDigests.add(candidate.graphReference.graphFactDigest);
+      }
       fileSourceBytes += resolved.sourceBytes;
       totalSourceBytes += resolved.sourceBytes;
       totalRelatedSpans += 1;
@@ -261,6 +276,10 @@ async function resolveArtifact(
       filesWithContext,
     },
     files,
+    diagnostics: artifact.diagnostics,
+    timings: artifact.timings,
+    graphSnapshotRevision: artifact.baseRevision ?? null,
+    graphFactDigests,
   };
 }
 
@@ -280,7 +299,11 @@ export async function loadReviewCodeContext(
   } catch {
     return emptyLoaded('unavailable', 'artifact-invalid');
   }
-  if (artifact.repository !== input.repository || artifact.revision !== bundle.manifest.head) {
+  if (
+    artifact.repository !== input.repository
+    || artifact.revision !== bundle.manifest.head
+    || (artifact.baseRevision !== undefined && artifact.baseRevision !== bundle.manifest.base)
+  ) {
     return emptyLoaded('unavailable', 'identity-mismatch', artifact.provider, artifact.revision);
   }
 

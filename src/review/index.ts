@@ -37,6 +37,11 @@ export {
   parseFileReviewDocument,
 } from './report.js';
 export {
+  buildPullRequestReview,
+  derivePullRequestVerdict,
+  validateFindingReferences,
+} from './pr-contract.js';
+export {
   buildRemediation,
   formatSpan,
   MAX_SPAN_LINES,
@@ -51,17 +56,26 @@ export { main } from './cli.js';
 export {
   FILE_REVIEW_RECORD_VERSION,
   FINDING_SCOPES,
+  PULL_REQUEST_REVIEW_VERSION,
   REVIEW_RUN_SUMMARY_VERSION,
   type FileReviewErrorKind,
   type FileReviewOutcome,
   type FileReviewRecord,
+  type GraphReference,
   type PublishedFinding,
+  type PullRequestFinding,
+  type PullRequestReviewCoverage,
+  type PullRequestReviewRecord,
+  type PullRequestVerdict,
+  type RejectedCandidate,
   type ReviewCodeContextCoverage,
   type ReviewCodeContextReason,
   type ReviewCodeContextRunCoverage,
   type ReviewCodeContextStatus,
   type ReviewFinding,
+  type ReviewLimitation,
   type ReviewRunSummary,
   type ReviewRunSummaryFile,
+  type SourceEvidence,
   type ValidatedFinding,
 } from './types.js';

@@ -120,7 +120,7 @@ describe('redline-review CLI', () => {
         // Start announcement plus final summary, in place.
         expect(calls.upsertSummary).toBe(2);
         expect(bodies[0]).toContain('Redline review in progress');
-        expect(bodies[1]).toContain('Redline review summary');
+        expect(bodies[1]).toContain('Redline pull request review');
       } finally {
         await fixture.cleanup();
       }

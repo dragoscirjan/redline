@@ -10,7 +10,7 @@
  */
 
 import type { PublicationEnvironment } from '../review/environment.js';
-import type { FileReviewRecord, ReviewRunSummary } from '../review/types.js';
+import type { FileReviewRecord, PullRequestReviewRecord } from '../review/types.js';
 import { GitHubReviewPublisher } from './github-publisher.js';
 import {
   fileReviewMarker,
@@ -107,7 +107,7 @@ export class PublicationService {
     };
   }
 
-  async publish(records: readonly FileReviewRecord[], summary: ReviewRunSummary): Promise<PublicationOutcome> {
+  async publish(records: readonly FileReviewRecord[], review: PullRequestReviewRecord): Promise<PublicationOutcome> {
     // Stale guard: never publish reviews for a head the PR has moved past.
     const currentHead = await this.#publisher.currentHead(this.#scope);
     if (currentHead !== this.#scope.head) {
@@ -166,7 +166,7 @@ export class PublicationService {
     }
 
     const notes = { publishedFileReviews, failedFileReviews, failedInlineComments };
-    const summaryBody = renderSummaryBody(this.#scope, summary, notes);
+    const summaryBody = renderSummaryBody(this.#scope, review, notes);
     const summaryCommentId = await this.#publisher.upsertSummary(this.#scope, summaryBody, summaryMarker(this.#scope));
 
     return {
@@ -181,7 +181,7 @@ export class PublicationService {
 
 export interface PublishRecordsInput {
   readonly records: readonly FileReviewRecord[];
-  readonly summary: ReviewRunSummary;
+  readonly review: PullRequestReviewRecord;
   readonly publication: PublicationEnvironment;
   /** Publisher override for tests; defaults to the GitHub adapter. */
   readonly publisher?: ReviewPublisher;
@@ -197,5 +197,5 @@ export async function publishRecords(input: PublishRecordsInput): Promise<Public
     pullRequest: input.publication.pullRequest,
     head: input.publication.head,
   });
-  return service.publish(input.records, input.summary);
+  return service.publish(input.records, input.review);
 }

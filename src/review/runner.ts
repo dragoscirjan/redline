@@ -24,6 +24,7 @@ import {
   type LoadedReviewCodeContext,
 } from './indexed-context.js';
 import { buildFileReviewPrompt, type FileReviewPrompt } from './prompt.js';
+import { buildPullRequestReview, validateFindingReferences } from './pr-contract.js';
 import { FileReviewValidator, parseFileReviewDocument } from './report.js';
 import { buildRemediation, formatSpan } from './remediation.js';
 import {
@@ -31,6 +32,8 @@ import {
   REVIEW_RUN_SUMMARY_VERSION,
   type FileReviewRecord,
   type PublishedFinding,
+  type PullRequestReviewRecord,
+  type RejectedCandidate,
   type ReviewRunSummary,
   type ReviewRunSummaryFile,
   type ValidatedFinding,
@@ -65,6 +68,7 @@ export interface ReviewRunInput {
 }
 
 export interface ReviewRunResult {
+  readonly review: PullRequestReviewRecord;
   readonly summary: ReviewRunSummary;
   /** The per-file records as written, consumed by the publication layer. */
   readonly records: readonly FileReviewRecord[];
@@ -139,6 +143,7 @@ async function reviewOneFile(
       errorKind: 'preparation-failed',
       reason: boundedReason(redact(error instanceof Error ? error.message : String(error))),
       findings: [],
+      rejectedCandidates: [],
       durationMs: 0,
     };
   }
@@ -161,6 +166,7 @@ async function reviewOneFile(
       errorKind: run.status === 'timed-out' ? 'harness-timeout' : 'harness-failed',
       reason: boundedReason(redact(run.diagnostic) || run.status),
       findings: [],
+      rejectedCandidates: [],
       durationMs: run.durationMs,
     };
   }
@@ -175,6 +181,7 @@ async function reviewOneFile(
       errorKind: 'invalid-output',
       reason: boundedReason(redact(error instanceof Error ? error.message : String(error))),
       findings: [],
+      rejectedCandidates: [],
       durationMs: run.durationMs,
       rawModelOutput: redact(run.text),
     };
@@ -188,24 +195,34 @@ async function reviewOneFile(
         redact(`review document targets file ${document.fileId} instead of ${file.id}`),
       ),
       findings: [],
+      rejectedCandidates: [],
       durationMs: run.durationMs,
       rawModelOutput: redact(run.text),
     };
   }
 
-  let findings: readonly ValidatedFinding[];
-  try {
-    findings = validator.validateFindings(document.findings);
-  } catch (error) {
-    return {
-      ...described,
-      outcome: 'omitted',
-      errorKind: 'invalid-output',
-      reason: boundedReason(redact(error instanceof Error ? error.message : String(error))),
-      findings: [],
-      durationMs: run.durationMs,
-      rawModelOutput: redact(run.text),
-    };
+  const triggerValidation = validator.validateCandidates(document.findings, document.candidateIndices);
+  const sanitizeRejection = (candidate: RejectedCandidate): RejectedCandidate => ({
+    ...candidate,
+    reason: boundedReason(redact(candidate.reason)),
+  });
+  const rejectedCandidates: RejectedCandidate[] = [
+    ...document.rejectedCandidates,
+    ...triggerValidation.rejectedCandidates,
+  ].map(sanitizeRejection);
+  const findings: ValidatedFinding[] = [];
+  for (const [position, finding] of triggerValidation.findings.entries()) {
+    const index = triggerValidation.candidateIndices[position] as number;
+    try {
+      findings.push(await validateFindingReferences(bundle, finding, indexedContext));
+    } catch (error) {
+      rejectedCandidates.push({
+        index,
+        stage: 'validation',
+        code: 'candidate-support-invalid',
+        reason: boundedReason(redact(error instanceof Error ? error.message : String(error))),
+      });
+    }
   }
 
   // Each validated finding is enriched for publication: the rendered
@@ -224,12 +241,23 @@ async function reviewOneFile(
     });
   }
 
-  const outcome = document.outcome === 'omitted' ? 'omitted' : published.length > 0 ? 'findings' : 'clean';
+  const allCandidatesRejected = published.length === 0 && rejectedCandidates.length > 0;
+  const outcome = document.outcome === 'omitted' || allCandidatesRejected
+    ? 'omitted'
+    : published.length > 0
+      ? 'findings'
+      : 'clean';
   return {
     ...described,
     outcome,
-    reason: document.reason !== undefined ? boundedReason(redact(document.reason)) : undefined,
+    ...(allCandidatesRejected ? { errorKind: 'invalid-output' as const } : {}),
+    reason: allCandidatesRejected
+      ? `${rejectedCandidates.length} review candidates failed validation`
+      : document.reason !== undefined
+        ? boundedReason(redact(document.reason))
+        : undefined,
     findings: published,
+    rejectedCandidates,
     durationMs: run.durationMs,
     rawModelOutput: redact(run.text),
   };
@@ -269,6 +297,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           outcome: 'omitted',
           reason: 'binary diff; not reviewable as text',
           findings: [],
+          rejectedCandidates: [],
           durationMs: 0,
         };
         records.push(binaryRecord);
@@ -316,11 +345,14 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       })),
     };
     await writer.writeSummary(summary);
+    const review = buildPullRequestReview({ bundle, environment, records, indexedContext });
+    await writer.writePullRequestReview(review);
 
     const validatedReviews = records.filter(
       (record) => record.outcome === 'clean' || record.outcome === 'findings',
     ).length;
     return {
+      review,
       summary,
       records,
       outputDirectory: environment.outputDirectory,

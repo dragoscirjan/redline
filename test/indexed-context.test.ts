@@ -1,13 +1,15 @@
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { codeContextGraphFactDigest } from '../src/code-context/artifact.js';
 import { loadReviewBundle } from '../src/review/bundle.js';
 import {
   codeContextForFile,
   loadReviewCodeContext,
   MAX_INDEXED_CONTEXT_SOURCE_BYTES_PER_FILE,
 } from '../src/review/indexed-context.js';
-import { createBundleFixture, HEAD_SHA } from './helpers/bundle.js';
+import { BASE_SHA, createBundleFixture, HEAD_SHA } from './helpers/bundle.js';
 
 const REPOSITORY = 'owner/repository';
 
@@ -77,10 +79,49 @@ describe('review indexed context', () => {
     }
   });
 
+  it('exposes only source-resolved, action-produced graph facts', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      await writeFile(join(fixture.source, 'src', 'related.ts'), 'zero\none\ntwo\nthree\n');
+      const graphFact = {
+        provider: 'cgc',
+        providerVersion: '0.5.7',
+        snapshotRevision: BASE_SHA,
+        capability: 'related-spans',
+        query: `related-span:sha256:${createHash('sha256')
+          .update(JSON.stringify(['src/example.ts', 'src/related.ts', 2, 3]), 'utf8')
+          .digest('hex')}`,
+        relationship: 'incoming CALLS relationship',
+        resolution: 'exact' as const,
+      };
+      const value = artifact({ baseRevision: BASE_SHA });
+      const files = value['files'] as Array<Record<string, unknown>>;
+      const related = files[0]?.['related'] as Array<Record<string, unknown>>;
+      related[0]!['graphReference'] = {
+        ...graphFact,
+        graphFactDigest: codeContextGraphFactDigest(graphFact),
+      };
+      const path = await writeArtifact(fixture.root, value);
+      const bundle = await loadReviewBundle(fixture.review, fixture.source);
+      const loaded = await loadReviewCodeContext(bundle, { path, repository: REPOSITORY });
+
+      expect(loaded.graphSnapshotRevision).toBe(BASE_SHA);
+      expect(loaded.graphFactDigests).toEqual(new Set([codeContextGraphFactDigest(graphFact)]));
+      expect(codeContextForFile(loaded, bundle.manifest.files[0]!).prompt?.related[0]).toMatchObject({
+        graphReference: { graphFactDigest: codeContextGraphFactDigest(graphFact) },
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('degrades identity mismatches to explicit unavailable file-only coverage', async () => {
     const fixture = await createBundleFixture();
     try {
-      const path = await writeArtifact(fixture.root, artifact({ revision: 'c'.repeat(40) }));
+      const path = await writeArtifact(fixture.root, artifact({
+        revision: 'c'.repeat(40),
+        baseRevision: 'd'.repeat(40),
+      }));
       const bundle = await loadReviewBundle(fixture.review, fixture.source);
       const loaded = await loadReviewCodeContext(bundle, { path, repository: REPOSITORY });
       const selected = codeContextForFile(loaded, bundle.manifest.files[0]!);

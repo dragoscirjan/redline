@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -725,6 +726,25 @@ def normalize_rows(
     return rows, invalid
 
 
+def graph_reference(base: str, changed_path: str, span: dict[str, Any]) -> dict[str, str]:
+    endpoint = json.dumps(
+        [changed_path, span["path"], span["startLine"], span["endLine"]],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    fact = {
+        "provider": PROVIDER_ID,
+        "providerVersion": PROVIDER_VERSION,
+        "snapshotRevision": base,
+        "capability": "related-spans",
+        "query": f"related-span:sha256:{hashlib.sha256(endpoint).hexdigest()}",
+        "relationship": span["reason"],
+        "resolution": "exact",
+    }
+    canonical = json.dumps(fact, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return {**fact, "graphFactDigest": f"sha256:{hashlib.sha256(canonical).hexdigest()}"}
+
+
 def source_validated_contexts(
     rows: list[dict[str, Any]],
     source_root: Path,
@@ -994,6 +1014,9 @@ def build_artifact(args: argparse.Namespace) -> bool:
 
     selected, selection_truncated = source_validated_contexts(all_rows, head_source_root, diagnostics)
     query_partial = query_partial or selection_truncated
+    for changed_path, spans in selected.items():
+        for span in spans:
+            span["graphReference"] = graph_reference(base, changed_path, span)
     for file_entry in files:
         file_entry["related"] = selected.get(file_entry["changedPath"], [])
         if query_partial and file_entry["status"] == "complete":
@@ -1002,7 +1025,9 @@ def build_artifact(args: argparse.Namespace) -> bool:
         add_diagnostic(diagnostics, "warning", f"{provider}-query-partial", "At least one provider row or query exceeded validation or a deterministic bound.")
 
     cache_ready = False if cache_reused else prepare_cache(provider, cache_root, repository, base, args.configuration_id, source_root, diagnostics)
-    write_artifact(output, make_artifact(repository, head, aggregate_status(files), files, diagnostics, measured))
+    artifact = make_artifact(repository, head, aggregate_status(files), files, diagnostics, measured)
+    artifact["baseRevision"] = base
+    write_artifact(output, artifact)
     return cache_ready
 
 

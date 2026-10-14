@@ -9,7 +9,12 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { spanLocation } from './remediation.js';
-import type { FileReviewRecord, PublishedFinding, ReviewRunSummary } from './types.js';
+import type {
+  FileReviewRecord,
+  PublishedFinding,
+  PullRequestReviewRecord,
+  ReviewRunSummary,
+} from './types.js';
 
 export const MAX_RAW_MODEL_OUTPUT_BYTES = 16 * 1024;
 
@@ -25,14 +30,44 @@ function fenceFor(content: string): string {
 function renderFindingMarkdown(finding: PublishedFinding, index: number, path: string): string {
   const location = spanLocation(path, finding.startLine, finding.endLine);
   const lines = [
-    `### Finding ${index + 1}: ${finding.severity} ${finding.classification} (${finding.category}) — ${location}`,
+    `### Finding ${index + 1}: ${finding.title}`,
     '',
     `- **Location:** ${location} (side ${finding.side})`,
+    `- **Classification:** ${finding.severity} ${finding.classification}`,
+    `- **Dimensions:** ${finding.dimensions.join(', ')}`,
     `- **Confidence:** ${finding.confidence}`,
     `- **Evidence (line ${finding.startLine}):** \`${finding.evidence.replace(/`/gu, '\\`')}\``,
+    `- **Behavioral contract:** ${finding.behavioralContract}`,
+    `- **Failure scenario:** ${finding.failureScenario}`,
+    `- **Reachability:** ${finding.reachability}`,
+    `- **Root cause:** ${finding.rootCause}`,
     `- **Impact:** ${finding.impact}`,
-    `- **Fix:** ${finding.fix}`,
+    `- **Blast radius:** ${finding.blastRadius}`,
+    `- **Reversibility:** ${finding.reversibility}`,
+    `- **Uncertainty:** ${finding.uncertainty}`,
+    `- **Verification:** ${finding.verification.status} — ${finding.verification.reason}`,
+    `- **Remediation:** ${finding.remediationStatus}; ${finding.fix}`,
+    `- **Regression test:** ${finding.regressionTest}`,
   ];
+  if (finding.supportingEvidence.length > 0) {
+    lines.push('', '**Supporting source evidence:**', '');
+    for (const evidence of finding.supportingEvidence) {
+      lines.push(`- ${evidence.role}: \`${evidence.path}:${evidence.startLine}-${evidence.endLine}\` at \`${evidence.revision.slice(0, 12)}\``);
+    }
+  }
+  if (finding.graphReferences.length > 0) {
+    lines.push('', '**Derived graph references (not source authority):**', '');
+    for (const reference of finding.graphReferences) {
+      lines.push(`- ${reference.provider} ${reference.providerVersion}: ${reference.relationship} (${reference.resolution}, ${reference.graphFactDigest})`);
+    }
+  }
+  lines.push('', `**Impact path:** ${finding.impactPath.status}`);
+  for (const step of finding.impactPath.steps) {
+    lines.push(`- ${step.from} → ${step.to}: ${step.relationship} (${step.evidence} evidence ${step.referenceIndex})`);
+  }
+  if (finding.impactPath.limitation !== undefined) {
+    lines.push(`- Limitation: ${finding.impactPath.limitation}`);
+  }
   if (finding.suggestion !== undefined) {
     lines.push('', `**Suggested change** for ${location} (side ${finding.side}):`, '');
     lines.push(`\`\`\`diff`);
@@ -64,6 +99,7 @@ function renderRecordMarkdown(record: FileReviewRecord): string {
   if (record.codeContext.reason !== null) lines.push(`- **Index coverage reason:** ${record.codeContext.reason}`);
   if (record.reason !== undefined) lines.push(`- **Reason:** ${record.reason}`);
   if (record.errorKind !== undefined) lines.push(`- **Error kind:** ${record.errorKind}`);
+  lines.push(`- **Rejected candidates:** ${record.rejectedCandidates.length}`);
   lines.push('', '');
   if (record.findings.length === 0) {
     lines.push(record.outcome === 'clean' ? 'No findings.' : 'No validated findings.');
@@ -106,9 +142,43 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
   return `${lines.join('\n')}\n`;
 }
 
+function renderPullRequestReviewMarkdown(review: PullRequestReviewRecord): string {
+  const lines = [
+    '# Pull request review',
+    '',
+    `- **Revisions:** ${review.base.slice(0, 12)}..${review.head.slice(0, 12)}`,
+    `- **Verdict:** ${review.verdict.status}`,
+    `- **Findings:** ${review.findings.length}`,
+    `- **Rejected candidates:** ${review.rejectedCandidates.length}`,
+    `- **Required file coverage:** ${review.coverage.files.status}`,
+    `- **Baseline review coverage:** ${review.coverage.specialists[0]?.status ?? 'unavailable'}`,
+    `- **Indexed context:** ${review.coverage.codeIntelligence.status}`,
+    `- **Graph queries:** ${review.coverage.graphQueries.map((item) => item.status).join(', ')}`,
+    `- **Impact traversals:** ${review.coverage.impactTraversals.map((item) => item.status).join(', ')}`,
+    `- **Relationships:** ${review.coverage.relationships.sourceConfirmed} source-confirmed / ${review.coverage.relationships.providerDerived} provider-derived`,
+    '',
+    '## Verdict reasons',
+    '',
+    ...review.verdict.reasons.map((reason) => `- ${reason}`),
+    '',
+    '## Limitations',
+    '',
+    ...review.limitations.map((limitation) => `- ${limitation.required ? 'Required' : 'Advisory'} — ${limitation.code}: ${limitation.message}`),
+    '',
+    '## Findings',
+    '',
+  ];
+  if (review.findings.length === 0) lines.push('No validated findings.');
+  for (const finding of review.findings) {
+    lines.push(`- **${finding.title}** — \`${finding.triggerPath}:${finding.startLine}-${finding.endLine}\` (${finding.severity} ${finding.classification})`);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
 export interface ReviewWriter {
   writeFileReview(record: FileReviewRecord & { rawModelOutput?: string | undefined }): Promise<void>;
   writeSummary(summary: ReviewRunSummary): Promise<void>;
+  writePullRequestReview(review: PullRequestReviewRecord): Promise<void>;
 }
 
 /**
@@ -142,6 +212,11 @@ export function createReviewWriter(outputDirectory: string): ReviewWriter {
       await prepare();
       await writeFile(join(reviewsDirectory, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
       await writeFile(join(reviewsDirectory, 'summary.md'), renderSummaryMarkdown(summary));
+    },
+    async writePullRequestReview(review: PullRequestReviewRecord): Promise<void> {
+      await prepare();
+      await writeFile(join(reviewsDirectory, 'review.json'), `${JSON.stringify(review, null, 2)}\n`);
+      await writeFile(join(reviewsDirectory, 'review.md'), renderPullRequestReviewMarkdown(review));
     },
   };
 }

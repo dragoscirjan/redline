@@ -10,6 +10,7 @@ import {
   writeBenchmarkReport,
 } from '../src/benchmark/benchmark.js';
 import type { FileReviewRecord, PublishedFinding } from '../src/review/types.js';
+import { publishedFinding } from './helpers/finding.js';
 
 const CORPUS = resolve('benchmark/review-quality/v2');
 const HISTORICAL_BASELINE = resolve('benchmark/review-quality/v1/baseline/report.json');
@@ -75,25 +76,20 @@ function scoringFixture() {
 }
 
 function finding(line: number): PublishedFinding {
-  return {
+  return publishedFinding({
     id: `finding-${line}`,
-    category: 'correctness',
-    classification: 'defect',
-    severity: 'medium',
-    confidence: 0.9,
-    side: 'RIGHT',
     startLine: line,
     endLine: line,
     evidence: `new ${line === 1 ? 'one' : 'two'}`,
     impact: 'Wrong result.',
     fix: 'Correct it.',
     fixPrompt: 'Correct it.',
-  };
+  });
 }
 
 function recordWithFindings(findings: readonly PublishedFinding[]): FileReviewRecord {
   return {
-    version: 3,
+    version: 4,
     fileId: '000001',
     path: 'src/example.ts',
     status: 'M',
@@ -109,6 +105,7 @@ function recordWithFindings(findings: readonly PublishedFinding[]): FileReviewRe
     },
     outcome: findings.length === 0 ? 'clean' : 'findings',
     findings,
+    rejectedCandidates: [],
     durationMs: 1,
   };
 }
@@ -152,7 +149,6 @@ describe('review-quality benchmark', () => {
       'findings',
       'falsePositives',
       'duplicateFindings',
-      'promptBytes',
       'reviewDurationMs',
     ]) {
       expect(fileOnly[field as keyof typeof fileOnly]).toBe(historicalFileOnly[field]);

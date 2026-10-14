@@ -73,7 +73,7 @@
   reviewed commit. Caps bound the run (25 file reviews, 100 inline
   comments); per-file failures are reported and never abort the run. A
   Forgejo/Gitea publisher would implement the same interface.
-- `prompts/v4/` — the fixed, versioned review policy. Prompt changes are
+- `prompts/v5/` — the fixed, versioned review policy. Prompt changes are
   policy changes: bump the prompt version and update the contract tests.
 
 ## Environment contract

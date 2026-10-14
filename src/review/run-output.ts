@@ -11,13 +11,16 @@ import { join } from 'node:path';
 import { isRecord } from './bundle.js';
 import {
   FILE_REVIEW_RECORD_VERSION,
+  PULL_REQUEST_REVIEW_VERSION,
   REVIEW_RUN_SUMMARY_VERSION,
   type FileReviewRecord,
+  type PullRequestReviewRecord,
   type ReviewRunSummary,
 } from './types.js';
 
 export interface PublishedRun {
   readonly records: readonly FileReviewRecord[];
+  readonly review: PullRequestReviewRecord;
   readonly summary: ReviewRunSummary;
 }
 
@@ -47,5 +50,13 @@ export async function loadPublishedRun(outputDirectory: string): Promise<Publish
   if (!isRecord(summaryValue) || summaryValue['version'] !== REVIEW_RUN_SUMMARY_VERSION) {
     throw new Error(`review output summary is not a v${REVIEW_RUN_SUMMARY_VERSION} summary`);
   }
-  return { records, summary: summaryValue as unknown as ReviewRunSummary };
+  const reviewValue = JSON.parse(await readFile(join(reviewsDirectory, 'review.json'), 'utf8')) as unknown;
+  if (!isRecord(reviewValue) || reviewValue['version'] !== PULL_REQUEST_REVIEW_VERSION) {
+    throw new Error(`review output PR record is not a v${PULL_REQUEST_REVIEW_VERSION} record`);
+  }
+  return {
+    records,
+    review: reviewValue as unknown as PullRequestReviewRecord,
+    summary: summaryValue as unknown as ReviewRunSummary,
+  };
 }

@@ -41,6 +41,15 @@ for expected in [
     'Validate action inputs with trusted TypeScript',
     'Fetch pull request commits as data',
     'Build bounded code index',
+    'Build review context bundle',
+    'Upload review context artifact',
+    'Ensure harness binary',
+    'Announce review start',
+    'Run harness review',
+    'Generate Redline App token for publication',
+    'Publish review',
+    'Notify review failure',
+    'Upload review output artifact',
 ]:
     assert expected in steps, f'missing step: {expected}'
 PY
@@ -95,6 +104,7 @@ PY
   grep -Fq 'name: ${{ inputs.artifact-name }}-context' "$ACTION"
   grep -Fq 'name: ${{ inputs.artifact-name }}-reviews' "$ACTION"
   grep -Fq 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1' "$ACTION"
+  grep -Fq 'include-hidden-files: true' "$ACTION"
 }
 
 @test "action gates review execution on the full review input set" {
@@ -123,6 +133,11 @@ PY
   [ "$count" -eq 2 ]
   # The failure notice prefers the fresh publication token when one exists.
   grep -Fq 'REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-publish.outputs.token || steps.app-token-start.outputs.token || inputs.github-token }}' "$ACTION"
+  # Publication failure only replaces the running summary when publication
+  # did not already finalize that managed comment.
+  grep -Fq 'id: publish' "$ACTION"
+  grep -Fq "printf 'summary-finalized=%s\\n' \"\$summary_finalized\" >> \"\$GITHUB_OUTPUT\"" "$ACTION"
+  grep -Fq "steps.publish.conclusion == 'failure' && steps.publish.outputs.summary-finalized != 'true'" "$ACTION"
 }
 
 @test "action keeps container and legacy inputs out of the surface" {

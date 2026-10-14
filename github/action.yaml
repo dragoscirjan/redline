@@ -191,152 +191,179 @@ runs:
         repository: ${{ github.repository }}
         output-directory: ${{ github.workspace }}/code-index
 
-    # - name: Build review context bundle
-    #   shell: bash
-    #   env:
-    #     BASE_SHA: ${{ github.event.pull_request.base.sha }}
-    #     HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-    #   run: |
-    #     set -euo pipefail
-    #     bash "${{ github.action_path }}/../src/context-bundle.sh" \
-    #       --base "$BASE_SHA" \
-    #       --head "$HEAD_SHA" \
-    #       --output "$GITHUB_WORKSPACE/review" \
-    #       --source "$GITHUB_WORKSPACE/source-at-head"
-    #     if [[ -f "$GITHUB_WORKSPACE/pr-requirements.md" ]]; then
-    #       cp "$GITHUB_WORKSPACE/pr-requirements.md" "$GITHUB_WORKSPACE/review/requirements.md"
-    #     fi
-    #
-    # - name: Upload review context artifact
-    #   uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-    #   with:
-    #     name: ${{ inputs.artifact-name }}-context
-    #     path: |
-    #       code-index/code-context.json
-    #       source-at-head/
-    #       review/
-    #     if-no-files-found: error
-    #     retention-days: ${{ inputs.artifact-retention-days }}
-    #
-    # - name: Ensure harness binary
-    #   if: ${{ inputs.backend == 'pi' || inputs.backend == 'opencode' }}
-    #   shell: bash
-    #   run: |
-    #     set -euo pipefail
-    #     # Trusted workflow tooling: the harness binaries are fixed packages
-    #     # and the backend is a validated enum. The guard keeps a binary
-    #     # installed by the calling workflow (for example the CI matrix)
-    #     # instead of reinstalling it.
-    #     #
-    #     # EXCEPTION: opencode-ai's postinstall script links its platform
-    #     # binary, so --ignore-scripts would break it. The version is
-    #     # pinned instead, because this action later runs with model and
-    #     # publication credentials and a compromised package script could
-    #     # alter the CLI before it runs. pi installs with scripts disabled;
-    #     # it has none.
-    #     case "${{ inputs.backend }}" in
-    #       pi) command -v pi >/dev/null 2>&1 || npm install -g --ignore-scripts @earendil-works/pi-coding-agent ;;
-    #       opencode) command -v opencode >/dev/null 2>&1 || npm install -g opencode-ai@1.18.34 ;;
-    #     esac
-    #
-    # - name: Announce review start
-    #   if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' && (steps.app-token-start.outputs.token != '' || inputs.github-token != '') }}
-    #   continue-on-error: true
-    #   shell: bash
-    #   working-directory: ${{ github.action_path }}/../
-    #   env:
-    #     REDLINE_HARNESS: ${{ inputs.backend }}
-    #     REDLINE_MODEL_CONFIG: ${{ inputs.model-config }}
-    #     REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-start.outputs.token || inputs.github-token }}
-    #     REDLINE_REPOSITORY: ${{ github.repository }}
-    #     REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
-    #     REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
-    #   run: |
-    #     set -euo pipefail
-    #     # The "review in progress" comment goes out before the review: a
-    #     # run can take tens of minutes and the PR must not look abandoned.
-    #     # A failed announcement is logged and the review continues.
-    #     node "${{ github.action_path }}/../dist/src/review/cli.js" --announce-only
-    #
-    # - name: Run harness review
-    #   id: review
-    #   if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
-    #   shell: bash
-    #   working-directory: ${{ github.action_path }}/../
-    #   env:
-    #     REDLINE_HARNESS: ${{ inputs.backend }}
-    #     REDLINE_MODEL_CONFIG: ${{ inputs.model-config }}
-    #     REDLINE_MODEL_AUTH: ${{ inputs.model-auth }}
-    #     REDLINE_FINDING_SCOPE: ${{ inputs.finding-scope }}
-    #     REDLINE_TIMEOUT: ${{ inputs.timeout }}
-    #     REDLINE_VERBOSITY: ${{ inputs.verbosity }}
-    #     REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
-    #     REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head
-    #     REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
-    #     REDLINE_CODE_CONTEXT: ${{ steps.code-index.outputs.context-file }}
-    #     REDLINE_CODE_CONTEXT_REPOSITORY: ${{ steps.code-index.outputs.context-file != '' && github.repository || '' }}
-    #   run: |
-    #     set -euo pipefail
-    #     # Token-free by design: the review process carries no publication
-    #     # credential at all. Publication happens in its own step with a
-    #     # freshly minted token, so the token lifetime never bounds the
-    #     # review duration.
-    #     node "${{ github.action_path }}/../dist/src/review/cli.js"
-    #
-    # - name: Generate Redline App token for publication
-    #   id: app-token-publish
-    #   if: ${{ !cancelled() && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' && inputs.github-app-id != '' && inputs.github-app-key != '' }}
-    #   uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-    #   with:
-    #     app-id: ${{ inputs.github-app-id }}
-    #     private-key: ${{ inputs.github-app-key }}
-    #     owner: ${{ github.repository_owner }}
-    #
-    # - name: Publish review
-    #   if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' && (steps.app-token-publish.outputs.token != '' || inputs.github-token != '') }}
-    #   shell: bash
-    #   working-directory: ${{ github.action_path }}/../
-    #   env:
-    #     REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
-    #     REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-publish.outputs.token || inputs.github-token }}
-    #     REDLINE_REPOSITORY: ${{ github.repository }}
-    #     REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
-    #     REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
-    #   run: |
-    #     set -euo pipefail
-    #     # Fresh token, seconds-old: loads the written records and summary
-    #     # from the output directory and publishes them. Fails when every
-    #     # requested file review failed, or when the PR moved past the
-    #     # reviewed head.
-    #     node "${{ github.action_path }}/../dist/src/review/cli.js" --publish-only
-    #
-    # - name: Notify review failure
-    #   if: ${{ failure() && steps.review.conclusion == 'failure' && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
-    #   continue-on-error: true
-    #   shell: bash
-    #   working-directory: ${{ github.action_path }}/../
-    #   env:
-    #     REDLINE_HARNESS: ${{ inputs.backend }}
-    #     REDLINE_MODEL_CONFIG: ${{ inputs.model-config }}
-    #     # Prefer the freshly minted publication token: a failure after one
-    #     # hour leaves the start token expired, while the publication token
-    #     # is seconds old. The start token covers earlier failures.
-    #     REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-publish.outputs.token || steps.app-token-start.outputs.token || inputs.github-token }}
-    #     REDLINE_REPOSITORY: ${{ github.repository }}
-    #     REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
-    #     REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
-    #     REDLINE_FAILURE_REASON: The review run failed; see the run log and artifacts for diagnostics.
-    #   run: |
-    #     set -euo pipefail
-    #     # Replaces the "review in progress" comment with the failure state
-    #     # so it never stays at running. Best effort.
-    #     node "${{ github.action_path }}/../dist/src/review/cli.js" --announce-failure
-    #
-    # - name: Upload review output artifact
-    #   if: ${{ always() && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
-    #   uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-    #   with:
-    #     name: ${{ inputs.artifact-name }}-reviews
-    #     path: reviews/
-    #     if-no-files-found: ignore
-    #     retention-days: ${{ inputs.artifact-retention-days }}
+    - name: Build review context bundle
+      shell: bash
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+        bash "${{ github.action_path }}/../src/context-bundle.sh" \
+          --base "$BASE_SHA" \
+          --head "$HEAD_SHA" \
+          --output "$GITHUB_WORKSPACE/review" \
+          --source "$GITHUB_WORKSPACE/source-at-head"
+        if [[ -f "$GITHUB_WORKSPACE/pr-requirements.md" ]]; then
+          cp "$GITHUB_WORKSPACE/pr-requirements.md" "$GITHUB_WORKSPACE/review/requirements.md"
+        fi
+
+    - name: Upload review context artifact
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.artifact-name }}-context
+        path: |
+          code-index/code-context.json
+          source-at-head/
+          review/
+        if-no-files-found: error
+        include-hidden-files: true
+        retention-days: ${{ inputs.artifact-retention-days }}
+
+    - name: Ensure harness binary
+      if: ${{ inputs.backend == 'pi' || inputs.backend == 'opencode' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Trusted workflow tooling: the harness binaries are fixed packages
+        # and the backend is a validated enum. The guard keeps a binary
+        # installed by the calling workflow (for example the CI matrix)
+        # instead of reinstalling it.
+        #
+        # EXCEPTION: opencode-ai's postinstall script links its platform
+        # binary, so --ignore-scripts would break it. The version is
+        # pinned instead, because this action later runs with model and
+        # publication credentials and a compromised package script could
+        # alter the CLI before it runs. pi installs with scripts disabled;
+        # it has none.
+        case "${{ inputs.backend }}" in
+          pi) command -v pi >/dev/null 2>&1 || npm install -g --ignore-scripts @earendil-works/pi-coding-agent ;;
+          opencode) command -v opencode >/dev/null 2>&1 || npm install -g opencode-ai@1.18.34 ;;
+        esac
+
+    - name: Announce review start
+      if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' && (steps.app-token-start.outputs.token != '' || inputs.github-token != '') }}
+      continue-on-error: true
+      shell: bash
+      working-directory: ${{ github.action_path }}/../
+      env:
+        REDLINE_HARNESS: ${{ inputs.backend }}
+        REDLINE_MODEL_CONFIG: ${{ inputs.model-config }}
+        REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-start.outputs.token || inputs.github-token }}
+        REDLINE_REPOSITORY: ${{ github.repository }}
+        REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
+        REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+        # The "review in progress" comment goes out before the review: a
+        # run can take tens of minutes and the PR must not look abandoned.
+        # A failed announcement is logged and the review continues.
+        node "${{ github.action_path }}/../dist/src/review/cli.js" --announce-only
+
+    - name: Run harness review
+      id: review
+      if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
+      shell: bash
+      working-directory: ${{ github.action_path }}/../
+      env:
+        REDLINE_HARNESS: ${{ inputs.backend }}
+        REDLINE_MODEL_CONFIG: ${{ inputs.model-config }}
+        REDLINE_MODEL_AUTH: ${{ inputs.model-auth }}
+        REDLINE_FINDING_SCOPE: ${{ inputs.finding-scope }}
+        REDLINE_TIMEOUT: ${{ inputs.timeout }}
+        REDLINE_VERBOSITY: ${{ inputs.verbosity }}
+        REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
+        REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head
+        REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
+        REDLINE_CODE_CONTEXT: ${{ steps.code-index.outputs.context-file }}
+        REDLINE_CODE_CONTEXT_REPOSITORY: ${{ steps.code-index.outputs.context-file != '' && github.repository || '' }}
+      run: |
+        set -euo pipefail
+        # Token-free by design: the review process carries no publication
+        # credential at all. Publication happens in its own step with a
+        # freshly minted token, so the token lifetime never bounds the
+        # review duration.
+        node "${{ github.action_path }}/../dist/src/review/cli.js"
+
+    - name: Generate Redline App token for publication
+      id: app-token-publish
+      if: ${{ !cancelled() && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' && inputs.github-app-id != '' && inputs.github-app-key != '' }}
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ inputs.github-app-id }}
+        private-key: ${{ inputs.github-app-key }}
+        owner: ${{ github.repository_owner }}
+
+    - name: Publish review
+      id: publish
+      if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' && (steps.app-token-publish.outputs.token != '' || inputs.github-token != '') }}
+      shell: bash
+      working-directory: ${{ github.action_path }}/../
+      env:
+        REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
+        REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-publish.outputs.token || inputs.github-token }}
+        REDLINE_REPOSITORY: ${{ github.repository }}
+        REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
+        REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+        # Fresh token, seconds-old: loads the written records and summary
+        # from the output directory and publishes them. Fails when every
+        # requested file review failed, or when the PR moved past the
+        # reviewed head. A structured publication report proves that the
+        # managed summary reached a final state even when all file reviews
+        # failed and the CLI intentionally exits non-zero.
+        publication_output=$(mktemp "$RUNNER_TEMP/redline-publication.XXXXXX")
+        trap 'rm -f "$publication_output"' EXIT
+        set +e
+        node "${{ github.action_path }}/../dist/src/review/cli.js" --publish-only >"$publication_output"
+        publication_status=$?
+        set -e
+        cat "$publication_output"
+        summary_finalized=false
+        if node - "$publication_output" <<'NODE'
+        const { readFileSync } = require('node:fs');
+        const reports = readFileSync(process.argv[2], 'utf8')
+          .split('\n')
+          .filter((line) => line.length > 0)
+          .flatMap((line) => {
+            try { return [JSON.parse(line)]; } catch { return []; }
+          });
+        const finalized = reports.some((report) => Number.isSafeInteger(report?.summaryCommentId));
+        process.exit(finalized ? 0 : 1);
+        NODE
+        then
+          summary_finalized=true
+        fi
+        printf 'summary-finalized=%s\n' "$summary_finalized" >> "$GITHUB_OUTPUT"
+        exit "$publication_status"
+
+    - name: Notify review failure
+      if: ${{ failure() && (steps.review.conclusion == 'failure' || (steps.publish.conclusion == 'failure' && steps.publish.outputs.summary-finalized != 'true')) && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
+      continue-on-error: true
+      shell: bash
+      working-directory: ${{ github.action_path }}/../
+      env:
+        REDLINE_HARNESS: ${{ inputs.backend }}
+        REDLINE_MODEL_CONFIG: ${{ inputs.model-config }}
+        # Prefer the freshly minted publication token: a failure after one
+        # hour leaves the start token expired, while the publication token
+        # is seconds old. The start token covers earlier failures.
+        REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-publish.outputs.token || steps.app-token-start.outputs.token || inputs.github-token }}
+        REDLINE_REPOSITORY: ${{ github.repository }}
+        REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
+        REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
+        REDLINE_FAILURE_REASON: The review run failed; see the run log and artifacts for diagnostics.
+      run: |
+        set -euo pipefail
+        # Replaces the "review in progress" comment with the failure state
+        # so it never stays at running. Best effort.
+        node "${{ github.action_path }}/../dist/src/review/cli.js" --announce-failure
+
+    - name: Upload review output artifact
+      if: ${{ always() && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.artifact-name }}-reviews
+        path: reviews/
+        if-no-files-found: ignore
+        retention-days: ${{ inputs.artifact-retention-days }}

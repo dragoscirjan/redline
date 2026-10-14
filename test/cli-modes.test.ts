@@ -92,7 +92,7 @@ describe('single-purpose CLI modes', () => {
       expect(calls.upsertSummary).toBe(1);
       // The fixture review is clean: no file reviews requested.
       expect(calls.publishFileReview).toBe(0);
-      expect(calls.bodies[0]).toContain('Redline review summary');
+      expect(calls.bodies[0]).toContain('Redline pull request review');
     } finally {
       await fixture.cleanup();
     }

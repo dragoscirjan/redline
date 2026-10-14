@@ -7,7 +7,7 @@
  */
 
 import { spanLocation } from '../review/remediation.js';
-import type { FileReviewRecord, PublishedFinding, ReviewRunSummary } from '../review/types.js';
+import type { FileReviewRecord, PublishedFinding, PullRequestReviewRecord } from '../review/types.js';
 import type { ReviewScope } from './types.js';
 
 export function summaryMarker(scope: ReviewScope): string {
@@ -62,11 +62,19 @@ export function renderFindingComment(
 ): string {
   const location = spanLocation(path, finding.startLine, finding.endLine);
   const lines = [
-    `**${finding.severity} ${finding.classification} (${finding.category})** — \`${location}\` (side ${finding.side}), confidence ${finding.confidence}`,
+    `**${finding.title}** — \`${location}\` (side ${finding.side})`,
     '',
+    `- **Classification:** ${finding.severity} ${finding.classification}; confidence ${finding.confidence}`,
+    `- **Dimensions:** ${finding.dimensions.join(', ')}`,
     `- **Evidence (line ${finding.startLine}):** \`${escapeBackticks(finding.evidence)}\``,
+    `- **Behavioral contract:** ${finding.behavioralContract}`,
+    `- **Failure scenario:** ${finding.failureScenario}`,
+    `- **Root cause:** ${finding.rootCause}`,
     `- **Impact:** ${finding.impact}`,
+    `- **Impact path:** ${finding.impactPath.status}${finding.impactPath.limitation === undefined ? '' : ` — ${finding.impactPath.limitation}`}`,
+    `- **Verification:** ${finding.verification.status} — ${finding.verification.reason}`,
     `- **Fix:** ${finding.fix}`,
+    `- **Regression test:** ${finding.regressionTest}`,
   ];
   if (finding.suggestion !== undefined) {
     const replacement = replacementLines(finding.suggestion);
@@ -105,6 +113,7 @@ export function renderFileReviewBody(scope: ReviewScope, record: FileReviewRecor
     `- **File id:** ${record.fileId}`,
     `- **Outcome:** ${record.outcome} — ${findings.length} validated finding${findings.length === 1 ? '' : 's'}`,
     `- **Review duration:** ${record.durationMs} ms`,
+    `- **Rejected candidates:** ${record.rejectedCandidates.length}`,
     '',
     `Findings${spanList.length > 0 ? ` (${spanList})` : ''} are attached as inline comments with apply-able suggestions and fix prompts. All findings are validated against the reviewed diff before publication.`,
     '',
@@ -172,25 +181,39 @@ export interface SummaryPublicationNotes {
 /** Renders the managed run summary body, ending with its marker. */
 export function renderSummaryBody(
   scope: ReviewScope,
-  summary: ReviewRunSummary,
+  review: PullRequestReviewRecord,
   notes: SummaryPublicationNotes,
 ): string {
+  const omitted = review.files.filter((file) => file.outcome === 'omitted').length;
   const lines = [
-    '## Redline review summary',
+    '## Redline pull request review',
     '',
-    `- **Revisions:** \`${summary.base.slice(0, 12)}\`…\`${summary.head.slice(0, 12)}\``,
-    `- **Harness:** ${summary.harness} (${summary.provider}/${summary.model})`,
-    `- **Finding scope:** ${summary.findingScope}`,
-    `- **Files:** ${summary.manifestFiles} in the manifest · ${summary.reviewedFiles} reviewed · ${summary.omittedFiles} omitted`,
-    `- **Findings:** ${summary.findings}`,
+    `- **Verdict:** ${review.verdict.status}`,
+    `- **Revisions:** \`${review.base.slice(0, 12)}\`…\`${review.head.slice(0, 12)}\``,
+    `- **Harness:** ${review.harness} (${review.provider}/${review.model})`,
+    `- **Finding scope:** ${review.findingScope}`,
+    `- **Files:** ${review.files.length} reviewed · ${omitted} omitted`,
+    `- **Findings:** ${review.findings.length}`,
+    `- **Rejected candidates:** ${review.rejectedCandidates.length}`,
+    `- **Required coverage:** files ${review.coverage.files.status}; baseline review ${review.coverage.specialists[0]?.status ?? 'unavailable'}`,
+    `- **Code intelligence:** ${review.coverage.codeIntelligence.status}; base ${review.coverage.codeIntelligence.baseSnapshot.slice(0, 12)}; head ${review.coverage.codeIntelligence.headSnapshot.slice(0, 12)}`,
   ];
-  if (summary.files.length > 0) {
+  if (review.verdict.reasons.length > 0) {
+    lines.push('', '**Verdict reasons:**');
+    for (const reason of review.verdict.reasons) lines.push(`- ${reason}`);
+  }
+  if (review.limitations.length > 0) {
+    lines.push('', '**Coverage limitations:**');
+    for (const limitation of review.limitations) {
+      lines.push(`- ${limitation.required ? 'Required' : 'Advisory'} — ${limitation.message}`);
+    }
+  }
+  if (review.files.length > 0) {
     lines.push('', '**Per file:**');
-    for (const file of summary.files) {
-      const spans =
-        file.findingSpans.length > 0 ? ` — ${file.findingSpans.map((span) => `\`${span}\``).join(', ')}` : '';
-      const error = file.errorKind !== undefined ? ` (${file.errorKind})` : '';
-      lines.push(`- \`${file.path}\`: ${file.outcome}${spans}${error}`);
+    for (const file of review.files) {
+      const findings = file.findingIds.length > 0 ? ` — ${file.findingIds.length} finding(s)` : '';
+      const rejected = file.rejectedCandidates > 0 ? ` — ${file.rejectedCandidates} rejected candidate(s)` : '';
+      lines.push(`- \`${file.path}\`: ${file.outcome}${findings}${rejected}`);
     }
   }
   lines.push('');

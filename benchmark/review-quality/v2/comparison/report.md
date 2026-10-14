@@ -9,7 +9,7 @@
 - Duplicate findings: 0
 - Clean fixtures with false positives: 1/2 (50.0%)
 - Evidence accuracy for claimed matches: 1/1 (100.0%)
-- Total prompt: 31707 bytes
+- Total prompt: 43619 bytes
 - Recorded review duration: 39 ms
 - Indexed coverage: disabled 4, complete 0, partial 0, unsupported 0, unavailable 0
 - Indexed source: 0 bytes across 0 spans in 0 reviewed files
@@ -17,10 +17,10 @@
 
 | Fixture | Kind | Review coverage | Indexed coverage | Expected | Root matches | Credited | Findings | False positives | Duplicates | Context spans | Context bytes | Prompt bytes | Duration ms |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| clean-api-extension | clean | complete | disabled | 0 | 0 | 0 | 1 | 1 | 0 | 0 | 0 | 7913 | 9 |
-| clean-local-refactor | clean | complete | disabled | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7902 | 8 |
-| cross-file-cache-collision | defect | complete | disabled | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7795 | 10 |
-| local-port-validation | defect | complete | disabled | 1 | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 8097 | 12 |
+| clean-api-extension | clean | complete | disabled | 0 | 0 | 0 | 1 | 1 | 0 | 0 | 0 | 10891 | 9 |
+| clean-local-refactor | clean | complete | disabled | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 10880 | 8 |
+| cross-file-cache-collision | defect | complete | disabled | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 10773 | 10 |
+| local-port-validation | defect | complete | disabled | 1 | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 11075 | 12 |
 
 ## indexed-context
 
@@ -31,7 +31,7 @@
 - Duplicate findings: 0
 - Clean fixtures with false positives: 0/2 (0.0%)
 - Evidence accuracy for claimed matches: 2/2 (100.0%)
-- Total prompt: 32746 bytes
+- Total prompt: 44658 bytes
 - Recorded review duration: 39 ms
 - Indexed coverage: disabled 0, complete 4, partial 0, unsupported 0, unavailable 0
 - Indexed source: 216 bytes across 2 spans in 2 reviewed files
@@ -39,10 +39,10 @@
 
 | Fixture | Kind | Review coverage | Indexed coverage | Expected | Root matches | Credited | Findings | False positives | Duplicates | Context spans | Context bytes | Prompt bytes | Duration ms |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| clean-api-extension | clean | complete | complete | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 103 | 8425 | 9 |
-| clean-local-refactor | clean | complete | complete | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7902 | 8 |
-| cross-file-cache-collision | defect | complete | complete | 1 | 1 | 1 | 1 | 0 | 0 | 1 | 113 | 8322 | 10 |
-| local-port-validation | defect | complete | complete | 1 | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 8097 | 12 |
+| clean-api-extension | clean | complete | complete | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 103 | 11403 | 9 |
+| clean-local-refactor | clean | complete | complete | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 10880 | 8 |
+| cross-file-cache-collision | defect | complete | complete | 1 | 1 | 1 | 1 | 0 | 0 | 1 | 113 | 11300 | 10 |
+| local-port-validation | defect | complete | complete | 1 | 1 | 1 | 1 | 0 | 0 | 0 | 0 | 11075 | 12 |
 
 ## Comparison
 

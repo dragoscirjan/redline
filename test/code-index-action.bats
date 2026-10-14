@@ -140,24 +140,31 @@ PY
   ! grep -Eq '^(index|update) ' "$PROVIDER/calls.log"
   cp "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$TMP_ROOT/warm.json"
 
-  python3 - "$TMP_ROOT/cold.json" "$TMP_ROOT/warm.json" "$HEAD_REVISION" <<'PY'
-import json, sys
+  python3 - "$TMP_ROOT/cold.json" "$TMP_ROOT/warm.json" "$HEAD_REVISION" "$BASE" <<'PY'
+import hashlib, json, sys
 cold = json.load(open(sys.argv[1], encoding='utf-8'))
 warm = json.load(open(sys.argv[2], encoding='utf-8'))
 assert cold['version'] == 1
 assert cold['provider'] == {'id': 'cgc', 'version': '0.5.7'}
 assert cold['revision'] == sys.argv[3]
+assert cold['baseRevision'] == sys.argv[4]
 assert cold['status'] == warm['status'] == 'complete'
 assert cold['files'] == warm['files']
 assert isinstance(cold['timings']['saveMs'], int)
 assert warm['timings']['indexMs'] == 0
 assert any(item['code'] == 'cache-save-failed' for item in cold['diagnostics'])
-assert cold['files'][0]['related'] == [{
+span = cold['files'][0]['related'][0]
+assert {key: span[key] for key in ('path', 'startLine', 'endLine', 'reason')} == {
     'path': 'src/user-service.ts',
     'startLine': 3,
     'endLine': 5,
     'reason': 'related-symbol-calls-changed-code',
-}]
+}
+reference = span['graphReference']
+fact = {key: value for key, value in reference.items() if key != 'graphFactDigest'}
+canonical = json.dumps(fact, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+assert reference['snapshotRevision'] == sys.argv[4]
+assert reference['graphFactDigest'] == f"sha256:{hashlib.sha256(canonical).hexdigest()}"
 assert any(item['code'] == 'cache-base-revision' for item in warm['diagnostics'])
 PY
 }
@@ -187,6 +194,7 @@ import json, sys
 artifact = json.load(open(sys.argv[1], encoding='utf-8'))
 state = json.load(open(sys.argv[2], encoding='utf-8'))
 assert artifact['revision'] == sys.argv[4]
+assert artifact['baseRevision'] == sys.argv[3]
 assert artifact['status'] == 'complete'
 assert artifact['files'][0]['status'] == 'complete'
 assert artifact['timings']['indexMs'] == 0
@@ -298,21 +306,28 @@ PY
   ! grep -q '^analyze ' "$GITNEXUS_CONTROL/calls.log"
   cp "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$TMP_ROOT/gitnexus-warm.json"
 
-  python3 - "$TMP_ROOT/gitnexus-cold.json" "$TMP_ROOT/gitnexus-warm.json" "$HEAD_REVISION" <<'PY'
-import json, sys
+  python3 - "$TMP_ROOT/gitnexus-cold.json" "$TMP_ROOT/gitnexus-warm.json" "$HEAD_REVISION" "$BASE" <<'PY'
+import hashlib, json, sys
 cold = json.load(open(sys.argv[1], encoding='utf-8'))
 warm = json.load(open(sys.argv[2], encoding='utf-8'))
 assert cold['provider'] == {'id': 'gitnexus', 'version': '1.6.12'}
 assert cold['revision'] == sys.argv[3]
+assert cold['baseRevision'] == sys.argv[4]
 assert cold['status'] == warm['status'] == 'complete'
 assert cold['files'] == warm['files']
 assert warm['timings']['indexMs'] == 0
-assert cold['files'][0]['related'] == [{
+span = cold['files'][0]['related'][0]
+assert {key: span[key] for key in ('path', 'startLine', 'endLine', 'reason')} == {
     'path': 'src/user-service.ts',
     'startLine': 3,
     'endLine': 5,
     'reason': 'related-symbol-calls-changed-code',
-}]
+}
+reference = span['graphReference']
+fact = {key: value for key, value in reference.items() if key != 'graphFactDigest'}
+canonical = json.dumps(fact, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+assert reference['snapshotRevision'] == sys.argv[4]
+assert reference['graphFactDigest'] == f"sha256:{hashlib.sha256(canonical).hexdigest()}"
 assert any(item['code'] == 'cache-base-revision' for item in warm['diagnostics'])
 PY
 }

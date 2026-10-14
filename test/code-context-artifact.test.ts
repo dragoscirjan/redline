@@ -1,19 +1,33 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   MAX_CODE_CONTEXT_ARTIFACT_BYTES,
+  codeContextGraphFactDigest,
   loadCodeContextArtifact,
   parseCodeContextArtifact,
 } from '../src/code-context/artifact.js';
 
 function validArtifact(): Record<string, unknown> {
+  const graphFact = {
+    provider: 'cgc',
+    providerVersion: '0.5.7',
+    snapshotRevision: 'b'.repeat(40),
+    capability: 'related-spans',
+    query: `related-span:sha256:${createHash('sha256')
+      .update(JSON.stringify(['src/cache.ts', 'src/user-service.ts', 3, 5]), 'utf8')
+      .digest('hex')}`,
+    relationship: 'related-symbol-calls-changed-code',
+    resolution: 'exact' as const,
+  };
   return {
     version: 1,
     provider: { id: 'cgc', version: '0.5.7' },
     repository: 'owner/repository',
     revision: 'a'.repeat(40),
+    baseRevision: 'b'.repeat(40),
     status: 'complete',
     files: [
       {
@@ -25,6 +39,10 @@ function validArtifact(): Record<string, unknown> {
             startLine: 3,
             endLine: 5,
             reason: 'related-symbol-calls-changed-code',
+            graphReference: {
+              ...graphFact,
+              graphFactDigest: codeContextGraphFactDigest(graphFact),
+            },
           },
         ],
       },
@@ -44,11 +62,17 @@ describe('code-context artifact', () => {
   it('parses exact provider provenance, per-file coverage, spans, and timings', () => {
     const parsed = parseCodeContextArtifact(validArtifact());
     expect(parsed.provider).toEqual({ id: 'cgc', version: '0.5.7' });
-    expect(parsed.files[0]?.related[0]).toEqual({
+    expect(parsed.baseRevision).toBe('b'.repeat(40));
+    expect(parsed.files[0]?.related[0]).toMatchObject({
       path: 'src/user-service.ts',
       startLine: 3,
       endLine: 5,
       reason: 'related-symbol-calls-changed-code',
+      graphReference: {
+        provider: 'cgc',
+        snapshotRevision: 'b'.repeat(40),
+        capability: 'related-spans',
+      },
     });
     expect(parsed.timings.saveMs).toBeNull();
   });
@@ -62,6 +86,37 @@ describe('code-context artifact', () => {
     const related = files[0]?.['related'] as Array<Record<string, unknown>>;
     related[0]!['path'] = '../outside.ts';
     expect(() => parseCodeContextArtifact(invalid)).toThrow('normalized repository-relative path');
+  });
+
+  it('rejects graph facts that were altered or do not match the provider snapshot', () => {
+    const altered = structuredClone(validArtifact());
+    const alteredFiles = altered['files'] as Array<Record<string, unknown>>;
+    const alteredRelated = alteredFiles[0]?.['related'] as Array<Record<string, unknown>>;
+    const alteredReference = alteredRelated[0]?.['graphReference'] as Record<string, unknown>;
+    alteredReference['relationship'] = 'invented-relationship';
+    expect(() => parseCodeContextArtifact(altered)).toThrow('does not match the graph fact identity');
+
+    const forged = structuredClone(validArtifact());
+    const forgedFiles = forged['files'] as Array<Record<string, unknown>>;
+    const forgedRelated = forgedFiles[0]?.['related'] as Array<Record<string, unknown>>;
+    const forgedReference = forgedRelated[0]?.['graphReference'] as Record<string, unknown>;
+    forgedReference['query'] = `related-span:sha256:${'d'.repeat(64)}`;
+    const { graphFactDigest: _digest, ...forgedFact } = forgedReference;
+    forgedReference['graphFactDigest'] = codeContextGraphFactDigest(forgedFact as never);
+    expect(() => parseCodeContextArtifact(forged)).toThrow('does not identify the exact related span');
+
+    const wrongBase = structuredClone(validArtifact());
+    wrongBase['baseRevision'] = 'd'.repeat(40);
+    expect(() => parseCodeContextArtifact(wrongBase)).toThrow('does not match its provider base snapshot');
+  });
+
+  it('accepts legacy v1 spans without graph provenance but cannot manufacture it', () => {
+    const legacy = structuredClone(validArtifact());
+    delete legacy['baseRevision'];
+    const files = legacy['files'] as Array<Record<string, unknown>>;
+    const related = files[0]?.['related'] as Array<Record<string, unknown>>;
+    delete related[0]?.['graphReference'];
+    expect(parseCodeContextArtifact(legacy).baseRevision).toBeUndefined();
   });
 
   it('rejects invalid, oversized, duplicate, and unsorted spans', () => {

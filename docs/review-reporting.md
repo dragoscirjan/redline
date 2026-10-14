@@ -6,6 +6,7 @@ Redline writes its review contract under `REDLINE_OUTPUT_DIR/reviews/`. The PR-l
 | --- | --- |
 | `review.json`, `review.md` | Authoritative PR-level findings, coverage, limitations, and verdict |
 | `<fileId>.json`, `<fileId>.md` | Validated per-file triggers, remediation guidance, and candidate diagnostics |
+| `verification/<fileId>.json` | Opt-in verifier dispositions and bounded, credential-redacted raw output; absent when no verifier ran |
 | `summary.json`, `summary.md` | Version-3 compatibility summary for existing benchmark/report consumers |
 
 The output travels in the `<artifact-name>-reviews` artifact. When a publication token is supplied, the publisher consumes `review.json` for the managed PR summary and the per-file records for diff-anchored inline comments.
@@ -67,6 +68,8 @@ If every candidate fails, the file is `omitted` with `invalid-output`. Mixed val
 
 Raw model output remains a bounded diagnostic field in the per-file artifact. It is not part of the publishable finding contract.
 
+The library runner also supports an **opt-in** independent verifier for benchmark evaluation. Each candidate-bearing file gets a fresh harness invocation using the configured model and a separate fixed `redline-verification/v1` policy; clean files make no verifier call. Its timeout is 10 minutes per file. A publishable disposition must cite captured base/head source (the changed trigger may suffice). Malformed output, failed execution, or unsupported citations suppress all of that file's candidates and record incomplete required coverage. Explicitly disproved or duplicate candidates are artifact-only but count as completed verification, not missing coverage. The file record includes candidate-verification counts and duration; the separate version-1 verifier artifact stores candidate IDs, dispositions, bounded reasons, and redacted raw output. Discovery raw output remains in the per-file record. The GitHub Action and CLI do **not** enable this opt-in path yet: quality and latency benchmarks must pass before it becomes a publication gate.
+
 ## Coverage and limitations
 
 Coverage facets use only these states: `completed`, `incomplete`, `unavailable`, and `not-applicable`. Absence is never treated as success.
@@ -83,9 +86,9 @@ The PR record states:
 - source-confirmed and provider-derived relationship counts;
 - provider disagreement, unresolved symbols, unsupported languages, and dynamic-behavior uncertainty;
 - truncation, finding, source-byte, and related-span budgets;
-- rejected candidates, remediation availability, and fix-verification availability.
+- rejected candidates, opt-in verifier completion and explicit falsifications, remediation availability, and fix-verification availability.
 
-Unavailable optional code intelligence is explicit but does not by itself make the run inconclusive. An omitted required file or rejected candidate makes required baseline coverage incomplete.
+Unavailable optional code intelligence is explicit but does not by itself make the run inconclusive. An omitted required file, invalid candidate, or inconclusive verifier makes required baseline coverage incomplete. A successful verifier falsification or deduplication is recorded but does not invalidate otherwise complete coverage.
 
 ## Deterministic verdicts
 
@@ -93,11 +96,11 @@ The model cannot select the PR verdict. Redline derives it from validated findin
 
 - `blocked`: at least one unresolved validated defect remains;
 - `human-decision-required`: unresolved evidenced risks, test gaps, design debt, or questions remain without a defect blocker;
-- `inconclusive`: required coverage is incomplete or any candidate was rejected, and no stronger finding consequence applies;
+- `inconclusive`: required coverage is incomplete or a candidate failed required validation, and no stronger finding consequence applies;
 - `mergeable-after-verified-fixes`: findings remain in the record, but each finding and remediation is independently confirmed/verified;
 - `mergeable`: no validated findings remain and every required coverage facet completed.
 
-The discovery stage accepts only `verification.status: unverified` and remediation status `guidance` or `proposed`. It cannot verify itself. Independent verification is deliberately deferred to its own stage; the contract already represents that future result without claiming it happened.
+The discovery stage accepts only `verification.status: unverified` and remediation status `guidance` or `proposed`. It cannot verify itself. The opt-in verifier can set confirmed source-backed findings; it cannot independently verify a proposed fix, and production execution remains disabled pending the benchmark gate.
 
 ## Per-file records and remediation
 
@@ -119,4 +122,4 @@ Migration is explicit:
 - Run summary version 3 remains unchanged as a subordinate compatibility artifact.
 - Review policy `redline-file-review/v3` lives in `prompts/v5/`.
 
-The extra verification, specialist, remediation-execution, and learning stages are not implemented by this contract change.
+Action-owned follow-up queries, consequence-ranked synthesis, fix execution, and learning stages are not implemented by this opt-in verifier stage.

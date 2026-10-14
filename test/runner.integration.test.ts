@@ -3,7 +3,10 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseReviewEnvironment } from '../src/review/environment.js';
 import { runFileReviews } from '../src/review/runner.js';
-import type { HarnessExecutor, HarnessPrompt, HarnessRun, PreparedHarness } from '../src/harness-executor/types.js';
+import type { HarnessExecuteOptions, HarnessExecutor, HarnessPrompt, HarnessRun, PreparedHarness } from '../src/harness-executor/types.js';
+import { loadReviewBundle } from '../src/review/bundle.js';
+import { FileReviewValidator } from '../src/review/report.js';
+import { VERIFICATION_TIMEOUT_MS } from '../src/review/runner.js';
 import {
   cleanReviewEnvironment,
   createBundleFixture,
@@ -16,6 +19,7 @@ import { reviewFinding } from './helpers/finding.js';
 class ScriptedExecutor implements HarnessExecutor {
   readonly harness = 'echo' as const;
   readonly prompts: HarnessPrompt[] = [];
+  readonly options: (HarnessExecuteOptions | undefined)[] = [];
   #runs: HarnessRun[] = [];
 
   script(runs: Array<Partial<HarnessRun>>): void {
@@ -34,8 +38,9 @@ class ScriptedExecutor implements HarnessExecutor {
     return { harness: 'echo', model: { provider: 'mock', endpoint: 'http://x', model: 'test-model' }, description: 'scripted test double' };
   }
 
-  async execute(_prepared: PreparedHarness, prompt: HarnessPrompt): Promise<HarnessRun> {
+  async execute(_prepared: PreparedHarness, prompt: HarnessPrompt, options?: HarnessExecuteOptions): Promise<HarnessRun> {
     this.prompts.push(prompt);
+    this.options.push(options);
     const next = this.#runs.shift();
     if (next === undefined) throw new Error('scripted executor ran out of scripted runs');
     return next;
@@ -70,6 +75,129 @@ async function writeCodeContext(fixture: BundleFixture, value?: object): Promise
 }
 
 describe('runFileReviews', () => {
+  it('skips the verifier for a clean file while recording required verification coverage', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      executor.script([{ text: reviewDocument({ version: 3, fileId: '000001', outcome: 'clean', findings: [] }) }]);
+      const result = await runFileReviews({ environment: environment.review!, executor, verifyCandidates: true });
+      expect(executor.prompts).toHaveLength(1);
+      expect(result.records[0]?.verification?.status).toBe('not-applicable');
+      expect(result.review.coverage.verification).toMatchObject({ status: 'completed', required: true });
+      expect(result.review.verdict.status).toBe('mergeable');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('verifies a finding in a fresh bounded call before publication and redacts the verifier result', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const bundle = await loadReviewBundle(fixture.review, fixture.source);
+      const file = bundle.manifest.files[0]!;
+      const candidate = reviewFinding({ evidence: 'new' });
+      const finding = new FileReviewValidator(
+        file, await readFile(join(fixture.review, file.diffFile), 'utf8'), 'defects',
+      ).validateFinding(candidate);
+      const executor = new ScriptedExecutor();
+      executor.script([
+        { text: reviewDocument({ version: 3, fileId: file.id, outcome: 'findings', findings: [candidate] }) },
+        { text: JSON.stringify({
+          version: 1,
+          fileId: file.id,
+          results: [{
+            candidateId: finding.id,
+            disposition: 'confirmed',
+            reason: 'Rechecked test-key against the changed line.',
+            citations: [{
+              role: 'contract', revision: HEAD_SHA, path: 'src/example.ts',
+              startLine: 1, endLine: 1, evidence: 'new',
+            }],
+          }],
+        }) },
+      ]);
+      const result = await runFileReviews({ environment: environment.review!, executor, verifyCandidates: true });
+      expect(executor.prompts).toHaveLength(2);
+      expect(executor.prompts[1]?.system).toContain('redline-verification/v1');
+      expect(executor.options[1]?.timeoutMs).toBe(VERIFICATION_TIMEOUT_MS);
+      expect(result.records[0]?.outcome).toBe('findings');
+      expect(result.records[0]?.verification).toMatchObject({ status: 'completed', requested: 1, accepted: 1 });
+      expect(result.records[0]?.findings[0]?.verification.status).toBe('confirmed');
+      expect(result.records[0]?.findings[0]?.verification.reason).not.toContain('test-key');
+      expect(result.review.coverage.verification).toMatchObject({ status: 'completed', required: true });
+      expect(result.review.verdict.status).toBe('blocked');
+      const artifact = await readFile(join(fixture.output, 'reviews/verification/000001.json'), 'utf8');
+      expect(artifact).toContain('"disposition": "confirmed"');
+      expect(artifact).not.toContain('test-key');
+      expect(artifact).toContain('[redacted]');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('records an explicit verifier falsification without turning a clean change inconclusive', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const bundle = await loadReviewBundle(fixture.review, fixture.source);
+      const file = bundle.manifest.files[0]!;
+      const candidate = reviewFinding({ evidence: 'new' });
+      const finding = new FileReviewValidator(
+        file, await readFile(join(fixture.review, file.diffFile), 'utf8'), 'defects',
+      ).validateFinding(candidate);
+      const executor = new ScriptedExecutor();
+      executor.script([
+        { text: reviewDocument({ version: 3, fileId: file.id, outcome: 'findings', findings: [candidate] }) },
+        { text: JSON.stringify({
+          version: 1, fileId: file.id, results: [{
+            candidateId: finding.id, disposition: 'rejected',
+            reason: 'The changed line is covered by a guard.', citations: [],
+          }],
+        }) },
+      ]);
+      const result = await runFileReviews({ environment: environment.review!, executor, verifyCandidates: true });
+      expect(result.records[0]).toMatchObject({
+        outcome: 'clean', findings: [], verification: { status: 'completed', requested: 1, rejected: 1 },
+      });
+      expect(result.review.verdict.status).toBe('mergeable');
+      expect(result.review.coverage.verificationRejections).toBe(1);
+      expect(result.review.limitations).toContainEqual(expect.objectContaining({
+        code: 'candidates-disproved', required: false,
+      }));
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('suppresses every candidate when the verifier returns invalid output', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      executor.script([
+        { text: reviewDocument({
+          version: 3, fileId: '000001', outcome: 'findings', findings: [reviewFinding({ evidence: 'new' })],
+        }) },
+        { text: '{"version":1,"fileId":"000001","results":[]}' },
+      ]);
+      const result = await runFileReviews({ environment: environment.review!, executor, verifyCandidates: true });
+      expect(result.exitCode).toBe(1);
+      expect(result.records[0]).toMatchObject({
+        outcome: 'omitted', errorKind: 'verification-failed', findings: [],
+        verification: { status: 'incomplete', requested: 1, accepted: 0 },
+      });
+      expect(result.review.findings).toEqual([]);
+      expect(result.review.verdict.status).toBe('inconclusive');
+      expect(result.review.limitations).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'candidate-verification-incomplete', required: true }),
+      ]));
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('reports progress after each completed file', async () => {
     const fixture = await createBundleFixture();
     try {

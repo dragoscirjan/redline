@@ -87,7 +87,14 @@ function coverageFor(
   const considered = records.map((record) => record.path);
   const omitted = records.filter((record) => record.outcome === 'omitted').map((record) => record.path);
   const rejectedCandidates = records.reduce((count, record) => count + record.rejectedCandidates.length, 0);
-  const baselineComplete = omitted.length === 0 && rejectedCandidates === 0;
+  const verificationRejections = records.reduce((count, record) => count + record.rejectedCandidates.filter(
+    (candidate) => candidate.stage === 'verification' &&
+      (candidate.code === 'verification-rejected' || candidate.code === 'verification-duplicate'),
+  ).length, 0);
+  const baselineComplete = omitted.length === 0 && rejectedCandidates === verificationRejections;
+  const verificationEnabled = records.some((record) => record.verification !== undefined);
+  const verificationIncomplete = records.filter((record) =>
+    record.verification !== undefined && record.verification.status === 'incomplete').length;
   const indexedStatus = indexStatus(context);
   const excluded = bundle.manifest.files
     .filter((file) => !file.reviewed)
@@ -123,10 +130,19 @@ function coverageFor(
         baselineComplete ? 'completed' : 'incomplete',
         true,
         baselineComplete
-          ? 'Every required file review completed without rejected candidates.'
-          : 'At least one required file was omitted or produced a rejected candidate.',
+          ? 'Every required file review completed without unresolved invalid candidates.'
+          : 'At least one required file was omitted or produced an invalid or inconclusive candidate.',
       ),
     }],
+    verification: facet(
+      !verificationEnabled ? 'not-applicable' : verificationIncomplete === 0 ? 'completed' : 'incomplete',
+      verificationEnabled,
+      !verificationEnabled
+        ? 'Independent candidate verification was not enabled for this run.'
+        : verificationIncomplete === 0
+          ? 'Every required candidate-bearing file completed independent verification; clean files needed no verifier.'
+          : `${verificationIncomplete} files did not complete required candidate verification.`,
+    ),
     inspections: [
       { kind: 'tests', ...facet('unavailable', false, 'The discovery stage does not independently attest complete test inspection.') },
       { kind: 'contracts', ...facet('unavailable', false, 'The discovery stage does not independently attest complete contract inspection.') },
@@ -180,6 +196,7 @@ function coverageFor(
         : 'No indexed source byte truncation was recorded.',
     ),
     rejectedCandidates,
+    verificationRejections,
     remediation: facet('completed', false, 'Every validated finding carries deterministic remediation guidance.'),
     fixVerification: facet(
       records.some((record) => record.findings.length > 0) ? 'unavailable' : 'not-applicable',
@@ -206,11 +223,19 @@ function limitationsFor(
       message: `${coverage.files.omitted.length} required files did not produce a complete review.`,
     });
   }
-  if (coverage.rejectedCandidates > 0) {
+  const invalidCandidates = coverage.rejectedCandidates - (coverage.verificationRejections ?? 0);
+  if (invalidCandidates > 0) {
     limitations.push({
       code: 'candidates-rejected',
       required: true,
-      message: `${coverage.rejectedCandidates} candidates were rejected by schema or evidence validation.`,
+      message: `${invalidCandidates} candidates failed required schema, evidence, or verifier validation.`,
+    });
+  }
+  if ((coverage.verificationRejections ?? 0) > 0) {
+    limitations.push({
+      code: 'candidates-disproved',
+      required: false,
+      message: `${coverage.verificationRejections} discovery candidates were disproved or deduplicated by the verifier.`,
     });
   }
   if (context.coverage.status !== 'complete') {
@@ -225,11 +250,19 @@ function limitationsFor(
     required: false,
     message: 'Changed-symbol coverage is not produced by the current file-review stage.',
   });
-  limitations.push({
-    code: 'independent-verification-not-run',
-    required: false,
-    message: 'Candidate falsification and fix verification have not run.',
-  });
+  if (coverage.verification?.status === 'incomplete') {
+    limitations.push({
+      code: 'candidate-verification-incomplete',
+      required: true,
+      message: coverage.verification.reason,
+    });
+  } else if (coverage.verification?.status === 'not-applicable') {
+    limitations.push({
+      code: 'independent-verification-not-run',
+      required: false,
+      message: 'Candidate falsification and fix verification have not run.',
+    });
+  }
   return limitations;
 }
 
@@ -262,17 +295,19 @@ export function derivePullRequestVerdict(
     coverage.files,
     ...coverage.contextSources,
     ...coverage.specialists,
+    ...(coverage.verification === undefined ? [] : [coverage.verification]),
     ...coverage.inspections,
     coverage.changedSymbols,
     coverage.codeIntelligence,
     coverage.truncation,
   ].filter((item) => item.required && item.status !== 'completed' && item.status !== 'not-applicable');
-  if (requiredIncomplete.length > 0 || coverage.rejectedCandidates > 0) {
+  const invalidCandidates = coverage.rejectedCandidates - (coverage.verificationRejections ?? 0);
+  if (requiredIncomplete.length > 0 || invalidCandidates > 0) {
     return {
       status: 'inconclusive',
       reasons: [
         ...requiredIncomplete.map((item) => item.reason),
-        ...(coverage.rejectedCandidates > 0 ? [`${coverage.rejectedCandidates} candidates were rejected`] : []),
+        ...(invalidCandidates > 0 ? [`${invalidCandidates} candidates failed required validation`] : []),
       ],
     };
   }

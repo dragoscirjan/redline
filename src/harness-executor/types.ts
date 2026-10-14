@@ -84,6 +84,8 @@ export interface HarnessOutputLine {
 export type HarnessStreamMode = 'off' | 'dots' | 'text';
 
 export interface HarnessExecuteOptions {
+  /** Fixed per-invocation timeout override for a verifier; executor must kill the child at expiry. */
+  readonly timeoutMs?: number;
   /** Live per-line harness output tap for progress logging; optional. */
   readonly onOutputLine?: (output: HarnessOutputLine) => void;
   /** Stream presentation; defaults to `text`. */

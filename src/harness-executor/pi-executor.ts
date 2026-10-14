@@ -255,7 +255,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         args,
         cwd: state.cwd,
         env: state.env,
-        timeoutMs: state.timeoutMs,
+        timeoutMs: options?.timeoutMs ?? state.timeoutMs,
         ...(options?.onOutputLine !== undefined
           ? {
               onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {

@@ -106,7 +106,7 @@ export interface PublishedFinding extends Omit<ValidatedFinding, 'suggestedChang
 
 export interface RejectedCandidate {
   readonly index: number;
-  readonly stage: 'parse' | 'validation';
+  readonly stage: 'parse' | 'validation' | 'verification';
   readonly code: string;
   readonly reason: string;
 }
@@ -116,7 +116,8 @@ export type FileReviewErrorKind =
   | 'harness-failed'
   | 'harness-timeout'
   | 'invalid-output'
-  | 'preparation-failed';
+  | 'preparation-failed'
+  | 'verification-failed';
 
 export type ReviewCodeContextStatus = CodeContextStatus | 'disabled';
 export type ReviewCodeContextReason =
@@ -144,6 +145,15 @@ export interface ReviewCodeContextRunCoverage extends ReviewCodeContextCoverage 
 
 export const FILE_REVIEW_RECORD_VERSION = 4 as const;
 
+export interface FileVerificationCoverage {
+  readonly status: 'not-applicable' | 'completed' | 'incomplete';
+  readonly requested: number;
+  readonly accepted: number;
+  readonly rejected: number;
+  readonly durationMs: number;
+  readonly reason?: string | undefined;
+}
+
 export interface FileReviewRecord {
   readonly version: typeof FILE_REVIEW_RECORD_VERSION;
   readonly fileId: string;
@@ -152,6 +162,7 @@ export interface FileReviewRecord {
   readonly harness: string;
   readonly model: string;
   readonly codeContext: ReviewCodeContextCoverage;
+  readonly verification?: FileVerificationCoverage | undefined;
   readonly outcome: FileReviewOutcome;
   readonly errorKind?: FileReviewErrorKind | undefined;
   readonly reason?: string | undefined;
@@ -238,6 +249,7 @@ export interface PullRequestReviewCoverage {
   readonly changedSymbols: ReviewCoverageFacet;
   readonly contextSources: readonly ReviewContextSourceCoverage[];
   readonly specialists: readonly ReviewSpecialistCoverage[];
+  readonly verification?: ReviewCoverageFacet | undefined;
   readonly inspections: readonly ReviewInspectionCoverage[];
   readonly codeIntelligence: ReviewCodeIntelligenceCoverage;
   readonly graphQueries: readonly ReviewCoverageFacet[];
@@ -245,6 +257,8 @@ export interface PullRequestReviewCoverage {
   readonly relationships: ReviewRelationshipCoverage;
   readonly truncation: ReviewCoverageFacet;
   readonly rejectedCandidates: number;
+  /** Successful verifier falsifications/duplicates, not required-coverage failures. */
+  readonly verificationRejections?: number | undefined;
   readonly remediation: ReviewCoverageFacet;
   readonly fixVerification: ReviewCoverageFacet;
   readonly budgets: {

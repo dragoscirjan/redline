@@ -91,7 +91,7 @@ export async function loadReviewPolicy(promptRoot = DEFAULT_PROMPT_ROOT): Promis
   return { text, digest: sha256(text) };
 }
 
-function generatedBoundary(payload: string): string {
+export function generatedBoundary(payload: string): string {
   let attempt = 0;
   while (true) {
     const suffix = createHash('sha256').update(String(attempt)).update('\0').update(payload).digest('hex');
@@ -134,6 +134,46 @@ async function embedFileContent(
   return { content, omitted: false };
 }
 
+/** Builds the bounded untrusted data shared by discovery and verification prompts. */
+export async function buildFileContextPayload(
+  bundle: ReviewBundle,
+  file: ReviewManifestFile,
+  indexedContext?: PromptCodeContext,
+): Promise<string> {
+  if (!bundle.manifest.files.includes(file)) throw new Error('prompt file is not part of the review manifest');
+  const diff = await readFile(`${bundle.root}/${file.diffFile}`, 'utf8');
+  const base = file.baseFile
+    ? await embedFileContent(bundle.root, file.baseFile)
+    : { content: null, omitted: false };
+  const head = await embedFileContent(bundle.sourceRoot, file.newPath);
+  const omittedSides = [base.omitted ? 'base' : null, head.omitted ? 'head' : null].filter(
+    (value) => value !== null,
+  );
+  const context = JSON.stringify({
+    contextVersion: indexedContext === undefined ? 1 : 2,
+    fileId: file.id,
+    revisions: { base: bundle.manifest.base, head: bundle.manifest.head },
+    manifestEntry: {
+      id: file.id,
+      status: file.status,
+      oldPath: file.oldPath,
+      newPath: file.newPath,
+      additions: file.additions,
+      deletions: file.deletions,
+      binary: file.binary,
+    },
+    diff,
+    baseFileContent: base.content,
+    headFileContent: head.content,
+    fileContentOmitted: omittedSides,
+    ...(indexedContext === undefined ? {} : { indexedContext }),
+  });
+  if (Buffer.byteLength(context, 'utf8') > MAX_UNTRUSTED_CONTEXT_BYTES) {
+    throw new Error('untrusted file context exceeds its byte limit');
+  }
+  return context;
+}
+
 export async function buildFileReviewPrompt(options: FileReviewPromptOptions): Promise<FileReviewPrompt> {
   const { bundle, file } = options;
   if (!bundle.manifest.files.includes(file)) throw new Error('prompt file is not part of the review manifest');
@@ -159,38 +199,8 @@ export async function buildFileReviewPrompt(options: FileReviewPromptOptions): P
   );
   const system = `${policy.text}# Trusted run configuration\n\n${trustedConfiguration}\n`;
 
-  const diff = await readFile(`${bundle.root}/${file.diffFile}`, 'utf8');
-  const base = file.baseFile
-    ? await embedFileContent(bundle.root, file.baseFile)
-    : { content: null, omitted: false };
-  const head = await embedFileContent(bundle.sourceRoot, file.newPath);
-
-  const omittedSides = [base.omitted ? 'base' : null, head.omitted ? 'head' : null].filter(
-    (value) => value !== null,
-  );
-  const context = JSON.stringify({
-    contextVersion: options.indexedContext === undefined ? 1 : 2,
-    fileId: file.id,
-    revisions: { base: bundle.manifest.base, head: bundle.manifest.head },
-    manifestEntry: {
-      id: file.id,
-      status: file.status,
-      oldPath: file.oldPath,
-      newPath: file.newPath,
-      additions: file.additions,
-      deletions: file.deletions,
-      binary: file.binary,
-    },
-    diff,
-    baseFileContent: base.content,
-    headFileContent: head.content,
-    fileContentOmitted: omittedSides,
-    ...(options.indexedContext === undefined ? {} : { indexedContext: options.indexedContext }),
-  });
+  const context = await buildFileContextPayload(bundle, file, options.indexedContext);
   const contextBytes = Buffer.byteLength(context, 'utf8');
-  if (contextBytes > MAX_UNTRUSTED_CONTEXT_BYTES) {
-    throw new Error('untrusted file context exceeds its byte limit');
-  }
   const boundary = generatedBoundary(context);
   const user = [
     'Review exactly one changed file from the pull request described below.',

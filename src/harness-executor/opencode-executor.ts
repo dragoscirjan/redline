@@ -234,7 +234,7 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
         args,
         cwd: state.cwd,
         env: state.env,
-        timeoutMs: state.timeoutMs,
+        timeoutMs: options?.timeoutMs ?? state.timeoutMs,
         // `opencode run --format json` prints once at the end, so there is
         // nothing to heartbeat on stdout; stderr diagnostics forward live.
         ...(options?.onOutputLine !== undefined

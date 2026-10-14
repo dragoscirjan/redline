@@ -27,10 +27,13 @@ import { buildFileReviewPrompt, type FileReviewPrompt } from './prompt.js';
 import { buildPullRequestReview, validateFindingReferences } from './pr-contract.js';
 import { FileReviewValidator, parseFileReviewDocument } from './report.js';
 import { buildRemediation, formatSpan } from './remediation.js';
+import { parseVerificationDocument, validateVerificationDocument } from './verification.js';
+import { buildVerificationPrompt } from './verification-prompt.js';
 import {
   FILE_REVIEW_RECORD_VERSION,
   REVIEW_RUN_SUMMARY_VERSION,
   type FileReviewRecord,
+  type FileVerificationCoverage,
   type PublishedFinding,
   type PullRequestReviewRecord,
   type RejectedCandidate,
@@ -38,14 +41,17 @@ import {
   type ReviewRunSummaryFile,
   type ValidatedFinding,
 } from './types.js';
-import { createReviewWriter } from './writer.js';
+import { createReviewWriter, type VerificationArtifact } from './writer.js';
 
 const MAX_REASON_CHARS = 500;
+export const VERIFICATION_TIMEOUT_MS = 10 * 60 * 1_000;
 
 export interface ReviewRunInput {
   readonly environment: ReviewEnvironment;
   /** Executor override for tests; defaults to the registry for the harness. */
   readonly executor?: HarnessExecutor | undefined;
+  /** Enables the fail-closed verifier during benchmark evaluation before publication rollout. */
+  readonly verifyCandidates?: boolean | undefined;
   /**
    * Called after each reviewed file completes, for live progress in the
    * run log — a long sequential run must stay distinguishable from a
@@ -105,7 +111,8 @@ async function reviewOneFile(
   file: ReviewManifestFile,
   onHarnessOutput?: (output: HarnessOutputLine) => void,
   harnessStreamMode?: HarnessStreamMode,
-): Promise<FileReviewRecord & { rawModelOutput?: string | undefined }> {
+  verifyCandidates = false,
+): Promise<FileReviewRecord & { rawModelOutput?: string | undefined; verificationArtifact?: VerificationArtifact | undefined }> {
   const redact = (value: string): string => redactCredential(value, environment.credential);
   const fileContext = codeContextForFile(indexedContext, file);
   const described = {
@@ -116,6 +123,16 @@ async function reviewOneFile(
     harness: environment.harness,
     model: environment.model.model,
     codeContext: fileContext.coverage,
+    ...(verifyCandidates ? {
+      verification: {
+        status: 'incomplete' as const,
+        requested: 0,
+        accepted: 0,
+        rejected: 0,
+        durationMs: 0,
+        reason: 'discovery did not complete',
+      },
+    } : {}),
   };
 
   // Preparation (diff reading, validator construction, prompt assembly) is
@@ -211,10 +228,12 @@ async function reviewOneFile(
     ...triggerValidation.rejectedCandidates,
   ].map(sanitizeRejection);
   const findings: ValidatedFinding[] = [];
+  const candidateIndexes = new Map<string, number>();
   for (const [position, finding] of triggerValidation.findings.entries()) {
     const index = triggerValidation.candidateIndices[position] as number;
     try {
       findings.push(await validateFindingReferences(bundle, finding, indexedContext));
+      candidateIndexes.set(finding.id, index);
     } catch (error) {
       rejectedCandidates.push({
         index,
@@ -225,11 +244,133 @@ async function reviewOneFile(
     }
   }
 
+  let verifiedFindings = findings;
+  let verification: FileVerificationCoverage | undefined;
+  let verificationArtifact: VerificationArtifact | undefined;
+  let verificationDurationMs = 0;
+  if (verifyCandidates && document.outcome === 'omitted') {
+    return {
+      ...described,
+      outcome: 'omitted',
+      reason: boundedReason(redact(document.reason ?? 'discovery omitted the file')),
+      findings: [],
+      rejectedCandidates,
+      durationMs: run.durationMs,
+      rawModelOutput: redact(run.text),
+    };
+  }
+  if (verifyCandidates && findings.length === 0) {
+    verification = {
+      status: 'not-applicable', requested: 0, accepted: 0, rejected: 0, durationMs: 0,
+    };
+  }
+  if (verifyCandidates && findings.length > 0) {
+    let verifierOutput = '';
+    try {
+      const verifierPrompt = await buildVerificationPrompt({
+        bundle,
+        file,
+        candidates: findings,
+        findingScope: environment.findingScope,
+        harness: environment.harness,
+        model: environment.model.model,
+        indexedContext: fileContext.prompt,
+      });
+      const verifiedRun = await executor.execute(prepared, verifierPrompt, {
+        timeoutMs: VERIFICATION_TIMEOUT_MS,
+        ...(onHarnessOutput === undefined ? {} : { onOutputLine: onHarnessOutput }),
+        ...(harnessStreamMode === undefined ? {} : { streamMode: harnessStreamMode }),
+      });
+      verificationDurationMs = verifiedRun.durationMs;
+      verifierOutput = redact(verifiedRun.text);
+      if (verifiedRun.status !== 'succeeded') {
+        throw new Error(`verifier ${verifiedRun.status}: ${redact(verifiedRun.diagnostic)}`);
+      }
+      const verificationDocument = parseVerificationDocument(verifiedRun.text, file.id, findings);
+      const dispositions = await validateVerificationDocument(
+        bundle, file, findings, verificationDocument, environment.findingScope,
+      );
+      verifiedFindings = dispositions.flatMap((item) => item.finding === undefined ? [] : [{
+        ...item.finding,
+        verification: {
+          status: 'confirmed' as const,
+          reason: boundedReason(redact(item.finding.verification.reason)),
+        },
+      }]);
+      for (const item of dispositions) {
+        if (item.finding !== undefined) continue;
+        rejectedCandidates.push({
+          index: candidateIndexes.get(item.candidateId) as number,
+          stage: 'verification',
+          code: `verification-${item.disposition}`,
+          reason: boundedReason(redact(item.reason)),
+        });
+      }
+      const inconclusive = dispositions.filter((item) => item.disposition === 'inconclusive').length;
+      verification = {
+        status: inconclusive === 0 ? 'completed' : 'incomplete',
+        requested: findings.length,
+        accepted: verifiedFindings.length,
+        rejected: findings.length - verifiedFindings.length,
+        durationMs: verificationDurationMs,
+        ...(inconclusive === 0 ? {} : { reason: `${inconclusive} candidates lacked conclusive source-backed verification` }),
+      };
+      verificationArtifact = {
+        version: 1,
+        candidateIds: findings.map((item) => item.id),
+        status: verification.status === 'completed' ? 'completed' : 'incomplete',
+        dispositions: dispositions.map((item) => ({
+          candidateId: item.candidateId,
+          disposition: item.disposition,
+          reason: boundedReason(redact(item.reason)),
+        })),
+        rawModelOutput: verifierOutput,
+      };
+    } catch (error) {
+      const reason = boundedReason(redact(error instanceof Error ? error.message : String(error)));
+      verification = {
+        status: 'incomplete',
+        requested: findings.length,
+        accepted: 0,
+        rejected: findings.length,
+        durationMs: verificationDurationMs,
+        reason,
+      };
+      verificationArtifact = {
+        version: 1,
+        candidateIds: findings.map((item) => item.id),
+        status: 'incomplete',
+        dispositions: findings.map((item) => ({ candidateId: item.id, disposition: 'inconclusive', reason })),
+        rawModelOutput: verifierOutput,
+      };
+      for (const item of findings) {
+        rejectedCandidates.push({
+          index: candidateIndexes.get(item.id) as number,
+          stage: 'verification',
+          code: 'verification-failed',
+          reason,
+        });
+      }
+      return {
+        ...described,
+        verification,
+        verificationArtifact,
+        outcome: 'omitted',
+        errorKind: 'verification-failed',
+        reason,
+        findings: [],
+        rejectedCandidates,
+        durationMs: run.durationMs + verificationDurationMs,
+        rawModelOutput: redact(run.text),
+      };
+    }
+  }
+
   // Each validated finding is enriched for publication: the rendered
   // change suggestion (when resolvable) and the fix prompt. Both embed
   // model-derived text, so both are redacted against the credential.
   const published: PublishedFinding[] = [];
-  for (const finding of findings) {
+  for (const finding of verifiedFindings) {
     const remediation = await buildRemediation(bundle, file, finding, validator.changed);
     const { suggestedChange: _modelProposal, ...core } = finding;
     published.push({
@@ -241,8 +382,11 @@ async function reviewOneFile(
     });
   }
 
-  const allCandidatesRejected = published.length === 0 && rejectedCandidates.length > 0;
-  const outcome = document.outcome === 'omitted' || allCandidatesRejected
+  const invalidCandidates = rejectedCandidates.filter((candidate) =>
+    candidate.stage !== 'verification' ||
+    (candidate.code !== 'verification-rejected' && candidate.code !== 'verification-duplicate'));
+  const allCandidatesInvalid = published.length === 0 && invalidCandidates.length > 0;
+  const outcome = document.outcome === 'omitted' || allCandidatesInvalid
     ? 'omitted'
     : published.length > 0
       ? 'findings'
@@ -250,15 +394,23 @@ async function reviewOneFile(
   return {
     ...described,
     outcome,
-    ...(allCandidatesRejected ? { errorKind: 'invalid-output' as const } : {}),
-    reason: allCandidatesRejected
-      ? `${rejectedCandidates.length} review candidates failed validation`
-      : document.reason !== undefined
-        ? boundedReason(redact(document.reason))
-        : undefined,
+    ...(allCandidatesInvalid ? {
+      errorKind: invalidCandidates.some((candidate) => candidate.code === 'verification-inconclusive')
+        ? 'verification-failed' as const
+        : 'invalid-output' as const,
+    } : {}),
+    reason: allCandidatesInvalid
+      ? `${invalidCandidates.length} review candidates failed required validation or verification`
+      : verifyCandidates && published.length === 0 && rejectedCandidates.length > 0
+        ? 'Discovery candidates were disproved by the verifier.'
+        : document.reason !== undefined
+          ? boundedReason(redact(document.reason))
+          : undefined,
     findings: published,
     rejectedCandidates,
-    durationMs: run.durationMs,
+    ...(verification === undefined ? {} : { verification }),
+    ...(verificationArtifact === undefined ? {} : { verificationArtifact }),
+    durationMs: run.durationMs + verificationDurationMs,
     rawModelOutput: redact(run.text),
   };
 }
@@ -282,7 +434,10 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       workDirectory,
     });
 
-    const records: (FileReviewRecord & { rawModelOutput?: string | undefined })[] = [];
+    const records: (FileReviewRecord & {
+      rawModelOutput?: string | undefined;
+      verificationArtifact?: VerificationArtifact | undefined;
+    })[] = [];
     for (const file of bundle.manifest.files) {
       if (!file.reviewed) continue;
       if (file.binary) {
@@ -315,6 +470,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
         file,
         input.onHarnessOutput,
         input.harnessStreamMode,
+        input.verifyCandidates,
       );
       records.push(record);
       await writer.writeFileReview(record);

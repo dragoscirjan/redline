@@ -60,6 +60,17 @@ The checked-in comparison verifies that:
 
 It does **not** prove that CGC or a live model produces the checked-in relationships or findings reliably. Recorded responses are human-judged fixtures, and their durations are not production latency measurements. Workflow enablement requires separate live evidence.
 
+## Scripted verifier replay (draft #107)
+
+Run `pnpm run benchmark:verification` to replay the four v2 fixtures plus two additional cases: a defaulted-parameter false positive and a cross-file per-user throttle defect. `benchmark/review-quality/verification-v1/dispositions.json` contains **scripted**, manually selected verifier dispositions—not model responses. `report.json` retains the per-fixture discovery and post-verifier findings, credited issues, false positives, prompt bytes, coverage, and recorded durations. Run `pnpm run benchmark:verification -- --output /tmp/verification-report.json` to regenerate a report without overwriting the checked-in evidence.
+
+| Recorded mode | Credited issues before → after | False positives before → after | Recorded review duration before → after | Incomplete files |
+| --- | ---: | ---: | ---: | ---: |
+| File only | 1/3 → 1/3 | 2 → 0 | 63 → 113 ms | 0 |
+| Indexed context | 3/3 → 3/3 | 0 → 0 | 63 → 125 ms | 0 |
+
+The replay runs the production discovery parser, source validator, verifier prompt and citation validation. The scripted gate fails if any fixture loses a credited defect, gains a clean-change false positive, or ends with incomplete required coverage. It also records missing decisions as failures instead of silently skipping verification. The measured extra 50/62 ms is **fixture data**, not observed model latency. Scripted decisions were selected knowing the expected outcomes, so this pass proves the pipeline and scoring gates work, **not** independent verifier quality. Production activation remains blocked pending a separately judged live discovery-versus-verifier measurement on these cases and trusted-base Action verification on a subsequent PR. The GitHub Action and CLI still do not enable the opt-in verifier.
+
 ## Opt-in live-model capture
 
 A live capture runs the same corpus and model configuration through Pi or OpenCode. It uses the checked-in context artifacts so model behavior can be measured independently from provider variability.

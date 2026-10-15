@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "fixtures": [
+    "fixtures/clean-default-parameter.json",
+    "fixtures/cross-file-rate-limit.json"
+  ]
+}

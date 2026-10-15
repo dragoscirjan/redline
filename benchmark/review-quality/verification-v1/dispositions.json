@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "kind": "scripted-verifier-decisions",
+  "decisions": [
+    { "fixtureId": "clean-api-extension", "mode": "file-only", "fileId": "000001", "findingIndex": 0, "disposition": "rejected", "durationMs": 16 },
+    { "fixtureId": "clean-default-parameter", "mode": "file-only", "fileId": "000001", "findingIndex": 0, "disposition": "rejected", "durationMs": 16 },
+    { "fixtureId": "cross-file-cache-collision", "mode": "indexed-context", "fileId": "000001", "findingIndex": 0, "disposition": "confirmed", "durationMs": 22 },
+    { "fixtureId": "cross-file-rate-limit", "mode": "indexed-context", "fileId": "000001", "findingIndex": 0, "disposition": "confirmed", "durationMs": 22 },
+    { "fixtureId": "local-port-validation", "mode": "file-only", "fileId": "000001", "findingIndex": 0, "disposition": "confirmed", "durationMs": 18 },
+    { "fixtureId": "local-port-validation", "mode": "indexed-context", "fileId": "000001", "findingIndex": 0, "disposition": "confirmed", "durationMs": 18 }
+  ]
+}

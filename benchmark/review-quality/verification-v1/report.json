@@ -1,0 +1,930 @@
+{
+  "version": 1,
+  "evidence": "scripted-verifier-decisions",
+  "cases": [
+    {
+      "fixtureId": "clean-api-extension",
+      "mode": "file-only",
+      "kind": "clean",
+      "discovery": {
+        "fixtureId": "clean-api-extension",
+        "title": "Add an optional name separator",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 1,
+        "falsePositives": 1,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 10891,
+        "reviewDurationMs": 9
+      },
+      "verified": {
+        "fixtureId": "clean-api-extension",
+        "title": "Add an optional name separator",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 16727,
+        "reviewDurationMs": 25
+      },
+      "requested": 1,
+      "confirmed": 0,
+      "disproved": 1,
+      "verificationDurationMs": 16,
+      "requiredCoverageComplete": true
+    },
+    {
+      "fixtureId": "clean-api-extension",
+      "mode": "indexed-context",
+      "kind": "clean",
+      "discovery": {
+        "fixtureId": "clean-api-extension",
+        "title": "Add an optional name separator",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "2222222222222222222222222222222222222222",
+          "relatedSpans": 1,
+          "sourceBytes": 103,
+          "reason": null,
+          "filesWithContext": 1,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 11403,
+        "reviewDurationMs": 9
+      },
+      "verified": {
+        "fixtureId": "clean-api-extension",
+        "title": "Add an optional name separator",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "2222222222222222222222222222222222222222",
+          "relatedSpans": 1,
+          "sourceBytes": 103,
+          "reason": null,
+          "filesWithContext": 1,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 11403,
+        "reviewDurationMs": 9
+      },
+      "requested": 0,
+      "confirmed": 0,
+      "disproved": 0,
+      "verificationDurationMs": 0,
+      "requiredCoverageComplete": true
+    },
+    {
+      "fixtureId": "clean-local-refactor",
+      "mode": "file-only",
+      "kind": "clean",
+      "discovery": {
+        "fixtureId": "clean-local-refactor",
+        "title": "Rename a local normalization variable",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 10880,
+        "reviewDurationMs": 8
+      },
+      "verified": {
+        "fixtureId": "clean-local-refactor",
+        "title": "Rename a local normalization variable",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 10880,
+        "reviewDurationMs": 8
+      },
+      "requested": 0,
+      "confirmed": 0,
+      "disproved": 0,
+      "verificationDurationMs": 0,
+      "requiredCoverageComplete": true
+    },
+    {
+      "fixtureId": "clean-local-refactor",
+      "mode": "indexed-context",
+      "kind": "clean",
+      "discovery": {
+        "fixtureId": "clean-local-refactor",
+        "title": "Rename a local normalization variable",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "ffffffffffffffffffffffffffffffffffffffff",
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": null,
+          "filesWithContext": 0,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 10880,
+        "reviewDurationMs": 8
+      },
+      "verified": {
+        "fixtureId": "clean-local-refactor",
+        "title": "Rename a local normalization variable",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "ffffffffffffffffffffffffffffffffffffffff",
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": null,
+          "filesWithContext": 0,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 10880,
+        "reviewDurationMs": 8
+      },
+      "requested": 0,
+      "confirmed": 0,
+      "disproved": 0,
+      "verificationDurationMs": 0,
+      "requiredCoverageComplete": true
+    },
+    {
+      "fixtureId": "cross-file-cache-collision",
+      "mode": "file-only",
+      "kind": "defect",
+      "discovery": {
+        "fixtureId": "cross-file-cache-collision",
+        "title": "Keep account identity in user cache keys",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [
+          "cross-account-cache-collision"
+        ],
+        "uncreditedIssueIds": [
+          "cross-account-cache-collision"
+        ],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 10773,
+        "reviewDurationMs": 10
+      },
+      "verified": {
+        "fixtureId": "cross-file-cache-collision",
+        "title": "Keep account identity in user cache keys",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [
+          "cross-account-cache-collision"
+        ],
+        "uncreditedIssueIds": [
+          "cross-account-cache-collision"
+        ],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 10773,
+        "reviewDurationMs": 10
+      },
+      "requested": 0,
+      "confirmed": 0,
+      "disproved": 0,
+      "verificationDurationMs": 0,
+      "requiredCoverageComplete": true
+    },
+    {
+      "fixtureId": "cross-file-cache-collision",
+      "mode": "indexed-context",
+      "kind": "defect",
+      "discovery": {
+        "fixtureId": "cross-file-cache-collision",
+        "title": "Keep account identity in user cache keys",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "dddddddddddddddddddddddddddddddddddddddd",
+          "relatedSpans": 1,
+          "sourceBytes": 113,
+          "reason": null,
+          "filesWithContext": 1,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 1,
+        "creditedIssues": 1,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 1,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 1,
+        "validEvidenceMatches": 1,
+        "promptBytes": 11300,
+        "reviewDurationMs": 10
+      },
+      "verified": {
+        "fixtureId": "cross-file-cache-collision",
+        "title": "Keep account identity in user cache keys",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "dddddddddddddddddddddddddddddddddddddddd",
+          "relatedSpans": 1,
+          "sourceBytes": 113,
+          "reason": null,
+          "filesWithContext": 1,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 1,
+        "creditedIssues": 1,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 1,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 1,
+        "validEvidenceMatches": 1,
+        "promptBytes": 17572,
+        "reviewDurationMs": 32
+      },
+      "requested": 1,
+      "confirmed": 1,
+      "disproved": 0,
+      "verificationDurationMs": 22,
+      "requiredCoverageComplete": true
+    },
+    {
+      "fixtureId": "local-port-validation",
+      "mode": "file-only",
+      "kind": "defect",
+      "discovery": {
+        "fixtureId": "local-port-validation",
+        "title": "Reject non-integer network ports",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 1,
+        "creditedIssues": 1,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 1,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 1,
+        "validEvidenceMatches": 1,
+        "promptBytes": 11075,
+        "reviewDurationMs": 12
+      },
+      "verified": {
+        "fixtureId": "local-port-validation",
+        "title": "Reject non-integer network ports",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 1,
+        "creditedIssues": 1,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 1,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 1,
+        "validEvidenceMatches": 1,
+        "promptBytes": 17251,
+        "reviewDurationMs": 30
+      },
+      "requested": 1,
+      "confirmed": 1,
+      "disproved": 0,
+      "verificationDurationMs": 18,
+      "requiredCoverageComplete": true
+    },
+    {
+      "fixtureId": "local-port-validation",
+      "mode": "indexed-context",
+      "kind": "defect",
+      "discovery": {
+        "fixtureId": "local-port-validation",
+        "title": "Reject non-integer network ports",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": null,
+          "filesWithContext": 0,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 1,
+        "creditedIssues": 1,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 1,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 1,
+        "validEvidenceMatches": 1,
+        "promptBytes": 11075,
+        "reviewDurationMs": 12
+      },
+      "verified": {
+        "fixtureId": "local-port-validation",
+        "title": "Reject non-integer network ports",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": null,
+          "filesWithContext": 0,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 1,
+        "creditedIssues": 1,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 1,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 1,
+        "validEvidenceMatches": 1,
+        "promptBytes": 17251,
+        "reviewDurationMs": 30
+      },
+      "requested": 1,
+      "confirmed": 1,
+      "disproved": 0,
+      "verificationDurationMs": 18,
+      "requiredCoverageComplete": true
+    },
+    {
+      "fixtureId": "clean-default-parameter",
+      "mode": "file-only",
+      "kind": "clean",
+      "discovery": {
+        "fixtureId": "clean-default-parameter",
+        "title": "Defaulted argument preserves an existing call",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 1,
+        "falsePositives": 1,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 10747,
+        "reviewDurationMs": 11
+      },
+      "verified": {
+        "fixtureId": "clean-default-parameter",
+        "title": "Defaulted argument preserves an existing call",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 16437,
+        "reviewDurationMs": 27
+      },
+      "requested": 1,
+      "confirmed": 0,
+      "disproved": 1,
+      "verificationDurationMs": 16,
+      "requiredCoverageComplete": true
+    },
+    {
+      "fixtureId": "clean-default-parameter",
+      "mode": "indexed-context",
+      "kind": "clean",
+      "discovery": {
+        "fixtureId": "clean-default-parameter",
+        "title": "Defaulted argument preserves an existing call",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "4444444444444444444444444444444444444444",
+          "relatedSpans": 1,
+          "sourceBytes": 66,
+          "reason": null,
+          "filesWithContext": 1,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 11219,
+        "reviewDurationMs": 11
+      },
+      "verified": {
+        "fixtureId": "clean-default-parameter",
+        "title": "Defaulted argument preserves an existing call",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "4444444444444444444444444444444444444444",
+          "relatedSpans": 1,
+          "sourceBytes": 66,
+          "reason": null,
+          "filesWithContext": 1,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 11219,
+        "reviewDurationMs": 11
+      },
+      "requested": 0,
+      "confirmed": 0,
+      "disproved": 0,
+      "verificationDurationMs": 0,
+      "requiredCoverageComplete": true
+    },
+    {
+      "fixtureId": "cross-file-rate-limit",
+      "mode": "file-only",
+      "kind": "defect",
+      "discovery": {
+        "fixtureId": "cross-file-rate-limit",
+        "title": "Per-user throttling now shares a route bucket",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [
+          "per-user-throttle-lost"
+        ],
+        "uncreditedIssueIds": [
+          "per-user-throttle-lost"
+        ],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 10751,
+        "reviewDurationMs": 13
+      },
+      "verified": {
+        "fixtureId": "cross-file-rate-limit",
+        "title": "Per-user throttling now shares a route bucket",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [
+          "per-user-throttle-lost"
+        ],
+        "uncreditedIssueIds": [
+          "per-user-throttle-lost"
+        ],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 10751,
+        "reviewDurationMs": 13
+      },
+      "requested": 0,
+      "confirmed": 0,
+      "disproved": 0,
+      "verificationDurationMs": 0,
+      "requiredCoverageComplete": true
+    },
+    {
+      "fixtureId": "cross-file-rate-limit",
+      "mode": "indexed-context",
+      "kind": "defect",
+      "discovery": {
+        "fixtureId": "cross-file-rate-limit",
+        "title": "Per-user throttling now shares a route bucket",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "6666666666666666666666666666666666666666",
+          "relatedSpans": 1,
+          "sourceBytes": 103,
+          "reason": null,
+          "filesWithContext": 1,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 1,
+        "creditedIssues": 1,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 1,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 1,
+        "validEvidenceMatches": 1,
+        "promptBytes": 11263,
+        "reviewDurationMs": 13
+      },
+      "verified": {
+        "fixtureId": "cross-file-rate-limit",
+        "title": "Per-user throttling now shares a route bucket",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "6666666666666666666666666666666666666666",
+          "relatedSpans": 1,
+          "sourceBytes": 103,
+          "reason": null,
+          "filesWithContext": 1,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 1,
+        "creditedIssues": 1,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 1,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 1,
+        "validEvidenceMatches": 1,
+        "promptBytes": 17422,
+        "reviewDurationMs": 35
+      },
+      "requested": 1,
+      "confirmed": 1,
+      "disproved": 0,
+      "verificationDurationMs": 22,
+      "requiredCoverageComplete": true
+    }
+  ],
+  "gate": {
+    "passedOnScriptedRecordings": true,
+    "recallRegressions": [],
+    "cleanFalsePositiveRegressions": [],
+    "incompleteCoverage": [],
+    "activationReady": false,
+    "activationReason": "Scripted dispositions exercise the pipeline but do not measure independent model recall or production latency."
+  }
+}

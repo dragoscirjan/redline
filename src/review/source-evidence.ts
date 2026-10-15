@@ -48,6 +48,10 @@ async function evidenceSource(bundle: ReviewBundle, evidence: SourceEvidence): P
 
 /** Re-resolves one bounded citation from captured base or exact-head source. */
 export async function validateSourceEvidence(bundle: ReviewBundle, evidence: SourceEvidence): Promise<void> {
+  if (!Number.isSafeInteger(evidence.startLine) || evidence.startLine < 1
+    || !Number.isSafeInteger(evidence.endLine) || evidence.endLine < evidence.startLine) {
+    throw new Error(`supporting evidence span is invalid for ${evidence.path}`);
+  }
   const lines = await evidenceSource(bundle, evidence);
   if (evidence.endLine > lines.length) {
     throw new Error(`supporting evidence span exceeds captured source for ${evidence.path}`);

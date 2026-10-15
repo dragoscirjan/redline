@@ -31,9 +31,10 @@ export interface SourceEvidence {
   readonly role: EvidenceRole;
   readonly revision: string;
   readonly path: string;
+  /** Inclusive, source-resolved range; interior lines have no claimed text in this contract. */
   readonly startLine: number;
   readonly endLine: number;
-  /** Exact content of startLine at revision/path. */
+  /** Exact content of startLine at revision/path; not a claim about the full range. */
   readonly evidence: string;
 }
 

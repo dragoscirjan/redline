@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadReviewBundle } from '../src/review/bundle.js';
 import { parseVerificationDocument, validateVerificationDocument } from '../src/review/verification.js';
+import { validateSourceEvidence } from '../src/review/source-evidence.js';
 import type { ValidatedFinding } from '../src/review/types.js';
 import { BASE_SHA, createBundleFixture, HEAD_SHA } from './helpers/bundle.js';
 import { reviewFinding } from './helpers/finding.js';
@@ -44,6 +45,32 @@ function document(results: readonly Record<string, unknown>[]): string {
 }
 
 describe('source-backed candidate verification contract', () => {
+  it('enforces valid bounded source ranges for direct callers and anchors multi-line citations to their first line', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      await writeFile(join(fixture.source, 'src/example.ts'), 'new\ninterior line\n');
+      const bundle = await loadReviewBundle(fixture.review, fixture.source);
+      const span = citation({ endLine: 2 });
+      await expect(validateSourceEvidence(bundle, span as unknown as ValidatedFinding['supportingEvidence'][number]))
+        .resolves.toBeUndefined();
+      for (const invalid of [
+        citation({ startLine: 0 }),
+        citation({ startLine: 2, endLine: 1 }),
+        citation({ startLine: 1.5 }),
+        citation({ endLine: Number.POSITIVE_INFINITY }),
+      ]) {
+        await expect(validateSourceEvidence(bundle, invalid as unknown as ValidatedFinding['supportingEvidence'][number]))
+          .rejects.toThrow('span is invalid');
+      }
+      await expect(validateSourceEvidence(bundle, citation({ endLine: 3 }) as unknown as ValidatedFinding['supportingEvidence'][number]))
+        .rejects.toThrow('span exceeds captured source');
+      await expect(validateSourceEvidence(bundle, citation({ endLine: 2, evidence: 'invented' }) as unknown as ValidatedFinding['supportingEvidence'][number]))
+        .rejects.toThrow('does not match captured source');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('covers every candidate exactly once without accepting extra, duplicate, or missing identities', () => {
     const candidates = [candidate(), candidate(SECOND)];
     expect(parseVerificationDocument(document([result(), result(SECOND)]), '000001', candidates).results).toHaveLength(2);

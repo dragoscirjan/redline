@@ -368,6 +368,135 @@ assert {'gitnexus-outgoing-query-failed', 'gitnexus-incoming-query-failed'} <= c
 PY
 }
 
+@test "action-owned follow-up uses pinned fake CGC and GitNexus base snapshots without indexing PR code" {
+  for provider in cgc gitnexus; do
+    export REDLINE_CODE_INDEX_PROVIDER="$provider"
+    if [[ "$provider" == gitnexus ]]; then
+      export REDLINE_GITNEXUS_EXECUTABLE="$GITNEXUS_PROVIDER/dist/cli/index.js"
+      export REDLINE_GITNEXUS_RUNTIME
+      REDLINE_GITNEXUS_RUNTIME=$(command -v node)
+      unset REDLINE_CGC_EXECUTABLE
+    fi
+    prepare_action
+    build_action '' success
+    mkdir -p "$TMP_ROOT/review"
+    python3 - "$TMP_ROOT/review/manifest.json" "$TMP_ROOT/requests.json" "$BASE" "$HEAD_REVISION" <<'PY'
+import hashlib, json, sys
+manifest, requests, base, head = sys.argv[1:]
+with open(manifest, 'w', encoding='utf-8') as handle:
+    json.dump({'version': 1, 'base': base, 'head': head, 'files': [{
+        'id': '000001', 'reviewed': True, 'newPath': 'src/cache.ts', 'oldPath': 'src/cache.ts'
+    }]}, handle)
+candidate = 'f-' + 'b'*24
+identity = ['owner/repository', base, head, '000001', candidate, 'src/cache.ts', 'incoming']
+identifier = 'related-span:sha256:' + hashlib.sha256(json.dumps(identity,
+    ensure_ascii=False, separators=(',', ':')).encode('utf-8')).hexdigest()
+with open(requests, 'w', encoding='utf-8') as handle:
+    json.dump({'version': 1, 'repository': 'owner/repository', 'base': base, 'head': head,
+        'omitted': 0, 'requests': [{
+            'id': identifier, 'candidateId': candidate, 'fileId': '000001',
+            'changedPath': 'src/cache.ts', 'capability': 'related-spans',
+            'direction': 'incoming', 'depth': 1, 'fanOut': 8, 'resultLimit': 8,
+        }]}, handle)
+PY
+    run python3 "$ACTION_DIR/follow-up.py" --provider "$provider" --repository owner/repository \
+      --base "$BASE" --head "$HEAD_REVISION" --review-dir "$TMP_ROOT/review" \
+      --runner-temp "$RUNNER_TEMP" --input "$TMP_ROOT/requests.json" --output "$TMP_ROOT/result.json"
+    [ "$status" -eq 0 ]
+    python3 - "$TMP_ROOT/result.json" "$HEAD_REVISION" "$BASE" "$provider" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1], encoding='utf-8'))
+assert result['head'] == sys.argv[2] and result['base'] == result['snapshot'] == sys.argv[3]
+assert result['provider']['id'] == sys.argv[4]
+assert result['results'][0]['status'] == 'complete', result
+assert result['results'][0]['spans'] == [{
+    'path': 'src/user-service.ts', 'revision': sys.argv[2], 'startLine': 3,
+    'endLine': 5, 'evidence': "export function loadUser(accountId: string, userId: string): string {",
+    'relationship': 'related-symbol-calls-changed-code',
+}], result
+PY
+    run node --input-type=module - "$ROOT" "$TMP_ROOT/review" "$RUNNER_TEMP" "$provider" "$BASE" "$HEAD_REVISION" <<'JS'
+import assert from 'node:assert/strict';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+const [root, reviewDirectory, runnerTemp, provider, base, head] = process.argv.slice(2);
+const { FollowUpBudget, parseFollowUpResults } = await import(pathToFileURL(join(root, 'dist/src/code-context/follow-up.js')));
+const { createActionFollowUpExecutor } = await import(pathToFileURL(join(root, 'dist/src/action/follow-up.js')));
+const candidateId = 'f-' + 'b'.repeat(24);
+const request = new FollowUpBudget().plan({ repository: 'owner/repository', base, head },
+  '000001', 'src/cache.ts', [candidateId], [{ candidateId, direction: 'incoming' }]);
+const output = await createActionFollowUpExecutor({ provider, runnerTemp, reviewDirectory, actionRoot: root })(request);
+const parsed = parseFollowUpResults(output, request, {
+  id: provider, version: provider === 'cgc' ? '0.5.7' : '1.6.12',
+});
+assert.equal(parsed.results[0]?.status, 'complete');
+assert.equal(parsed.results[0]?.spans[0]?.revision, head);
+JS
+    [ "$status" -eq 0 ]
+    python3 - "$TMP_ROOT/requests.json" "$TMP_ROOT/invalid.json" <<'PY'
+import json, sys
+request = json.load(open(sys.argv[1], encoding='utf-8'))
+request['requests'][0]['direction'] = "MATCH (n) DELETE n"
+with open(sys.argv[2], 'w', encoding='utf-8') as handle:
+    json.dump(request, handle)
+PY
+    run python3 "$ACTION_DIR/follow-up.py" --provider "$provider" --repository owner/repository \
+      --base "$BASE" --head "$HEAD_REVISION" --review-dir "$TMP_ROOT/review" \
+      --runner-temp "$RUNNER_TEMP" --input "$TMP_ROOT/invalid.json" --output "$TMP_ROOT/invalid-result.json"
+    [ "$status" -eq 2 ]
+    [ ! -f "$TMP_ROOT/invalid-result.json" ]
+
+    if [[ "$provider" == cgc ]]; then
+      printf 'query-fail\n' > "$PROVIDER/mode"
+    else
+      printf 'query-fail\n' > "$GITNEXUS_CONTROL/mode"
+    fi
+    run python3 "$ACTION_DIR/follow-up.py" --provider "$provider" --repository owner/repository \
+      --base "$BASE" --head "$HEAD_REVISION" --review-dir "$TMP_ROOT/review" \
+      --runner-temp "$RUNNER_TEMP" --input "$TMP_ROOT/requests.json" --output "$TMP_ROOT/result.json"
+    [ "$status" -eq 0 ]
+    python3 - "$TMP_ROOT/result.json" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1], encoding='utf-8'))['results'][0]
+assert result['status'] == 'unavailable' and result['reason'] == 'query-failed' and result['spans'] == []
+PY
+    if [[ "$provider" == cgc ]]; then
+      rm -f "$PROVIDER/mode"
+    else
+      rm -f "$GITNEXUS_CONTROL/mode"
+    fi
+    rm "$RUNNER_TEMP/redline-code-index/head-source/src/user-service.ts"
+    run python3 "$ACTION_DIR/follow-up.py" --provider "$provider" --repository owner/repository \
+      --base "$BASE" --head "$HEAD_REVISION" --review-dir "$TMP_ROOT/review" \
+      --runner-temp "$RUNNER_TEMP" --input "$TMP_ROOT/requests.json" --output "$TMP_ROOT/result.json"
+    [ "$status" -eq 0 ]
+    python3 - "$TMP_ROOT/result.json" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1], encoding='utf-8'))['results'][0]
+assert result['status'] == 'partial' and result['reason'] == 'source-unavailable' and result['spans'] == []
+PY
+    python3 - "$RUNNER_TEMP/redline-code-index/cache/state.json" "$HEAD_REVISION" <<'PY'
+import json, sys
+path, head = sys.argv[1:]
+state = json.load(open(path, encoding='utf-8'))
+state['revision'] = head
+with open(path, 'w', encoding='utf-8') as handle:
+    json.dump(state, handle)
+PY
+    run python3 "$ACTION_DIR/follow-up.py" --provider "$provider" --repository owner/repository \
+      --base "$BASE" --head "$HEAD_REVISION" --review-dir "$TMP_ROOT/review" \
+      --runner-temp "$RUNNER_TEMP" --input "$TMP_ROOT/requests.json" --output "$TMP_ROOT/result.json"
+    [ "$status" -eq 0 ]
+    python3 - "$TMP_ROOT/result.json" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1], encoding='utf-8'))
+assert result['results'][0]['status'] == 'unavailable'
+assert result['results'][0]['reason'] == 'snapshot-stale'
+assert result['results'][0]['spans'] == []
+PY
+  done
+}
+
 @test "live pinned GitNexus smoke test is opt-in" {
   [[ "${REDLINE_LIVE_GITNEXUS_TESTS:-0}" == '1' ]] || skip 'set REDLINE_LIVE_GITNEXUS_TESTS=1 to run the live GitNexus smoke test'
   export REDLINE_CODE_INDEX_PROVIDER=gitnexus

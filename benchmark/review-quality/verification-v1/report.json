@@ -31,7 +31,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 10891,
+        "promptBytes": 11532,
         "reviewDurationMs": 9
       },
       "verified": {
@@ -59,8 +59,43 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 16727,
+        "promptBytes": 17368,
         "reviewDurationMs": 25
+      },
+      "published": {
+        "fixtureId": "clean-api-extension",
+        "title": "Add an optional name separator",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 17368,
+        "reviewDurationMs": 25
+      },
+      "publication": {
+        "commentsBeforeSynthesis": 0,
+        "commentsAfterSynthesis": 0,
+        "duplicateCommentsSuppressed": 0,
+        "budgetSuppressed": 0,
+        "criticalSuppressed": 0
       },
       "requested": 1,
       "confirmed": 0,
@@ -106,7 +141,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 11403,
+        "promptBytes": 12044,
         "reviewDurationMs": 9
       },
       "verified": {
@@ -143,9 +178,53 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 11403,
+        "promptBytes": 12044,
         "reviewDurationMs": 9
       },
+      "published": {
+        "fixtureId": "clean-api-extension",
+        "title": "Add an optional name separator",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "2222222222222222222222222222222222222222",
+          "relatedSpans": 1,
+          "sourceBytes": 103,
+          "reason": null,
+          "filesWithContext": 1,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 12044,
+        "reviewDurationMs": 9
+      },
+      "publication": {
+        "commentsBeforeSynthesis": 0,
+        "commentsAfterSynthesis": 0,
+        "duplicateCommentsSuppressed": 0,
+        "budgetSuppressed": 0,
+        "criticalSuppressed": 0
+      },
       "requested": 0,
       "confirmed": 0,
       "disproved": 0,
@@ -181,7 +260,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 10880,
+        "promptBytes": 11521,
         "reviewDurationMs": 8
       },
       "verified": {
@@ -209,8 +288,43 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 10880,
+        "promptBytes": 11521,
         "reviewDurationMs": 8
+      },
+      "published": {
+        "fixtureId": "clean-local-refactor",
+        "title": "Rename a local normalization variable",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 11521,
+        "reviewDurationMs": 8
+      },
+      "publication": {
+        "commentsBeforeSynthesis": 0,
+        "commentsAfterSynthesis": 0,
+        "duplicateCommentsSuppressed": 0,
+        "budgetSuppressed": 0,
+        "criticalSuppressed": 0
       },
       "requested": 0,
       "confirmed": 0,
@@ -256,7 +370,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 10880,
+        "promptBytes": 11521,
         "reviewDurationMs": 8
       },
       "verified": {
@@ -293,8 +407,52 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 10880,
+        "promptBytes": 11521,
         "reviewDurationMs": 8
+      },
+      "published": {
+        "fixtureId": "clean-local-refactor",
+        "title": "Rename a local normalization variable",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "ffffffffffffffffffffffffffffffffffffffff",
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": null,
+          "filesWithContext": 0,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 11521,
+        "reviewDurationMs": 8
+      },
+      "publication": {
+        "commentsBeforeSynthesis": 0,
+        "commentsAfterSynthesis": 0,
+        "duplicateCommentsSuppressed": 0,
+        "budgetSuppressed": 0,
+        "criticalSuppressed": 0
       },
       "requested": 0,
       "confirmed": 0,
@@ -335,7 +493,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 10773,
+        "promptBytes": 11414,
         "reviewDurationMs": 10
       },
       "verified": {
@@ -367,8 +525,47 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 10773,
+        "promptBytes": 11414,
         "reviewDurationMs": 10
+      },
+      "published": {
+        "fixtureId": "cross-file-cache-collision",
+        "title": "Keep account identity in user cache keys",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [
+          "cross-account-cache-collision"
+        ],
+        "uncreditedIssueIds": [
+          "cross-account-cache-collision"
+        ],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 11414,
+        "reviewDurationMs": 10
+      },
+      "publication": {
+        "commentsBeforeSynthesis": 0,
+        "commentsAfterSynthesis": 0,
+        "duplicateCommentsSuppressed": 0,
+        "budgetSuppressed": 0,
+        "criticalSuppressed": 0
       },
       "requested": 0,
       "confirmed": 0,
@@ -414,7 +611,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 11300,
+        "promptBytes": 11941,
         "reviewDurationMs": 10
       },
       "verified": {
@@ -451,8 +648,52 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 17572,
+        "promptBytes": 18213,
         "reviewDurationMs": 32
+      },
+      "published": {
+        "fixtureId": "cross-file-cache-collision",
+        "title": "Keep account identity in user cache keys",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "dddddddddddddddddddddddddddddddddddddddd",
+          "relatedSpans": 1,
+          "sourceBytes": 113,
+          "reason": null,
+          "filesWithContext": 1,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 1,
+        "creditedIssues": 1,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 1,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 1,
+        "validEvidenceMatches": 1,
+        "promptBytes": 18213,
+        "reviewDurationMs": 32
+      },
+      "publication": {
+        "commentsBeforeSynthesis": 1,
+        "commentsAfterSynthesis": 1,
+        "duplicateCommentsSuppressed": 0,
+        "budgetSuppressed": 0,
+        "criticalSuppressed": 0
       },
       "requested": 1,
       "confirmed": 1,
@@ -489,7 +730,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 11075,
+        "promptBytes": 11716,
         "reviewDurationMs": 12
       },
       "verified": {
@@ -517,8 +758,43 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 17251,
+        "promptBytes": 17892,
         "reviewDurationMs": 30
+      },
+      "published": {
+        "fixtureId": "local-port-validation",
+        "title": "Reject non-integer network ports",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 1,
+        "creditedIssues": 1,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 1,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 1,
+        "validEvidenceMatches": 1,
+        "promptBytes": 17892,
+        "reviewDurationMs": 30
+      },
+      "publication": {
+        "commentsBeforeSynthesis": 1,
+        "commentsAfterSynthesis": 1,
+        "duplicateCommentsSuppressed": 0,
+        "budgetSuppressed": 0,
+        "criticalSuppressed": 0
       },
       "requested": 1,
       "confirmed": 1,
@@ -564,7 +840,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 11075,
+        "promptBytes": 11716,
         "reviewDurationMs": 12
       },
       "verified": {
@@ -601,8 +877,52 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 17251,
+        "promptBytes": 17892,
         "reviewDurationMs": 30
+      },
+      "published": {
+        "fixtureId": "local-port-validation",
+        "title": "Reject non-integer network ports",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": null,
+          "filesWithContext": 0,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 1,
+        "creditedIssues": 1,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 1,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 1,
+        "validEvidenceMatches": 1,
+        "promptBytes": 17892,
+        "reviewDurationMs": 30
+      },
+      "publication": {
+        "commentsBeforeSynthesis": 1,
+        "commentsAfterSynthesis": 1,
+        "duplicateCommentsSuppressed": 0,
+        "budgetSuppressed": 0,
+        "criticalSuppressed": 0
       },
       "requested": 1,
       "confirmed": 1,
@@ -639,7 +959,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 10747,
+        "promptBytes": 11388,
         "reviewDurationMs": 11
       },
       "verified": {
@@ -667,8 +987,43 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 16437,
+        "promptBytes": 17078,
         "reviewDurationMs": 27
+      },
+      "published": {
+        "fixtureId": "clean-default-parameter",
+        "title": "Defaulted argument preserves an existing call",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 17078,
+        "reviewDurationMs": 27
+      },
+      "publication": {
+        "commentsBeforeSynthesis": 0,
+        "commentsAfterSynthesis": 0,
+        "duplicateCommentsSuppressed": 0,
+        "budgetSuppressed": 0,
+        "criticalSuppressed": 0
       },
       "requested": 1,
       "confirmed": 0,
@@ -714,7 +1069,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 11219,
+        "promptBytes": 11860,
         "reviewDurationMs": 11
       },
       "verified": {
@@ -751,8 +1106,52 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 11219,
+        "promptBytes": 11860,
         "reviewDurationMs": 11
+      },
+      "published": {
+        "fixtureId": "clean-default-parameter",
+        "title": "Defaulted argument preserves an existing call",
+        "kind": "clean",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "4444444444444444444444444444444444444444",
+          "relatedSpans": 1,
+          "sourceBytes": 66,
+          "reason": null,
+          "filesWithContext": 1,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 0,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 11860,
+        "reviewDurationMs": 11
+      },
+      "publication": {
+        "commentsBeforeSynthesis": 0,
+        "commentsAfterSynthesis": 0,
+        "duplicateCommentsSuppressed": 0,
+        "budgetSuppressed": 0,
+        "criticalSuppressed": 0
       },
       "requested": 0,
       "confirmed": 0,
@@ -793,7 +1192,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 10751,
+        "promptBytes": 11392,
         "reviewDurationMs": 13
       },
       "verified": {
@@ -825,8 +1224,47 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 10751,
+        "promptBytes": 11392,
         "reviewDurationMs": 13
+      },
+      "published": {
+        "fixtureId": "cross-file-rate-limit",
+        "title": "Per-user throttling now shares a route bucket",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "disabled",
+          "provider": null,
+          "revision": null,
+          "relatedSpans": 0,
+          "sourceBytes": 0,
+          "reason": "not-configured",
+          "filesWithContext": 0,
+          "timings": null
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 0,
+        "creditedIssues": 0,
+        "unmatchedIssueIds": [
+          "per-user-throttle-lost"
+        ],
+        "uncreditedIssueIds": [
+          "per-user-throttle-lost"
+        ],
+        "findings": 0,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 0,
+        "validEvidenceMatches": 0,
+        "promptBytes": 11392,
+        "reviewDurationMs": 13
+      },
+      "publication": {
+        "commentsBeforeSynthesis": 0,
+        "commentsAfterSynthesis": 0,
+        "duplicateCommentsSuppressed": 0,
+        "budgetSuppressed": 0,
+        "criticalSuppressed": 0
       },
       "requested": 0,
       "confirmed": 0,
@@ -872,7 +1310,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 11263,
+        "promptBytes": 11904,
         "reviewDurationMs": 13
       },
       "verified": {
@@ -909,8 +1347,52 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 17422,
+        "promptBytes": 18063,
         "reviewDurationMs": 35
+      },
+      "published": {
+        "fixtureId": "cross-file-rate-limit",
+        "title": "Per-user throttling now shares a route bucket",
+        "kind": "defect",
+        "coverage": "complete",
+        "codeContext": {
+          "status": "complete",
+          "provider": {
+            "id": "cgc",
+            "version": "0.5.7"
+          },
+          "revision": "6666666666666666666666666666666666666666",
+          "relatedSpans": 1,
+          "sourceBytes": 103,
+          "reason": null,
+          "filesWithContext": 1,
+          "timings": {
+            "installationMs": 0,
+            "restoreMs": 0,
+            "indexMs": 0,
+            "queryMs": 0,
+            "saveMs": null
+          }
+        },
+        "expectedIssues": 1,
+        "rootCauseMatches": 1,
+        "creditedIssues": 1,
+        "unmatchedIssueIds": [],
+        "uncreditedIssueIds": [],
+        "findings": 1,
+        "falsePositives": 0,
+        "duplicateFindings": 0,
+        "claimedMatches": 1,
+        "validEvidenceMatches": 1,
+        "promptBytes": 18063,
+        "reviewDurationMs": 35
+      },
+      "publication": {
+        "commentsBeforeSynthesis": 1,
+        "commentsAfterSynthesis": 1,
+        "duplicateCommentsSuppressed": 0,
+        "budgetSuppressed": 0,
+        "criticalSuppressed": 0
       },
       "requested": 1,
       "confirmed": 1,

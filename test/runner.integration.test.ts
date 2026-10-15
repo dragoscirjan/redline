@@ -10,6 +10,7 @@ import { VERIFICATION_TIMEOUT_MS } from '../src/review/runner.js';
 import {
   cleanReviewEnvironment,
   createBundleFixture,
+  BASE_SHA,
   HEAD_SHA,
   type BundleFixture,
 } from './helpers/bundle.js';
@@ -75,6 +76,116 @@ async function writeCodeContext(fixture: BundleFixture, value?: object): Promise
 }
 
 describe('runFileReviews', () => {
+  it('passes only action-resolved follow-up source to the verifier and records exact query coverage', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      await writeFile(join(fixture.source, 'src/related.ts'), 'export const related = true;\n');
+      const contextPath = await writeCodeContext(fixture, {
+        version: 1, provider: { id: 'cgc', version: '0.5.7' },
+        repository: 'owner/repository', revision: HEAD_SHA, status: 'complete',
+        files: [{ changedPath: 'src/example.ts', status: 'complete', related: [{
+          path: 'src/related.ts', startLine: 1, endLine: 1, reason: 'incoming CALLS',
+        }] }],
+        diagnostics: [], timings: { installationMs: 0, restoreMs: 0, indexMs: 0, queryMs: 0, saveMs: null },
+      });
+      const environment = parseReviewEnvironment({ ...cleanReviewEnvironment(fixture, 'echo'),
+        REDLINE_CODE_CONTEXT: contextPath, REDLINE_CODE_CONTEXT_REPOSITORY: 'owner/repository',
+      });
+      const bundle = await loadReviewBundle(fixture.review, fixture.source);
+      const file = bundle.manifest.files[0]!;
+      const candidate = reviewFinding({ evidence: 'new' });
+      const finding = new FileReviewValidator(
+        file, await readFile(join(fixture.review, file.diffFile), 'utf8'), 'defects',
+      ).validateFinding(candidate);
+      const executor = new ScriptedExecutor();
+      executor.script([
+        { text: reviewDocument({ version: 4, fileId: file.id, outcome: 'findings', findings: [candidate],
+          contextRequests: [{ candidateIndex: 0, direction: 'incoming' }] }) },
+        { text: reviewDocument({ version: 1, fileId: file.id, results: [{
+          candidateId: finding.id, disposition: 'confirmed', reason: 'Captured caller establishes reachability.',
+          citations: [{ role: 'impact-path', revision: HEAD_SHA, path: 'src/related.ts',
+            startLine: 1, endLine: 1, evidence: 'export const related = true;' }],
+        }] }) },
+      ]);
+      const seen: string[] = [];
+      const result = await runFileReviews({ environment: environment.review!, executor, verifyCandidates: true,
+        followUpExecutor: async (requests) => {
+          seen.push(requests.requests[0]?.changedPath ?? 'missing');
+          expect(requests).toMatchObject({ repository: 'owner/repository', base: BASE_SHA, head: HEAD_SHA });
+          expect(requests.requests[0]).toMatchObject({
+            candidateId: finding.id, direction: 'incoming', depth: 1, fanOut: 8, resultLimit: 8,
+          });
+          return JSON.stringify({ version: 1, repository: requests.repository,
+            base: requests.base, head: requests.head, provider: { id: 'cgc', version: '0.5.7' },
+            snapshot: BASE_SHA, results: [{ requestId: requests.requests[0]?.id,
+              status: 'complete', reason: null, durationMs: 5, spans: [{ path: 'src/related.ts',
+                revision: HEAD_SHA, startLine: 1, endLine: 1, evidence: 'export const related = true;',
+                relationship: 'related-symbol-calls-changed-code' }] }] });
+        },
+      });
+      expect(seen).toEqual(['src/example.ts']);
+      expect(executor.prompts[1]?.user).toContain('"followUp"');
+      expect(result.records[0]).toMatchObject({
+        followUp: { status: 'completed', requested: 1, completed: 1, durationMs: 5 },
+        verification: { status: 'completed' }, outcome: 'findings',
+      });
+      expect(result.records[0]?.findings[0]?.supportingEvidence).toContainEqual(expect.objectContaining({
+        path: 'src/related.ts', evidence: 'export const related = true;',
+      }));
+      expect(result.review.coverage.followUp).toMatchObject({ status: 'completed', required: true });
+      expect(await readFile(join(fixture.output, 'reviews/follow-up/000001.json'), 'utf8'))
+        .toContain('related-symbol-calls-changed-code');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('never publishes a v4 candidate that asks for follow-up while the verifier gate is off', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      executor.script([{ text: reviewDocument({ version: 4, fileId: '000001', outcome: 'findings',
+        findings: [reviewFinding({ evidence: 'new' })],
+        contextRequests: [{ candidateIndex: 0, direction: 'incoming' }],
+      }) }]);
+      const result = await runFileReviews({ environment: environment.review!, executor });
+      expect(result.records[0]).toMatchObject({ outcome: 'omitted', findings: [],
+        followUp: { status: 'incomplete', requested: 1 } });
+      expect(result.review.findings).toEqual([]);
+      expect(result.review.coverage.followUp).toMatchObject({ status: 'incomplete', required: true });
+      expect(result.review.verdict.status).toBe('inconclusive');
+      expect(executor.prompts).toHaveLength(1);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('records required incomplete coverage when action-owned follow-up is unavailable', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      executor.script([
+        { text: reviewDocument({ version: 4, fileId: '000001', outcome: 'findings',
+          findings: [reviewFinding({ evidence: 'new' })],
+          contextRequests: [{ candidateIndex: 0, direction: 'incoming' }] }) },
+        { text: '{"version":1,"fileId":"000001","results":[]}' },
+      ]);
+      const result = await runFileReviews({ environment: environment.review!, executor, verifyCandidates: true });
+      expect(result.records[0]).toMatchObject({
+        followUp: { status: 'incomplete', requested: 1, completed: 0 },
+        outcome: 'omitted', findings: [],
+      });
+      expect(result.review.limitations).toContainEqual(expect.objectContaining({
+        code: 'follow-up-incomplete', required: true,
+      }));
+      expect(result.review.verdict.status).toBe('inconclusive');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('skips the verifier for a clean file while recording required verification coverage', async () => {
     const fixture = await createBundleFixture();
     try {
@@ -392,7 +503,7 @@ describe('runFileReviews', () => {
         await readFile(join(fixture.output, 'reviews', 'review.json'), 'utf8'),
       ) as { version: number; verdict: { status: string }; coverage: { files: { status: string } } };
       expect(review).toMatchObject({
-        version: 1,
+        version: 2,
         verdict: { status: 'mergeable' },
         coverage: { files: { status: 'completed' } },
       });

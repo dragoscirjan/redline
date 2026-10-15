@@ -266,6 +266,42 @@ describe('deterministic PR verdict and coverage', () => {
     }).status).toBe('inconclusive');
   });
 
+  it('marks confirmed critical budget exhaustion as required while keeping noncritical truncation advisory', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const bundle = await loadReviewBundle(fixture.review, fixture.source);
+      const environment = { harness: 'echo' as const, findingScope: 'defects' as const,
+        model: { provider: 'mock', endpoint: 'http://127.0.0.1', model: 'test-model', auth: undefined } };
+      const records: FileReviewRecord[] = Array.from({ length: 26 }, (_value, index) => {
+        const fileId = String(index + 1).padStart(6, '0');
+        return { version: 4, fileId, path: `src/${fileId}.ts`, status: 'M', harness: 'echo',
+          model: 'test-model', codeContext: context().coverage, outcome: 'findings',
+          findings: [publishedFinding({ id: `f-${fileId}`, rootCause: `independent cause ${fileId}`,
+            severity: 'critical', verification: { status: 'confirmed', reason: 'checked' } })],
+          verification: { status: 'completed', requested: 1, accepted: 1, rejected: 0, durationMs: 1 },
+          rejectedCandidates: [], durationMs: 1 };
+      });
+      const critical = buildPullRequestReview({ bundle, environment, records, indexedContext: context(), synthesize: true });
+      expect(critical.synthesis?.decisions.filter((item) => item.status === 'publish')).toHaveLength(25);
+      expect(critical.synthesis?.decisions.filter((item) => item.status === 'file-budget')).toHaveLength(1);
+      expect(critical.limitations).toContainEqual(expect.objectContaining({
+        code: 'critical-publication-suppressed', required: true,
+      }));
+      expect(critical.coverage.publication).toMatchObject({ status: 'incomplete', required: true });
+      const noncritical = buildPullRequestReview({ bundle, environment,
+        records: records.map((record) => ({ ...record, findings: record.findings.map((finding) => ({
+          ...finding, severity: 'medium' as const,
+        })) })), indexedContext: context(), synthesize: true });
+      expect(noncritical.limitations).toContainEqual(expect.objectContaining({
+        code: 'publication-truncated', required: false,
+      }));
+      expect(noncritical.limitations.some((item) => item.code === 'critical-publication-suppressed')).toBe(false);
+      expect(noncritical.coverage.publication).toMatchObject({ status: 'completed', required: false });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('records exact snapshots, unavailable inspections, bounded graph work, and one cross-file finding', async () => {
     const fixture = await createBundleFixture();
     try {

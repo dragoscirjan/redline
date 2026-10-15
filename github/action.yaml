@@ -119,6 +119,7 @@ runs:
         pnpm install --frozen-lockfile --ignore-scripts
         pnpm run build
         test -f dist/src/review/cli.js
+        test -f dist/src/action/review.js
 
     # Two-phase token flow: token 1 exists for the review-start (and
     # failure) notifications minted while the review data is collected;
@@ -276,13 +277,17 @@ runs:
         REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
         REDLINE_CODE_CONTEXT: ${{ steps.code-index.outputs.context-file }}
         REDLINE_CODE_CONTEXT_REPOSITORY: ${{ steps.code-index.outputs.context-file != '' && github.repository || '' }}
+        CODE_INDEX_PROVIDER: ${{ inputs.indexing-provider }}
+        # Explicit gate: scripted replay is not independent live-model evidence.
+        # Never enable until the recall, clean-change, and latency gates pass.
+        CODE_INDEX_VERIFICATION_ENABLED: 'false'
       run: |
         set -euo pipefail
         # Token-free by design: the review process carries no publication
         # credential at all. Publication happens in its own step with a
         # freshly minted token, so the token lifetime never bounds the
         # review duration.
-        node "${{ github.action_path }}/../dist/src/review/cli.js"
+        node "${{ github.action_path }}/../dist/src/action/review.js"
 
     - name: Generate Redline App token for publication
       id: app-token-publish

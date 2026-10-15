@@ -29,12 +29,16 @@ describe('scripted candidate verification quality gate', () => {
       && item.mode === 'indexed-context');
     expect(indexedCrossFile).toMatchObject({
       discovery: { creditedIssues: 1 }, verified: { creditedIssues: 1 },
+      published: { creditedIssues: 1, duplicateFindings: 0 },
+      publication: { commentsBeforeSynthesis: 1, commentsAfterSynthesis: 1,
+        duplicateCommentsSuppressed: 0, budgetSuppressed: 0, criticalSuppressed: 0 },
       requested: 1, confirmed: 1, requiredCoverageComplete: true,
     });
     const clean = report.cases.find((item) => item.fixtureId === 'clean-default-parameter'
       && item.mode === 'file-only');
     expect(clean).toMatchObject({
       discovery: { falsePositives: 1 }, verified: { falsePositives: 0 },
+      published: { falsePositives: 0 }, publication: { commentsAfterSynthesis: 0 },
       requested: 1, disproved: 1, requiredCoverageComplete: true,
     });
     expect(report.gate).toMatchObject({

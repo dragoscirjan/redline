@@ -15,9 +15,11 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHarnessExecutor } from '../harness-executor/registry.js';
+import { FollowUpBudget, type FollowUpRequestBatch } from '../code-context/follow-up.js';
 import type { HarnessExecutor, HarnessOutputLine, HarnessStreamMode } from '../harness-executor/types.js';
 import { loadReviewBundle, type ReviewBundle, type ReviewManifestFile } from './bundle.js';
 import type { ReviewEnvironment } from './environment.js';
+import { followUpSourcesByCandidate, resolveFollowUpResults, type ResolvedFollowUp } from './follow-up.js';
 import {
   codeContextForFile,
   loadReviewCodeContext,
@@ -33,6 +35,7 @@ import {
   FILE_REVIEW_RECORD_VERSION,
   REVIEW_RUN_SUMMARY_VERSION,
   type FileReviewRecord,
+  type FileFollowUpCoverage,
   type FileVerificationCoverage,
   type PublishedFinding,
   type PullRequestReviewRecord,
@@ -41,7 +44,7 @@ import {
   type ReviewRunSummaryFile,
   type ValidatedFinding,
 } from './types.js';
-import { createReviewWriter, type VerificationArtifact } from './writer.js';
+import { createReviewWriter, type FollowUpArtifact, type VerificationArtifact } from './writer.js';
 
 const MAX_REASON_CHARS = 500;
 export const VERIFICATION_TIMEOUT_MS = 10 * 60 * 1_000;
@@ -52,6 +55,8 @@ export interface ReviewRunInput {
   readonly executor?: HarnessExecutor | undefined;
   /** Enables the fail-closed verifier during benchmark evaluation before publication rollout. */
   readonly verifyCandidates?: boolean | undefined;
+  /** Action-owned bounded provider resolver; review code never opens a provider database. */
+  readonly followUpExecutor?: ((requests: FollowUpRequestBatch, remainingMs: number) => Promise<string>) | undefined;
   /**
    * Called after each reviewed file completes, for live progress in the
    * run log — a long sequential run must stay distinguishable from a
@@ -109,10 +114,16 @@ async function reviewOneFile(
   bundle: ReviewBundle,
   indexedContext: LoadedReviewCodeContext,
   file: ReviewManifestFile,
+  followUpBudget: FollowUpBudget,
+  followUpExecutor?: (requests: FollowUpRequestBatch, remainingMs: number) => Promise<string>,
   onHarnessOutput?: (output: HarnessOutputLine) => void,
   harnessStreamMode?: HarnessStreamMode,
   verifyCandidates = false,
-): Promise<FileReviewRecord & { rawModelOutput?: string | undefined; verificationArtifact?: VerificationArtifact | undefined }> {
+): Promise<FileReviewRecord & {
+  rawModelOutput?: string | undefined;
+  verificationArtifact?: VerificationArtifact | undefined;
+  followUpArtifact?: FollowUpArtifact | undefined;
+}> {
   const redact = (value: string): string => redactCredential(value, environment.credential);
   const fileContext = codeContextForFile(indexedContext, file);
   const described = {
@@ -244,6 +255,101 @@ async function reviewOneFile(
     }
   }
 
+  let followUp: FileFollowUpCoverage | undefined;
+  let followUpArtifact: FollowUpArtifact | undefined;
+  let followUpResults: readonly ResolvedFollowUp[] = [];
+  if (document.contextRequests.length > 0) {
+    let requests: FollowUpRequestBatch | null = null;
+    let omitted = 0;
+    let completed = 0;
+    let durationMs = 0;
+    let executorStartedAt: number | undefined;
+    let reason: string | undefined;
+    try {
+      const intents = document.contextRequests.flatMap((request) => {
+        const candidate = findings.find((item) => candidateIndexes.get(item.id) === request.candidateIndex);
+        if (candidate === undefined) {
+          omitted += 1;
+          return [];
+        }
+        return [{ candidateId: candidate.id, direction: request.direction }];
+      });
+      if (document.outcome === 'omitted' || !verifyCandidates) {
+        throw new Error('follow-up is unavailable because independent verification did not run');
+      }
+      if (environment.codeContext === undefined) throw new Error('follow-up provider is not configured');
+      requests = followUpBudget.plan({
+        repository: environment.codeContext.repository,
+        base: bundle.manifest.base,
+        head: bundle.manifest.head,
+      }, file.id, fileReviewPath(file), findings.map((item) => item.id), intents);
+      omitted += requests.omitted;
+      if (requests.requests.length > 0) {
+        const provider = indexedContext.coverage.provider;
+        const startedAt = Date.now();
+        if (provider !== null && followUpExecutor !== undefined) executorStartedAt = startedAt;
+        const raw = provider !== null && followUpExecutor !== undefined
+          ? await followUpExecutor(requests, followUpBudget.remainingTimeMs())
+          : JSON.stringify({
+            version: 1,
+            repository: requests.repository,
+            base: requests.base,
+            head: requests.head,
+            provider,
+            snapshot: provider === null ? null : requests.base,
+            results: requests.requests.map((request) => ({
+              requestId: request.id, status: 'unavailable', reason: 'not-configured', durationMs: 0, spans: [],
+            })),
+          });
+        const resolved = await resolveFollowUpResults(bundle, requests, raw, provider);
+        const elapsed = executorStartedAt === undefined ? 0 : Math.max(0, Date.now() - startedAt);
+        followUpBudget.consume(raw, resolved, elapsed);
+        followUpResults = resolved;
+        completed = followUpResults.filter((item) => item.status === 'complete').length;
+        durationMs = Math.max(elapsed, followUpResults.reduce((total, item) => total + item.durationMs, 0));
+        if (completed !== requests.requests.length) {
+          reason = `${requests.requests.length - completed} action-owned follow-up requests were unavailable or unconfirmed`;
+        }
+      }
+    } catch (error) {
+      if (executorStartedAt !== undefined) {
+        durationMs = Math.max(0, Date.now() - executorStartedAt);
+        followUpBudget.spendFailure(durationMs);
+      }
+      reason = boundedReason(redact(error instanceof Error ? error.message : String(error)));
+    }
+    if (omitted > 0) reason = reason ?? `${omitted} follow-up requests exceeded budgets or lacked validated candidates`;
+    const requested = document.contextRequests.length;
+    followUp = {
+      status: completed === requested && omitted === 0 ? 'completed' : 'incomplete',
+      requested, completed, omitted, durationMs,
+      ...(reason === undefined ? {} : { reason }),
+    };
+    const artifact: FollowUpArtifact = {
+      version: 1, requests, results: followUpResults,
+      ...(followUp.reason === undefined ? {} : { reason: followUp.reason }),
+    };
+    followUpArtifact = JSON.parse(JSON.stringify(artifact, (_key, value: unknown) =>
+      typeof value === 'string' ? redact(value) : value)) as FollowUpArtifact;
+  }
+
+  if (!verifyCandidates && document.contextRequests.length > 0) {
+    const reason = 'Discovery requested source follow-up, but independent verification is not enabled.';
+    return {
+      ...described,
+      outcome: 'omitted', errorKind: 'verification-failed', reason,
+      findings: [],
+      rejectedCandidates: [...rejectedCandidates, ...findings.map((item) => ({
+        index: candidateIndexes.get(item.id) as number,
+        stage: 'verification' as const, code: 'follow-up-unavailable', reason,
+      }))],
+      ...(followUp === undefined ? {} : { followUp }),
+      ...(followUpArtifact === undefined ? {} : { followUpArtifact }),
+      durationMs: run.durationMs,
+      rawModelOutput: redact(run.text),
+    };
+  }
+
   let verifiedFindings = findings;
   let verification: FileVerificationCoverage | undefined;
   let verificationArtifact: VerificationArtifact | undefined;
@@ -255,7 +361,9 @@ async function reviewOneFile(
       reason: boundedReason(redact(document.reason ?? 'discovery omitted the file')),
       findings: [],
       rejectedCandidates,
-      durationMs: run.durationMs,
+      ...(followUp === undefined ? {} : { followUp }),
+      ...(followUpArtifact === undefined ? {} : { followUpArtifact }),
+      durationMs: run.durationMs + (followUp?.durationMs ?? 0),
       rawModelOutput: redact(run.text),
     };
   }
@@ -275,6 +383,13 @@ async function reviewOneFile(
         harness: environment.harness,
         model: environment.model.model,
         indexedContext: fileContext.prompt,
+        ...(followUp === undefined ? {} : { followUp: {
+          provider: indexedContext.coverage.provider,
+          snapshot: indexedContext.coverage.provider === null ? null : bundle.manifest.base,
+          status: followUp.status === 'completed' ? 'completed' as const : 'incomplete' as const,
+          ...(followUp.reason === undefined ? {} : { reason: followUp.reason }),
+          results: followUpResults,
+        } }),
       });
       const verifiedRun = await executor.execute(prepared, verifierPrompt, {
         timeoutMs: VERIFICATION_TIMEOUT_MS,
@@ -289,6 +404,7 @@ async function reviewOneFile(
       const verificationDocument = parseVerificationDocument(verifiedRun.text, file.id, findings);
       const dispositions = await validateVerificationDocument(
         bundle, file, findings, verificationDocument, environment.findingScope,
+        followUpSourcesByCandidate(followUpResults),
       );
       verifiedFindings = dispositions.flatMap((item) => item.finding === undefined ? [] : [{
         ...item.finding,
@@ -355,12 +471,14 @@ async function reviewOneFile(
         ...described,
         verification,
         verificationArtifact,
+        ...(followUp === undefined ? {} : { followUp }),
+        ...(followUpArtifact === undefined ? {} : { followUpArtifact }),
         outcome: 'omitted',
         errorKind: 'verification-failed',
         reason,
         findings: [],
         rejectedCandidates,
-        durationMs: run.durationMs + verificationDurationMs,
+        durationMs: run.durationMs + (followUp?.durationMs ?? 0) + verificationDurationMs,
         rawModelOutput: redact(run.text),
       };
     }
@@ -410,7 +528,9 @@ async function reviewOneFile(
     rejectedCandidates,
     ...(verification === undefined ? {} : { verification }),
     ...(verificationArtifact === undefined ? {} : { verificationArtifact }),
-    durationMs: run.durationMs + verificationDurationMs,
+    ...(followUp === undefined ? {} : { followUp }),
+    ...(followUpArtifact === undefined ? {} : { followUpArtifact }),
+    durationMs: run.durationMs + (followUp?.durationMs ?? 0) + verificationDurationMs,
     rawModelOutput: redact(run.text),
   };
 }
@@ -437,7 +557,9 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
     const records: (FileReviewRecord & {
       rawModelOutput?: string | undefined;
       verificationArtifact?: VerificationArtifact | undefined;
+      followUpArtifact?: FollowUpArtifact | undefined;
     })[] = [];
+    const followUpBudget = new FollowUpBudget();
     for (const file of bundle.manifest.files) {
       if (!file.reviewed) continue;
       if (file.binary) {
@@ -468,6 +590,8 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
         bundle,
         indexedContext,
         file,
+        followUpBudget,
+        input.followUpExecutor,
         input.onHarnessOutput,
         input.harnessStreamMode,
         input.verifyCandidates,
@@ -501,7 +625,9 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       })),
     };
     await writer.writeSummary(summary);
-    const review = buildPullRequestReview({ bundle, environment, records, indexedContext });
+    const review = buildPullRequestReview({
+      bundle, environment, records, indexedContext, synthesize: input.verifyCandidates === true,
+    });
     await writer.writePullRequestReview(review);
 
     const validatedReviews = records.filter(

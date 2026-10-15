@@ -1,0 +1,14 @@
+# Independently judged live discovery → verifier replay
+
+**Result: production activation blocked.** The same Pi/OpenRouter `z-ai/glm-5.3-flash` configuration reviewed six predeclared fixtures in file-only and recorded indexed-context modes. Each discovery output was replayed byte-for-byte into a new verifier invocation; there was no second discovery call. The accepted discovery findings were manually matched against the fixture's expected defect **and** authoritative changed-line location in [`judgments.json`](judgments.json). The model's disposition was not used as a judgment.
+
+| Mode | Expected defects | Discovery credited | Verified credited | Planned comments credited | Clean false positives | Required cases incomplete |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| File only | 3 | 2 | 0 | 0 | 0 → 0 | 3/6 |
+| Indexed context | 3 | 3 | 0 | 0 | 0 → 0 | 3/6 |
+
+All five valid discovery defects were lost after verification. Both cross-file defects requested action-owned follow-up in each mode (and the indexed port case also requested it), but no live pinned provider worker was configured in this model-only capture; their required coverage is incomplete. Four verifier outputs failed schema/citation validation (three invalid JSON documents, one unsupported citation role); the fifth exceeded the bounded reason contract. The file-only port case had an invalid discovery candidate and was omitted before verification. These failures were **not** silently treated as clean reviews. The scripted replay's positive dispositions do not override the live regression.
+
+Five verifier calls added **189,538 ms** of recorded model execution across 12 cases; the observed p95 per-call duration was **67,706 ms** (only five sequential calls, not a stable latency distribution). Recorded source contexts were supplied for the indexed mode; **no live CGC/GitNexus relationship quality or end-to-end Action latency is established**. No duplicate comment or budget-saturation case occurred in these captures; offline tests cover those branches. The source-backed synthesis plan produced no publishable comments because no candidate survived verification.
+
+Evidence: [`baseline-capture.json`](baseline-capture.json), [`extension-capture.json`](extension-capture.json), [`judgments.json`](judgments.json), and machine-readable [`report.json`](report.json). Captures contain bounded validated records but no raw model text, endpoint, or credential. Regenerate the score offline with `pnpm run benchmark:judge-live-verification`. Both captures used the v6 discovery policy before the subsequent default-mode change that suppresses candidates requesting unavailable follow-up; **do not use these captures as an activation pass for the later code**. Activation still requires a separately passing live recall/clean-change/latency comparison and a trusted-base Action run with available follow-up. The action gate remains hardcoded off.

@@ -1,7 +1,7 @@
 /**
  * Builds the fixed, versioned per-file review prompts.
  *
- * The system prompt is the review policy (loaded from `prompts/v5/`) plus a
+ * The system prompt is the review policy (loaded from `prompts/v6/`) plus a
  * trusted run configuration; it never contains repository content. The user
  * prompt embeds exactly one file's untrusted context — manifest entry, the
  * authoritative diff, bounded base and head file content, and optional
@@ -25,8 +25,8 @@ import {
 import type { PromptCodeContext } from './indexed-context.js';
 import type { FindingScope } from './types.js';
 
-export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v3' as const;
-export const FILE_REVIEW_PROMPT_VERSION = 3 as const;
+export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v4' as const;
+export const FILE_REVIEW_PROMPT_VERSION = 4 as const;
 
 const PROMPT_MODULES = ['core-policy.md', 'review-phases.md', 'file-reporting.md'] as const;
 
@@ -37,11 +37,11 @@ const PROMPT_MODULES = ['core-policy.md', 'review-phases.md', 'file-reporting.md
  */
 function defaultPromptRoot(): string {
   const moduleDirectory = fileURLToPath(new URL('.', import.meta.url));
-  for (const candidate of ['../../prompts/v5/', '../../../prompts/v5/']) {
+  for (const candidate of ['../../prompts/v6/', '../../../prompts/v6/']) {
     const path = resolve(moduleDirectory, candidate);
     if (existsSync(path)) return path;
   }
-  return resolve(moduleDirectory, '../../prompts/v5/');
+  return resolve(moduleDirectory, '../../prompts/v6/');
 }
 const DEFAULT_PROMPT_ROOT = defaultPromptRoot();
 const MAX_PROMPT_MODULE_BYTES = 64 * 1024;

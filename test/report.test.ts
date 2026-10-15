@@ -57,6 +57,24 @@ function document(findingOverrides: Partial<ReviewFinding> = {}) {
 }
 
 describe('parseFileReviewDocument', () => {
+  it('parses only bounded enum follow-up intents in v4 without accepting model paths or query strings', () => {
+    const baseline = { version: 4, fileId: '000001', outcome: 'findings', findings: [finding()],
+      contextRequests: [{ candidateIndex: 0, direction: 'incoming' }] };
+    const parsed = parseFileReviewDocument(JSON.stringify(baseline));
+    expect(parsed.version).toBe(4);
+    expect(parsed.contextRequests).toEqual([{ candidateIndex: 0, direction: 'incoming' }]);
+    expect(parseFileReviewDocument(JSON.stringify({ ...baseline, version: 3,
+      contextRequests: undefined })).contextRequests).toEqual([]);
+    for (const invalid of [
+      { ...baseline, contextRequests: [{ candidateIndex: 0, direction: 'MATCH (n) DELETE n' }] },
+      { ...baseline, contextRequests: [{ candidateIndex: 0, direction: 'incoming', path: '../escape' }] },
+      { ...baseline, contextRequests: [{ candidateIndex: 1, direction: 'incoming' }] },
+      { ...baseline, contextRequests: Array(5).fill({ candidateIndex: 0, direction: 'incoming' }) },
+      { ...baseline, contextRequests: undefined },
+      { ...baseline, outcome: 'clean', findings: [] },
+    ]) expect(() => parseFileReviewDocument(JSON.stringify(invalid))).toThrow();
+  });
+
   it('parses a clean document', () => {
     const parsed = parseFileReviewDocument('{"version":2,"fileId":"000001","outcome":"clean","findings":[]}');
     expect(parsed.outcome).toBe('clean');

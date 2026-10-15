@@ -3,6 +3,7 @@ import type { ReviewBundle } from './bundle.js';
 import type { ReviewEnvironment } from './environment.js';
 import type { LoadedReviewCodeContext } from './indexed-context.js';
 import { MAX_FILE_FINDINGS } from './report.js';
+import { synthesizeReview } from './synthesis.js';
 import { validateSourceEvidence } from './source-evidence.js';
 import type {
   FileReviewRecord,
@@ -95,6 +96,8 @@ function coverageFor(
   const verificationEnabled = records.some((record) => record.verification !== undefined);
   const verificationIncomplete = records.filter((record) =>
     record.verification !== undefined && record.verification.status === 'incomplete').length;
+  const followUpRequested = records.reduce((total, record) => total + (record.followUp?.requested ?? 0), 0);
+  const followUpIncomplete = records.filter((record) => record.followUp?.status === 'incomplete').length;
   const indexedStatus = indexStatus(context);
   const excluded = bundle.manifest.files
     .filter((file) => !file.reviewed)
@@ -142,6 +145,15 @@ function coverageFor(
         : verificationIncomplete === 0
           ? 'Every required candidate-bearing file completed independent verification; clean files needed no verifier.'
           : `${verificationIncomplete} files did not complete required candidate verification.`,
+    ),
+    followUp: facet(
+      followUpRequested === 0 ? 'not-applicable' : followUpIncomplete === 0 ? 'completed' : 'incomplete',
+      followUpRequested > 0,
+      followUpRequested === 0
+        ? 'No candidate requested an action-owned follow-up.'
+        : followUpIncomplete === 0
+          ? `${followUpRequested} requested follow-up relationships were source-resolved.`
+          : `${followUpIncomplete} files lack complete requested follow-up coverage.`,
     ),
     inspections: [
       { kind: 'tests', ...facet('unavailable', false, 'The discovery stage does not independently attest complete test inspection.') },
@@ -250,6 +262,11 @@ function limitationsFor(
     required: false,
     message: 'Changed-symbol coverage is not produced by the current file-review stage.',
   });
+  if (coverage.followUp?.status === 'incomplete') {
+    limitations.push({
+      code: 'follow-up-incomplete', required: true, message: coverage.followUp.reason,
+    });
+  }
   if (coverage.verification?.status === 'incomplete') {
     limitations.push({
       code: 'candidate-verification-incomplete',
@@ -296,6 +313,8 @@ export function derivePullRequestVerdict(
     ...coverage.contextSources,
     ...coverage.specialists,
     ...(coverage.verification === undefined ? [] : [coverage.verification]),
+    ...(coverage.followUp === undefined ? [] : [coverage.followUp]),
+    ...(coverage.publication === undefined ? [] : [coverage.publication]),
     ...coverage.inspections,
     coverage.changedSymbols,
     coverage.codeIntelligence,
@@ -325,6 +344,7 @@ export interface BuildPullRequestReviewInput {
   readonly environment: Pick<ReviewEnvironment, 'harness' | 'model' | 'findingScope'>;
   readonly records: readonly FileReviewRecord[];
   readonly indexedContext: LoadedReviewCodeContext;
+  readonly synthesize?: boolean | undefined;
 }
 
 export function buildPullRequestReview(input: BuildPullRequestReviewInput): PullRequestReviewRecord {
@@ -336,7 +356,44 @@ export function buildPullRequestReview(input: BuildPullRequestReviewInput): Pull
     })));
   const rejectedCandidates = input.records.flatMap((record) =>
     record.rejectedCandidates.map((candidate) => ({ ...candidate, fileId: record.fileId, path: record.path })));
-  const coverage = coverageFor(input.bundle, input.records, input.indexedContext);
+  const synthesis = input.synthesize === true ? synthesizeReview(findings) : undefined;
+  const conflicts = synthesis?.groups.filter((group) => group.status === 'conflict') ?? [];
+  const budgetSuppressed = synthesis?.decisions.filter((item) =>
+    item.status === 'file-budget' || item.status === 'comment-budget') ?? [];
+  const criticalBudgetSuppressed = budgetSuppressed.filter((decision) => findings.some((finding) =>
+    finding.id === decision.findingId && finding.triggerFileId === decision.fileId && finding.severity === 'critical'));
+  const unverified = synthesis?.decisions.filter((decision) => decision.status === 'unverified') ?? [];
+  const coverage: PullRequestReviewCoverage = {
+    ...coverageFor(input.bundle, input.records, input.indexedContext),
+    ...(synthesis === undefined ? {} : { publication: facet(
+      conflicts.length + criticalBudgetSuppressed.length + unverified.length > 0 ? 'incomplete' : 'completed',
+      conflicts.length + criticalBudgetSuppressed.length + unverified.length > 0,
+      `${synthesis.decisions.filter((item) => item.status === 'publish').length} ranked comments eligible; ${budgetSuppressed.length} budget-suppressed; ${conflicts.length} source-backed disagreements`,
+    ) }),
+  };
+  const limitations = [
+    ...limitationsFor(coverage, input.indexedContext),
+    ...(conflicts.length === 0 ? [] : [{ code: 'source-claim-conflict', required: true,
+      message: `${conflicts.length} source-backed claim groups disagree; human judgment is required.` }]),
+    ...(criticalBudgetSuppressed.length === 0 ? [] : [{ code: 'critical-publication-suppressed', required: true,
+      message: `${criticalBudgetSuppressed.length} confirmed critical findings exceeded the publication budget.` }]),
+    ...(budgetSuppressed.length === 0 ? [] : [{ code: 'publication-truncated', required: false,
+      message: `${budgetSuppressed.length} ranked findings exceeded the publication budget; see synthesis decisions.` }]),
+    ...(unverified.length === 0 ? [] : [{ code: 'synthesis-unverified', required: true,
+      message: `${unverified.length} publication representatives lacked independent confirmation.` }]),
+  ];
+  const conflictedIds = new Set(conflicts.flatMap((group) => group.triggers.map((item) =>
+    `${item.fileId}:${item.findingId}`)));
+  const coherentFindings = findings.filter((finding) =>
+    !conflictedIds.has(`${finding.triggerFileId}:${finding.id}`));
+  const baselineVerdict = derivePullRequestVerdict(coherentFindings, coverage);
+  const verdict: PullRequestVerdict = conflicts.length > 0
+    ? {
+      status: baselineVerdict.status === 'blocked' ? 'blocked' : 'human-decision-required',
+      reasons: [...baselineVerdict.reasons, ...conflicts.map((group) =>
+        `${group.id}: incompatible source-backed contracts require human judgment`)],
+    }
+    : baselineVerdict;
   return {
     version: PULL_REQUEST_REVIEW_VERSION,
     harness: input.environment.harness,
@@ -346,10 +403,11 @@ export function buildPullRequestReview(input: BuildPullRequestReviewInput): Pull
     base: input.bundle.manifest.base,
     head: input.bundle.manifest.head,
     findings,
+    ...(synthesis === undefined ? {} : { synthesis }),
     rejectedCandidates,
     coverage,
-    limitations: limitationsFor(coverage, input.indexedContext),
-    verdict: derivePullRequestVerdict(findings, coverage),
+    limitations,
+    verdict,
     files: input.records.map((record) => ({
       fileId: record.fileId,
       path: record.path,

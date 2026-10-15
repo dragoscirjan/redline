@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "method": "manual-review-against-predeclared-issues-and-authoritative-diff",
+  "scope": "Every accepted discovery finding in both live captures; omitted invalid candidates receive no credit.",
+  "judgments": [
+    { "fixtureId": "cross-file-rate-limit", "mode": "file-only", "fileId": "000001", "findingId": "f-9ac685b6abd9d1f5863b7a9a", "expectedIssueId": "per-user-throttle-lost", "validEvidence": true },
+    { "fixtureId": "cross-file-rate-limit", "mode": "indexed-context", "fileId": "000001", "findingId": "f-94dee77a1b99cc292ae2c374", "expectedIssueId": "per-user-throttle-lost", "validEvidence": true },
+    { "fixtureId": "cross-file-cache-collision", "mode": "file-only", "fileId": "000001", "findingId": "f-feccb0b58b63165578d6d6ea", "expectedIssueId": "cross-account-cache-collision", "validEvidence": true },
+    { "fixtureId": "cross-file-cache-collision", "mode": "indexed-context", "fileId": "000001", "findingId": "f-85890a9126c1d0fcf2c85315", "expectedIssueId": "cross-account-cache-collision", "validEvidence": true },
+    { "fixtureId": "local-port-validation", "mode": "indexed-context", "fileId": "000001", "findingId": "f-28e6671408bc477f9f21532d", "expectedIssueId": "non-integer-port", "validEvidence": true }
+  ]
+}

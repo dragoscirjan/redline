@@ -41,7 +41,7 @@ A finding receives credit only when a human judgment associates it with an expec
 | Credited issue recall | 1/2 | 2/2 | +1 |
 | False positives | 1 | 0 | -1 |
 | Duplicate findings | 0 | 0 | 0 |
-| Prompt bytes | 31,707 | 32,746 | +1,039 |
+| Prompt bytes (current v6 policy) | 46,183 | 47,222 | +1,039 |
 | Resolved indexed source | 0 bytes | 216 bytes | +216 bytes |
 | Recorded review duration | 39 ms | 39 ms | 0 ms |
 
@@ -52,7 +52,7 @@ The indexed recording recovers the cross-account cache collision and removes the
 The checked-in comparison verifies that:
 
 - both modes use the same cases, review policy, model identity, and finding validator;
-- file-only prompts and scores remain identical to the v1 baseline;
+- file-only scores preserve the original expected-issue judgments; prompt bytes differ because the current v6 discovery policy adds bounded follow-up intents;
 - indexed artifacts pass the production schema and identity checks;
 - every injected span is re-resolved from captured exact-head source;
 - context coverage, source bytes, prompt bytes, and timing fields remain reproducible;
@@ -62,14 +62,14 @@ It does **not** prove that CGC or a live model produces the checked-in relations
 
 ## Scripted verifier replay (draft #107)
 
-Run `pnpm run benchmark:verification` to replay the four v2 fixtures plus two additional cases: a defaulted-parameter false positive and a cross-file per-user throttle defect. `benchmark/review-quality/verification-v1/dispositions.json` contains **scripted**, manually selected verifier dispositions—not model responses. `report.json` retains the per-fixture discovery and post-verifier findings, credited issues, false positives, prompt bytes, coverage, and recorded durations. Run `pnpm run benchmark:verification -- --output /tmp/verification-report.json` to regenerate a report without overwriting the checked-in evidence.
+Run `pnpm run benchmark:verification` to replay the four v2 fixtures plus two additional cases: a defaulted-parameter false positive and a cross-file per-user throttle defect. `benchmark/review-quality/verification-v1/dispositions.json` contains **scripted**, manually selected verifier dispositions—not model responses. `report.json` retains the per-fixture discovery and post-verifier findings, credited issues, false positives, prompt bytes, coverage, and recorded durations. Run `node dist/src/benchmark/verification-cli.js --output /tmp/verification-report.json` after a build to regenerate a report without overwriting the checked-in evidence.
 
 | Recorded mode | Credited issues before → after | False positives before → after | Recorded review duration before → after | Incomplete files |
 | --- | ---: | ---: | ---: | ---: |
 | File only | 1/3 → 1/3 | 2 → 0 | 63 → 113 ms | 0 |
 | Indexed context | 3/3 → 3/3 | 0 → 0 | 63 → 125 ms | 0 |
 
-The replay runs the production discovery parser, source validator, verifier prompt and citation validation. The scripted gate fails if any fixture loses a credited defect, gains a clean-change false positive, or ends with incomplete required coverage. It also records missing decisions as failures instead of silently skipping verification. The measured extra 50/62 ms is **fixture data**, not observed model latency. Scripted decisions were selected knowing the expected outcomes, so this pass proves the pipeline and scoring gates work, **not** independent verifier quality. Production activation remains blocked pending a separately judged live discovery-versus-verifier measurement on these cases and trusted-base Action verification on a subsequent PR. The GitHub Action and CLI still do not enable the opt-in verifier.
+The replay now also applies deterministic cross-file grouping and publication budgets after verification. All credited issues survive to the planned comments (file-only 1/3 and indexed 3/3), with zero post-plan false positives, zero duplicate comments, zero budget suppression, and complete planned coverage. This small corpus has **no duplicate or budget-saturated case**; unit and integration tests exercise those branches, but the recording does not establish their live prevalence or latency. The replay runs the production discovery parser, source validator, verifier prompt and citation validation. The scripted gate fails if any fixture loses a credited defect, gains a clean-change false positive, or ends with incomplete required coverage. It also records missing decisions as failures instead of silently skipping verification. The measured extra 50/62 ms is **fixture data**, not observed model latency. Scripted decisions were selected knowing the expected outcomes, so this pass proves the pipeline and scoring gates work, **not** independent verifier quality. Production activation remains blocked pending a separately judged live discovery-versus-verifier measurement on these cases and trusted-base Action verification on a subsequent PR. The GitHub Action and CLI still do not enable the opt-in verifier.
 
 ## Opt-in live-model capture
 
@@ -85,7 +85,15 @@ mise run benchmark:live-model -- --output /tmp/redline-live-model.json
 
 The output contains validated per-file records, prompt bytes, context coverage, and measured review duration for both modes. It intentionally does not assign findings to expected issues automatically; a reviewer must judge new findings before promoting them into the deterministic corpus. The capture is written with owner-only permissions and never includes the selected credential or endpoint.
 
-The checked-in live result is under `benchmark/review-quality/v2/live-model/`. Both modes found both expected defects with valid evidence and produced no findings on the clean fixtures. Indexed context added 1,039 prompt bytes and 216 resolved source bytes without changing recall, evidence accuracy, false positives, or duplicates. The single-run latency difference is not treated as an improvement because calls were sequential and provider latency varied.
+The historical checked-in live result (older discovery policy) is under `benchmark/review-quality/v2/live-model/`. Both modes found both expected defects with valid evidence and produced no findings on the clean fixtures. Indexed context added 1,039 prompt bytes and 216 resolved source bytes without changing recall, evidence accuracy, false positives, or duplicates. The single-run latency difference is not treated as an improvement because calls were sequential and provider latency varied.
+
+## Opt-in independent verifier capture (draft #107)
+
+After `pnpm run build`, `node dist/src/benchmark/live-verification-cli.js --output /tmp/redline-live-verification.json` requires `REDLINE_LIVE_BENCHMARK=1`, a Pi/OpenCode harness, and the same `REDLINE_MODEL_CONFIG`/`REDLINE_MODEL_AUTH` credentials as the live-model capture. The two-fixture verification extension and four-fixture v2 corpus are captured separately with `--corpus benchmark/review-quality/v2` for the latter (six fixtures total). Each mode runs discovery once, then **replays exactly that discovery output** to a fresh live verifier invocation for every candidate-bearing file. The private capture retains validated per-file discovery and verified records, source coverage, prompts, calls, verdict, and measured durations, but not raw model text or credentials. A separate human judgment must map findings to the predeclared expected issues and inspect false positives; the capture itself never auto-credits model claims. File-only and indexed modes use recorded context artifacts, not live provider queries. If a model requests action-owned follow-up without a live pinned provider, coverage is incomplete rather than silently assumed complete.
+
+The activation gate requires no lost credited defects, no added clean-change false positives, adequate valid evidence, complete required coverage, and tolerable measured verifier latency. A single sequential provider run is directional evidence, not a stable latency distribution. The hardcoded Action gate remains off until the measurement and a trusted-base follow-up run pass.
+
+The checked-in, independently judged live replay is at `benchmark/review-quality/verification-v1/live-model/`. On six fixtures across both modes, discovery credited **2/3 file-only** and **3/3 indexed** expected issues; the verifier retained **0/3 in both**. Clean-change false positives stayed zero, but five confirmed discovery defects were lost and six of twelve cases had incomplete required coverage. Five verifier calls took 189,538 ms in aggregate (observed p95 67,706 ms; a tiny sequential sample). The file-only port case was already omitted because discovery produced an invalid candidate. No live follow-up worker was configured, so requests for relationship evidence were explicitly incomplete. The live gate **failed**; no production activation or independent provider quality claim follows from the scripted replay. See `benchmark/review-quality/verification-v1/live-model/report.md` and run `pnpm run benchmark:judge-live-verification` to reproduce its scoring offline. These captures precede a later default-mode fail-closed change and cannot be treated as a pass for that revision.
 
 ## Opt-in live-indexer evaluation
 

@@ -51,12 +51,17 @@ export async function loadPublishedRun(outputDirectory: string): Promise<Publish
     throw new Error(`review output summary is not a v${REVIEW_RUN_SUMMARY_VERSION} summary`);
   }
   const reviewValue = JSON.parse(await readFile(join(reviewsDirectory, 'review.json'), 'utf8')) as unknown;
-  if (!isRecord(reviewValue) || reviewValue['version'] !== PULL_REQUEST_REVIEW_VERSION) {
-    throw new Error(`review output PR record is not a v${PULL_REQUEST_REVIEW_VERSION} record`);
+  if (!isRecord(reviewValue) || (reviewValue['version'] !== 1 && reviewValue['version'] !== PULL_REQUEST_REVIEW_VERSION)) {
+    throw new Error(`review output PR record is not a supported v1/v${PULL_REQUEST_REVIEW_VERSION} record`);
   }
+  // v1 had no synthesis plan. Non-verified legacy runs remain publishable;
+  // verified v1 records fail closed in PublicationService rather than bypass ranking.
+  const review = reviewValue['version'] === 1
+    ? { ...reviewValue, version: PULL_REQUEST_REVIEW_VERSION }
+    : reviewValue;
   return {
     records,
-    review: reviewValue as unknown as PullRequestReviewRecord,
+    review: review as unknown as PullRequestReviewRecord,
     summary: summaryValue as unknown as ReviewRunSummary,
   };
 }

@@ -27,6 +27,14 @@ export interface VerificationBenchmarkCase {
   readonly kind: 'clean' | 'defect';
   readonly discovery: BenchmarkCaseResult;
   readonly verified: BenchmarkCaseResult;
+  readonly published: BenchmarkCaseResult;
+  readonly publication: {
+    readonly commentsBeforeSynthesis: number;
+    readonly commentsAfterSynthesis: number;
+    readonly duplicateCommentsSuppressed: number;
+    readonly budgetSuppressed: number;
+    readonly criticalSuppressed: number;
+  };
   readonly requested: number;
   readonly confirmed: number;
   readonly disproved: number;
@@ -209,6 +217,28 @@ async function runCase(
         ...verified.summary.codeContext,
         timings: recording.mode === 'indexed-context' ? recording.codeContext.timings : null,
       });
+    const plan = verified.review.synthesis;
+    if (plan === undefined) throw new Error('verified benchmark lacks the required synthesis plan');
+    const selected = new Set(plan.decisions.filter((item) => item.status === 'publish').map((item) =>
+      `${item.fileId}:${item.findingId}`));
+    const publicationRecords = verified.records.map((record) => ({
+      ...record, findings: record.findings.filter((finding) => selected.has(`${record.fileId}:${finding.id}`)),
+    }));
+    const publicationJudgments = publicationRecords.flatMap((record) => record.findings.map((finding, index) => {
+      const before = verified.records.find((item) => item.fileId === record.fileId)?.findings
+        .findIndex((item) => item.id === finding.id) ?? -1;
+      const judgment = remapped.find((item) => item.fileId === record.fileId && item.findingIndex === before);
+      if (judgment === undefined) throw new Error(`publication representative lacks a judgment: ${fixture.id}`);
+      return { ...judgment, findingIndex: index };
+    }));
+    const publishedScore = scoreBenchmarkCase(fixture,
+      { ...recording, judgments: publicationJudgments }, publicationRecords,
+      verifierExecutor.promptBytes, {
+        ...verified.summary.codeContext,
+        timings: recording.mode === 'indexed-context' ? recording.codeContext.timings : null,
+      });
+    const budgetSuppressed = plan.decisions.filter((item) =>
+      item.status === 'file-budget' || item.status === 'comment-budget').length;
     const coverage = verified.records.map((record) => record.verification);
     return {
       fixtureId: fixture.id,
@@ -216,12 +246,25 @@ async function runCase(
       kind: fixture.kind,
       discovery: baselineScore,
       verified: verifiedScore,
+      published: publishedScore,
+      publication: {
+        commentsBeforeSynthesis: verified.records.reduce((sum, record) => sum + record.findings.length, 0),
+        commentsAfterSynthesis: selected.size,
+        duplicateCommentsSuppressed: plan.decisions.filter((item) => item.status === 'duplicate').length,
+        budgetSuppressed,
+        criticalSuppressed: plan.decisions.filter((item) =>
+          (item.status === 'file-budget' || item.status === 'comment-budget')
+          && verified.review.findings.some((finding) => finding.id === item.findingId
+            && finding.triggerFileId === item.fileId && finding.severity === 'critical')).length,
+      },
       requested: coverage.reduce((total, item) => total + (item?.requested ?? 0), 0),
       confirmed: coverage.reduce((total, item) => total + (item?.accepted ?? 0), 0),
       disproved: coverage.reduce((total, item) => total + (item?.rejected ?? 0), 0),
       verificationDurationMs: coverage.reduce((total, item) => total + (item?.durationMs ?? 0), 0),
       requiredCoverageComplete: verified.records.every((record) =>
-        record.outcome !== 'omitted' && record.verification?.status !== 'incomplete'),
+        record.outcome !== 'omitted' && record.verification?.status !== 'incomplete'
+        && record.followUp?.status !== 'incomplete')
+        && verified.review.coverage.publication?.status !== 'incomplete',
     };
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -252,9 +295,12 @@ export async function runVerificationBenchmark(
   const unknown = decisions.filter((decision) => !fixtureIds.has(decision.fixtureId));
   if (unknown.length > 0) throw new Error('verifier decisions reference unknown fixtures');
   const label = (item: VerificationBenchmarkCase): string => `${item.fixtureId}/${item.mode}`;
-  const recallRegressions = cases.filter((item) => item.verified.creditedIssues < item.discovery.creditedIssues).map(label);
+  const recallRegressions = cases.filter((item) =>
+    item.verified.creditedIssues < item.discovery.creditedIssues
+    || item.published.creditedIssues < item.discovery.creditedIssues).map(label);
   const cleanFalsePositiveRegressions = cases.filter((item) => item.kind === 'clean'
-    && item.verified.falsePositives > item.discovery.falsePositives).map(label);
+    && (item.verified.falsePositives > item.discovery.falsePositives
+      || item.published.falsePositives > item.discovery.falsePositives)).map(label);
   const incompleteCoverage = cases.filter((item) => !item.requiredCoverageComplete).map(label);
   return {
     version: 1,

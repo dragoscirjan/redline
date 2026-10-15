@@ -183,6 +183,8 @@ export async function validateVerificationDocument(
   candidates: readonly ValidatedFinding[],
   document: VerificationDocument,
   findingScope: FindingScope,
+  /** Only source-revalidated, candidate-scoped action results may extend known citations. */
+  followUpEvidence: ReadonlyMap<string, readonly SourceEvidence[]> = new Map(),
 ): Promise<readonly VerifiedDisposition[]> {
   if (document.fileId !== file.id || document.results.length !== candidates.length) {
     throw new Error('verifier document does not cover this file');
@@ -208,7 +210,8 @@ export async function validateVerificationDocument(
       evidence: candidate.evidence,
     };
     for (const evidence of entry.citations) {
-      if (![trigger, ...candidate.supportingEvidence].some((known) => sameCitation(known, evidence))) {
+      if (![trigger, ...candidate.supportingEvidence, ...(followUpEvidence.get(candidate.id) ?? [])]
+        .some((known) => sameCitation(known, evidence))) {
         throw new Error('verifier citation is not a validated candidate source location');
       }
       await validateSourceEvidence(bundle, evidence);

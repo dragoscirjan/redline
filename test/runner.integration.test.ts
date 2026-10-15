@@ -215,7 +215,7 @@ describe('runFileReviews', () => {
       const executor = new ScriptedExecutor();
       executor.script([
         { text: reviewDocument({ version: 3, fileId: file.id, outcome: 'findings', findings: [candidate] }) },
-        { text: JSON.stringify({
+        { text: `\`\`\`json\n${JSON.stringify({
           version: 1,
           fileId: file.id,
           results: [{
@@ -227,11 +227,11 @@ describe('runFileReviews', () => {
               startLine: 1, endLine: 1, evidence: 'new',
             }],
           }],
-        }) },
+        })}\n\`\`\`` },
       ]);
       const result = await runFileReviews({ environment: environment.review!, executor, verifyCandidates: true });
       expect(executor.prompts).toHaveLength(2);
-      expect(executor.prompts[1]?.system).toContain('redline-verification/v1');
+      expect(executor.prompts[1]?.system).toContain('redline-verification/v2');
       expect(executor.options[1]?.timeoutMs).toBe(VERIFICATION_TIMEOUT_MS);
       expect(result.records[0]?.outcome).toBe('findings');
       expect(result.records[0]?.verification).toMatchObject({ status: 'completed', requested: 1, accepted: 1 });

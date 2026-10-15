@@ -9,16 +9,16 @@ import type { ResolvedFollowUp } from './follow-up.js';
 import { buildFileContextPayload, generatedBoundary, type FileReviewPrompt } from './prompt.js';
 import type { FindingScope, ValidatedFinding } from './types.js';
 
-export const VERIFICATION_PROMPT_ID = 'redline-verification/v1' as const;
+export const VERIFICATION_PROMPT_ID = 'redline-verification/v2' as const;
 const MAX_VERIFICATION_CONTEXT_BYTES = 768 * 1024;
 
 function defaultPolicyRoot(): string {
   const moduleDirectory = fileURLToPath(new URL('.', import.meta.url));
-  for (const relative of ['../../prompts/verification/v1/', '../../../prompts/verification/v1/']) {
+  for (const relative of ['../../prompts/verification/v2/', '../../../prompts/verification/v2/']) {
     const candidate = resolve(moduleDirectory, relative);
     if (existsSync(candidate)) return candidate;
   }
-  return resolve(moduleDirectory, '../../prompts/verification/v1/');
+  return resolve(moduleDirectory, '../../prompts/verification/v2/');
 }
 
 function digest(value: string): string {

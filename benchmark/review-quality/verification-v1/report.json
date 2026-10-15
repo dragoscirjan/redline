@@ -59,7 +59,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 17368,
+        "promptBytes": 17591,
         "reviewDurationMs": 25
       },
       "published": {
@@ -87,7 +87,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 17368,
+        "promptBytes": 17591,
         "reviewDurationMs": 25
       },
       "publication": {
@@ -648,7 +648,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 18213,
+        "promptBytes": 18436,
         "reviewDurationMs": 32
       },
       "published": {
@@ -685,7 +685,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 18213,
+        "promptBytes": 18436,
         "reviewDurationMs": 32
       },
       "publication": {
@@ -758,7 +758,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 17892,
+        "promptBytes": 18115,
         "reviewDurationMs": 30
       },
       "published": {
@@ -786,7 +786,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 17892,
+        "promptBytes": 18115,
         "reviewDurationMs": 30
       },
       "publication": {
@@ -877,7 +877,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 17892,
+        "promptBytes": 18115,
         "reviewDurationMs": 30
       },
       "published": {
@@ -914,7 +914,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 17892,
+        "promptBytes": 18115,
         "reviewDurationMs": 30
       },
       "publication": {
@@ -987,7 +987,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 17078,
+        "promptBytes": 17301,
         "reviewDurationMs": 27
       },
       "published": {
@@ -1015,7 +1015,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 0,
         "validEvidenceMatches": 0,
-        "promptBytes": 17078,
+        "promptBytes": 17301,
         "reviewDurationMs": 27
       },
       "publication": {
@@ -1347,7 +1347,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 18063,
+        "promptBytes": 18286,
         "reviewDurationMs": 35
       },
       "published": {
@@ -1384,7 +1384,7 @@
         "duplicateFindings": 0,
         "claimedMatches": 1,
         "validEvidenceMatches": 1,
-        "promptBytes": 18063,
+        "promptBytes": 18286,
         "reviewDurationMs": 35
       },
       "publication": {

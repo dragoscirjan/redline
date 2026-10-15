@@ -82,6 +82,35 @@ describe('source-backed candidate verification contract', () => {
       .toThrow('identity');
   });
 
+  it('accepts only a complete standalone JSON envelope without guessing or changing source validation', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const bundle = await loadReviewBundle(fixture.review, fixture.source);
+      const payload = document([result()]);
+      for (const fenced of [`\`\`\`json\n${payload}\n\`\`\``, `\`\`\`\n${payload}\n\`\`\``]) {
+        const parsed = parseVerificationDocument(fenced, '000001', [candidate()]);
+        await expect(validateVerificationDocument(bundle, bundle.manifest.files[0]!, [candidate()], parsed, 'defects'))
+          .resolves.toMatchObject([{ finding: { verification: { status: 'confirmed' } } }]);
+      }
+      for (const malformed of [
+        `Here is the result:\n\`\`\`json\n${payload}\n\`\`\``,
+        `\`\`\`json\n${payload}\n\`\`\`\nExtra commentary`,
+        `\`\`\`json\n${payload}\n\`\`\`\n\`\`\`json\n${payload}\n\`\`\``,
+        `\`\`\`json\n${document([result(FIRST, { citations: [citation({ evidence: 'invented' })] })])}\n\`\`\``,
+      ]) {
+        if (malformed.includes('invented')) {
+          const parsed = parseVerificationDocument(malformed, '000001', [candidate()]);
+          await expect(validateVerificationDocument(bundle, bundle.manifest.files[0]!, [candidate()], parsed, 'defects'))
+            .rejects.toThrow('not a validated candidate');
+        } else {
+          expect(() => parseVerificationDocument(malformed, '000001', [candidate()])).toThrow('valid JSON');
+        }
+      }
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('rejects malformed dispositions, excessive output, and unbounded citation fields', () => {
     expect(() => parseVerificationDocument(document([result(FIRST, { unknown: true })]), '000001', [candidate()]))
       .toThrow('unsupported fields');

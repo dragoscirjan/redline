@@ -140,9 +140,14 @@ export function parseVerificationDocument(
   if (Buffer.byteLength(raw, 'utf8') > MAX_VERIFICATION_DOCUMENT_BYTES) {
     throw new Error('verifier document exceeds its byte limit');
   }
+  // Accept only an exact single JSON envelope. No prose or multiple blocks
+  // may be extracted from model text; the decoded document remains subject
+  // to the same identity, schema, and source-evidence checks.
+  const fenced = /^\s*```(?:json)?\r?\n(\{[\s\S]*\})\r?\n```\s*$/u.exec(raw);
+  const documentText = fenced?.[1] ?? raw;
   let decoded: unknown;
   try {
-    decoded = JSON.parse(raw) as unknown;
+    decoded = JSON.parse(documentText) as unknown;
   } catch {
     throw new Error('verifier document must be valid JSON');
   }

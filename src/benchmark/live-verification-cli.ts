@@ -12,6 +12,7 @@ import { createHarnessExecutor, isHarnessName } from '../harness-executor/regist
 import type { HarnessExecuteOptions, HarnessExecutor, HarnessPrompt, HarnessRun, HarnessSettings, PreparedHarness } from '../harness-executor/types.js';
 import { parseModelConfig, selectModelCredential, type ReviewEnvironment } from '../review/environment.js';
 import { runFileReviews } from '../review/runner.js';
+import { VERIFICATION_PROMPT_ID } from '../review/verification-prompt.js';
 import type { FileReviewRecord } from '../review/types.js';
 
 interface Configuration {
@@ -53,7 +54,7 @@ class ReplayDiscoveryExecutor implements HarnessExecutor {
       this.discovery.push(result);
       return result;
     }
-    if (!prompt.system.includes('"policyId": "redline-verification/v1"')) {
+    if (!prompt.system.includes(`"policyId": "${VERIFICATION_PROMPT_ID}"`)) {
       const result = this.discovery[this.#replayOffset++];
       if (result === undefined) throw new Error('verifier replay consumed more discovery outputs than were captured');
       // No second discovery model call. Only verifier durations are incremental.

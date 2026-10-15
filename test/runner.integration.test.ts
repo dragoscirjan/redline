@@ -171,6 +171,77 @@ describe('runFileReviews', () => {
     }
   });
 
+  it('publishes only a confirmed sibling when another candidate stays inconclusive', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const bundle = await loadReviewBundle(fixture.review, fixture.source);
+      const file = bundle.manifest.files[0]!;
+      const first = reviewFinding({ evidence: 'new' });
+      const second = reviewFinding({ evidence: 'new', title: 'A separate failure path needs an owner decision' });
+      const validator = new FileReviewValidator(
+        file, await readFile(join(fixture.review, file.diffFile), 'utf8'), 'defects',
+      );
+      const firstId = validator.validateFinding(first).id;
+      const secondId = validator.validateFinding(second).id;
+      const executor = new ScriptedExecutor();
+      executor.script([
+        { text: reviewDocument({ version: 3, fileId: file.id, outcome: 'findings', findings: [first, second] }) },
+        { text: JSON.stringify({
+          version: 1, fileId: file.id, results: [
+            { candidateId: firstId, disposition: 'confirmed', reason: 'Changed trigger proves the claim.',
+              citations: [{ role: 'contract', revision: HEAD_SHA, path: 'src/example.ts',
+                startLine: 1, endLine: 1, evidence: 'new' }] },
+            { candidateId: secondId, disposition: 'inconclusive', reason: 'No independent source proves reachability.', citations: [] },
+          ],
+        }) },
+      ]);
+      const result = await runFileReviews({ environment: environment.review!, executor, verifyCandidates: true });
+      expect(executor.prompts).toHaveLength(2);
+      expect(result.records[0]).toMatchObject({
+        outcome: 'findings', verification: { status: 'incomplete', requested: 2, accepted: 1, rejected: 1 },
+      });
+      expect(result.records[0]?.findings.map((finding) => finding.id)).toEqual([firstId]);
+      expect(result.records[0]?.rejectedCandidates).toContainEqual(expect.objectContaining({
+        stage: 'verification', code: 'verification-inconclusive',
+      }));
+      expect(result.review.coverage.verification).toMatchObject({ status: 'incomplete', required: true });
+      expect(result.review.verdict.status).toBe('blocked');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('retains an evidence-backed human question for a deterministic owner decision', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const bundle = await loadReviewBundle(fixture.review, fixture.source);
+      const file = bundle.manifest.files[0]!;
+      const candidate = reviewFinding({ evidence: 'new' });
+      const finding = new FileReviewValidator(
+        file, await readFile(join(fixture.review, file.diffFile), 'utf8'), 'defects',
+      ).validateFinding(candidate);
+      const executor = new ScriptedExecutor();
+      executor.script([
+        { text: reviewDocument({ version: 3, fileId: file.id, outcome: 'findings', findings: [candidate] }) },
+        { text: JSON.stringify({
+          version: 1, fileId: file.id, results: [{
+            candidateId: finding.id, disposition: 'human-question', classification: 'question',
+            reason: 'Owner must decide whether the documented behavior is intentional.',
+            citations: [{ role: 'contract', revision: HEAD_SHA, path: 'src/example.ts',
+              startLine: 1, endLine: 1, evidence: 'new' }],
+          }],
+        }) },
+      ]);
+      const result = await runFileReviews({ environment: environment.review!, executor, verifyCandidates: true });
+      expect(result.records[0]?.findings[0]).toMatchObject({ classification: 'question', verification: { status: 'confirmed' } });
+      expect(result.review.verdict.status).toBe('human-decision-required');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('suppresses every candidate when the verifier returns invalid output', async () => {
     const fixture = await createBundleFixture();
     try {

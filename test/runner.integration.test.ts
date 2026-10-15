@@ -198,6 +198,68 @@ describe('runFileReviews', () => {
     }
   });
 
+  it.each(['timed-out', 'failed'] as const)('fails closed on a %s verifier invocation', async (status) => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      executor.script([
+        { text: reviewDocument({
+          version: 3, fileId: '000001', outcome: 'findings', findings: [reviewFinding({ evidence: 'new' })],
+        }) },
+        { status, durationMs: 3_000, diagnostic: 'test-key unavailable' },
+      ]);
+      const result = await runFileReviews({ environment: environment.review!, executor, verifyCandidates: true });
+      expect(result.records[0]).toMatchObject({
+        outcome: 'omitted', errorKind: 'verification-failed', findings: [],
+        durationMs: 3_001,
+        verification: { status: 'incomplete', requested: 1, accepted: 0, durationMs: 3_000 },
+      });
+      expect(result.review.coverage.verification).toMatchObject({ status: 'incomplete', required: true });
+      expect(result.review.findings).toEqual([]);
+      expect(result.records[0]?.reason).not.toContain('test-key');
+      expect(await readFile(join(fixture.output, 'reviews/verification/000001.json'), 'utf8'))
+        .not.toContain('test-key');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('rejects a verifier citation whose path is not an already validated source location', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const bundle = await loadReviewBundle(fixture.review, fixture.source);
+      const file = bundle.manifest.files[0]!;
+      const candidate = reviewFinding({ evidence: 'new' });
+      const finding = new FileReviewValidator(
+        file, await readFile(join(fixture.review, file.diffFile), 'utf8'), 'defects',
+      ).validateFinding(candidate);
+      const executor = new ScriptedExecutor();
+      executor.script([
+        { text: reviewDocument({ version: 3, fileId: file.id, outcome: 'findings', findings: [candidate] }) },
+        { text: JSON.stringify({
+          version: 1, fileId: file.id, results: [{
+            candidateId: finding.id, disposition: 'confirmed', reason: 'Graph relationship is sufficient.',
+            citations: [{
+              role: 'contract', revision: HEAD_SHA, path: 'src/other.ts',
+              startLine: 1, endLine: 1, evidence: 'new',
+            }],
+          }],
+        }) },
+      ]);
+      const result = await runFileReviews({ environment: environment.review!, executor, verifyCandidates: true });
+      expect(result.records[0]).toMatchObject({
+        outcome: 'omitted', errorKind: 'verification-failed', findings: [],
+        verification: { status: 'incomplete' },
+      });
+      expect(result.review.verdict.status).toBe('inconclusive');
+      expect(result.review.findings).toEqual([]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('reports progress after each completed file', async () => {
     const fixture = await createBundleFixture();
     try {

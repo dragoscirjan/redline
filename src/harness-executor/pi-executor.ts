@@ -210,7 +210,9 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
     },
     async execute(prepared: PreparedHarness, prompt: HarnessPrompt, options?: HarnessExecuteOptions): Promise<HarnessRun> {
       const state = prepared as PreparedPi;
-      const args = [...state.args, '--system-prompt', prompt.system, '--', prompt.user];
+      const systemPromptFile = join(state.cwd, 'pi-agent', 'system-prompt.md');
+      await writeFile(systemPromptFile, prompt.system, { mode: 0o600 });
+      const args = [...state.args, '--system-prompt', systemPromptFile];
       // Readable live output: the NDJSON event stream is decoded, and the
       // model's text deltas are forwarded per the stream mode — raw
       // fragments ('text') or one dot per chunk ('dots'). Text is
@@ -255,6 +257,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         args,
         cwd: state.cwd,
         env: state.env,
+        stdin: prompt.user,
         timeoutMs: options?.timeoutMs ?? state.timeoutMs,
         ...(options?.onOutputLine !== undefined
           ? {

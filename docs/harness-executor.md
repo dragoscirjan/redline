@@ -36,7 +36,10 @@ core makes.
   environment variable; `models.json` only references it by interpolation,
   so the value never appears in a generated file.
 - Invocation: `pi --print --mode json --no-session --no-tools --provider …
-  --model … --system-prompt … -- <user prompt>`.
+  --model … --system-prompt <generated-policy-file>`. Pi reads the fixed
+  policy from a mode-0600 file in the temporary agent directory and the
+  bounded user prompt from stdin. Large untrusted review context never
+  enters a process argument.
 - Assistant text is extracted from the final `turn_end` event of Pi's
   newline-delimited JSON stream.
 
@@ -54,7 +57,8 @@ core makes.
   config file — mode 0600 inside the review's temporary work directory,
   which is deleted when the run ends.
 - Invocation: `opencode run --pure --format json --agent redline-review
-  --model provider/model -- <user prompt>`.
+  --model provider/model`, with the bounded user prompt on stdin. The
+  generated configuration still supplies the fixed system policy.
 - Assistant text is concatenated from `text` parts of the JSON event stream.
 
 ### Echo
@@ -85,6 +89,11 @@ models are involved.
 4. Add unit tests for configuration generation and event parsing, plus an
    opt-in live test against `test/fixtures/mock-model-server.mjs`.
 5. Add the harness to the CI matrix in `.github/workflows/ci.yml`.
+
+The shared process runner caps stdin at 1 MiB and retains its output and
+execution-time limits. The argument list contains only trusted options and
+paths. This prevents `spawn E2BIG` when a reviewed file's captured diff and
+source exceed the operating system's per-argument limit.
 
 Security rules for every implementation: argument arrays only (no shell),
 tools disabled, isolated generated configuration, constructed environment

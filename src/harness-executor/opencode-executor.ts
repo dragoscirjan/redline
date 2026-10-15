@@ -228,12 +228,12 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
       // Every `opencode run` is a fresh process, so the agent system prompt
       // (the fixed review policy) is rewritten before each invocation.
       await writeFile(state.configFile, buildConfig(state.modelConfig, prompt.system), { mode: 0o600 });
-      const args = [...state.args, '--', prompt.user];
       const result = await runBoundedProcess(spawner, {
         command: state.command,
-        args,
+        args: state.args,
         cwd: state.cwd,
         env: state.env,
+        stdin: prompt.user,
         timeoutMs: options?.timeoutMs ?? state.timeoutMs,
         // `opencode run --format json` prints once at the end, so there is
         // nothing to heartbeat on stdout; stderr diagnostics forward live.

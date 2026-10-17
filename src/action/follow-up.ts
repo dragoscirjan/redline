@@ -49,8 +49,14 @@ export function createActionFollowUpExecutor(config: ActionFollowUpConfig):
       if (result.timedOut || result.code !== 0) {
         throw new Error(result.timedOut ? 'action-owned follow-up timed out' : 'action-owned follow-up unavailable');
       }
-      const info = await stat(output);
-      if (info.size > MAX_RESULT_BYTES || info.size === 0) throw new Error('follow-up result exceeded its size limit');
+      const info = await stat(output).catch((error: unknown) => {
+        if (error !== null && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+          throw new Error('follow-up result is missing or empty');
+        }
+        throw error;
+      });
+      if (info.size === 0) throw new Error('follow-up result is missing or empty');
+      if (info.size > MAX_RESULT_BYTES) throw new Error('follow-up result exceeded its size limit');
       return await readFile(output, 'utf8');
     } finally {
       await rm(directory, { recursive: true, force: true });

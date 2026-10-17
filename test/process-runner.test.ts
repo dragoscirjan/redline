@@ -60,6 +60,13 @@ describe('runBoundedProcess', () => {
       command: process.execPath, args: ['-e', 'process.exit(0)'],
       stdin: 'x'.repeat(MAX_INPUT_BYTES + 1), timeoutMs: 10_000,
     })).rejects.toThrow('input exceeds its byte limit');
+    const multibyte = 'α'.repeat(MAX_INPUT_BYTES);
+    expect(multibyte.length).toBe(MAX_INPUT_BYTES);
+    expect(Buffer.byteLength(multibyte, 'utf8')).toBeGreaterThan(MAX_INPUT_BYTES);
+    await expect(runBoundedProcess(nodeProcessSpawner, {
+      command: process.execPath, args: ['-e', 'process.exit(0)'],
+      stdin: multibyte, timeoutMs: 10_000,
+    })).rejects.toThrow('input exceeds its byte limit');
   });
 
   it('reports a non-zero exit code', async () => {

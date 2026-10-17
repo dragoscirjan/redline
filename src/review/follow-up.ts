@@ -7,7 +7,7 @@ import {
 } from '../code-context/follow-up.js';
 import type { CodeContextProvider } from '../code-context/artifact.js';
 import type { ReviewBundle } from './bundle.js';
-import { validateSourceEvidence } from './source-evidence.js';
+import { SourceMismatchError, validateSourceEvidence } from './source-evidence.js';
 import type { SourceEvidence } from './types.js';
 
 export interface ResolvedFollowUp {
@@ -19,6 +19,10 @@ export interface ResolvedFollowUp {
   readonly sources: readonly SourceEvidence[];
   /** Provider relationship labels stay provenance, never citation authority. */
   readonly relationships: readonly string[];
+}
+
+export function classifyFollowUpSourceFailure(error: unknown): FollowUpReason {
+  return error instanceof SourceMismatchError ? 'source-disagreement' : 'source-unavailable';
 }
 
 function degraded(result: FollowUpResult, candidateId: string, reason: FollowUpReason): ResolvedFollowUp {
@@ -71,8 +75,7 @@ export async function resolveFollowUpResults(
         await validateSourceEvidence(bundle, source);
         sources.push(source);
       } catch (error) {
-        limitation = error instanceof Error && error.message.includes('does not match captured source')
-          ? 'source-disagreement' : 'source-unavailable';
+        limitation = classifyFollowUpSourceFailure(error);
         break;
       }
     }

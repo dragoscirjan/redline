@@ -5,6 +5,15 @@ import type { SourceEvidence } from './types.js';
 
 const MAX_EVIDENCE_SOURCE_BYTES = 2 * 1024 * 1024;
 
+/** Captured source exists, but a provider's claimed span does not match it. */
+export class SourceMismatchError extends Error {
+  readonly code = 'source-mismatch' as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'SourceMismatchError';
+  }
+}
+
 function sourceLines(value: string): string[] {
   const lines = value.split('\n');
   if (lines.at(-1) === '') lines.pop();
@@ -54,9 +63,9 @@ export async function validateSourceEvidence(bundle: ReviewBundle, evidence: Sou
   }
   const lines = await evidenceSource(bundle, evidence);
   if (evidence.endLine > lines.length) {
-    throw new Error(`supporting evidence span exceeds captured source for ${evidence.path}`);
+    throw new SourceMismatchError(`supporting evidence span exceeds captured source for ${evidence.path}`);
   }
   if (lines[evidence.startLine - 1] !== evidence.evidence) {
-    throw new Error(`supporting evidence does not match captured source for ${evidence.path}`);
+    throw new SourceMismatchError(`supporting evidence does not match captured source for ${evidence.path}`);
   }
 }

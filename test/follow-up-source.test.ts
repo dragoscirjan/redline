@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FollowUpBudget, type FollowUpRequestBatch } from '../src/code-context/follow-up.js';
 import { loadReviewBundle } from '../src/review/bundle.js';
-import { followUpSourcesByCandidate, resolveFollowUpResults } from '../src/review/follow-up.js';
+import { classifyFollowUpSourceFailure, followUpSourcesByCandidate, resolveFollowUpResults } from '../src/review/follow-up.js';
+import { SourceMismatchError } from '../src/review/source-evidence.js';
 import { parseVerificationDocument, validateVerificationDocument } from '../src/review/verification.js';
 import { BASE_SHA, createBundleFixture, HEAD_SHA } from './helpers/bundle.js';
 import { reviewFinding } from './helpers/finding.js';
@@ -29,6 +30,18 @@ function results(plan: FollowUpRequestBatch, overrides: Record<string, unknown> 
 }
 
 describe('follow-up source re-resolution', () => {
+  it('classifies typed source disagreements regardless of error wording', () => {
+    expect(classifyFollowUpSourceFailure(new SourceMismatchError('does not match captured source')))
+      .toBe('source-disagreement');
+    expect(classifyFollowUpSourceFailure(new SourceMismatchError('the captured line changed')))
+      .toBe('source-disagreement');
+    expect(classifyFollowUpSourceFailure(new Error('does not match captured source')))
+      .toBe('source-unavailable');
+    expect(classifyFollowUpSourceFailure(new Error('source file is missing')))
+      .toBe('source-unavailable');
+    expect(classifyFollowUpSourceFailure({ message: 'the captured line changed' }))
+      .toBe('source-unavailable');
+  });
   it('accepts bounded action facts only when exact-head source confirms the anchor', async () => {
     const fixture = await createBundleFixture();
     try {

@@ -6,6 +6,7 @@
 
 import { createHash } from 'node:crypto';
 import { codeContextGraphFactDigest } from '../code-context/artifact.js';
+import { FOLLOW_UP_LIMITS, type FollowUpDirection } from '../code-context/follow-up.js';
 import { assertOnlyKeys, isRecord, type ReviewManifestFile } from './bundle.js';
 import type {
   EvidenceRole,
@@ -25,7 +26,8 @@ import type {
   ValidatedFinding,
 } from './types.js';
 
-export const FILE_REVIEW_DOCUMENT_VERSION = 3 as const;
+export const FILE_REVIEW_DOCUMENT_VERSION = 4 as const;
+export const PREVIOUS_FILE_REVIEW_DOCUMENT_VERSION = 3 as const;
 export const LEGACY_FILE_REVIEW_DOCUMENT_VERSION = 2 as const;
 export const MAX_FILE_FINDINGS = 10;
 export const MAX_SUGGESTED_CHANGE_CHARS = 8 * 1024;
@@ -47,7 +49,8 @@ const MAX_IMPACT_PATH_STEPS = 16;
 const MAX_TEXT_LIST = 8;
 
 export interface FileReviewDocument {
-  readonly version: typeof FILE_REVIEW_DOCUMENT_VERSION | typeof LEGACY_FILE_REVIEW_DOCUMENT_VERSION;
+  readonly version: typeof FILE_REVIEW_DOCUMENT_VERSION | typeof PREVIOUS_FILE_REVIEW_DOCUMENT_VERSION
+    | typeof LEGACY_FILE_REVIEW_DOCUMENT_VERSION;
   readonly fileId: string;
   readonly outcome: 'clean' | 'findings' | 'omitted';
   readonly reason: string | undefined;
@@ -55,6 +58,8 @@ export interface FileReviewDocument {
   /** Original raw-array index for each successfully parsed finding. */
   readonly candidateIndices: readonly number[];
   readonly rejectedCandidates: readonly RejectedCandidate[];
+  /** Optional evidence requests refer to raw candidate array indexes, never provider query text. */
+  readonly contextRequests: readonly { readonly candidateIndex: number; readonly direction: FollowUpDirection }[];
 }
 
 export interface CandidateValidationResult {
@@ -387,8 +392,11 @@ export function parseFileReviewDocument(raw: string): FileReviewDocument {
     throw new Error('review document is not valid JSON');
   }
   if (!isRecord(decoded)) throw new Error('review document must be an object');
-  assertOnlyKeys(decoded, ['version', 'fileId', 'outcome', 'reason', 'findings'], 'review document');
-  if (decoded.version !== FILE_REVIEW_DOCUMENT_VERSION && decoded.version !== LEGACY_FILE_REVIEW_DOCUMENT_VERSION) {
+  assertOnlyKeys(decoded, ['version', 'fileId', 'outcome', 'reason', 'findings',
+    ...(decoded.version === FILE_REVIEW_DOCUMENT_VERSION ? ['contextRequests'] : [])], 'review document');
+  if (decoded.version !== FILE_REVIEW_DOCUMENT_VERSION
+    && decoded.version !== PREVIOUS_FILE_REVIEW_DOCUMENT_VERSION
+    && decoded.version !== LEGACY_FILE_REVIEW_DOCUMENT_VERSION) {
     throw new Error('review document uses an unsupported version');
   }
   const version = decoded.version;
@@ -421,13 +429,28 @@ export function parseFileReviewDocument(raw: string): FileReviewDocument {
   const rejectedCandidates: RejectedCandidate[] = [];
   rawFindings.forEach((item, index) => {
     try {
-      findings.push(version === FILE_REVIEW_DOCUMENT_VERSION ? parseRichFinding(item) : parseLegacyFinding(item));
+      findings.push(version === LEGACY_FILE_REVIEW_DOCUMENT_VERSION ? parseLegacyFinding(item) : parseRichFinding(item));
       candidateIndices.push(index);
     } catch (error) {
       rejectedCandidates.push(rejection(index, 'parse', 'candidate-schema-invalid', error));
     }
   });
-  return Object.freeze({ version, fileId, outcome, reason, findings, candidateIndices, rejectedCandidates });
+  const rawRequests = version === FILE_REVIEW_DOCUMENT_VERSION ? decoded.contextRequests : [];
+  if (!Array.isArray(rawRequests) || rawRequests.length > FOLLOW_UP_LIMITS.requestsPerFile
+    || (outcome === 'clean' && rawRequests.length > 0)) {
+    throw new Error('review document.contextRequests must be a bounded array for candidate-bearing files');
+  }
+  const contextRequests = rawRequests.map((item: unknown) => {
+    if (!isRecord(item)) throw new Error('review document.contextRequest must be an object');
+    assertOnlyKeys(item, ['candidateIndex', 'direction'], 'review document.contextRequest');
+    const candidateIndex = nonNegativeInteger(item.candidateIndex, 'review document.contextRequest.candidateIndex');
+    if (candidateIndex >= rawFindings.length) throw new Error('review document.contextRequest candidate index is out of range');
+    const direction = enumValue(item.direction, ['incoming', 'outgoing'] as const,
+      'review document.contextRequest.direction');
+    return { candidateIndex, direction };
+  });
+  return Object.freeze({ version, fileId, outcome, reason, findings, candidateIndices, rejectedCandidates,
+    contextRequests });
 }
 
 export interface ChangedLines {

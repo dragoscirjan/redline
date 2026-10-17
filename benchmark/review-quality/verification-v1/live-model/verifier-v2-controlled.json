@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "source": "saved validated discovery findings; no provider follow-up",
+  "outcomes": [
+    {
+      "fixture": "cross-file-rate-limit",
+      "mode": "file-only",
+      "elapsedMs": 13202,
+      "fenced": false,
+      "dispositions": [
+        {
+          "status": "confirmed",
+          "sourceConfirmed": true
+        }
+      ],
+      "error": null,
+      "confirmed": 1
+    },
+    {
+      "fixture": "cross-file-rate-limit",
+      "mode": "indexed-context",
+      "elapsedMs": 34061,
+      "fenced": false,
+      "dispositions": [
+        {
+          "status": "confirmed",
+          "sourceConfirmed": true
+        }
+      ],
+      "error": null,
+      "confirmed": 1
+    },
+    {
+      "fixture": "cross-file-cache-collision",
+      "mode": "file-only",
+      "elapsedMs": 41518,
+      "fenced": false,
+      "dispositions": [
+        {
+          "status": "inconclusive",
+          "sourceConfirmed": false
+        }
+      ],
+      "error": null,
+      "confirmed": 0
+    },
+    {
+      "fixture": "cross-file-cache-collision",
+      "mode": "indexed-context",
+      "elapsedMs": 29880,
+      "fenced": false,
+      "dispositions": [
+        {
+          "status": "confirmed",
+          "sourceConfirmed": true
+        }
+      ],
+      "error": null,
+      "confirmed": 1
+    },
+    {
+      "fixture": "local-port-validation",
+      "mode": "indexed-context",
+      "elapsedMs": 19516,
+      "fenced": true,
+      "dispositions": [
+        {
+          "status": "confirmed",
+          "sourceConfirmed": true
+        }
+      ],
+      "error": null,
+      "confirmed": 1
+    }
+  ]
+}

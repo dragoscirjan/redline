@@ -8,6 +8,8 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { FollowUpRequestBatch } from '../code-context/follow-up.js';
+import type { ResolvedFollowUp } from './follow-up.js';
 import { spanLocation } from './remediation.js';
 import type {
   FileReviewRecord,
@@ -18,8 +20,29 @@ import type {
 
 export const MAX_RAW_MODEL_OUTPUT_BYTES = 16 * 1024;
 
+export interface VerificationArtifact {
+  readonly version: 1;
+  readonly candidateIds: readonly string[];
+  readonly status: 'completed' | 'incomplete';
+  readonly dispositions: readonly {
+    readonly candidateId: string;
+    readonly disposition: string;
+    readonly reason: string;
+  }[];
+  readonly rawModelOutput?: string | undefined;
+}
+
+export interface FollowUpArtifact {
+  readonly version: 1;
+  readonly requests: FollowUpRequestBatch | null;
+  readonly results: readonly ResolvedFollowUp[];
+  readonly reason?: string | undefined;
+}
+
 interface FileReviewRecordWithRaw extends FileReviewRecord {
   readonly rawModelOutput?: string | undefined;
+  readonly verificationArtifact?: VerificationArtifact | undefined;
+  readonly followUpArtifact?: FollowUpArtifact | undefined;
 }
 
 /** Uses a fence that cannot occur inside the fenced content. */
@@ -97,6 +120,14 @@ function renderRecordMarkdown(record: FileReviewRecord): string {
     lines.push(`- **Index provider:** ${record.codeContext.provider.id} ${record.codeContext.provider.version}`);
   }
   if (record.codeContext.reason !== null) lines.push(`- **Index coverage reason:** ${record.codeContext.reason}`);
+  if (record.followUp !== undefined) {
+    lines.push(`- **Follow-up queries:** ${record.followUp.status}; ${record.followUp.completed}/${record.followUp.requested} completed; ${record.followUp.omitted} omitted`);
+    if (record.followUp.reason !== undefined) lines.push(`- **Follow-up limitation:** ${record.followUp.reason}`);
+  }
+  if (record.verification !== undefined) {
+    lines.push(`- **Candidate verification:** ${record.verification.status}; ${record.verification.accepted}/${record.verification.requested} accepted; ${record.verification.durationMs} ms`);
+    if (record.verification.reason !== undefined) lines.push(`- **Verification limitation:** ${record.verification.reason}`);
+  }
   if (record.reason !== undefined) lines.push(`- **Reason:** ${record.reason}`);
   if (record.errorKind !== undefined) lines.push(`- **Error kind:** ${record.errorKind}`);
   lines.push(`- **Rejected candidates:** ${record.rejectedCandidates.length}`);
@@ -152,6 +183,9 @@ function renderPullRequestReviewMarkdown(review: PullRequestReviewRecord): strin
     `- **Rejected candidates:** ${review.rejectedCandidates.length}`,
     `- **Required file coverage:** ${review.coverage.files.status}`,
     `- **Baseline review coverage:** ${review.coverage.specialists[0]?.status ?? 'unavailable'}`,
+    ...(review.coverage.verification === undefined ? [] : [`- **Candidate verification:** ${review.coverage.verification.status}`]),
+    ...(review.coverage.followUp === undefined ? [] : [`- **Follow-up queries:** ${review.coverage.followUp.status}`]),
+    ...(review.coverage.publication === undefined ? [] : [`- **Publication budget:** ${review.coverage.publication.status} — ${review.coverage.publication.reason}`]),
     `- **Indexed context:** ${review.coverage.codeIntelligence.status}`,
     `- **Graph queries:** ${review.coverage.graphQueries.map((item) => item.status).join(', ')}`,
     `- **Impact traversals:** ${review.coverage.impactTraversals.map((item) => item.status).join(', ')}`,
@@ -172,11 +206,21 @@ function renderPullRequestReviewMarkdown(review: PullRequestReviewRecord): strin
   for (const finding of review.findings) {
     lines.push(`- **${finding.title}** — \`${finding.triggerPath}:${finding.startLine}-${finding.endLine}\` (${finding.severity} ${finding.classification})`);
   }
+  if (review.synthesis !== undefined) {
+    lines.push('', '## Source-backed root-cause groups', '');
+    for (const group of review.synthesis.groups) {
+      lines.push(`- \`${group.id}\`: ${group.status}; ${group.triggers.length} changed-line trigger(s); ${group.supportingEvidence.length} source anchor(s).`);
+    }
+    lines.push('', '## Publication decisions', '');
+    for (const decision of review.synthesis.decisions) {
+      lines.push(`- \`${decision.fileId}:${decision.findingId}\`: ${decision.status} — ${decision.reason}`);
+    }
+  }
   return `${lines.join('\n')}\n`;
 }
 
 export interface ReviewWriter {
-  writeFileReview(record: FileReviewRecord & { rawModelOutput?: string | undefined }): Promise<void>;
+  writeFileReview(record: FileReviewRecordWithRaw): Promise<void>;
   writeSummary(summary: ReviewRunSummary): Promise<void>;
   writePullRequestReview(review: PullRequestReviewRecord): Promise<void>;
 }
@@ -197,7 +241,7 @@ export function createReviewWriter(outputDirectory: string): ReviewWriter {
   return {
     async writeFileReview(record: FileReviewRecordWithRaw): Promise<void> {
       await prepare();
-      const { rawModelOutput, ...rest } = record;
+      const { rawModelOutput, verificationArtifact, followUpArtifact, ...rest } = record;
       const json: Record<string, unknown> = { ...rest };
       if (rawModelOutput !== undefined) {
         json['rawModelOutput'] =
@@ -207,6 +251,22 @@ export function createReviewWriter(outputDirectory: string): ReviewWriter {
       }
       await writeFile(join(reviewsDirectory, `${record.fileId}.json`), `${JSON.stringify(json, null, 2)}\n`);
       await writeFile(join(reviewsDirectory, `${record.fileId}.md`), renderRecordMarkdown(record));
+      if (followUpArtifact !== undefined) {
+        const directory = join(reviewsDirectory, 'follow-up');
+        await mkdir(directory, { recursive: true });
+        await writeFile(join(directory, `${record.fileId}.json`), `${JSON.stringify(followUpArtifact, null, 2)}\n`);
+      }
+      if (verificationArtifact !== undefined) {
+        const directory = join(reviewsDirectory, 'verification');
+        await mkdir(directory, { recursive: true });
+        const bounded = {
+          ...verificationArtifact,
+          ...(verificationArtifact.rawModelOutput === undefined ? {} : {
+            rawModelOutput: verificationArtifact.rawModelOutput.slice(0, MAX_RAW_MODEL_OUTPUT_BYTES),
+          }),
+        };
+        await writeFile(join(directory, `${record.fileId}.json`), `${JSON.stringify(bounded, null, 2)}\n`);
+      }
     },
     async writeSummary(summary: ReviewRunSummary): Promise<void> {
       await prepare();

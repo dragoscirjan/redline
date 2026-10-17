@@ -10,6 +10,9 @@
   "scripts": {
     "benchmark": "pnpm run build && node dist/src/benchmark/cli.js",
     "benchmark:live-model": "pnpm run build && node dist/src/benchmark/live-cli.js",
+    "benchmark:verification": "pnpm run build && node dist/src/benchmark/verification-cli.js",
+    "benchmark:live-verification": "pnpm run build && node dist/src/benchmark/live-verification-cli.js",
+    "benchmark:judge-live-verification": "pnpm run build && node dist/src/benchmark/judge-live-verification.js",
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "docs": "vitepress build docs",
     "docs:preview": "vitepress preview docs",

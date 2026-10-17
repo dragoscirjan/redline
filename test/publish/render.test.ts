@@ -10,6 +10,7 @@ import {
 import type { FileReviewRecord, PublishedFinding } from '../../src/review/types.js';
 import type { ReviewScope } from '../../src/publish/types.js';
 import { publishedFinding, pullRequestReview } from '../helpers/finding.js';
+import { synthesizeReview } from '../../src/review/synthesis.js';
 
 const HEAD = 'b'.repeat(40);
 const SCOPE: ReviewScope = { repository: 'owner/repository', pullRequest: 14, head: HEAD };
@@ -138,6 +139,28 @@ describe('renderFileReviewBody', () => {
 });
 
 describe('renderSummaryBody', () => {
+  it('shows every consolidated changed-line trigger and a critical budget omission without inline duplication', () => {
+    const support = [{ role: 'contract' as const, revision: HEAD, path: 'src/shared.ts',
+      startLine: 1, endLine: 1, evidence: 'shared();' }];
+    const findings = [
+      { ...finding({ id: 'f-first', severity: 'critical', supportingEvidence: support,
+        verification: { status: 'confirmed' as const, reason: 'checked' } }),
+        triggerFileId: '000001', triggerPath: 'src/example.ts' },
+      { ...finding({ id: 'f-second', severity: 'high', supportingEvidence: support,
+        verification: { status: 'confirmed' as const, reason: 'checked' } }),
+        triggerFileId: '000002', triggerPath: 'src/other.ts' },
+    ];
+    const synthesis = synthesizeReview(findings, { fileReviews: 0, inlineComments: 0 });
+    const body = renderSummaryBody(SCOPE, { ...REVIEW, findings, synthesis,
+      limitations: [{ code: 'critical-publication-suppressed', required: true,
+        message: '1 critical finding exceeded the budget.' }],
+    }, { publishedFileReviews: 0, failedFileReviews: 0, failedInlineComments: 0 });
+    expect(body).toContain('1 duplicate comments consolidated; 1 findings withheld');
+    expect(body).toContain('`src/example.ts:3-5`, `src/other.ts:3-5`');
+    expect(body).toContain('f-first` — file-budget');
+    expect(body).toContain('Required — 1 critical finding exceeded the budget.');
+  });
+
   it('renders run counts, per-file outcomes, and publication notes', () => {
     const body = renderSummaryBody(SCOPE, REVIEW, { publishedFileReviews: 1, failedFileReviews: 0, failedInlineComments: 0 });
     expect(body).toContain('## Redline pull request review');

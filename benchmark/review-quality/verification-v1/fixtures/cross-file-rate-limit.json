@@ -1,0 +1,79 @@
+{
+  "version": 2,
+  "id": "cross-file-rate-limit",
+  "title": "Per-user throttling now shares a route bucket",
+  "kind": "defect",
+  "baseRevision": "5555555555555555555555555555555555555555",
+  "headRevision": "6666666666666666666666666666666666666666",
+  "files": [{
+    "id": "000001",
+    "path": "src/bucket.ts",
+    "status": "M",
+    "base": "export function rateBucket(userId: string, route: string): string {\n  return `${userId}:${route}`;\n}\n",
+    "head": "export function rateBucket(userId: string, route: string): string {\n  return route;\n}\n",
+    "diff": "diff --git a/src/bucket.ts b/src/bucket.ts\n--- a/src/bucket.ts\n+++ b/src/bucket.ts\n@@ -1,3 +1,3 @@\n export function rateBucket(userId: string, route: string): string {\n-  return `${userId}:${route}`;\n+  return route;\n }\n"
+  }],
+  "additionalHeadFiles": {
+    "src/gateway.ts": "import { rateBucket } from './bucket.js';\nexport function throttle(userId: string, route: string): string {\n  return rateBucket(userId, route);\n}\n"
+  },
+  "expectedIssues": [{
+    "id": "per-user-throttle-lost",
+    "title": "Different users now share one route throttle bucket",
+    "locations": [{ "path": "src/bucket.ts", "side": "RIGHT", "startLine": 2, "endLine": 2 }]
+  }],
+  "recordings": [
+    {
+      "mode": "file-only",
+      "responses": [{
+        "fileId": "000001",
+        "durationMs": 13,
+        "document": { "version": 2, "fileId": "000001", "outcome": "clean", "findings": [] }
+      }],
+      "judgments": []
+    },
+    {
+      "mode": "indexed-context",
+      "responses": [{
+        "fileId": "000001",
+        "durationMs": 13,
+        "document": {
+          "version": 2,
+          "fileId": "000001",
+          "outcome": "findings",
+          "findings": [{
+            "category": "correctness",
+            "classification": "defect",
+            "severity": "high",
+            "confidence": 0.91,
+            "side": "RIGHT",
+            "startLine": 2,
+            "endLine": 2,
+            "evidence": "  return route;",
+            "impact": "One user can exhaust another user's route allowance.",
+            "fix": "Keep the user identifier in the throttle key."
+          }]
+        }
+      }],
+      "judgments": [{ "fileId": "000001", "findingIndex": 0, "expectedIssueId": "per-user-throttle-lost" }],
+      "codeContext": {
+        "version": 1,
+        "provider": { "id": "cgc", "version": "0.5.7" },
+        "repository": "benchmark/redline",
+        "revision": "6666666666666666666666666666666666666666",
+        "status": "complete",
+        "files": [{
+          "changedPath": "src/bucket.ts",
+          "status": "complete",
+          "related": [{
+            "path": "src/gateway.ts",
+            "startLine": 2,
+            "endLine": 4,
+            "reason": "related-symbol-calls-changed-code"
+          }]
+        }],
+        "diagnostics": [],
+        "timings": { "installationMs": 0, "restoreMs": 0, "indexMs": 0, "queryMs": 0, "saveMs": null }
+      }
+    }
+  ]
+}

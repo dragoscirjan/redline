@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -23,7 +23,8 @@ async function createSettings(
 
 /** Spawner double that records the spawn request and returns scripted output. */
 class RecordingSpawner implements ProcessSpawner {
-  readonly requests: Array<{ command: string; args: string[]; env?: Record<string, string | undefined> | undefined }> = [];
+  readonly requests: Array<{ command: string; args: string[]; stdin?: string | undefined;
+    env?: Record<string, string | undefined> | undefined }> = [];
   #stdout = '';
   #code: number | null = 0;
 
@@ -32,8 +33,9 @@ class RecordingSpawner implements ProcessSpawner {
     this.#code = code;
   }
 
-  spawn(request: { command: string; args: readonly string[]; env?: Record<string, string | undefined> | undefined }): SpawnedProcess {
-    this.requests.push({ command: request.command, args: [...request.args], env: request.env });
+  spawn(request: { command: string; args: readonly string[]; stdin?: string | undefined;
+    env?: Record<string, string | undefined> | undefined }): SpawnedProcess {
+    this.requests.push({ command: request.command, args: [...request.args], stdin: request.stdin, env: request.env });
     const encoder = new TextEncoder();
     const stdout = encoder.encode(this.#stdout);
     const empty = encoder.encode('');
@@ -79,16 +81,32 @@ describe('createPiExecutor', () => {
         '--model',
         'test-model',
         '--system-prompt',
-        'SYS',
-        '--',
-        'USER',
+        join(settings.workDirectory, 'pi-agent', 'system-prompt.md'),
       ]);
+      expect(request.stdin).toBe('USER');
+      expect(await readFile(join(settings.workDirectory, 'pi-agent', 'system-prompt.md'), 'utf8')).toBe('SYS');
+      expect((await stat(join(settings.workDirectory, 'pi-agent', 'system-prompt.md'))).mode & 0o777).toBe(0o600);
       expect(request.env?.PI_CODING_AGENT_DIR).toContain('pi-agent');
       expect(request.env?.[PI_CREDENTIAL_ENV_NAME]).toBe('test-key');
       // No ambient credentials leak into the child environment.
       expect(Object.keys(request.env ?? {}).sort()).toEqual(
         ['HOME', 'LANG', 'PATH', 'PI_CODING_AGENT_DIR', PI_CREDENTIAL_ENV_NAME].sort(),
       );
+    } finally {
+      await settings.cleanup();
+    }
+  });
+
+  it('keeps a 256 KiB untrusted review prompt out of the process argument list', async () => {
+    const settings = await createSettings();
+    try {
+      const spawner = new RecordingSpawner();
+      const executor = createPiExecutor({ command: 'pi-fake', spawner });
+      const prepared = await executor.prepare(settings);
+      const context = 'x'.repeat(256 * 1024);
+      await executor.execute(prepared, { system: 'fixed policy', user: context });
+      expect(spawner.requests[0]?.stdin).toBe(context);
+      expect(spawner.requests[0]?.args.every((value) => value.length < 4_096)).toBe(true);
     } finally {
       await settings.cleanup();
     }

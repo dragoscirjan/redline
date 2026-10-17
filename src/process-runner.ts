@@ -12,6 +12,7 @@ import { spawn } from 'node:child_process';
 
 export const MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 export const MAX_DIAGNOSTIC_BYTES = 256 * 1024;
+export const MAX_INPUT_BYTES = 1024 * 1024;
 const TIMEOUT_KILL_GRACE_MS = 2_000;
 
 export interface SpawnRequest {
@@ -19,6 +20,8 @@ export interface SpawnRequest {
   readonly args: readonly string[];
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
+  /** Bounded prompt sent over stdin, never through an argument or shell. */
+  readonly stdin?: string;
 }
 
 export interface SpawnedProcess {
@@ -44,7 +47,7 @@ export const nodeProcessSpawner: ProcessSpawner = {
     const child = spawn(request.command, [...request.args], {
       cwd: request.cwd,
       env: request.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [request.stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
     // The exit promise is memoized: `close` and `error` fire once, so a
@@ -57,6 +60,12 @@ export const nodeProcessSpawner: ProcessSpawner = {
         resolve({ code });
       });
     });
+    if (request.stdin !== undefined) {
+      // A child that exits before reading can close stdin early. The exit
+      // result, rather than a broken pipe, reports the harness failure.
+      child.stdin?.on('error', () => undefined);
+      child.stdin?.end(request.stdin);
+    }
     return {
       stdout: child.stdout ?? emptyStream(),
       stderr: child.stderr ?? emptyStream(),
@@ -207,6 +216,9 @@ export async function runBoundedProcess(
 ): Promise<BoundedRunResult> {
   if (!Number.isSafeInteger(request.timeoutMs) || request.timeoutMs <= 0) {
     throw new Error('process timeout is invalid');
+  }
+  if (request.stdin !== undefined && Buffer.byteLength(request.stdin, 'utf8') > MAX_INPUT_BYTES) {
+    throw new Error('process input exceeds its byte limit');
   }
   const startedAt = Date.now();
   const child = spawner.spawn(request);

@@ -11,6 +11,7 @@
 
 import type { PublicationEnvironment } from '../review/environment.js';
 import type { FileReviewRecord, PullRequestReviewRecord } from '../review/types.js';
+import { MAX_PUBLISHED_FILE_REVIEWS, MAX_PUBLISHED_INLINE_COMMENTS } from '../review/publication-limits.js';
 import { GitHubReviewPublisher } from './github-publisher.js';
 import {
   fileReviewMarker,
@@ -24,8 +25,7 @@ import {
 } from './render.js';
 import type { FileReviewPublication, ReviewPublisher, ReviewScope } from './types.js';
 
-export const MAX_PUBLISHED_FILE_REVIEWS = 25;
-export const MAX_PUBLISHED_INLINE_COMMENTS = 100;
+export { MAX_PUBLISHED_FILE_REVIEWS, MAX_PUBLISHED_INLINE_COMMENTS } from '../review/publication-limits.js';
 
 export interface PublicationFileResult {
   readonly fileId: string;
@@ -114,7 +114,24 @@ export class PublicationService {
       throw new Error('pull request head changed during review');
     }
 
-    const filesWithFindings = records.filter((record) => record.findings.length > 0);
+    if (review.coverage.verification?.required === true && review.synthesis === undefined) {
+      throw new Error('verified review has no deterministic publication plan');
+    }
+    const plan = review.synthesis?.decisions.filter((decision) => decision.status === 'publish');
+    const planned = plan?.map((decision) => {
+      const record = records.find((item) => item.fileId === decision.fileId);
+      const finding = record?.findings.find((item) => item.id === decision.findingId);
+      if (record === undefined || finding === undefined || finding.verification.status !== 'confirmed') {
+        throw new Error('publication plan references an unconfirmed or missing finding');
+      }
+      return { record, finding };
+    });
+    const filesWithFindings = planned === undefined
+      ? records.filter((record) => record.findings.length > 0)
+      : [...new Set(planned.map(({ record }) => record.fileId))].map((fileId) => {
+        const entries = planned.filter(({ record }) => record.fileId === fileId);
+        return { ...entries[0]!.record, findings: entries.map(({ finding }) => finding) };
+      });
     const results: PublicationFileResult[] = [];
     let publishedFileReviews = 0;
     let failedFileReviews = 0;

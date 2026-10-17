@@ -18,7 +18,8 @@ const SETTINGS: HarnessSettings = {
 };
 
 class RecordingSpawner implements ProcessSpawner {
-  readonly requests: Array<{ command: string; args: string[]; env?: Record<string, string | undefined> | undefined }> = [];
+  readonly requests: Array<{ command: string; args: string[]; stdin?: string | undefined;
+    env?: Record<string, string | undefined> | undefined }> = [];
   #stdout = '';
   #code: number | null = 0;
 
@@ -27,8 +28,9 @@ class RecordingSpawner implements ProcessSpawner {
     this.#code = code;
   }
 
-  spawn(request: { command: string; args: readonly string[]; env?: Record<string, string | undefined> | undefined }): SpawnedProcess {
-    this.requests.push({ command: request.command, args: [...request.args], env: request.env });
+  spawn(request: { command: string; args: readonly string[]; stdin?: string | undefined;
+    env?: Record<string, string | undefined> | undefined }): SpawnedProcess {
+    this.requests.push({ command: request.command, args: [...request.args], stdin: request.stdin, env: request.env });
     const encoder = new TextEncoder();
     const stdout = encoder.encode(this.#stdout);
     const empty = encoder.encode('');
@@ -80,9 +82,8 @@ describe('createOpenCodeExecutor', () => {
         'redline-review',
         '--model',
         'mock/test-model',
-        '--',
-        'USER',
       ]);
+      expect(request.stdin).toBe('USER');
       expect(request.env?.OPENCODE_CONFIG).toBe(configFile);
       expect(request.env?.XDG_CONFIG_HOME).toContain(join('opencode', 'config'));
       expect(request.env?.XDG_DATA_HOME).toContain(join('opencode', 'data'));
@@ -93,6 +94,21 @@ describe('createOpenCodeExecutor', () => {
         ['HOME', 'LANG', 'OPENCODE_CONFIG', 'PATH', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME'].sort(),
       );
       expect(prepared.description).not.toContain('test-key');
+    } finally {
+      await rm(workDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps a 256 KiB untrusted review prompt out of the process argument list', async () => {
+    const workDirectory = await mkdtemp(join(tmpdir(), 'redline-oc-'));
+    try {
+      const spawner = new RecordingSpawner();
+      const executor = createOpenCodeExecutor({ command: 'opencode-fake', spawner });
+      const prepared = await executor.prepare({ ...SETTINGS, workDirectory });
+      const context = 'x'.repeat(256 * 1024);
+      await executor.execute(prepared, { system: 'fixed policy', user: context });
+      expect(spawner.requests[0]?.stdin).toBe(context);
+      expect(spawner.requests[0]?.args.every((value) => value.length < 4_096)).toBe(true);
     } finally {
       await rm(workDirectory, { recursive: true, force: true });
     }

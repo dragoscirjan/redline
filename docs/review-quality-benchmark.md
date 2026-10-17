@@ -41,7 +41,7 @@ A finding receives credit only when a human judgment associates it with an expec
 | Credited issue recall | 1/2 | 2/2 | +1 |
 | False positives | 1 | 0 | -1 |
 | Duplicate findings | 0 | 0 | 0 |
-| Prompt bytes (current v6 policy) | 46,183 | 47,222 | +1,039 |
+| Prompt bytes (v7 policy) | 47,647 | 48,686 | +1,039 |
 | Resolved indexed source | 0 bytes | 216 bytes | +216 bytes |
 | Recorded review duration | 39 ms | 39 ms | 0 ms |
 
@@ -52,7 +52,7 @@ The indexed recording recovers the cross-account cache collision and removes the
 The checked-in comparison verifies that:
 
 - both modes use the same cases, review policy, model identity, and finding validator;
-- file-only scores preserve the original expected-issue judgments; prompt bytes differ because the current v6 discovery policy adds bounded follow-up intents;
+- file-only scores preserve the original expected-issue judgments; prompt bytes reflect the v7 policy's explicit trusted follow-up capability, while older v6 live captures remain historical evidence;
 - indexed artifacts pass the production schema and identity checks;
 - every injected span is re-resolved from captured exact-head source;
 - context coverage, source bytes, prompt bytes, and timing fields remain reproducible;
@@ -62,7 +62,7 @@ It does **not** prove that CGC or a live model produces the checked-in relations
 
 ## Scripted verifier replay (draft #107)
 
-Run `pnpm run benchmark:verification` to replay the four v2 fixtures plus two additional cases: a defaulted-parameter false positive and a cross-file per-user throttle defect. `benchmark/review-quality/verification-v1/dispositions.json` contains **scripted**, manually selected verifier dispositions—not model responses. `report.json` retains the per-fixture discovery and post-verifier findings, credited issues, false positives, prompt bytes, coverage, and recorded durations. Run `node dist/src/benchmark/verification-cli.js --output /tmp/verification-report.json` after a build to regenerate a report without overwriting the checked-in evidence.
+Run `pnpm run benchmark:verification` to replay the four v2 fixtures plus two additional cases: a defaulted-parameter false positive and a cross-file per-user throttle defect. `benchmark/review-quality/verification-v1/dispositions.json` contains **scripted**, manually selected verifier dispositions—not model responses. `report.json` retains the per-fixture discovery and post-verifier findings, credited issues, false positives, prompt bytes (regenerated under the v7 policy), coverage, and recorded durations. Run `node dist/src/benchmark/verification-cli.js --output /tmp/verification-report.json` after a build to regenerate a report without overwriting the checked-in evidence.
 
 | Recorded mode | Credited issues before → after | False positives before → after | Recorded review duration before → after | Incomplete files |
 | --- | ---: | ---: | ---: | ---: |
@@ -93,7 +93,7 @@ After `pnpm run build`, `node dist/src/benchmark/live-verification-cli.js --outp
 
 The activation gate requires no lost credited defects, no added clean-change false positives, adequate valid evidence, complete required coverage, and tolerable measured verifier latency. A single sequential provider run is directional evidence, not a stable latency distribution. The hardcoded Action gate remains off until the measurement and a trusted-base follow-up run pass.
 
-The checked-in, independently judged live replay is at `benchmark/review-quality/verification-v1/live-model/`. On six fixtures across both modes, discovery credited **2/3 file-only** and **3/3 indexed** expected issues; the verifier retained **0/3 in both**. Clean-change false positives stayed zero, but five confirmed discovery defects were lost and six of twelve cases had incomplete required coverage. Five verifier calls took 189,538 ms in aggregate (observed p95 67,706 ms; a tiny sequential sample). The file-only port case was already omitted because discovery produced an invalid candidate. No live follow-up worker was configured, so requests for relationship evidence were explicitly incomplete. The live gate **failed**; no production activation or independent provider quality claim follows from the scripted replay. See `benchmark/review-quality/verification-v1/live-model/report.md` and run `pnpm run benchmark:judge-live-verification` to reproduce its scoring offline. These captures precede a later default-mode fail-closed change and cannot be treated as a pass for that revision.
+The checked-in, independently judged live replay is at `benchmark/review-quality/verification-v1/live-model/`. On six fixtures across both modes, discovery credited **2/3 file-only** and **3/3 indexed** expected issues; the verifier retained **0/3 in both**. Clean-change false positives stayed zero, but five confirmed discovery defects were lost and six of twelve cases had incomplete required coverage. Five verifier calls took 189,538 ms in aggregate (observed p95 67,706 ms; a tiny sequential sample). The file-only port case was already omitted because discovery produced an invalid candidate. No live follow-up worker was configured, so requests for relationship evidence were explicitly incomplete. The live gate **failed**; no production activation or independent provider quality claim follows from the scripted replay. See `benchmark/review-quality/verification-v1/live-model/report.md` and run `pnpm run benchmark:judge-live-verification` to reproduce its scoring offline. These captures precede the v7 capability-aware discovery policy and a later default-mode fail-closed change; they cannot establish a pass for either revision.
 
 A controlled verifier-v2 retest of the same five saved validated candidates confirmed **4/5** with exact source citations; the remaining file-only cache case was inconclusive. All five verifier documents parsed, including one standalone fenced JSON document. That retest had no discovery calls, clean controls, or provider queries, so it is **not** an activation gate pass. Details are in `benchmark/review-quality/verification-v1/live-model/verifier-v2-controlled.json` and the accompanying report.
 

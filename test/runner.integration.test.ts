@@ -76,7 +76,7 @@ async function writeCodeContext(fixture: BundleFixture, value?: object): Promise
 }
 
 describe('runFileReviews', () => {
-  it('passes only action-resolved follow-up source to the verifier and records exact query coverage', async () => {
+  it('passes only action-resolved source and counts duplicate requests once', async () => {
     const fixture = await createBundleFixture();
     try {
       await writeFile(join(fixture.source, 'src/related.ts'), 'export const related = true;\n');
@@ -100,7 +100,8 @@ describe('runFileReviews', () => {
       const executor = new ScriptedExecutor();
       executor.script([
         { text: reviewDocument({ version: 4, fileId: file.id, outcome: 'findings', findings: [candidate],
-          contextRequests: [{ candidateIndex: 0, direction: 'incoming' }] }) },
+          contextRequests: [{ candidateIndex: 0, direction: 'incoming' },
+            { candidateIndex: 0, direction: 'incoming' }] }) },
         { text: reviewDocument({ version: 1, fileId: file.id, results: [{
           candidateId: finding.id, disposition: 'confirmed', reason: 'Captured caller establishes reachability.',
           citations: [{ role: 'impact-path', revision: HEAD_SHA, path: 'src/related.ts',
@@ -124,6 +125,7 @@ describe('runFileReviews', () => {
         },
       });
       expect(seen).toEqual(['src/example.ts']);
+      expect(executor.prompts[0]?.system).toContain('"followUp": "action-owned"');
       expect(executor.prompts[1]?.user).toContain('"followUp"');
       expect(result.records[0]).toMatchObject({
         followUp: { status: 'completed', requested: 1, completed: 1, durationMs: 5 },
@@ -135,6 +137,26 @@ describe('runFileReviews', () => {
       expect(result.review.coverage.followUp).toMatchObject({ status: 'completed', required: true });
       expect(await readFile(join(fixture.output, 'reviews/follow-up/000001.json'), 'utf8'))
         .toContain('related-symbol-calls-changed-code');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('publishes supported v4 findings with no follow-up under the verifier-off policy', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      executor.script([{ text: reviewDocument({ version: 4, fileId: '000001', outcome: 'findings',
+        findings: [reviewFinding({ evidence: 'new' })], contextRequests: [],
+      }) }]);
+      const result = await runFileReviews({ environment: environment.review!, executor });
+      expect(executor.prompts[0]?.system).toContain('"followUp": "unavailable"');
+      expect(executor.prompts[0]?.system).toContain('always return `[]`');
+      expect(result.records[0]?.outcome).toBe('findings');
+      expect(result.records[0]?.followUp).toBeUndefined();
+      expect(result.review.findings).toHaveLength(1);
+      expect(result.review.verdict.status).toBe('blocked');
     } finally {
       await fixture.cleanup();
     }

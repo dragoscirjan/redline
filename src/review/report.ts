@@ -6,7 +6,7 @@
 
 import { createHash } from 'node:crypto';
 import { codeContextGraphFactDigest } from '../code-context/artifact.js';
-import type { FollowUpDirection } from '../code-context/follow-up.js';
+import { FOLLOW_UP_LIMITS, type FollowUpDirection } from '../code-context/follow-up.js';
 import { assertOnlyKeys, isRecord, type ReviewManifestFile } from './bundle.js';
 import type {
   EvidenceRole,
@@ -436,7 +436,8 @@ export function parseFileReviewDocument(raw: string): FileReviewDocument {
     }
   });
   const rawRequests = version === FILE_REVIEW_DOCUMENT_VERSION ? decoded.contextRequests : [];
-  if (!Array.isArray(rawRequests) || rawRequests.length > 4 || (outcome === 'clean' && rawRequests.length > 0)) {
+  if (!Array.isArray(rawRequests) || rawRequests.length > FOLLOW_UP_LIMITS.requestsPerFile
+    || (outcome === 'clean' && rawRequests.length > 0)) {
     throw new Error('review document.contextRequests must be a bounded array for candidate-bearing files');
   }
   const contextRequests = rawRequests.map((item: unknown) => {

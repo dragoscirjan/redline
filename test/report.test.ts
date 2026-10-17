@@ -69,7 +69,7 @@ describe('parseFileReviewDocument', () => {
       { ...baseline, contextRequests: [{ candidateIndex: 0, direction: 'MATCH (n) DELETE n' }] },
       { ...baseline, contextRequests: [{ candidateIndex: 0, direction: 'incoming', path: '../escape' }] },
       { ...baseline, contextRequests: [{ candidateIndex: 1, direction: 'incoming' }] },
-      { ...baseline, contextRequests: Array(5).fill({ candidateIndex: 0, direction: 'incoming' }) },
+      { ...baseline, contextRequests: Array(3).fill({ candidateIndex: 0, direction: 'incoming' }) },
       { ...baseline, contextRequests: undefined },
       { ...baseline, outcome: 'clean', findings: [] },
     ]) expect(() => parseFileReviewDocument(JSON.stringify(invalid))).toThrow();

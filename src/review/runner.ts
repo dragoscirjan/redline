@@ -163,6 +163,8 @@ async function reviewOneFile(
       harness: environment.harness,
       model: environment.model.model,
       indexedContext: fileContext.prompt,
+      followUpAvailable: verifyCandidates && environment.codeContext !== undefined
+        && followUpExecutor !== undefined && fileContext.coverage.provider !== null,
     });
   } catch (error) {
     return {
@@ -261,12 +263,18 @@ async function reviewOneFile(
   if (document.contextRequests.length > 0) {
     let requests: FollowUpRequestBatch | null = null;
     let omitted = 0;
+    let requested = new Set(document.contextRequests.map((item) =>
+      `${item.candidateIndex}:${item.direction}`)).size;
     let completed = 0;
     let durationMs = 0;
     let executorStartedAt: number | undefined;
     let reason: string | undefined;
     try {
+      const seenIntents = new Set<string>();
       const intents = document.contextRequests.flatMap((request) => {
+        const key = `${request.candidateIndex}:${request.direction}`;
+        if (seenIntents.has(key)) return [];
+        seenIntents.add(key);
         const candidate = findings.find((item) => candidateIndexes.get(item.id) === request.candidateIndex);
         if (candidate === undefined) {
           omitted += 1;
@@ -284,6 +292,7 @@ async function reviewOneFile(
         head: bundle.manifest.head,
       }, file.id, fileReviewPath(file), findings.map((item) => item.id), intents);
       omitted += requests.omitted;
+      requested = requests.requests.length + omitted;
       if (requests.requests.length > 0) {
         const provider = indexedContext.coverage.provider;
         const startedAt = Date.now();
@@ -319,7 +328,6 @@ async function reviewOneFile(
       reason = boundedReason(redact(error instanceof Error ? error.message : String(error)));
     }
     if (omitted > 0) reason = reason ?? `${omitted} follow-up requests exceeded budgets or lacked validated candidates`;
-    const requested = document.contextRequests.length;
     followUp = {
       status: completed === requested && omitted === 0 ? 'completed' : 'incomplete',
       requested, completed, omitted, durationMs,

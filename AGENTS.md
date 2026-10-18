@@ -43,9 +43,12 @@
   proposal. Do not change instructions until the owner approves that proposal.
 - Load `cleanup-workspaces` only when the owner requests a workspace cleanup;
   audit first and obtain confirmation of the exact removal plan.
+- Before validating, committing, or pushing skill or instruction changes,
+  read `VALIDATION.md`. Its checks supplement the existing validation gate.
 - For every new feature or issue, create a focused branch from `main`, check
   it out in a dedicated worktree at
-  `../redline--workspaces/<branch-name>`, and work there.
+  `../redline--workspaces/<workspace-name>`, and work there. See
+  `CONTRIBUTING.md` for the mapping from branch name to directory name.
 - Commit with Conventional Commits. Run `mise run validate` before pushing.
 - Open a pull request linked to the issue. Never merge without explicit
   owner instruction; approval or a green review is not permission to merge.

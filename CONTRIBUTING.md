@@ -21,10 +21,37 @@ The stack is pnpm, TypeScript, Node, vitest, bats, and VitePress. Do not add a s
 
 ## Branches and pull requests
 
-1. Create a focused branch from `main` for each issue.
-2. Check it out in a dedicated worktree: `git worktree add ../redline--workspaces/<branch-name> -b <branch> origin/main`. Do not implement changes in the primary checkout.
-3. Commit with Conventional Commits.
-4. Run `mise run validate` before pushing.
+1. Create a focused branch for each issue. Before changing repository files,
+   read `.agents/skills/isolated-workspace/SKILL.md` and work in a dedicated
+   Git worktree, never the primary checkout.
+2. From the primary checkout, inspect `git status --short --branch`,
+   `git worktree list --porcelain`, `git rev-parse main`, and
+   `git rev-parse origin/main`. Leave existing changes untouched. Reuse a
+   registered, same-issue worktree only after verifying its path, branch, and
+   status. Stop on an unrelated branch, path collision, or uncertain changes.
+   New worktrees start at `origin/main`; if that ref appears stale, report it
+   rather than fetching or changing `main` just to pass the preflight.
+3. Use safe, issue-linked branch components; never turn an untrusted issue
+   title, `.` or `..` into a path. Replace `/` with `-` for the directory:
+   `feat/123-short-title` lives at
+   `../redline--workspaces/feat-123-short-title`. After the preflight, create
+   a new issue worktree from the primary checkout, substituting your branch:
+
+   ```sh
+   branch_name='feat/123-short-title'
+   workspace_name=$(printf '%s' "$branch_name" | tr '/' '-')
+   workspace_path="../redline--workspaces/$workspace_name"
+   mkdir -p ../redline--workspaces
+   git worktree add "$workspace_path" -b "$branch_name" origin/main
+   git -C "$workspace_path" status --short --branch
+   ```
+
+   Do not run the creation command if the branch or destination already
+   exists. Do not stash, reset, clean, or delete another contributor's work.
+   Worktree cleanup is a separate, owner-approved plan; see
+   `.agents/skills/cleanup-workspaces/SKILL.md`.
+4. Make changes and run checks in that worktree. Commit with Conventional
+   Commits and run `mise run validate` before pushing.
 5. Open a pull request linked to the issue and relevant docs pages.
 
 Never merge a pull request without explicit owner approval. Approval, completed tasks, or a green review is not permission to merge.
@@ -52,6 +79,11 @@ Each pull request adds or updates tests for changed behavior.
 Tests use temporary directories and repositories. They must not modify the contributor's checkout. Network tests beyond loopback must be opt-in and clearly named.
 
 ## Before pushing, run the validation gate
+
+For changes to `.agents/skills/` or agent instruction files (`AGENTS.md`,
+`CONTRIBUTING.md`, `VALIDATION.md`), read [VALIDATION.md](VALIDATION.md) before
+validating, committing, or pushing. Its manual checks supplement this gate;
+they do not add an automated toolchain or replace `mise run validate`.
 
 ```bash
 mise run validate

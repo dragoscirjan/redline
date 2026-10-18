@@ -122,7 +122,7 @@ Migration is explicit:
 - Harness review document version 4 adds bounded candidate-indexed follow-up intents; versions 2 and 3 remain readable.
 - Version-2 harness documents remain accepted during migration. Redline maps their validated fields into version 4 records and labels every unavailable rich field as legacy-derived or unresolved; it does not reinterpret missing evidence as completed analysis.
 - Per-file record version 4 adds the rich finding and rejected-candidate contract.
-- PR-level record version 2 adds optional synthesis and publication coverage. The publish-only loader migrates legacy version-1 non-verified records; a verified version-1 record cannot bypass the synthesis plan and fails closed.
+- PR-level record version 2 adds optional synthesis and publication coverage. The publish-only loader migrates legacy version-1 non-verified records; it rejects a verified version-1 record before migration so the synthesis-plan check cannot be bypassed.
 - Run summary version 3 remains unchanged as a subordinate compatibility artifact.
 - Review policy `redline-file-review/v4` lives in `prompts/v7/`. Earlier prompts remain archived for versioned recordings.
 

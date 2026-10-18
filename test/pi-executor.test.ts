@@ -27,10 +27,15 @@ class RecordingSpawner implements ProcessSpawner {
     env?: Record<string, string | undefined> | undefined }> = [];
   #stdout = '';
   #code: number | null = 0;
+  #waitMs = 0;
 
   script(stdout: string, code: number | null): void {
     this.#stdout = stdout;
     this.#code = code;
+  }
+
+  scriptWait(milliseconds: number): void {
+    this.#waitMs = milliseconds;
   }
 
   spawn(request: { command: string; args: readonly string[]; stdin?: string | undefined;
@@ -46,7 +51,10 @@ class RecordingSpawner implements ProcessSpawner {
       stderr: (async function* () {
         yield empty;
       })(),
-      wait: async () => ({ code: this.#code }),
+      wait: async () => {
+        if (this.#waitMs > 0) await new Promise((resolve) => setTimeout(resolve, this.#waitMs));
+        return { code: this.#code };
+      },
       kill: () => undefined,
     };
   }
@@ -92,6 +100,23 @@ describe('createPiExecutor', () => {
       expect(Object.keys(request.env ?? {}).sort()).toEqual(
         ['HOME', 'LANG', 'PATH', 'PI_CODING_AGENT_DIR', PI_CREDENTIAL_ENV_NAME].sort(),
       );
+    } finally {
+      await settings.cleanup();
+    }
+  });
+
+  it('uses a positive per-invocation timeout before the prepared default', async () => {
+    const settings = await createSettings();
+    try {
+      const spawner = new RecordingSpawner();
+      const executor = createPiExecutor({ command: 'pi-fake', spawner });
+      const prepared = await executor.prepare(settings);
+      const prompt = { system: 'fixed policy', user: 'review' };
+      spawner.scriptWait(80);
+      expect((await executor.execute(prepared, prompt, { timeoutMs: 20 })).status).toBe('timed-out');
+      expect((await executor.execute(prepared, prompt)).status).not.toBe('timed-out');
+      await expect(executor.execute(prepared, prompt, { timeoutMs: 0 })).rejects.toThrow(/process timeout is invalid/u);
+      expect(spawner.requests).toHaveLength(2);
     } finally {
       await settings.cleanup();
     }

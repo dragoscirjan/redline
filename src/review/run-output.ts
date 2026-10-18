@@ -54,8 +54,20 @@ export async function loadPublishedRun(outputDirectory: string): Promise<Publish
   if (!isRecord(reviewValue) || (reviewValue['version'] !== 1 && reviewValue['version'] !== PULL_REQUEST_REVIEW_VERSION)) {
     throw new Error(`review output PR record is not a supported v1/v${PULL_REQUEST_REVIEW_VERSION} record`);
   }
-  // v1 had no synthesis plan. Non-verified legacy runs remain publishable;
-  // verified v1 records fail closed in PublicationService rather than bypass ranking.
+  // v1 had no synthesis plan. Reject any evidence of verification before
+  // migrating non-verified records; rewriting the version first would erase
+  // the only explicit legacy discriminator at publication time.
+  if (reviewValue['version'] === 1 && (
+    reviewValue['synthesis'] !== undefined
+    || (isRecord(reviewValue['coverage']) && reviewValue['coverage']['verification'] !== undefined
+      && (!isRecord(reviewValue['coverage']['verification'])
+        || reviewValue['coverage']['verification']['status'] !== 'not-applicable'
+        || reviewValue['coverage']['verification']['required'] !== false))
+    || records.some((record) => record.verification !== undefined
+      || record.findings.some((finding) => finding.verification?.status !== 'unverified'))
+  )) {
+    throw new Error('verified legacy v1 review cannot be published without a deterministic publication plan');
+  }
   const review = reviewValue['version'] === 1
     ? { ...reviewValue, version: PULL_REQUEST_REVIEW_VERSION }
     : reviewValue;

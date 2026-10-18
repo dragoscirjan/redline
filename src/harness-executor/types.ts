@@ -84,7 +84,9 @@ export interface HarnessOutputLine {
 export type HarnessStreamMode = 'off' | 'dots' | 'text';
 
 export interface HarnessExecuteOptions {
-  /** Fixed per-invocation timeout override for a verifier; executor must kill the child at expiry. */
+  /** Positive safe integer in milliseconds; overrides HarnessSettings.timeoutMs when supplied.
+   * An undefined override uses the prepared setting. The bounded runner rejects
+   * zero, negative, fractional, or unsafe values before spawning and kills at expiry. */
   readonly timeoutMs?: number;
   /** Live per-line harness output tap for progress logging; optional. */
   readonly onOutputLine?: (output: HarnessOutputLine) => void;

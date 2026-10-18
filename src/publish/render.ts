@@ -198,9 +198,37 @@ export function renderSummaryBody(
     `- **Required coverage:** files ${review.coverage.files.status}; baseline review ${review.coverage.specialists[0]?.status ?? 'unavailable'}`,
     `- **Code intelligence:** ${review.coverage.codeIntelligence.status}; base ${review.coverage.codeIntelligence.baseSnapshot.slice(0, 12)}; head ${review.coverage.codeIntelligence.headSnapshot.slice(0, 12)}`,
   ];
+  if (review.synthesis !== undefined) {
+    const suppressed = review.synthesis.decisions.filter((decision) =>
+      decision.status !== 'publish' && decision.status !== 'duplicate');
+    const duplicates = review.synthesis.decisions.filter((decision) => decision.status === 'duplicate').length;
+    lines.push(`- **Synthesis:** ${review.synthesis.groups.length} root-cause groups; ${duplicates} duplicate comments consolidated; ${suppressed.length} findings withheld`);
+    const consolidated = review.synthesis.groups.filter((group) => group.triggers.length > 1);
+    if (consolidated.length > 0) {
+      lines.push('', '**Consolidated changed-line triggers** (full source anchors in review.json):');
+      for (const group of consolidated.slice(0, 16)) {
+        const triggers = group.triggers.slice(0, 8).map((item) =>
+          `\`${escapeBackticks(item.path)}:${item.startLine}-${item.endLine}\``).join(', ');
+        lines.push(`- \`${group.id}\` — ${group.status}; ${triggers}${group.triggers.length > 8 ? `, and ${group.triggers.length - 8} more` : ''}`);
+      }
+      if (consolidated.length > 16) lines.push(`- …${consolidated.length - 16} more groups in review.json.`);
+    }
+    if (suppressed.length > 0) {
+      const critical = new Set(review.findings.filter((finding) => finding.severity === 'critical')
+        .map((finding) => `${finding.triggerFileId}:${finding.id}`));
+      const prioritized = [...suppressed].sort((a, b) =>
+        Number(critical.has(`${b.fileId}:${b.findingId}`)) - Number(critical.has(`${a.fileId}:${a.findingId}`)));
+      lines.push('', '**Unpublished findings** (full decisions in review artifacts):');
+      for (const decision of prioritized.slice(0, 20)) {
+        lines.push(`- \`${decision.fileId}:${decision.findingId}\` — ${decision.status}: ${decision.reason}`);
+      }
+      if (suppressed.length > 20) lines.push(`- …${suppressed.length - 20} more; inspect review.json.`);
+    }
+  }
   if (review.verdict.reasons.length > 0) {
     lines.push('', '**Verdict reasons:**');
-    for (const reason of review.verdict.reasons) lines.push(`- ${reason}`);
+    for (const reason of review.verdict.reasons.slice(0, 20)) lines.push(`- ${reason}`);
+    if (review.verdict.reasons.length > 20) lines.push(`- …${review.verdict.reasons.length - 20} more reasons in review.json.`);
   }
   if (review.limitations.length > 0) {
     lines.push('', '**Coverage limitations:**');
@@ -210,11 +238,12 @@ export function renderSummaryBody(
   }
   if (review.files.length > 0) {
     lines.push('', '**Per file:**');
-    for (const file of review.files) {
+    for (const file of review.files.slice(0, 50)) {
       const findings = file.findingIds.length > 0 ? ` — ${file.findingIds.length} finding(s)` : '';
       const rejected = file.rejectedCandidates > 0 ? ` — ${file.rejectedCandidates} rejected candidate(s)` : '';
-      lines.push(`- \`${file.path}\`: ${file.outcome}${findings}${rejected}`);
+      lines.push(`- \`${escapeBackticks(file.path)}\`: ${file.outcome}${findings}${rejected}`);
     }
+    if (review.files.length > 50) lines.push(`- …${review.files.length - 50} more file records in review.json.`);
   }
   lines.push('');
   lines.push(

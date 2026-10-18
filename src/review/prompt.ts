@@ -1,7 +1,7 @@
 /**
  * Builds the fixed, versioned per-file review prompts.
  *
- * The system prompt is the review policy (loaded from `prompts/v5/`) plus a
+ * The system prompt is the review policy (loaded from `prompts/v7/`) plus a
  * trusted run configuration; it never contains repository content. The user
  * prompt embeds exactly one file's untrusted context — manifest entry, the
  * authoritative diff, bounded base and head file content, and optional
@@ -25,8 +25,8 @@ import {
 import type { PromptCodeContext } from './indexed-context.js';
 import type { FindingScope } from './types.js';
 
-export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v3' as const;
-export const FILE_REVIEW_PROMPT_VERSION = 3 as const;
+export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v4' as const;
+export const FILE_REVIEW_PROMPT_VERSION = 4 as const;
 
 const PROMPT_MODULES = ['core-policy.md', 'review-phases.md', 'file-reporting.md'] as const;
 
@@ -37,11 +37,11 @@ const PROMPT_MODULES = ['core-policy.md', 'review-phases.md', 'file-reporting.md
  */
 function defaultPromptRoot(): string {
   const moduleDirectory = fileURLToPath(new URL('.', import.meta.url));
-  for (const candidate of ['../../prompts/v5/', '../../../prompts/v5/']) {
+  for (const candidate of ['../../prompts/v7/', '../../../prompts/v7/']) {
     const path = resolve(moduleDirectory, candidate);
     if (existsSync(path)) return path;
   }
-  return resolve(moduleDirectory, '../../prompts/v5/');
+  return resolve(moduleDirectory, '../../prompts/v7/');
 }
 const DEFAULT_PROMPT_ROOT = defaultPromptRoot();
 const MAX_PROMPT_MODULE_BYTES = 64 * 1024;
@@ -64,6 +64,8 @@ export interface FileReviewPromptOptions {
   readonly harness: string;
   readonly model: string;
   readonly indexedContext?: PromptCodeContext | undefined;
+  /** Trusted execution capability; repository content must not select this value. */
+  readonly followUpAvailable?: boolean;
   readonly promptRoot?: string;
 }
 
@@ -91,7 +93,7 @@ export async function loadReviewPolicy(promptRoot = DEFAULT_PROMPT_ROOT): Promis
   return { text, digest: sha256(text) };
 }
 
-function generatedBoundary(payload: string): string {
+export function generatedBoundary(payload: string): string {
   let attempt = 0;
   while (true) {
     const suffix = createHash('sha256').update(String(attempt)).update('\0').update(payload).digest('hex');
@@ -134,42 +136,23 @@ async function embedFileContent(
   return { content, omitted: false };
 }
 
-export async function buildFileReviewPrompt(options: FileReviewPromptOptions): Promise<FileReviewPrompt> {
-  const { bundle, file } = options;
+/** Builds the bounded untrusted data shared by discovery and verification prompts. */
+export async function buildFileContextPayload(
+  bundle: ReviewBundle,
+  file: ReviewManifestFile,
+  indexedContext?: PromptCodeContext,
+): Promise<string> {
   if (!bundle.manifest.files.includes(file)) throw new Error('prompt file is not part of the review manifest');
-
-  const policy = await loadReviewPolicy(options.promptRoot);
-  const trustedConfiguration = JSON.stringify(
-    {
-      policyId: FILE_REVIEW_PROMPT_ID,
-      policyVersion: FILE_REVIEW_PROMPT_VERSION,
-      policyDigest: policy.digest,
-      findingScope: options.findingScope,
-      harness: options.harness,
-      model: options.model,
-      capabilities: {
-        inspection: 'read-only',
-        tools: [],
-        vulnerabilityLookup: false,
-        subagents: false,
-      },
-    },
-    null,
-    2,
-  );
-  const system = `${policy.text}# Trusted run configuration\n\n${trustedConfiguration}\n`;
-
   const diff = await readFile(`${bundle.root}/${file.diffFile}`, 'utf8');
   const base = file.baseFile
     ? await embedFileContent(bundle.root, file.baseFile)
     : { content: null, omitted: false };
   const head = await embedFileContent(bundle.sourceRoot, file.newPath);
-
   const omittedSides = [base.omitted ? 'base' : null, head.omitted ? 'head' : null].filter(
     (value) => value !== null,
   );
   const context = JSON.stringify({
-    contextVersion: options.indexedContext === undefined ? 1 : 2,
+    contextVersion: indexedContext === undefined ? 1 : 2,
     fileId: file.id,
     revisions: { base: bundle.manifest.base, head: bundle.manifest.head },
     manifestEntry: {
@@ -185,12 +168,42 @@ export async function buildFileReviewPrompt(options: FileReviewPromptOptions): P
     baseFileContent: base.content,
     headFileContent: head.content,
     fileContentOmitted: omittedSides,
-    ...(options.indexedContext === undefined ? {} : { indexedContext: options.indexedContext }),
+    ...(indexedContext === undefined ? {} : { indexedContext }),
   });
-  const contextBytes = Buffer.byteLength(context, 'utf8');
-  if (contextBytes > MAX_UNTRUSTED_CONTEXT_BYTES) {
+  if (Buffer.byteLength(context, 'utf8') > MAX_UNTRUSTED_CONTEXT_BYTES) {
     throw new Error('untrusted file context exceeds its byte limit');
   }
+  return context;
+}
+
+export async function buildFileReviewPrompt(options: FileReviewPromptOptions): Promise<FileReviewPrompt> {
+  const { bundle, file } = options;
+  if (!bundle.manifest.files.includes(file)) throw new Error('prompt file is not part of the review manifest');
+
+  const policy = await loadReviewPolicy(options.promptRoot);
+  const trustedConfiguration = JSON.stringify(
+    {
+      policyId: FILE_REVIEW_PROMPT_ID,
+      policyVersion: FILE_REVIEW_PROMPT_VERSION,
+      policyDigest: policy.digest,
+      findingScope: options.findingScope,
+      harness: options.harness,
+      model: options.model,
+      capabilities: {
+        inspection: 'read-only',
+        followUp: options.followUpAvailable === true ? 'action-owned' : 'unavailable',
+        tools: [],
+        vulnerabilityLookup: false,
+        subagents: false,
+      },
+    },
+    null,
+    2,
+  );
+  const system = `${policy.text}# Trusted run configuration\n\n${trustedConfiguration}\n`;
+
+  const context = await buildFileContextPayload(bundle, file, options.indexedContext);
+  const contextBytes = Buffer.byteLength(context, 'utf8');
   const boundary = generatedBoundary(context);
   const user = [
     'Review exactly one changed file from the pull request described below.',

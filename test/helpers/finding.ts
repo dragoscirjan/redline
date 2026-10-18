@@ -54,7 +54,7 @@ export function pullRequestReview(
   overrides: Partial<PullRequestReviewRecord> = {},
 ): PullRequestReviewRecord {
   return {
-    version: 1,
+    version: 2,
     harness: 'pi',
     model: 'test-model',
     provider: 'mock',

@@ -18,6 +18,10 @@ run = "pnpm run benchmark"
 description = "Run the opt-in live-model benchmark capture"
 run = "pnpm run benchmark:live-model"
 
+[tasks."benchmark:live-verification"]
+description = "Opt-in independent live discovery-to-verifier capture; never runs in CI"
+run = "pnpm run benchmark:live-verification"
+
 [tasks."benchmark:live-indexer"]
 description = "Run the opt-in pinned-CGC fixture evaluation"
 run = "REDLINE_LIVE_CODE_INDEX_TESTS=1 pnpm exec bats --show-output-of-passing-tests test/code-index-action.bats --filter 'live pinned CGC smoke test is opt-in'"

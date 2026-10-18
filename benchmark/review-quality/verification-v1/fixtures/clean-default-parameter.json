@@ -1,0 +1,75 @@
+{
+  "version": 2,
+  "id": "clean-default-parameter",
+  "title": "Defaulted argument preserves an existing call",
+  "kind": "clean",
+  "baseRevision": "3333333333333333333333333333333333333333",
+  "headRevision": "4444444444444444444444444444444444444444",
+  "files": [{
+    "id": "000001",
+    "path": "src/name.ts",
+    "status": "M",
+    "base": "export function buildName(name: string): string {\n  return name;\n}\n",
+    "head": "export function buildName(name: string, prefix = ''): string {\n  return prefix + name;\n}\n",
+    "diff": "diff --git a/src/name.ts b/src/name.ts\n--- a/src/name.ts\n+++ b/src/name.ts\n@@ -1,3 +1,3 @@\n-export function buildName(name: string): string {\n-  return name;\n+export function buildName(name: string, prefix = ''): string {\n+  return prefix + name;\n }\n"
+  }],
+  "additionalHeadFiles": {
+    "src/user.ts": "import { buildName } from './name.js';\nexport function userLabel(): string {\n  return buildName('Ada');\n}\n"
+  },
+  "expectedIssues": [],
+  "recordings": [
+    {
+      "mode": "file-only",
+      "responses": [{
+        "fileId": "000001",
+        "durationMs": 11,
+        "document": {
+          "version": 2,
+          "fileId": "000001",
+          "outcome": "findings",
+          "findings": [{
+            "category": "regression",
+            "classification": "defect",
+            "severity": "low",
+            "confidence": 0.63,
+            "side": "RIGHT",
+            "startLine": 1,
+            "endLine": 1,
+            "evidence": "export function buildName(name: string, prefix = ''): string {",
+            "impact": "Old callers no longer pass the new prefix argument.",
+            "fix": "Update all existing callers to pass an empty prefix."
+          }]
+        }
+      }],
+      "judgments": [{ "fileId": "000001", "findingIndex": 0, "expectedIssueId": null }]
+    },
+    {
+      "mode": "indexed-context",
+      "responses": [{
+        "fileId": "000001",
+        "durationMs": 11,
+        "document": { "version": 2, "fileId": "000001", "outcome": "clean", "findings": [] }
+      }],
+      "judgments": [],
+      "codeContext": {
+        "version": 1,
+        "provider": { "id": "cgc", "version": "0.5.7" },
+        "repository": "benchmark/redline",
+        "revision": "4444444444444444444444444444444444444444",
+        "status": "complete",
+        "files": [{
+          "changedPath": "src/name.ts",
+          "status": "complete",
+          "related": [{
+            "path": "src/user.ts",
+            "startLine": 2,
+            "endLine": 4,
+            "reason": "related-symbol-calls-changed-code"
+          }]
+        }],
+        "diagnostics": [],
+        "timings": { "installationMs": 0, "restoreMs": 0, "indexMs": 0, "queryMs": 0, "saveMs": null }
+      }
+    }
+  ]
+}

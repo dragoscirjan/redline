@@ -85,6 +85,8 @@ function harnessLine(output: HarnessOutputLine): void {
 export interface CliDependencies {
   /** Publisher override for tests; defaults to the GitHub adapter. */
   readonly publisher?: ReviewPublisher;
+  /** Trusted action-only opt-in. The standalone CLI never enables verifier publication. */
+  readonly reviewOptions?: Pick<ReviewRunInput, 'verifyCandidates' | 'followUpExecutor'>;
 }
 
 /**
@@ -246,7 +248,7 @@ export async function main(
 
       let result;
       try {
-        result = await runFileReviews({ ...progressCallbacks(parsed.verbosity), environment: review });
+        result = await runFileReviews({ ...progressCallbacks(parsed.verbosity), environment: review, ...dependencies.reviewOptions });
       } catch (error) {
         // Defense in depth: the failure text is published, so the
         // publication token must never appear in it.
@@ -283,7 +285,7 @@ export async function main(
       return exitCode;
     }
 
-    const result = await runFileReviews({ ...progressCallbacks(parsed.verbosity), environment: review });
+    const result = await runFileReviews({ ...progressCallbacks(parsed.verbosity), environment: review, ...dependencies.reviewOptions });
     writeLine(process.stdout, JSON.stringify(result.summary));
     return result.exitCode;
   } catch (error) {

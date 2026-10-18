@@ -140,7 +140,7 @@ describe('createReviewWriter', () => {
         coverage: { files: { status: string } };
       };
       expect(reviewJson).toMatchObject({
-        version: 1,
+        version: 2,
         verdict: { status: 'blocked' },
         coverage: { files: { status: 'completed' } },
       });

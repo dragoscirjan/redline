@@ -1,5 +1,8 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { main } from '../src/review/cli.js';
+import { loadPublishedRun } from '../src/review/run-output.js';
 import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.js';
 
 const HEAD = 'b'.repeat(40);
@@ -97,6 +100,64 @@ describe('single-purpose CLI modes', () => {
       await fixture.cleanup();
     }
   });
+
+  it('migrates a non-verified legacy v1 review for publish-only', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const reviewEnv = cleanReviewEnvironment(fixture, 'echo');
+      expect(await main([], reviewEnv)).toBe(0);
+      const path = join(fixture.output, 'reviews', 'review.json');
+      const review = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+      review.version = 1;
+      await writeFile(path, JSON.stringify(review));
+      const loaded = await loadPublishedRun(fixture.output);
+      expect(loaded.review.version).toBe(2);
+      const { publisher, calls } = fakePublisher();
+      expect(await main(['--publish-only'], {
+        REDLINE_OUTPUT_DIR: fixture.output,
+        REDLINE_PUBLISH_TOKEN: 'gh-token', REDLINE_REPOSITORY: 'owner/repository',
+        REDLINE_PULL_REQUEST: '14', REDLINE_HEAD: HEAD,
+      }, { publisher })).toBe(0);
+      expect(calls.upsertSummary).toBe(1);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it.each(['review coverage', 'file verification'] as const)(
+    'rejects a verified legacy v1 review marked by %s before publication', async (marker) => {
+      const fixture = await createBundleFixture();
+      try {
+        const reviewEnv = cleanReviewEnvironment(fixture, 'echo');
+        expect(await main([], reviewEnv)).toBe(0);
+        const path = join(fixture.output, 'reviews', 'review.json');
+        const review = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+        review.version = 1;
+        if (marker === 'review coverage') {
+          const coverage = review.coverage as Record<string, unknown>;
+          coverage.verification = { status: 'completed', required: true };
+          await writeFile(path, JSON.stringify(review));
+        } else {
+          await writeFile(path, JSON.stringify(review));
+          const recordPath = join(fixture.output, 'reviews', '000001.json');
+          const record = JSON.parse(await readFile(recordPath, 'utf8')) as Record<string, unknown>;
+          record.verification = { status: 'not-applicable', requested: 0, accepted: 0,
+            rejected: 0, durationMs: 0 };
+          await writeFile(recordPath, JSON.stringify(record));
+        }
+        await expect(loadPublishedRun(fixture.output)).rejects.toThrow(/verified legacy v1 review/u);
+        const { publisher, calls } = fakePublisher();
+        expect(await main(['--publish-only'], {
+          REDLINE_OUTPUT_DIR: fixture.output,
+          REDLINE_PUBLISH_TOKEN: 'gh-token', REDLINE_REPOSITORY: 'owner/repository',
+          REDLINE_PULL_REQUEST: '14', REDLINE_HEAD: HEAD,
+        }, { publisher })).toBe(1);
+        expect(calls).toMatchObject({ currentHead: 0, publishFileReview: 0, upsertSummary: 0 });
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
 
   it('fails when the output directory has no run', async () => {
     const { publisher } = fakePublisher();

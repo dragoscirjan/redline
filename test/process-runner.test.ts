@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_INPUT_BYTES,
   createBoundedReader,
   nodeProcessSpawner,
   parseJsonLines,
@@ -42,6 +43,30 @@ describe('runBoundedProcess', () => {
     expect(result.timedOut).toBe(false);
     expect(result.stdout).toBe('out');
     expect(result.stderr).toBe('err');
+  });
+
+  it('streams prompts larger than the operating-system argument limit through bounded stdin', async () => {
+    const input = 'review context: ' + 'x'.repeat(256 * 1024);
+    const result = await runBoundedProcess(nodeProcessSpawner, {
+      command: process.execPath,
+      args: ['-e', 'let size = 0; process.stdin.on("data", (part) => size += part.length); '
+        + 'process.stdin.on("end", () => process.stdout.write(String(size)));'],
+      stdin: input,
+      timeoutMs: 10_000,
+    });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe(String(Buffer.byteLength(input, 'utf8')));
+    await expect(runBoundedProcess(nodeProcessSpawner, {
+      command: process.execPath, args: ['-e', 'process.exit(0)'],
+      stdin: 'x'.repeat(MAX_INPUT_BYTES + 1), timeoutMs: 10_000,
+    })).rejects.toThrow('input exceeds its byte limit');
+    const multibyte = 'α'.repeat(MAX_INPUT_BYTES);
+    expect(multibyte.length).toBe(MAX_INPUT_BYTES);
+    expect(Buffer.byteLength(multibyte, 'utf8')).toBeGreaterThan(MAX_INPUT_BYTES);
+    await expect(runBoundedProcess(nodeProcessSpawner, {
+      command: process.execPath, args: ['-e', 'process.exit(0)'],
+      stdin: multibyte, timeoutMs: 10_000,
+    })).rejects.toThrow('input exceeds its byte limit');
   });
 
   it('reports a non-zero exit code', async () => {

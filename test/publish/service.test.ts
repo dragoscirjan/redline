@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PublicationService } from '../../src/publish/service.js';
+import { synthesizeReview } from '../../src/review/synthesis.js';
 import type { FileReviewPublication, ReviewPublisher, ReviewScope } from '../../src/publish/types.js';
 import type { FileReviewRecord, PullRequestReviewRecord } from '../../src/review/types.js';
 import { publishedFinding, pullRequestReview } from '../helpers/finding.js';
@@ -95,6 +96,34 @@ function review(overrides: Partial<PullRequestReviewRecord> = {}): PullRequestRe
 }
 
 describe('PublicationService', () => {
+  it('publishes only the planned, ranked, confirmed representative and keeps duplicates out of comments', async () => {
+    const { publisher, publications } = fakePublisher();
+    const support = [{ role: 'contract' as const, revision: HEAD, path: 'src/contract.ts',
+      startLine: 1, endLine: 1, evidence: 'shared();' }];
+    const first = record({ findings: [publishedFinding({ id: 'f-a', severity: 'critical',
+      supportingEvidence: support, verification: { status: 'confirmed', reason: 'checked' } })] });
+    const second = record({ fileId: '000002', path: 'src/other.ts',
+      findings: [publishedFinding({ id: 'f-b', severity: 'high',
+        supportingEvidence: support, verification: { status: 'confirmed', reason: 'checked' } })] });
+    const pullFindings = [first, second].flatMap((item) => item.findings.map((finding) => ({
+      ...finding, triggerFileId: item.fileId, triggerPath: item.path,
+    })));
+    const plan = synthesizeReview(pullFindings);
+    const current = review({ findings: pullFindings, synthesis: plan, coverage: {
+      ...review().coverage,
+      verification: { status: 'completed', required: true, reason: 'independent verifier completed' },
+    } });
+    const outcome = await new PublicationService(publisher, SCOPE).publish([second, first], current);
+    expect(plan.decisions.map((decision) => decision.status)).toEqual(['publish', 'duplicate']);
+    expect(outcome.publishedFileReviews).toBe(1);
+    expect(publications).toHaveLength(1);
+    expect(publications[0]?.fileId).toBe('000001');
+    expect(publications[0]?.comments).toHaveLength(1);
+    await expect(new PublicationService(publisher, SCOPE).publish([first], {
+      ...current, synthesis: undefined,
+    })).rejects.toThrow(/no deterministic publication plan/u);
+  });
+
   it('publishes one review per file with findings plus the summary', async () => {
     const { publisher, calls, publications } = fakePublisher();
     const service = new PublicationService(publisher, SCOPE);

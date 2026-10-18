@@ -31,9 +31,10 @@ export interface SourceEvidence {
   readonly role: EvidenceRole;
   readonly revision: string;
   readonly path: string;
+  /** Inclusive, source-resolved range; interior lines have no claimed text in this contract. */
   readonly startLine: number;
   readonly endLine: number;
-  /** Exact content of startLine at revision/path. */
+  /** Exact content of startLine at revision/path; not a claim about the full range. */
   readonly evidence: string;
 }
 
@@ -106,7 +107,7 @@ export interface PublishedFinding extends Omit<ValidatedFinding, 'suggestedChang
 
 export interface RejectedCandidate {
   readonly index: number;
-  readonly stage: 'parse' | 'validation';
+  readonly stage: 'parse' | 'validation' | 'verification';
   readonly code: string;
   readonly reason: string;
 }
@@ -116,7 +117,8 @@ export type FileReviewErrorKind =
   | 'harness-failed'
   | 'harness-timeout'
   | 'invalid-output'
-  | 'preparation-failed';
+  | 'preparation-failed'
+  | 'verification-failed';
 
 export type ReviewCodeContextStatus = CodeContextStatus | 'disabled';
 export type ReviewCodeContextReason =
@@ -144,6 +146,24 @@ export interface ReviewCodeContextRunCoverage extends ReviewCodeContextCoverage 
 
 export const FILE_REVIEW_RECORD_VERSION = 4 as const;
 
+export interface FileVerificationCoverage {
+  readonly status: 'not-applicable' | 'completed' | 'incomplete';
+  readonly requested: number;
+  readonly accepted: number;
+  readonly rejected: number;
+  readonly durationMs: number;
+  readonly reason?: string | undefined;
+}
+
+export interface FileFollowUpCoverage {
+  readonly status: 'not-applicable' | 'completed' | 'incomplete';
+  readonly requested: number;
+  readonly completed: number;
+  readonly omitted: number;
+  readonly durationMs: number;
+  readonly reason?: string | undefined;
+}
+
 export interface FileReviewRecord {
   readonly version: typeof FILE_REVIEW_RECORD_VERSION;
   readonly fileId: string;
@@ -152,6 +172,8 @@ export interface FileReviewRecord {
   readonly harness: string;
   readonly model: string;
   readonly codeContext: ReviewCodeContextCoverage;
+  readonly verification?: FileVerificationCoverage | undefined;
+  readonly followUp?: FileFollowUpCoverage | undefined;
   readonly outcome: FileReviewOutcome;
   readonly errorKind?: FileReviewErrorKind | undefined;
   readonly reason?: string | undefined;
@@ -238,6 +260,9 @@ export interface PullRequestReviewCoverage {
   readonly changedSymbols: ReviewCoverageFacet;
   readonly contextSources: readonly ReviewContextSourceCoverage[];
   readonly specialists: readonly ReviewSpecialistCoverage[];
+  readonly verification?: ReviewCoverageFacet | undefined;
+  readonly followUp?: ReviewCoverageFacet | undefined;
+  readonly publication?: ReviewCoverageFacet | undefined;
   readonly inspections: readonly ReviewInspectionCoverage[];
   readonly codeIntelligence: ReviewCodeIntelligenceCoverage;
   readonly graphQueries: readonly ReviewCoverageFacet[];
@@ -245,6 +270,8 @@ export interface PullRequestReviewCoverage {
   readonly relationships: ReviewRelationshipCoverage;
   readonly truncation: ReviewCoverageFacet;
   readonly rejectedCandidates: number;
+  /** Successful verifier falsifications/duplicates, not required-coverage failures. */
+  readonly verificationRejections?: number | undefined;
   readonly remediation: ReviewCoverageFacet;
   readonly fixVerification: ReviewCoverageFacet;
   readonly budgets: {
@@ -286,7 +313,39 @@ export interface PullRequestReviewFile {
   readonly codeContext: ReviewCodeContextCoverage;
 }
 
-export const PULL_REQUEST_REVIEW_VERSION = 1 as const;
+export interface ReviewSynthesisGroup {
+  readonly id: string;
+  readonly rootCause: string;
+  readonly status: 'coherent' | 'conflict';
+  readonly triggers: readonly {
+    readonly fileId: string;
+    readonly findingId: string;
+    readonly path: string;
+    readonly side: FindingSide;
+    readonly startLine: number;
+    readonly endLine: number;
+  }[];
+  readonly supportingEvidence: readonly SourceEvidence[];
+  readonly representative: { readonly fileId: string; readonly findingId: string } | null;
+}
+
+export interface ReviewSynthesisDecision {
+  readonly fileId: string;
+  readonly findingId: string;
+  readonly groupId: string;
+  readonly status: 'publish' | 'duplicate' | 'conflict' | 'file-budget' | 'comment-budget' | 'unverified';
+  readonly reason: string;
+}
+
+export interface ReviewSynthesis {
+  readonly version: 1;
+  readonly groups: readonly ReviewSynthesisGroup[];
+  readonly decisions: readonly ReviewSynthesisDecision[];
+  readonly budgets: { readonly fileReviews: number; readonly inlineComments: number };
+}
+
+/** v1 records remain loadable; v2 carries deterministic synthesis when enabled. */
+export const PULL_REQUEST_REVIEW_VERSION = 2 as const;
 
 /** Primary machine-readable contract for one complete pull-request review. */
 export interface PullRequestReviewRecord {
@@ -298,6 +357,7 @@ export interface PullRequestReviewRecord {
   readonly base: string;
   readonly head: string;
   readonly findings: readonly PullRequestFinding[];
+  readonly synthesis?: ReviewSynthesis | undefined;
   readonly rejectedCandidates: readonly (RejectedCandidate & { readonly fileId: string; readonly path: string })[];
   readonly coverage: PullRequestReviewCoverage;
   readonly limitations: readonly ReviewLimitation[];

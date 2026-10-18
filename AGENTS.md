@@ -27,8 +27,22 @@
   understanding. Then create a GitHub issue with the agreed requirements and
   acceptance criteria. Begin work only after the issue exists.
 - Apply `unslop` to every user-facing response, including questions, progress
-  updates, review replies, and final answers.
-- Read `CONTRIBUTING.md` before changing the repository.
+  updates, review replies, and final answers. For developer-facing technical
+  prose, `asd-ste100-technical` is an optional supplement, not a replacement.
+- Read `CONTRIBUTING.md` before changing the repository. Before any repository
+  mutation, load `isolated-workspace` and verify or create the dedicated Git
+  worktree for the issue or task. This enforces the existing worktree rule;
+  it does not bypass the issue intake or authorize changes in the primary
+  checkout.
+- For contributor code changes, load `coding` and the matching `coding-ts`,
+  `coding-js`, or `coding-mjs` skill. Load dependencies before the language or
+  extension skill. These skills do not run inside Redline's tool-disabled PR
+  review harness and cannot change its fixed prompts or permissions.
+- If instruction routes, dependencies, or skill metadata appear stale or
+  conflicting, load `instruction-maintenance` for a read-only audit and exact
+  proposal. Do not change instructions until the owner approves that proposal.
+- Load `cleanup-workspaces` only when the owner requests a workspace cleanup;
+  audit first and obtain confirmation of the exact removal plan.
 - For every new feature or issue, create a focused branch from `main`, check
   it out in a dedicated worktree at
   `../redline--workspaces/<branch-name>`, and work there.

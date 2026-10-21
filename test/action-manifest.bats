@@ -100,7 +100,7 @@ PY
 }
 
 @test "action keeps the context bundle step and both artifact uploads" {
-  grep -Fq 'src/context-bundle.sh' "$ACTION"
+  grep -Fq 'dist/src/context-bundle.js' "$ACTION"
   grep -Fq 'name: ${{ inputs.artifact-name }}-context' "$ACTION"
   grep -Fq 'name: ${{ inputs.artifact-name }}-reviews' "$ACTION"
   grep -Fq 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1' "$ACTION"
@@ -148,4 +148,5 @@ PY
   grep -Fq 'pnpm install --frozen-lockfile --ignore-scripts' "$ACTION"
   grep -Fq 'pnpm run build' "$ACTION"
   grep -Fq 'test -f dist/src/review/cli.js' "$ACTION"
+  grep -Fq 'test -f dist/src/context-bundle.js' "$ACTION"
 }

@@ -1,6 +1,6 @@
 /**
  * Shared test fixture: a minimal review bundle on disk, matching what
- * `context-bundle.sh` produces.
+ * the compiled `context-bundle.ts` CLI produces.
  */
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';

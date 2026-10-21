@@ -120,6 +120,7 @@ runs:
         pnpm run build
         test -f dist/src/review/cli.js
         test -f dist/src/action/review.js
+        test -f dist/src/context-bundle.js
 
     # Two-phase token flow: token 1 exists for the review-start (and
     # failure) notifications minted while the review data is collected;
@@ -199,7 +200,7 @@ runs:
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       run: |
         set -euo pipefail
-        bash "${{ github.action_path }}/../src/context-bundle.sh" \
+        node "${{ github.action_path }}/../dist/src/context-bundle.js" \
           --base "$BASE_SHA" \
           --head "$HEAD_SHA" \
           --output "$GITHUB_WORKSPACE/review" \

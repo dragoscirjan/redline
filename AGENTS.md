@@ -56,7 +56,7 @@
   `code-context.json`, verifies repository/head identity, resolves bounded
   related spans from captured head source, and degrades invalid or missing
   context to explicit file-only coverage.
-- `src/context-bundle.sh` — builds the review context bundle (manifest,
+- `src/context-bundle.ts` — builds the review context bundle (manifest,
   diffs, base files, source-at-head). The `reviewed` flag is computed here
   deterministically: lock files, vendored dependencies, build output, and
   binary files are excluded from review.

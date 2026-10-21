@@ -103,7 +103,7 @@ root = Path(sys.argv[1])
 package = json.loads((root / 'package.json').read_text())
 assert package['bin'] == {'redline-review': 'dist/src/review/cli.js'}
 assert (root / 'src' / 'review' / 'cli.ts').is_file()
-assert (root / 'src' / 'context-bundle.sh').is_file()
+assert (root / 'src' / 'context-bundle.ts').is_file()
 PY
   printf '%s\n' "$output"
   [ "$status" -eq 0 ]

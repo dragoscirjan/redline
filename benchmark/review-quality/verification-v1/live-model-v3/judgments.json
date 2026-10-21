@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "judgments": [
+    {
+      "fixtureId": "cross-file-cache-collision",
+      "mode": "file-only",
+      "fileId": "000001",
+      "findingId": "f-147334d5a636310f92e865cd",
+      "expectedIssueId": "cross-account-cache-collision",
+      "validEvidence": true
+    },
+    {
+      "fixtureId": "local-port-validation",
+      "mode": "file-only",
+      "fileId": "000001",
+      "findingId": "f-a369f1162c9bea69ee1846db",
+      "expectedIssueId": "non-integer-port",
+      "validEvidence": true
+    },
+    {
+      "fixtureId": "local-port-validation",
+      "mode": "indexed-context",
+      "fileId": "000001",
+      "findingId": "f-38f3c100735832da65dc6f79",
+      "expectedIssueId": "non-integer-port",
+      "validEvidence": true
+    },
+    {
+      "fixtureId": "cross-file-rate-limit",
+      "mode": "file-only",
+      "fileId": "000001",
+      "findingId": "f-e61abdfba03c411520e6b6d0",
+      "expectedIssueId": "per-user-throttle-lost",
+      "validEvidence": true
+    },
+    {
+      "fixtureId": "cross-file-rate-limit",
+      "mode": "indexed-context",
+      "fileId": "000001",
+      "findingId": "f-c2422a67582b4c46cf07e404",
+      "expectedIssueId": "per-user-throttle-lost",
+      "validEvidence": true
+    }
+  ]
+}

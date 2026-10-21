@@ -1,6 +1,7 @@
 /** Bounded, source-backed dispositions from one fresh verifier invocation per file. */
 
 import type { ReviewBundle, ReviewManifestFile } from './bundle.js';
+import type { PromptCodeContext } from './indexed-context.js';
 import { validateSourceEvidence } from './source-evidence.js';
 import type {
   FindingClassification,
@@ -173,12 +174,33 @@ export function parseVerificationDocument(
   return { version: VERIFICATION_DOCUMENT_VERSION, fileId, results };
 }
 
-function sameCitation(left: SourceEvidence, right: SourceEvidence): boolean {
+function sameSourceLocation(left: SourceEvidence, right: SourceEvidence): boolean {
   return left.revision === right.revision
     && left.path === right.path
     && left.startLine === right.startLine
     && left.endLine === right.endLine
     && left.evidence === right.evidence;
+}
+
+function isReviewedFileSource(
+  bundle: ReviewBundle,
+  file: ReviewManifestFile,
+  evidence: SourceEvidence,
+): boolean {
+  if (evidence.revision === bundle.manifest.head) return evidence.path === file.newPath;
+  if (evidence.revision !== bundle.manifest.base || file.baseFile === null) return false;
+  return evidence.path === (file.oldPath ?? file.newPath);
+}
+
+function isIndexedContextSource(
+  indexedContext: PromptCodeContext | undefined,
+  evidence: SourceEvidence,
+): boolean {
+  return indexedContext?.related.some((span) =>
+    span.revision === evidence.revision
+    && span.path === evidence.path
+    && evidence.startLine >= span.startLine
+    && evidence.endLine <= span.endLine) ?? false;
 }
 
 /** A model cannot create a new source authority: follow-up evidence needs action validation first. */
@@ -190,6 +212,8 @@ export async function validateVerificationDocument(
   findingScope: FindingScope,
   /** Only source-revalidated, candidate-scoped action results may extend known citations. */
   followUpEvidence: ReadonlyMap<string, readonly SourceEvidence[]> = new Map(),
+  /** Bounded related spans were source-revalidated before they entered the verifier prompt. */
+  indexedContext?: PromptCodeContext,
 ): Promise<readonly VerifiedDisposition[]> {
   if (document.fileId !== file.id || document.results.length !== candidates.length) {
     throw new Error('verifier document does not cover this file');
@@ -215,8 +239,10 @@ export async function validateVerificationDocument(
       evidence: candidate.evidence,
     };
     for (const evidence of entry.citations) {
-      if (![trigger, ...candidate.supportingEvidence, ...(followUpEvidence.get(candidate.id) ?? [])]
-        .some((known) => sameCitation(known, evidence))) {
+      const knownSource = [trigger, ...candidate.supportingEvidence, ...(followUpEvidence.get(candidate.id) ?? [])]
+        .some((known) => sameSourceLocation(known, evidence));
+      if (!knownSource && !isReviewedFileSource(bundle, file, evidence)
+        && !isIndexedContextSource(indexedContext, evidence)) {
         throw new Error('verifier citation is not a validated candidate source location');
       }
       await validateSourceEvidence(bundle, evidence);
@@ -234,8 +260,8 @@ export async function validateVerificationDocument(
     if (findingScope === 'defects' && (classification === 'risk' || classification === 'design-debt')) {
       throw new Error('verifier reclassification is outside the configured finding scope');
     }
-    const additions = entry.citations.filter((item) => !sameCitation(item, trigger)
-      && !candidate.supportingEvidence.some((known) => sameCitation(known, item)));
+    const additions = entry.citations.filter((item) => !sameSourceLocation(item, trigger)
+      && !candidate.supportingEvidence.some((known) => sameSourceLocation(known, item)));
     if (candidate.supportingEvidence.length + additions.length > MAX_SUPPORTING_EVIDENCE) {
       throw new Error('verified supporting evidence exceeds the finding limit');
     }

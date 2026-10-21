@@ -253,7 +253,7 @@ describe('runFileReviews', () => {
       ]);
       const result = await runFileReviews({ environment: environment.review!, executor, verifyCandidates: true });
       expect(executor.prompts).toHaveLength(2);
-      expect(executor.prompts[1]?.system).toContain('redline-verification/v2');
+      expect(executor.prompts[1]?.system).toContain('redline-verification/v3');
       expect(executor.options[1]?.timeoutMs).toBe(VERIFICATION_TIMEOUT_MS);
       expect(result.records[0]?.outcome).toBe('findings');
       expect(result.records[0]?.verification).toMatchObject({ status: 'completed', requested: 1, accepted: 1 });

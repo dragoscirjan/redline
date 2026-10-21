@@ -53,6 +53,21 @@ teardown() {
   grep -Fq 'reviewed' "$TMP/review/manifest.json"
   [ -n "$(find "$TMP/review/diffs" -type f -print -quit)" ]
   [ -n "$(find "$TMP/review/base-files" -type f -print -quit)" ]
+  run python3 - "$TMP/review/manifest.json" "$TMP/review" <<'PY'
+import json
+import pathlib
+import sys
+
+manifest = json.loads(pathlib.Path(sys.argv[1]).read_text())
+modified = next(item for item in manifest['files'] if item['status'] == 'M' and item['newPath'].startswith('config/with'))
+assert modified['reviewed'] is True
+assert modified['baseFile'] is not None
+assert (pathlib.Path(sys.argv[2]) / modified['baseFile']).read_text() == 'alpha\n'
+binary = next(item for item in manifest['files'] if item['status'] == 'M' and item['binary'])
+assert binary['reviewed'] is False
+assert binary['baseFile'] is None
+PY
+  [ "$status" -eq 0 ]
   [ -f "$TMP/review/summary.txt" ]
   [ -f "$TMP/review/commits.txt" ]
   [ -f "$TMP/review/README.md" ]

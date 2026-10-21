@@ -134,20 +134,21 @@ while i < len(name_status):
     paths = [old_path] if status.startswith('D') else sorted(set([old_path, new_path]))
     patch = run(['diff', '--no-ext-diff', '--find-renames', '--binary', base, head, '--', *paths])
     with open(os.path.join(output, diff_file), 'wb') as f: f.write(patch)
+    review_paths = [old_path, new_path]
+    reviewed = reviewed_file(binary, review_paths)
     base_file = None
-    if status.startswith(('D', 'R')):
+    if status.startswith(('D', 'R')) or (reviewed and not status.startswith('A')):
         base_file = f'base-files/{entry_id}'
         old = subprocess.run(['git', '-C', repo, 'show', f'{base}:{old_path}'], stdout=subprocess.PIPE)
         if old.returncode == 0:
             with open(os.path.join(output, base_file), 'wb') as f: f.write(old.stdout)
         else:
             base_file = None
-    review_paths = [old_path, new_path]
     files.append({'id': entry_id, 'status': status[0], 'oldPath': old_path if status.startswith(('D', 'R', 'C')) else None,
                   'newPath': new_path if not status.startswith('D') else None, 'similarity': similarity,
                   'additions': additions, 'deletions': deletions, 'binary': binary,
                   'diffFile': diff_file, 'baseFile': base_file,
-                  'reviewed': reviewed_file(binary, review_paths)})
+                  'reviewed': reviewed})
 if j != len(numstat): raise SystemExit('Unmatched numstat records')
 manifest = {'version': 1, 'base': base, 'head': head, 'files': files}
 with open(os.path.join(output, 'manifest.json'), 'w', encoding='utf-8', newline='\n') as f:

@@ -97,6 +97,8 @@ The checked-in, independently judged live replay is at `benchmark/review-quality
 
 A controlled verifier-v2 retest of the same five saved validated candidates confirmed **4/5** with exact source citations; the remaining file-only cache case was inconclusive. All five verifier documents parsed, including one standalone fenced JSON document. That retest had no discovery calls, clean controls, or provider queries, so it is **not** an activation gate pass. Details are in `benchmark/review-quality/verification-v1/live-model/verifier-v2-controlled.json` and the accompanying report.
 
+The current verifier-v3 capture is under `benchmark/review-quality/verification-v1/live-model-v3/`. It covers all six fixtures in both modes with Pi, OpenRouter, and `z-ai/glm-5.3-flash`. Verification retained every credited discovery finding: file-only recall stayed 3/3 and indexed-context recall stayed 2/3, with no clean-change false positives. Observed verifier p95 was 76,496 ms. The gate still failed because the indexed cache fixture produced an invalid discovery candidate before verification, which left one required-coverage case incomplete. No live action-owned provider follow-up ran. The Action gate therefore remains off. `report.json` contains the machine-scored result; `report.md` records the judgment and limitations.
+
 ## Opt-in live-indexer evaluation
 
 With the pinned CGC 0.5.7 binary installed on `PATH`, run:

@@ -42,7 +42,8 @@ async function evidenceSource(bundle: ReviewBundle, evidence: SourceEvidence): P
   if (evidence.revision !== bundle.manifest.base) {
     throw new Error('supporting evidence revision is not the reviewed base or head');
   }
-  const owner = bundle.manifest.files.find((file) => file.oldPath === evidence.path && file.baseFile !== null);
+  const owner = bundle.manifest.files.find((file) =>
+    file.baseFile !== null && (file.oldPath ?? file.newPath) === evidence.path);
   if (owner?.baseFile === null || owner === undefined) {
     throw new Error(`base supporting evidence is not captured for ${evidence.path}`);
   }

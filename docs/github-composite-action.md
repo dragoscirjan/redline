@@ -45,7 +45,7 @@ Re-runs on the same head are idempotent: an existing actor-owned review with the
 4. **Validate action inputs with trusted TypeScript** — the review CLI runs `--validate-only` against the `REDLINE_*` environment contract; invalid optional inputs fail even in context-only mode.
 5. **Fetch pull request commits as data** — base and head commits are fetched as Git objects and verified.
 6. **Build bounded code index** — for configured reviews with indexing enabled, the root action invokes `$/github/code-index`. GitHub resolves this self-repository reference at the root action's exact running commit. The child action exports the head as data, restores or builds the selected provider's bounded base-revision database, and writes provider-neutral `code-index/code-context.json`.
-7. **Build review context bundle** — `src/context-bundle.sh` produces the manifest, diffs, base files, and a source-at-head export; a PR requirements file is folded in when present.
+7. **Build review context bundle** — compiled `src/context-bundle.ts` produces the manifest, diffs, base files, and a source-at-head export; a PR requirements file is folded in when present.
 8. **Upload review context artifact** — `<artifact-name>-context` with the bounded `code-context.json` when generated, `source-at-head/`, and `review/`.
 9. **Ensure harness binary** — installs the selected harness's fixed npm package when review execution is enabled and the binary is not already present (`pi` or `opencode`; `echo` needs nothing). This is trusted workflow tooling, never pull request code.
 10. **Announce review start** — publishes the "review in progress" comment (continue-on-error; a failed notification never blocks the review). Token 1 covers this and the failure notification.

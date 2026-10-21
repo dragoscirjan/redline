@@ -413,6 +413,7 @@ async function reviewOneFile(
       const dispositions = await validateVerificationDocument(
         bundle, file, findings, verificationDocument, environment.findingScope,
         followUpSourcesByCandidate(followUpResults),
+        fileContext.prompt,
       );
       verifiedFindings = dispositions.flatMap((item) => item.finding === undefined ? [] : [{
         ...item.finding,

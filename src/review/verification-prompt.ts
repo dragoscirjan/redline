@@ -9,16 +9,16 @@ import type { ResolvedFollowUp } from './follow-up.js';
 import { buildFileContextPayload, generatedBoundary, type FileReviewPrompt } from './prompt.js';
 import type { FindingScope, ValidatedFinding } from './types.js';
 
-export const VERIFICATION_PROMPT_ID = 'redline-verification/v2' as const;
+export const VERIFICATION_PROMPT_ID = 'redline-verification/v3' as const;
 const MAX_VERIFICATION_CONTEXT_BYTES = 768 * 1024;
 
 function defaultPolicyRoot(): string {
   const moduleDirectory = fileURLToPath(new URL('.', import.meta.url));
-  for (const relative of ['../../prompts/verification/v2/', '../../../prompts/verification/v2/']) {
+  for (const relative of ['../../prompts/verification/v3/', '../../../prompts/verification/v3/']) {
     const candidate = resolve(moduleDirectory, relative);
     if (existsSync(candidate)) return candidate;
   }
-  return resolve(moduleDirectory, '../../prompts/verification/v2/');
+  return resolve(moduleDirectory, '../../prompts/verification/v3/');
 }
 
 function digest(value: string): string {
@@ -78,6 +78,10 @@ export async function buildVerificationPrompt(options: VerificationPromptOptions
     '',
     payload,
     `</${boundary}>`,
+    '',
+    'For every citation, copy one exact revision value below. Never use a symbolic label or shorten it:',
+    `- base: ${options.bundle.manifest.base}`,
+    `- head: ${options.bundle.manifest.head}`,
     '',
     'Return only the verifier JSON document specified by the system policy.',
   ].join('\n');

@@ -51,11 +51,11 @@ git -C "$REPO" add .
 git -C "$REPO" commit -qm head
 HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
 
-# context-bundle.sh operates on the git checkout it runs in.
+# The context-bundle CLI operates on the git checkout it runs in.
 git -C "$REPO" worktree add --detach "$TMP/source" "$HEAD_SHA" >/dev/null 2>&1
 (
   cd "$TMP/source"
-  bash "$ROOT/src/context-bundle.sh" \
+  node "$ROOT/dist/src/context-bundle.js" \
     --base "$BASE_SHA" \
     --head "$HEAD_SHA" \
     --output "$TMP/review" \

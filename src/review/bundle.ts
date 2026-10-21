@@ -1,6 +1,6 @@
 /**
  * Loads and validates the review context bundle produced by
- * `context-bundle.sh`.
+ * the compiled `context-bundle.ts` CLI.
  *
  * The bundle is untrusted data: every file is size-bounded, path-checked
  * against the bundle root, and rejected when it is a symlink or escapes

@@ -2,7 +2,7 @@
 
 setup() {
   ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
-  SCRIPT="$ROOT/src/context-bundle.sh"
+  SCRIPT="$ROOT/dist/src/context-bundle.js"
   TMP="$(mktemp -d)"
   REPO="$TMP/repo"
   mkdir -p "$REPO/src" "$REPO/config"
@@ -40,7 +40,7 @@ teardown() {
 }
 
 @test "bundle records base/head files, rename paths, and binary status" {
-  run bash -c 'cd "$1" && bash "$2" --base "$3" --head "$4" --output "$5" --source "$6"' _ "$TMP/source" "$SCRIPT" "$BASE" "$HEAD_SHA" "$TMP/review" "$TMP/source-at-head"
+  run bash -c 'cd "$1" && node "$2" --base "$3" --head "$4" --output "$5" --source "$6"' _ "$TMP/source" "$SCRIPT" "$BASE" "$HEAD_SHA" "$TMP/review" "$TMP/source-at-head"
   [ "$status" -eq 0 ]
   [ -f "$TMP/review/manifest.json" ]
   grep -Fq "$BASE" "$TMP/review/revisions.txt"
@@ -53,6 +53,17 @@ teardown() {
   grep -Fq 'reviewed' "$TMP/review/manifest.json"
   [ -n "$(find "$TMP/review/diffs" -type f -print -quit)" ]
   [ -n "$(find "$TMP/review/base-files" -type f -print -quit)" ]
+  run node - "$TMP/review/manifest.json" "$TMP/review" <<'JS'
+const fs = require('node:fs');
+const path = require('node:path');
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const modified = manifest.files.find((item) => item.status === 'M' && item.newPath.startsWith('config/with'));
+if (modified?.reviewed !== true || modified.baseFile === null) process.exit(1);
+if (fs.readFileSync(path.join(process.argv[3], modified.baseFile), 'utf8') !== 'alpha\n') process.exit(1);
+const binary = manifest.files.find((item) => item.status === 'M' && item.binary === true);
+if (binary?.reviewed !== false || binary.baseFile !== null) process.exit(1);
+JS
+  [ "$status" -eq 0 ]
   [ -f "$TMP/review/summary.txt" ]
   [ -f "$TMP/review/commits.txt" ]
   [ -f "$TMP/review/README.md" ]
@@ -60,12 +71,12 @@ teardown() {
 }
 
 @test "rejects missing arguments" {
-  run bash "$SCRIPT"
+  run node "$SCRIPT"
   [ "$status" -eq 2 ]
 }
 
 @test "rejects unresolved revision" {
-  run bash -c 'cd "$1" && bash "$2" --base missing-revision --head "$3" --output "$4"' _ "$TMP/source" "$SCRIPT" "$HEAD_SHA" "$TMP/review"
+  run bash -c 'cd "$1" && node "$2" --base missing-revision --head "$3" --output "$4"' _ "$TMP/source" "$SCRIPT" "$HEAD_SHA" "$TMP/review"
   [ "$status" -ne 0 ]
 }
 
@@ -79,7 +90,7 @@ teardown() {
   rm -rf "$TMP/source-at-head"
   mkdir -p "$TMP/review"
 
-  run bash -c 'cd "$1" && bash "$2" --base "$3" --head "$4" --output "$5" --source "$6"' _ "$TMP/source" "$SCRIPT" "$BASE" "$HEAD_SHA" "$TMP/review" "$TMP/source-at-head"
+  run bash -c 'cd "$1" && node "$2" --base "$3" --head "$4" --output "$5" --source "$6"' _ "$TMP/source" "$SCRIPT" "$BASE" "$HEAD_SHA" "$TMP/review" "$TMP/source-at-head"
   [ "$status" -eq 0 ]
   [ -f "$TMP/source-at-head/.github/workflows/untrusted.sh" ]
   [ ! -e "$marker" ]

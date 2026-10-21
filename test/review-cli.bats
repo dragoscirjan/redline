@@ -3,7 +3,7 @@
 setup() {
   ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   CLI="$ROOT/dist/src/review/cli.js"
-  SCRIPT="$ROOT/src/context-bundle.sh"
+  SCRIPT="$ROOT/dist/src/context-bundle.js"
   TMP="$(mktemp -d)"
   REPO="$TMP/repo"
   mkdir -p "$REPO/src"
@@ -30,7 +30,7 @@ teardown() {
 build_bundle() {
   (
     cd "$TMP/source"
-    bash "$SCRIPT" --base "$BASE" --head "$HEAD" --output "$TMP/review" --source "$TMP/source-at-head"
+    node "$SCRIPT" --base "$BASE" --head "$HEAD" --output "$TMP/review" --source "$TMP/source-at-head"
   )
 }
 

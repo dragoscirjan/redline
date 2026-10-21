@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { judgeLiveVerification } from '../src/benchmark/judge-live-verification.js';
 
 const directory = resolve('benchmark/review-quality/verification-v1/live-model');
+const verifierV3Directory = resolve('benchmark/review-quality/verification-v1/live-model-v3');
 
 describe('independently judged live verifier capture', () => {
   it('replays every manual judgment against predeclared issue locations and blocks activation on recall loss', async () => {
@@ -18,6 +19,22 @@ describe('independently judged live verifier capture', () => {
     expect(report['modes']).toEqual(expect.arrayContaining([
       expect.objectContaining({ mode: 'file-only', discoveryCredited: 2, verifiedCredited: 0 }),
       expect.objectContaining({ mode: 'indexed-context', discoveryCredited: 3, verifiedCredited: 0 }),
+    ]));
+  });
+
+  it('retains credited findings under verifier v3 but blocks activation on incomplete discovery coverage', async () => {
+    const report = await judgeLiveVerification(verifierV3Directory);
+    expect(report).toEqual(JSON.parse(await readFile(join(verifierV3Directory, 'report.json'), 'utf8')));
+    expect(report['gate']).toMatchObject({
+      activationReady: false,
+      recallRegressions: [],
+      cleanFalsePositiveRegressions: [],
+      incompleteCoverage: ['cross-file-cache-collision/indexed-context'],
+      verifierP95Ms: 76_496,
+    });
+    expect(report['modes']).toEqual(expect.arrayContaining([
+      expect.objectContaining({ mode: 'file-only', discoveryCredited: 3, verifiedCredited: 3 }),
+      expect.objectContaining({ mode: 'indexed-context', discoveryCredited: 2, verifiedCredited: 2 }),
     ]));
   });
 

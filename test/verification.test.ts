@@ -101,7 +101,7 @@ describe('source-backed candidate verification contract', () => {
         if (malformed.includes('invented')) {
           const parsed = parseVerificationDocument(malformed, '000001', [candidate()]);
           await expect(validateVerificationDocument(bundle, bundle.manifest.files[0]!, [candidate()], parsed, 'defects'))
-            .rejects.toThrow('not a validated candidate');
+            .rejects.toThrow('does not match captured source');
         } else {
           expect(() => parseVerificationDocument(malformed, '000001', [candidate()])).toThrow('valid JSON');
         }
@@ -135,7 +135,7 @@ describe('source-backed candidate verification contract', () => {
         citations: [citation({ evidence: 'invented line' })],
       })]), file.id, [candidate()]);
       await expect(validateVerificationDocument(bundle, file, [candidate()], altered, 'defects'))
-        .rejects.toThrow('not a validated candidate');
+        .rejects.toThrow('does not match captured source');
 
       await writeFile(join(fixture.source, 'src/example.ts'), 'changed since capture\n');
       await expect(validateVerificationDocument(bundle, file, [candidate()], accepted, 'defects'))
@@ -145,7 +145,7 @@ describe('source-backed candidate verification contract', () => {
     }
   });
 
-  it('accepts a previously validated supporting span without giving graph facts source authority', async () => {
+  it('accepts a previously validated supporting span without treating its discovery role as source authority', async () => {
     const fixture = await createBundleFixture();
     try {
       await writeFile(join(fixture.source, 'src/related.ts'), 'export const allowed = false;\n');
@@ -161,10 +161,61 @@ describe('source-backed candidate verification contract', () => {
       };
       const finding = candidate();
       const supported: ValidatedFinding = { ...finding, supportingEvidence: [support] };
-      const report = parseVerificationDocument(document([result(FIRST, { citations: [support] })]), file.id, [supported]);
+      const relabeled = { ...support, role: 'contract' as const };
+      const report = parseVerificationDocument(document([result(FIRST, { citations: [relabeled] })]), file.id, [supported]);
       await expect(validateVerificationDocument(bundle, file, [supported], report, 'defects')).resolves.toHaveLength(1);
       await expect(validateVerificationDocument(bundle, file, [finding], report, 'defects'))
         .rejects.toThrow('not a validated candidate');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('accepts a newly selected span from the captured current file and re-resolves its source', async () => {
+    const fixture = await createBundleFixture({ headContent: 'new\nconst guard = true;\n' });
+    try {
+      const bundle = await loadReviewBundle(fixture.review, fixture.source);
+      const file = bundle.manifest.files[0]!;
+      const selected = citation({
+        role: 'missing-guard', startLine: 2, endLine: 2, evidence: 'const guard = true;',
+      });
+      const report = parseVerificationDocument(document([result(FIRST, { citations: [selected] })]), file.id, [candidate()]);
+      const verified = await validateVerificationDocument(bundle, file, [candidate()], report, 'defects');
+      expect(verified[0]?.finding?.supportingEvidence).toContainEqual(selected);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('accepts a source span inside the bounded source-resolved indexed context', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      await writeFile(join(fixture.source, 'src/related.ts'), 'first line\nvalidated caller\n');
+      const bundle = await loadReviewBundle(fixture.review, fixture.source);
+      const file = bundle.manifest.files[0]!;
+      const selected = {
+        role: 'caller-assumption' as const,
+        revision: HEAD_SHA,
+        path: 'src/related.ts',
+        startLine: 2,
+        endLine: 2,
+        evidence: 'validated caller',
+      };
+      const report = parseVerificationDocument(document([result(FIRST, { citations: [selected] })]), file.id, [candidate()]);
+      const indexedContext = {
+        status: 'complete' as const,
+        limitation: 'Bounded test context.',
+        related: [{
+          provider: { id: 'cgc', version: 'test' }, revision: HEAD_SHA, status: 'complete' as const,
+          path: 'src/related.ts', startLine: 1, endLine: 2, reason: 'calls changed code',
+          content: 'first line\nvalidated caller',
+        }],
+      };
+      await expect(validateVerificationDocument(
+        bundle, file, [candidate()], report, 'defects', new Map(), indexedContext,
+      )).resolves.toMatchObject([{ finding: { supportingEvidence: [selected] } }]);
+      await expect(validateVerificationDocument(bundle, file, [candidate()], report, 'defects'))
+        .rejects.toThrow('not a validated candidate source location');
     } finally {
       await fixture.cleanup();
     }
@@ -217,7 +268,7 @@ describe('source-backed candidate verification contract', () => {
     }
   });
 
-  it('rejects base claims when the base path was not captured, even with a matching digest', async () => {
+  it('accepts captured current-file base source and rejects an unrelated base path', async () => {
     const fixture = await createBundleFixture();
     try {
       const bundle = await loadReviewBundle(fixture.review, fixture.source);
@@ -226,6 +277,12 @@ describe('source-backed candidate verification contract', () => {
         citations: [citation({ revision: BASE_SHA, evidence: 'old' })],
       })]), file.id, [candidate()]);
       await expect(validateVerificationDocument(bundle, file, [candidate()], claim, 'defects'))
+        .resolves.toHaveLength(1);
+
+      const unrelated = parseVerificationDocument(document([result(FIRST, {
+        citations: [citation({ revision: BASE_SHA, path: 'src/other.ts', evidence: 'old' })],
+      })]), file.id, [candidate()]);
+      await expect(validateVerificationDocument(bundle, file, [candidate()], unrelated, 'defects'))
         .rejects.toThrow('not a validated candidate source location');
     } finally {
       await fixture.cleanup();

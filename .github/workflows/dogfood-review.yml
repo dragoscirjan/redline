@@ -67,28 +67,18 @@ jobs:
       # The checkout above is the trusted base revision: pull request code is
       # never installed, built, or executed.
       #
-      # Auto-review on this repository's own pull requests: pi runs the
-      # real model review and publishes one review per file plus a managed
-      # summary. Publication goes through the Redline GitHub App
-      # installation token when the App secrets are configured (the action
-      # generates it); the PAT (GH_TOKEN) is only the fallback until then
-      # — never the Actions GITHUB_TOKEN.
-      # While a base revision still lacks an input declared here, the extra
-      # input is ignored, so this call stays green across transitions.
-      # TRANSITION: the base revision's action does not yet install the
-      # harness binary (this branch's action does); install it here so the
-      # pi review works while this branch is open. Drop this step once the
-      # base revision carries the action-level install.
-      - name: Install pi harness binary
-        run: |
-          set -euo pipefail
-          command -v pi >/dev/null 2>&1 || npm install -g --ignore-scripts @earendil-works/pi-coding-agent
-
+      # Auto-review on this repository's own pull requests: when model-auth
+      # is configured, pi runs the real model review and publishes one review
+      # per file plus a managed summary. Without model-auth, all three review
+      # inputs remain empty together and the action uploads context only.
+      # Publication goes through the Redline GitHub App installation token
+      # when the App secrets are configured (the action generates it); the PAT
+      # (GH_TOKEN) is only the fallback — never the Actions GITHUB_TOKEN.
       - name: Run Redline review action
         uses: ./github
         with:
-          backend: pi
-          model-config: '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}'
+          backend: ${{ secrets.model-auth != '' && 'pi' || '' }}
+          model-config: ${{ secrets.model-auth != '' && '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}' || '' }}
           model-auth: ${{ secrets.model-auth }}
           # Risks join defects: operational/maintainability/compatibility
           # findings give the auto-review real coverage on docs- and

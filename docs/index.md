@@ -14,6 +14,7 @@ The action fetches the pull request's base and head commits as Git data, builds 
 ## Start here
 
 - [Reusable review workflow](/reusable-review-workflow) — call Redline from your repository's `pull_request_target` workflow.
+- [Dogfood reviews](/dogfood-review) — how Redline reviews and publishes results on its own pull requests.
 - [GitHub composite action](/github-composite-action) — the full input contract, secrets, pipeline, and boundaries.
 
 ## How it works under the hood

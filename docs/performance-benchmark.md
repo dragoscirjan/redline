@@ -74,6 +74,6 @@ Reports never contain prompts, source text, model responses, raw reasoning, cred
 
 ## Timing boundaries
 
-The checked-in index profile uses bounded timings from named production runs. Live corpus runs currently combine their measured review and publication durations with those fixed production index samples. The report states this limitation explicitly. Issue #153 owns the broader CGC/GitNexus value and latency comparison.
+The checked-in index profile uses bounded timings from named production runs. Live corpus runs combine their measured review wall time with those fixed production samples, including sampled production publication latency. The locally measured publication duration is reported for each run but is not added to the end-to-end totals. The report states this limitation explicitly. Issue #153 owns the broader CGC/GitNexus value and latency comparison.
 
 Publication uses the production forge-neutral service with an in-memory publisher. It measures validation, rendering, planning, and orchestration, but not GitHub network latency.

@@ -82,6 +82,10 @@ function liveConfiguration(environment: NodeJS.ProcessEnv): LivePerformanceConfi
   };
 }
 
+export function performanceExitCode(report: { readonly quality: { readonly passed: boolean } }): number {
+  return report.quality.passed ? 0 : 1;
+}
+
 export async function main(
   args: readonly string[] = process.argv.slice(2),
   environment: NodeJS.ProcessEnv = process.env,
@@ -97,7 +101,7 @@ export async function main(
     });
     await writePerformanceReport(report, options.outputDirectory);
     process.stdout.write(`${options.outputDirectory}/report.json\n`);
-    return 0;
+    return performanceExitCode(report);
   } catch (error) {
     process.stderr.write(`redline-performance-benchmark: ${error instanceof Error ? error.message : String(error)}\n`);
     return 1;

@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { main } from '../src/benchmark/performance-cli.js';
+import { main, performanceExitCode } from '../src/benchmark/performance-cli.js';
 
 const CORPUS = resolve('benchmark/performance/v1/corpus.json');
 const PROFILE = resolve('benchmark/performance/v1/profile.json');
@@ -11,6 +11,11 @@ afterEach(() => {
 });
 
 describe('performance benchmark CLI', () => {
+  it('returns a failure status when the quality gate fails', () => {
+    expect(performanceExitCode({ quality: { passed: true } })).toBe(0);
+    expect(performanceExitCode({ quality: { passed: false } })).toBe(1);
+  });
+
   it('requires an explicit opt in before live execution', async () => {
     await expect(main([
       '--live',

@@ -53,7 +53,12 @@ jobs:
         run: |
           set -euo pipefail
           pnpm run benchmark:performance
-          git diff --exit-code -- benchmark/performance/v1/baseline
+          baseline_changes="$(git status --porcelain --untracked-files=all -- benchmark/performance/v1/baseline)"
+          if [[ -n "$baseline_changes" ]]; then
+            printf 'performance baseline changed:\n%s\n' "$baseline_changes" >&2
+            git diff -- benchmark/performance/v1/baseline >&2
+            exit 1
+          fi
 
       - name: Check workflow syntax
         uses: rhysd/actionlint@03d0035246f3e81f36aed592ffb4bebf33a03106 # v1.7.7

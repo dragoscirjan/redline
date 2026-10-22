@@ -95,6 +95,10 @@ describe('parseFileReviewDocument', () => {
       contextRequests: [] });
     expect(parseFileReviewDocument(clean)).toMatchObject({ outcome: 'clean', reason: undefined });
 
+    const findings = JSON.stringify({ version: 4, fileId: '000001', outcome: 'findings', reason,
+      findings: [finding()], contextRequests: [] });
+    expect(parseFileReviewDocument(findings)).toMatchObject({ outcome: 'findings', reason: undefined });
+
     const omitted = JSON.stringify({ version: 4, fileId: '000001', outcome: 'omitted', reason, findings: [],
       contextRequests: [] });
     expect(() => parseFileReviewDocument(omitted)).toThrow(/reason is invalid/u);

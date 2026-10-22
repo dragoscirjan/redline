@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "id": "representative-20-file-pr",
+  "title": "Representative 20-file pull request",
+  "baseRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "headRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "files": [
+    { "id": "000001", "path": "src/cache.ts", "category": "typescript", "format": "typescript", "lines": 36, "changeLine": 18, "durationMs": 55000, "indexStatus": "complete" },
+    { "id": "000002", "path": "src/auth.ts", "category": "typescript", "format": "typescript", "lines": 48, "changeLine": 24, "durationMs": 70000, "indexStatus": "complete" },
+    { "id": "000003", "path": "src/parser.ts", "category": "typescript", "format": "typescript", "lines": 64, "changeLine": 32, "durationMs": 65000, "indexStatus": "complete" },
+    { "id": "000004", "path": "src/api.ts", "category": "typescript", "format": "typescript", "lines": 72, "changeLine": 36, "durationMs": 80000, "indexStatus": "complete" },
+    { "id": "000005", "path": "src/schema.ts", "category": "typescript", "format": "typescript", "lines": 52, "changeLine": 26, "durationMs": 60000, "indexStatus": "complete" },
+    { "id": "000006", "path": "src/large-service.ts", "category": "large-source", "format": "typescript", "lines": 500, "changeLine": 250, "durationMs": 180000, "indexStatus": "complete" },
+    { "id": "000007", "path": "src/large-router.ts", "category": "large-source", "format": "typescript", "lines": 420, "changeLine": 210, "durationMs": 150000, "indexStatus": "complete" },
+    { "id": "000008", "path": "scripts/check.ts", "category": "typescript", "format": "typescript", "lines": 44, "changeLine": 22, "durationMs": 45000, "indexStatus": "complete" },
+    { "id": "000009", "path": "test/cache.test.ts", "category": "test", "format": "typescript", "lines": 54, "changeLine": 27, "durationMs": 50000, "indexStatus": "complete" },
+    { "id": "000010", "path": "test/auth.test.ts", "category": "test", "format": "typescript", "lines": 62, "changeLine": 31, "durationMs": 60000, "indexStatus": "complete" },
+    { "id": "000011", "path": "test/parser.test.ts", "category": "test", "format": "typescript", "lines": 58, "changeLine": 29, "durationMs": 55000, "indexStatus": "complete" },
+    { "id": "000012", "path": "test/schema.test.ts", "category": "test", "format": "typescript", "lines": 50, "changeLine": 25, "durationMs": 45000, "indexStatus": "complete" },
+    { "id": "000013", "path": ".github/workflows/ci.yml", "category": "configuration", "format": "yaml", "lines": 40, "changeLine": 20, "durationMs": 30000, "indexStatus": "unsupported" },
+    { "id": "000014", "path": "package.json", "category": "configuration", "format": "json", "lines": 34, "changeLine": 17, "durationMs": 20000, "indexStatus": "unsupported" },
+    { "id": "000015", "path": "tsconfig.json", "category": "configuration", "format": "json", "lines": 30, "changeLine": 15, "durationMs": 18000, "indexStatus": "unsupported" },
+    { "id": "000016", "path": "README.md", "category": "documentation", "format": "markdown", "lines": 42, "changeLine": 21, "durationMs": 18000, "indexStatus": "unsupported" },
+    { "id": "000017", "path": "docs/review.md", "category": "documentation", "format": "markdown", "lines": 56, "changeLine": 28, "durationMs": 22000, "indexStatus": "unsupported" },
+    { "id": "000018", "path": "docs/api.md", "category": "documentation", "format": "markdown", "lines": 48, "changeLine": 24, "durationMs": 20000, "indexStatus": "unsupported" },
+    { "id": "000019", "path": "benchmark/capture.json", "category": "generated-like", "format": "json", "lines": 180, "changeLine": 90, "durationMs": 90000, "indexStatus": "unsupported" },
+    { "id": "000020", "path": "test/fixtures/snapshot.json", "category": "generated-like", "format": "json", "lines": 150, "changeLine": 75, "durationMs": 75000, "indexStatus": "unsupported" }
+  ]
+}

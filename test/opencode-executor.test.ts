@@ -166,4 +166,28 @@ describe('extractOpenCodeAssistantText', () => {
   it('returns undefined without text parts', () => {
     expect(extractOpenCodeAssistantText('{"type":"step_start"}\n')).toBeUndefined();
   });
+
+  it('records bounded output and first-text telemetry', async () => {
+    const workDirectory = await mkdtemp(join(tmpdir(), 'redline-oc-'));
+    try {
+      const spawner = new RecordingSpawner();
+      const executor = createOpenCodeExecutor({ command: 'opencode-fake', spawner });
+      const prepared = await executor.prepare({ ...SETTINGS, workDirectory });
+      const stdout = `${JSON.stringify({ type: 'text', part: { type: 'text', text: 'RESULT' } })}\n`;
+      spawner.script(stdout, 0);
+      const run = await executor.execute(prepared, { system: 'SYS', user: 'USER' });
+
+      expect(run.status).toBe('succeeded');
+      expect(run.telemetry).toMatchObject({
+        processStartupMs: expect.any(Number),
+        timeToFirstTextMs: expect.any(Number),
+        stdoutBytes: Buffer.byteLength(stdout, 'utf8'),
+        stderrBytes: 0,
+        stdoutTruncated: false,
+        stderrTruncated: false,
+      });
+    } finally {
+      await rm(workDirectory, { recursive: true, force: true });
+    }
+  });
 });

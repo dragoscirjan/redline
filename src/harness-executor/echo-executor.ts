@@ -48,6 +48,14 @@ export class EchoHarnessExecutor implements HarnessExecutor {
       text,
       diagnostic: '',
       durationMs: 0,
+      telemetry: {
+        processStartupMs: null,
+        timeToFirstTextMs: 0,
+        stdoutBytes: Buffer.byteLength(text, 'utf8'),
+        stderrBytes: 0,
+        stdoutTruncated: false,
+        stderrTruncated: false,
+      },
     };
   }
 }

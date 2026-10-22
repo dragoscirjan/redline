@@ -69,6 +69,12 @@ export interface ReviewRunInput {
    */
   readonly onFileStart?: ((record: { readonly path: string }) => void) | undefined;
   /**
+   * Called after model output and review validation complete, immediately
+   * before the per-file record is written. Performance tooling uses this
+   * boundary without observing prompt or model content.
+   */
+  readonly onFileValidated?: ((record: FileReviewRecord) => void) | undefined;
+  /**
    * Live harness output tap while a file's prompt runs. Harnesses forward
    * bounded heartbeat lines and readable text fragments (redacted and
    * capped), never unbounded raw output.
@@ -605,6 +611,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
         input.harnessStreamMode,
         input.verifyCandidates,
       );
+      input.onFileValidated?.(record);
       records.push(record);
       await writer.writeFileReview(record);
       input.onFileDone?.(record);

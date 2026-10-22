@@ -48,6 +48,13 @@ jobs:
           pnpm test
           pnpm run docs
 
+      - name: Verify deterministic performance baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm run benchmark:performance
+          git diff --exit-code -- benchmark/performance/v1/baseline
+
       - name: Check workflow syntax
         uses: rhysd/actionlint@03d0035246f3e81f36aed592ffb4bebf33a03106 # v1.7.7
 

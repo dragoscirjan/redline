@@ -43,6 +43,18 @@ export interface HarnessPrompt {
 
 export type HarnessRunStatus = 'succeeded' | 'failed' | 'timed-out';
 
+export interface HarnessRunTelemetry {
+  /** Synchronous time spent creating the child process; null for in-process executors. */
+  readonly processStartupMs: number | null;
+  /** Time from invocation start to the first streamed model text; null when unavailable. */
+  readonly timeToFirstTextMs: number | null;
+  /** Total bytes observed before bounded capture discarded any excess. */
+  readonly stdoutBytes: number;
+  readonly stderrBytes: number;
+  readonly stdoutTruncated: boolean;
+  readonly stderrTruncated: boolean;
+}
+
 export interface HarnessRun {
   readonly status: HarnessRunStatus;
   readonly harness: HarnessName;
@@ -52,6 +64,8 @@ export interface HarnessRun {
   /** Bounded diagnostic (stderr and similar) for failure reporting. */
   readonly diagnostic: string;
   readonly durationMs: number;
+  /** Bounded operational measurements; never contains prompt, output, or credential text. */
+  readonly telemetry?: HarnessRunTelemetry | undefined;
 }
 
 /** Harness-specific state prepared once per review run and reused per prompt. */

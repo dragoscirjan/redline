@@ -80,6 +80,10 @@ export const nodeProcessSpawner: ProcessSpawner = {
 export interface BoundedText {
   readonly text: string;
   readonly truncated: boolean;
+  /** Bytes retained in `text`; bounded by the caller's limit. */
+  readonly retainedBytes: number;
+  /** Total bytes observed before any excess was discarded. */
+  readonly totalBytes: number;
 }
 
 export interface BoundedStreamReader {
@@ -115,6 +119,8 @@ export function createBoundedReader(
     resolveResult({
       text: new TextDecoder().decode(Buffer.concat(chunks)),
       truncated: cancelled || total > retained,
+      retainedBytes: retained,
+      totalBytes: total,
     });
   };
   void (async () => {
@@ -205,7 +211,12 @@ export interface BoundedRunResult {
   readonly timedOut: boolean;
   readonly stdout: string;
   readonly stderr: string;
+  readonly stdoutBytes?: number | undefined;
+  readonly stderrBytes?: number | undefined;
   readonly stdoutTruncated: boolean;
+  readonly stderrTruncated?: boolean | undefined;
+  /** Synchronous time spent creating the child process. */
+  readonly processStartupMs?: number | undefined;
   readonly durationMs: number;
 }
 
@@ -222,6 +233,7 @@ export async function runBoundedProcess(
   }
   const startedAt = Date.now();
   const child = spawner.spawn(request);
+  const processStartupMs = Date.now() - startedAt;
   const tap = request.onOutputLine;
   const stdoutReader = createBoundedReader(
     tap ? tappedStream(child.stdout, (line) => tap('stdout', line)) : child.stdout,
@@ -285,7 +297,11 @@ export async function runBoundedProcess(
       timedOut,
       stdout: stdout.text,
       stderr: stderr.text,
+      stdoutBytes: stdout.totalBytes,
+      stderrBytes: stderr.totalBytes,
       stdoutTruncated: stdout.truncated,
+      stderrTruncated: stderr.truncated,
+      processStartupMs,
       durationMs: Date.now() - startedAt,
     };
   } finally {

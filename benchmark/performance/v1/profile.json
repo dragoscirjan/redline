@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "id": "pi-openrouter-glm-cgc",
+  "configuration": {
+    "harness": "pi",
+    "provider": "openrouter",
+    "endpoint": "https://openrouter.ai/api/v1",
+    "model": "z-ai/glm-5.3-flash",
+    "indexProvider": "cgc",
+    "indexProviderVersion": "0.5.7",
+    "execution": "sequential"
+  },
+  "targets": {
+    "warmIndexP95Ms": 600000,
+    "coldIndexP95Ms": 900000,
+    "minimumLiveRuns": 5
+  },
+  "conditions": [
+    {
+      "id": "warm-index",
+      "cache": "restored",
+      "samples": [
+        {
+          "source": "https://github.com/dragoscirjan/redline/actions/runs/39856452560",
+          "checkoutFetchMs": 1020,
+          "runtimeSetupMs": 5371,
+          "dependencyInstallBuildMs": 6521,
+          "harnessInstallMs": 9126,
+          "contextBundleMs": 110,
+          "reviewValidationWritingMs": 140,
+          "publicationMs": 2873,
+          "otherMs": 6488,
+          "installationMs": 2194,
+          "restoreMs": 1663,
+          "indexMs": 0,
+          "queryMs": 7310,
+          "saveMs": null
+        },
+        {
+          "source": "https://github.com/dragoscirjan/redline/actions/runs/39731102219",
+          "checkoutFetchMs": 1023,
+          "runtimeSetupMs": 914,
+          "dependencyInstallBuildMs": 6781,
+          "harnessInstallMs": 9016,
+          "contextBundleMs": 200,
+          "reviewValidationWritingMs": 213,
+          "publicationMs": 2272,
+          "otherMs": 4444,
+          "installationMs": 2083,
+          "restoreMs": 566,
+          "indexMs": 0,
+          "queryMs": 21091,
+          "saveMs": null
+        },
+        {
+          "source": "https://github.com/dragoscirjan/redline/actions/runs/39699251260",
+          "checkoutFetchMs": 23,
+          "runtimeSetupMs": 752,
+          "dependencyInstallBuildMs": 6959,
+          "harnessInstallMs": 9025,
+          "contextBundleMs": 194,
+          "reviewValidationWritingMs": 195,
+          "publicationMs": 2209,
+          "otherMs": 4754,
+          "installationMs": 2179,
+          "restoreMs": 717,
+          "indexMs": 0,
+          "queryMs": 20913,
+          "saveMs": null
+        }
+      ]
+    },
+    {
+      "id": "cold-index",
+      "cache": "built",
+      "samples": [
+        {
+          "source": "https://github.com/dragoscirjan/redline/actions/runs/39853453188",
+          "checkoutFetchMs": 2038,
+          "runtimeSetupMs": 581,
+          "dependencyInstallBuildMs": 5106,
+          "harnessInstallMs": 7016,
+          "contextBundleMs": 99,
+          "reviewValidationWritingMs": 78,
+          "publicationMs": 2708,
+          "otherMs": 6305,
+          "installationMs": 3308,
+          "restoreMs": 482,
+          "indexMs": 96965,
+          "queryMs": 6552,
+          "saveMs": 1317
+        },
+        {
+          "source": "https://github.com/dragoscirjan/redline/actions/runs/39855691750",
+          "checkoutFetchMs": 1020,
+          "runtimeSetupMs": 704,
+          "dependencyInstallBuildMs": 6179,
+          "harnessInstallMs": 8147,
+          "contextBundleMs": 119,
+          "reviewValidationWritingMs": 119,
+          "publicationMs": 2474,
+          "otherMs": 5729,
+          "installationMs": 2292,
+          "restoreMs": 353,
+          "indexMs": 119738,
+          "queryMs": 6912,
+          "saveMs": 1027
+        },
+        {
+          "source": "https://github.com/dragoscirjan/redline/actions/runs/39693253427",
+          "checkoutFetchMs": 1022,
+          "runtimeSetupMs": 689,
+          "dependencyInstallBuildMs": 6479,
+          "harnessInstallMs": 8014,
+          "contextBundleMs": 147,
+          "reviewValidationWritingMs": 354,
+          "publicationMs": 2330,
+          "otherMs": 5473,
+          "installationMs": 2445,
+          "restoreMs": 353,
+          "indexMs": 239139,
+          "queryMs": 180,
+          "saveMs": null
+        },
+        {
+          "source": "https://github.com/dragoscirjan/redline/actions/runs/39497402032",
+          "checkoutFetchMs": 1025,
+          "runtimeSetupMs": 743,
+          "dependencyInstallBuildMs": 6480,
+          "harnessInstallMs": 8018,
+          "contextBundleMs": 116,
+          "reviewValidationWritingMs": 210,
+          "publicationMs": 2909,
+          "otherMs": 4288,
+          "installationMs": 2281,
+          "restoreMs": 307,
+          "indexMs": 177545,
+          "queryMs": 231,
+          "saveMs": null
+        },
+        {
+          "source": "https://github.com/dragoscirjan/redline/actions/runs/39124513503",
+          "checkoutFetchMs": 2020,
+          "runtimeSetupMs": 465,
+          "dependencyInstallBuildMs": 3911,
+          "harnessInstallMs": 6016,
+          "contextBundleMs": 215,
+          "reviewValidationWritingMs": 552,
+          "publicationMs": 4039,
+          "otherMs": 4891,
+          "installationMs": 1960,
+          "restoreMs": 319,
+          "indexMs": 118451,
+          "queryMs": 131,
+          "saveMs": null
+        }
+      ]
+    }
+  ]
+}

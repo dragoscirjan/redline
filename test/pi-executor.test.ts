@@ -160,6 +160,14 @@ describe('createPiExecutor', () => {
       const run = await executor.execute(prepared, { system: 'SYS', user: 'USER' });
       expect(run.status).toBe('failed');
       expect(run.text).toBe('');
+      expect(run.telemetry).toMatchObject({
+        processStartupMs: expect.any(Number),
+        timeToFirstTextMs: null,
+        stdoutBytes: Buffer.byteLength('{"type":"session"}\n'),
+        stderrBytes: 0,
+        stdoutTruncated: false,
+        stderrTruncated: false,
+      });
     } finally {
       await settings.cleanup();
     }
@@ -207,10 +215,12 @@ describe('extractPiAssistantText', () => {
       ].join('\n');
       spawner.script(stdout, 0);
       const tapped: Array<{ kind: string; line: string }> = [];
-      await executor.execute(prepared, { system: 'SYS', user: 'USER' }, {
+      const run = await executor.execute(prepared, { system: 'SYS', user: 'USER' }, {
         onOutputLine: (output) => tapped.push({ kind: output.kind, line: output.line }),
       });
 
+      expect(run.telemetry?.timeToFirstTextMs).toBeGreaterThanOrEqual(0);
+      expect(run.telemetry?.stdoutBytes).toBe(Buffer.byteLength(stdout, 'utf8'));
       const text = tapped.filter((entry) => entry.kind === 'text').map((entry) => entry.line).join('');
       // Readable streaming text, credential-redacted, newline at segment
       // end, and workflow-command syntax neutralized.

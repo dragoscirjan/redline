@@ -96,6 +96,84 @@ build_action() {
   [ "$status" -eq 0 ]
 }
 
+write_follow_up_fixture() {
+  mkdir -p "$TMP_ROOT/review"
+  python3 - "$TMP_ROOT/review/manifest.json" "$TMP_ROOT/requests.json" "$BASE" "$HEAD_REVISION" <<'PY'
+import hashlib, json, sys
+manifest, requests, base, head = sys.argv[1:]
+with open(manifest, 'w', encoding='utf-8') as handle:
+    json.dump({'version': 1, 'base': base, 'head': head, 'files': [{
+        'id': '000001', 'reviewed': True, 'newPath': 'src/cache.ts', 'oldPath': 'src/cache.ts'
+    }]}, handle)
+candidate = 'f-' + 'b'*24
+identity = ['owner/repository', base, head, '000001', candidate, 'src/cache.ts', 'incoming']
+identifier = 'related-span:sha256:' + hashlib.sha256(json.dumps(identity,
+    ensure_ascii=False, separators=(',', ':')).encode('utf-8')).hexdigest()
+with open(requests, 'w', encoding='utf-8') as handle:
+    json.dump({'version': 1, 'repository': 'owner/repository', 'base': base, 'head': head,
+        'omitted': 0, 'requests': [{
+            'id': identifier, 'candidateId': candidate, 'fileId': '000001',
+            'changedPath': 'src/cache.ts', 'capability': 'related-spans',
+            'direction': 'incoming', 'depth': 1, 'fanOut': 8, 'resultLimit': 8,
+        }]}, handle)
+PY
+}
+
+assert_complete_follow_up() {
+  python3 - "$TMP_ROOT/result.json" "$HEAD_REVISION" "$BASE" "$1" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1], encoding='utf-8'))
+assert result['head'] == sys.argv[2] and result['base'] == result['snapshot'] == sys.argv[3]
+assert result['provider']['id'] == sys.argv[4]
+assert result['results'][0]['status'] == 'complete', result
+assert result['results'][0]['spans'] == [{
+    'path': 'src/user-service.ts', 'revision': sys.argv[2], 'startLine': 3,
+    'endLine': 5, 'evidence': "export function loadUser(accountId: string, userId: string): string {",
+    'relationship': 'related-symbol-calls-changed-code',
+}], result
+PY
+}
+
+run_follow_up_worker() {
+  python3 "$ACTION_DIR/follow-up.py" --provider "$1" --repository owner/repository \
+    --base "$BASE" --head "$HEAD_REVISION" --review-dir "$TMP_ROOT/review" \
+    --runner-temp "$RUNNER_TEMP" --input "$TMP_ROOT/requests.json" --output "$TMP_ROOT/result.json"
+}
+
+benchmark_follow_up() {
+  local provider=$1 durations="$TMP_ROOT/follow-up-durations.txt" sample
+  : > "$durations"
+  for sample in 1 2 3 4 5; do
+    run run_follow_up_worker "$provider"
+    [ "$status" -eq 0 ]
+    assert_complete_follow_up "$provider"
+    python3 - "$TMP_ROOT/result.json" >> "$durations" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1], encoding='utf-8'))['results'][0]['durationMs'])
+PY
+  done
+  python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$TMP_ROOT/result.json" "$durations" <<'PY'
+import json, math, statistics, sys
+artifact = json.load(open(sys.argv[1], encoding='utf-8'))
+exchange = json.load(open(sys.argv[2], encoding='utf-8'))
+durations = sorted(int(value) for value in open(sys.argv[3], encoding='utf-8') if value.strip())
+result = exchange['results'][0]
+print(json.dumps({
+    'provider': artifact['provider'],
+    'artifactStatus': artifact['status'],
+    'capability': 'related-spans',
+    'followUpStatus': result['status'],
+    'spanCount': len(result['spans']),
+    'indexTimings': artifact['timings'],
+    'followUpLatencyMs': {
+        'samples': durations,
+        'median': statistics.median(durations),
+        'p95NearestRank': durations[math.ceil(0.95 * len(durations)) - 1],
+    },
+}, sort_keys=True))
+PY
+}
+
 @test "secondary action pins CGC and actions/cache without provider configuration inputs" {
   if ! python3 -c 'import yaml' 2>/dev/null; then
     skip 'PyYAML is required to validate action.yaml'
@@ -166,6 +244,83 @@ canonical = json.dumps(fact, ensure_ascii=False, separators=(',', ':')).encode('
 assert reference['snapshotRevision'] == sys.argv[4]
 assert reference['graphFactDigest'] == f"sha256:{hashlib.sha256(canonical).hexdigest()}"
 assert any(item['code'] == 'cache-base-revision' for item in warm['diagnostics'])
+PY
+}
+
+@test "CGC query bounds do not restrict provider database writes" {
+  prepare_action
+  printf 'query-state\n' > "$PROVIDER/mode"
+  build_action '' success
+
+  python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" <<'PY'
+import json, sys
+artifact = json.load(open(sys.argv[1], encoding='utf-8'))
+print(json.dumps(artifact, sort_keys=True))
+assert artifact['status'] == 'complete'
+PY
+}
+
+@test "provider read failures stop and reap the process" {
+  python3 - "$ACTION_DIR/export.py" "$TMP_ROOT/provider.pid" <<'PY'
+import importlib.util
+import os
+from pathlib import Path
+import sys
+
+spec = importlib.util.spec_from_file_location("redline_code_index_export", sys.argv[1])
+assert spec is not None and spec.loader is not None
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+pid_file = Path(sys.argv[2])
+provider = """
+import os
+from pathlib import Path
+import sys
+import time
+
+Path(sys.argv[1]).write_text(str(os.getpid()), encoding="utf-8")
+sys.stdout.buffer.write(b"[")
+sys.stdout.buffer.flush()
+time.sleep(30)
+"""
+original_read = module.os.read
+original_select = module.selectors.DefaultSelector.select
+
+
+def fail_read(_descriptor, _length):
+    raise OSError("forced provider read failure")
+
+
+def select_then_fail_read(selector, timeout=None):
+    events = original_select(selector, timeout)
+    module.os.read = fail_read
+    return events
+
+
+module.selectors.DefaultSelector.select = select_then_fail_read
+try:
+    try:
+        module.run_provider_json(
+            [sys.executable, "-c", provider, str(pid_file)],
+            os.environ.copy(),
+            5,
+        )
+    except OSError as error:
+        assert str(error) == "forced provider read failure"
+    else:
+        raise AssertionError("provider read failure was not propagated")
+finally:
+    module.os.read = original_read
+    module.selectors.DefaultSelector.select = original_select
+
+provider_pid = int(pid_file.read_text(encoding="utf-8"))
+try:
+    os.kill(provider_pid, 0)
+except ProcessLookupError:
+    pass
+else:
+    os.kill(provider_pid, 9)
+    raise AssertionError("provider process was not stopped")
 PY
 }
 
@@ -379,42 +534,10 @@ PY
     fi
     prepare_action
     build_action '' success
-    mkdir -p "$TMP_ROOT/review"
-    python3 - "$TMP_ROOT/review/manifest.json" "$TMP_ROOT/requests.json" "$BASE" "$HEAD_REVISION" <<'PY'
-import hashlib, json, sys
-manifest, requests, base, head = sys.argv[1:]
-with open(manifest, 'w', encoding='utf-8') as handle:
-    json.dump({'version': 1, 'base': base, 'head': head, 'files': [{
-        'id': '000001', 'reviewed': True, 'newPath': 'src/cache.ts', 'oldPath': 'src/cache.ts'
-    }]}, handle)
-candidate = 'f-' + 'b'*24
-identity = ['owner/repository', base, head, '000001', candidate, 'src/cache.ts', 'incoming']
-identifier = 'related-span:sha256:' + hashlib.sha256(json.dumps(identity,
-    ensure_ascii=False, separators=(',', ':')).encode('utf-8')).hexdigest()
-with open(requests, 'w', encoding='utf-8') as handle:
-    json.dump({'version': 1, 'repository': 'owner/repository', 'base': base, 'head': head,
-        'omitted': 0, 'requests': [{
-            'id': identifier, 'candidateId': candidate, 'fileId': '000001',
-            'changedPath': 'src/cache.ts', 'capability': 'related-spans',
-            'direction': 'incoming', 'depth': 1, 'fanOut': 8, 'resultLimit': 8,
-        }]}, handle)
-PY
-    run python3 "$ACTION_DIR/follow-up.py" --provider "$provider" --repository owner/repository \
-      --base "$BASE" --head "$HEAD_REVISION" --review-dir "$TMP_ROOT/review" \
-      --runner-temp "$RUNNER_TEMP" --input "$TMP_ROOT/requests.json" --output "$TMP_ROOT/result.json"
+    write_follow_up_fixture
+    run run_follow_up_worker "$provider"
     [ "$status" -eq 0 ]
-    python3 - "$TMP_ROOT/result.json" "$HEAD_REVISION" "$BASE" "$provider" <<'PY'
-import json, sys
-result = json.load(open(sys.argv[1], encoding='utf-8'))
-assert result['head'] == sys.argv[2] and result['base'] == result['snapshot'] == sys.argv[3]
-assert result['provider']['id'] == sys.argv[4]
-assert result['results'][0]['status'] == 'complete', result
-assert result['results'][0]['spans'] == [{
-    'path': 'src/user-service.ts', 'revision': sys.argv[2], 'startLine': 3,
-    'endLine': 5, 'evidence': "export function loadUser(accountId: string, userId: string): string {",
-    'relationship': 'related-symbol-calls-changed-code',
-}], result
-PY
+    assert_complete_follow_up "$provider"
     run node --input-type=module - "$ROOT" "$TMP_ROOT/review" "$RUNNER_TEMP" "$provider" "$BASE" "$HEAD_REVISION" <<'JS'
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
@@ -513,7 +636,6 @@ PY
 import json, sys
 cold = json.load(open(sys.argv[1], encoding='utf-8'))
 warm = json.load(open(sys.argv[2], encoding='utf-8'))
-print(json.dumps({'cold': cold, 'warm': warm}, sort_keys=True))
 assert cold['provider'] == warm['provider'] == {'id': 'gitnexus', 'version': '1.6.12'}
 assert cold['status'] == warm['status'] == 'complete'
 assert cold['files'] == warm['files']
@@ -521,6 +643,8 @@ assert cold['timings']['indexMs'] >= 0
 assert warm['timings']['indexMs'] == 0
 assert any(item['code'] == 'cache-base-revision' for item in warm['diagnostics'])
 PY
+  write_follow_up_fixture
+  benchmark_follow_up gitnexus
 }
 
 @test "live pinned CGC smoke test is opt-in" {
@@ -534,24 +658,23 @@ PY
   python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" <<'PY'
 import json, sys
 artifact = json.load(open(sys.argv[1], encoding='utf-8'))
-print(json.dumps(artifact, sort_keys=True))
 assert artifact['provider'] == {'id': 'cgc', 'version': '0.5.7'}
 assert artifact['status'] == 'complete'
-assert artifact['files'][0]['related'] == [{
+span = artifact['files'][0]['related'][0]
+assert {key: span[key] for key in ('path', 'startLine', 'endLine', 'reason')} == {
     'path': 'src/user-service.ts',
     'startLine': 3,
     'endLine': 5,
     'reason': 'related-symbol-calls-changed-code',
-}]
+}
+assert span['graphReference']['provider'] == 'cgc'
+assert span['graphReference']['providerVersion'] == '0.5.7'
+assert span['graphReference']['snapshotRevision'] == artifact['baseRevision']
 timings = artifact['timings']
 for key in ('installationMs', 'restoreMs', 'indexMs', 'queryMs'):
     assert isinstance(timings[key], int) and timings[key] >= 0
 assert timings['saveMs'] is None or isinstance(timings['saveMs'], int)
-print(json.dumps({
-    'provider': artifact['provider'],
-    'status': artifact['status'],
-    'related': artifact['files'][0]['related'],
-    'timings': timings,
-}, sort_keys=True))
 PY
+  write_follow_up_fixture
+  benchmark_follow_up cgc
 }

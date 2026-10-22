@@ -194,9 +194,22 @@ describe('runFileReviews', () => {
           contextRequests: [{ candidateIndex: 0, direction: 'incoming' }] }) },
         { text: '{"version":1,"fileId":"000001","results":[]}' },
       ]);
-      const result = await runFileReviews({ environment: environment.review!, executor, verifyCandidates: true });
+      let providerCalls = 0;
+      const result = await runFileReviews({
+        environment: environment.review!,
+        executor,
+        verifyCandidates: true,
+        followUpExecutor: async () => {
+          providerCalls += 1;
+          return '';
+        },
+      });
+      expect(providerCalls).toBe(0);
       expect(result.records[0]).toMatchObject({
-        followUp: { status: 'incomplete', requested: 1, completed: 0 },
+        followUp: {
+          status: 'incomplete', requested: 1, completed: 0, durationMs: 0,
+          reason: 'follow-up provider is not configured',
+        },
         outcome: 'omitted', findings: [],
       });
       expect(result.review.limitations).toContainEqual(expect.objectContaining({

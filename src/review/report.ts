@@ -403,14 +403,13 @@ export function parseFileReviewDocument(raw: string): FileReviewDocument {
   const fileId = boundedString(decoded.fileId, 'review document.fileId', 6);
   const outcome = enumValue(decoded.outcome, OUTCOMES, 'review document.outcome');
   let reason: string | undefined;
-  if ((typeof decoded.reason === 'string' && decoded.reason.trim().length === 0) || decoded.reason === null) {
-    // Empty omission reasons are treated as absent.
-  } else if (decoded.reason !== undefined) {
-    const provided = boundedString(decoded.reason, 'review document.reason', 500);
-    if (outcome === 'omitted') reason = provided;
-  }
-  if (outcome === 'omitted' && reason === undefined) {
-    throw new Error('review document.reason is required when the outcome is omitted');
+  if (outcome === 'omitted') {
+    if ((typeof decoded.reason === 'string' && decoded.reason.trim().length === 0)
+      || decoded.reason === null
+      || decoded.reason === undefined) {
+      throw new Error('review document.reason is required when the outcome is omitted');
+    }
+    reason = boundedString(decoded.reason, 'review document.reason', 500);
   }
   const rawFindings = decoded.findings === undefined && outcome !== 'findings' ? [] : decoded.findings;
   if (!Array.isArray(rawFindings)) throw new Error('review document.findings must be an array');

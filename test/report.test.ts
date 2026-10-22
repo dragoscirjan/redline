@@ -89,6 +89,21 @@ describe('parseFileReviewDocument', () => {
     expect(parsed.reason).toBe('binary content');
   });
 
+  it('drops an overlong reason from a clean document without weakening omission bounds', () => {
+    const reason = 'Reviewed the supplied diff and source. '.repeat(20);
+    const clean = JSON.stringify({ version: 4, fileId: '000001', outcome: 'clean', reason, findings: [],
+      contextRequests: [] });
+    expect(parseFileReviewDocument(clean)).toMatchObject({ outcome: 'clean', reason: undefined });
+
+    const findings = JSON.stringify({ version: 4, fileId: '000001', outcome: 'findings', reason,
+      findings: [finding()], contextRequests: [] });
+    expect(parseFileReviewDocument(findings)).toMatchObject({ outcome: 'findings', reason: undefined });
+
+    const omitted = JSON.stringify({ version: 4, fileId: '000001', outcome: 'omitted', reason, findings: [],
+      contextRequests: [] });
+    expect(() => parseFileReviewDocument(omitted)).toThrow(/reason is invalid/u);
+  });
+
   it('rejects older document versions', () => {
     expect(() =>
       parseFileReviewDocument('{"version":1,"fileId":"000001","outcome":"clean","findings":[]}'),

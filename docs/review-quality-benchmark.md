@@ -97,7 +97,9 @@ The checked-in, independently judged live replay is at `benchmark/review-quality
 
 A controlled verifier-v2 retest of the same five saved validated candidates confirmed **4/5** with exact source citations; the remaining file-only cache case was inconclusive. All five verifier documents parsed, including one standalone fenced JSON document. That retest had no discovery calls, clean controls, or provider queries, so it is **not** an activation gate pass. Details are in `benchmark/review-quality/verification-v1/live-model/verifier-v2-controlled.json` and the accompanying report.
 
-The current verifier-v3 capture is under `benchmark/review-quality/verification-v1/live-model-v3/`. It covers all six fixtures in both modes with Pi, OpenRouter, and `z-ai/glm-5.3-flash`. Verification retained every credited discovery finding: file-only recall stayed 3/3 and indexed-context recall stayed 2/3, with no clean-change false positives. Observed verifier p95 was 76,496 ms. The gate still failed because the indexed cache fixture produced an invalid discovery candidate before verification, which left one required-coverage case incomplete. No live action-owned provider follow-up ran. The Action gate therefore remains off. `report.json` contains the machine-scored result; `report.md` records the judgment and limitations.
+The current verifier-v3 capture is under `benchmark/review-quality/verification-v1/live-model-v3/`. It covers all six fixtures in both modes with Pi, OpenRouter, and `z-ai/glm-5.3-flash`. Verification retained every credited discovery finding: file-only recall stayed 3/3 and indexed-context recall stayed 2/3, with no clean-change false positives. Observed verifier p95 was 76,496 ms. The gate still failed because the indexed cache fixture produced an invalid discovery candidate before verification, which left one required-coverage case incomplete. No live action-owned provider follow-up ran in that model capture. The Action gate therefore remains off. `report.json` contains the machine-scored result; `report.md` records the judgment and limitations.
+
+A separate action-owned follow-up benchmark is under `benchmark/review-quality/follow-up-v1/live-providers/`. Both pinned providers returned the expected source-confirmed incoming span in five sequential queries. The no-index control made zero provider calls and recorded required incomplete coverage. This proves the provider execution path, but it does not repair the incomplete verifier-v3 case or replace a trusted-base end-to-end model capture.
 
 ## Opt-in live-indexer evaluation
 
@@ -109,15 +111,15 @@ mise run benchmark:live-indexer
 
 This exercises the production `github/code-index` path against the cross-file cache fixture and requires the expected related span. It prints the live artifact and exits non-zero when the relationship is missing. It does not call a model. Normal CI continues to use fake provider behavior and does not download CGC.
 
-The checked-in live result is under `benchmark/review-quality/v2/live-indexer/`. In the measured cold run, CGC 0.5.7 indexed the fixture but returned partial coverage with no related span because the incoming relationship query failed. Installation took 2,036 ms, restore bookkeeping 67 ms, indexing 8,023 ms, and bounded queries 18,063 ms. Save was not attempted after the failed assertion.
+The checked-in live result is under `benchmark/review-quality/v2/live-indexer/`. In the measured cold run, CGC 0.5.7 returned complete coverage and the expected source-confirmed caller. Installation took 1,837 ms, restore bookkeeping 40 ms, indexing 7,825 ms, and bounded queries 18,048 ms. The prior partial result was a Redline host defect: its stdout limit also restricted CGC's embedded database writes.
 
 ## Evidence and subsequent enablement
 
-This comparison did not provide evidence for enabling `github/code-index`. The deterministic recordings show an upper-bound benefit when useful related source is supplied, but the live model already found every expected defect without that source. Indexed context did not improve measured quality. More importantly, the live production indexer returned partial coverage and no related caller for the cross-file fixture. The measured path added installation, indexing, query, prompt-size, and cache complexity without a demonstrated review-quality gain.
+The live production indexer now supplies the expected related caller, so provider capability is demonstrated for this fixture. The comparison still does not show a review-quality gain: the live model found every expected defect without the related source, and the indexed recording did not improve measured recall or precision. The measured path adds installation, indexing, query, prompt-size, and cache complexity.
 
 After that measurement, the owner chose to continue the indexing investment and make the published Redline action invoke its bundled index action by default. This product direction does not reinterpret the benchmark or claim a quality improvement. File-only review remains available through `indexing: disabled`, and unavailable generated context still degrades to file-only review with recorded coverage.
 
-A provider or query change must recover the expected live relationship and repeat both live evaluations before Redline claims an indexed-context quality benefit. The current result still does not justify a second provider, base index, graph delta, dynamic review query, or full impact planner.
+Redline must repeat the model-quality evaluation with complete action-owned follow-up coverage before it claims an indexed-context quality benefit or enables verifier-driven publication. Provider capability alone does not satisfy that gate.
 
 ## Adding a fixture
 

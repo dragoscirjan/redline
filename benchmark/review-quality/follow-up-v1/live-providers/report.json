@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "capturedAt": "2026-10-22T00:19:04Z",
+  "fixture": {
+    "id": "typescript-incoming-call-v1",
+    "description": "A changed cache-key function and one source-confirmed caller in a two-file TypeScript repository.",
+    "capability": "related-spans",
+    "direction": "incoming",
+    "expectedSpans": 1
+  },
+  "environment": {
+    "os": "Linux",
+    "architecture": "x86_64",
+    "kernel": "6.18.38",
+    "node": "24.21.0",
+    "python": "3.12.14"
+  },
+  "results": [
+    {
+      "mode": "cgc",
+      "provider": {
+        "id": "cgc",
+        "version": "0.5.7"
+      },
+      "capabilityStatus": "complete",
+      "sourceConfirmedSpans": 1,
+      "providerCalls": 5,
+      "followUpLatencyMs": {
+        "samples": [5963, 5972, 5976, 5988, 6083],
+        "median": 5976,
+        "p95NearestRank": 6083
+      },
+      "indexTimingsMs": {
+        "installation": 1837,
+        "restore": 40,
+        "index": 7825,
+        "query": 18048
+      }
+    },
+    {
+      "mode": "gitnexus",
+      "provider": {
+        "id": "gitnexus",
+        "version": "1.6.12"
+      },
+      "capabilityStatus": "complete",
+      "sourceConfirmedSpans": 1,
+      "providerCalls": 5,
+      "followUpLatencyMs": {
+        "samples": [141, 143, 144, 148, 153],
+        "median": 144,
+        "p95NearestRank": 153
+      },
+      "indexTimingsMs": {
+        "installation": 5935,
+        "restore": 3365,
+        "index": 0,
+        "query": 424
+      },
+      "cache": "validated-base-cache"
+    },
+    {
+      "mode": "no-index",
+      "provider": null,
+      "capabilityStatus": "unavailable",
+      "reason": "not-configured",
+      "sourceConfirmedSpans": 0,
+      "providerCalls": 0,
+      "followUpLatencyMs": {
+        "samples": [0],
+        "median": 0,
+        "p95NearestRank": 0
+      },
+      "coverage": "required-incomplete"
+    }
+  ],
+  "limits": [
+    "The provider measurements are five sequential queries against one small synthetic TypeScript fixture.",
+    "They demonstrate pinned-provider capability and bounded execution, not production latency or verifier activation quality.",
+    "The no-index result is deterministic fallback behavior and does not execute a provider."
+  ]
+}

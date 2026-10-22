@@ -32,6 +32,13 @@ case "${1:-}" in
     ;;
   query)
     [ "$mode" != 'query-fail' ] || exit 23
+    if [ "$mode" = 'query-state' ]; then
+      bytes=0
+      while [ "$bytes" -le 1048576 ]; do
+        printf '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+        bytes=$((bytes + 64))
+      done > "${database_root:?}/query-state"
+    fi
     query=${2:-}
     case "$query" in
       *repository_count*)

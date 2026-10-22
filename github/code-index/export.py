@@ -8,12 +8,11 @@ import hashlib
 import json
 import os
 import re
-import resource
+import selectors
 import shutil
 import stat
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 from typing import Any, Iterable
@@ -399,8 +398,70 @@ def parse_provider_json(raw: bytes) -> Any:
     raise ValueError("provider output did not end with a JSON array")
 
 
-def limit_query_output() -> None:
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_QUERY_OUTPUT_BYTES, MAX_QUERY_OUTPUT_BYTES))
+def stop_provider(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is None:
+        process.kill()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def run_provider_json(
+    command: list[str],
+    environment: dict[str, str],
+    timeout_seconds: int,
+) -> tuple[bool, Any | None]:
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        env=environment,
+    )
+    if process.stdout is None:
+        stop_provider(process)
+        return False, None
+
+    output = bytearray()
+    deadline = time.monotonic() + timeout_seconds
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ)
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                stop_provider(process)
+                return False, None
+            if not selector.select(remaining):
+                stop_provider(process)
+                return False, None
+            chunk = os.read(
+                process.stdout.fileno(),
+                min(64 * 1024, MAX_QUERY_OUTPUT_BYTES + 1 - len(output)),
+            )
+            if not chunk:
+                break
+            output.extend(chunk)
+            if len(output) > MAX_QUERY_OUTPUT_BYTES:
+                stop_provider(process)
+                return False, None
+    finally:
+        selector.close()
+        process.stdout.close()
+
+    try:
+        returncode = process.wait(timeout=max(0.001, deadline - time.monotonic()))
+    except subprocess.TimeoutExpired:
+        stop_provider(process)
+        return False, None
+    if returncode != 0:
+        return False, None
+    try:
+        value = parse_provider_json(bytes(output))
+    except (UnicodeDecodeError, ValueError):
+        return False, None
+    return True, value
 
 
 def run_provider(
@@ -410,33 +471,21 @@ def run_provider(
     *,
     json_output: bool = False,
 ) -> tuple[bool, Any | None]:
-    with tempfile.TemporaryFile() as stdout_file:
-        try:
-            result = subprocess.run(
-                command,
-                check=False,
-                stdin=subprocess.DEVNULL,
-                stdout=stdout_file if json_output else subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                env=environment,
-                timeout=timeout_seconds,
-                preexec_fn=limit_query_output if json_output else None,
-            )
-        except subprocess.TimeoutExpired:
-            return False, None
-        if result.returncode != 0:
-            return False, None
-        if not json_output:
-            return True, None
-        size = stdout_file.seek(0, os.SEEK_END)
-        if size > MAX_QUERY_OUTPUT_BYTES:
-            return False, None
-        stdout_file.seek(0)
-        try:
-            value = parse_provider_json(stdout_file.read())
-        except (UnicodeDecodeError, ValueError):
-            return False, None
-        return True, value
+    if json_output:
+        return run_provider_json(command, environment, timeout_seconds)
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=environment,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired:
+        return False, None
+    return result.returncode == 0, None
 
 
 def cypher_literal(value: str) -> str:

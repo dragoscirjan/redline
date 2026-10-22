@@ -1,7 +1,7 @@
 {
   "version": 1,
   "kind": "live-indexer",
-  "recordedAt": "2026-10-11T20:29:05Z",
+  "recordedAt": "2026-10-22T00:19:04Z",
   "fixtureId": "cross-file-cache-collision",
   "provider": {
     "id": "cgc",
@@ -10,18 +10,22 @@
   "run": "cold",
   "environment": "local-linux-x64",
   "command": "mise run benchmark:live-indexer",
-  "status": "partial",
-  "expectedRelationFound": false,
-  "relatedSpans": [],
-  "diagnostics": [
-    "cgc-incoming-query-failed",
-    "cgc-query-partial"
+  "status": "complete",
+  "expectedRelationFound": true,
+  "relatedSpans": [
+    {
+      "path": "src/user-service.ts",
+      "startLine": 3,
+      "endLine": 5,
+      "reason": "related-symbol-calls-changed-code"
+    }
   ],
+  "diagnostics": [],
   "timings": {
-    "installationMs": 2036,
-    "restoreMs": 67,
-    "indexMs": 8023,
-    "queryMs": 18063,
+    "installationMs": 1837,
+    "restoreMs": 40,
+    "indexMs": 7825,
+    "queryMs": 18048,
     "saveMs": null
   }
 }

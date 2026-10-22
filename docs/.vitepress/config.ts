@@ -22,6 +22,7 @@ export default defineConfig({
         text: 'Adopt',
         items: [
           { text: 'Reusable review workflow', link: '/reusable-review-workflow' },
+          { text: 'Dogfood reviews', link: '/dogfood-review' },
         ],
       },
       {

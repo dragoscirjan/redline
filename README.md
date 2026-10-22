@@ -4,7 +4,7 @@ Automated pull request code review, smaller and self-hosted: a GitHub Action tha
 
 ## How it works
 
-The review fetches the pull request's base and head commits as Git data, builds a bounded context bundle, and runs the Pi or OpenCode backend inside a digest-pinned container. Findings are schema-validated, mapped to the reviewed diff, and published through a host-side GitHub client. Pull request code is never checked out or executed.
+The review fetches the pull request's base and head commits as Git data, builds a bounded context bundle, and runs Pi or OpenCode with tools disabled and isolated generated configuration. Findings are schema-validated, mapped to the reviewed diff, and published through a host-side GitHub client. Pull request code is never checked out or executed.
 
 ## Adoption
 
@@ -14,8 +14,8 @@ Product documentation:
 
 - [GitHub composite action contract](docs/github-composite-action.md)
 - [Reusable review workflow](docs/reusable-review-workflow.md)
+- [Dogfood reviews](docs/dogfood-review.md)
 - [Runnable review configuration](docs/runnable-review-configuration.md)
-- [Container staging](docs/container-staging.md)
 - [Review reporting](docs/review-reporting.md)
 
 ## Development

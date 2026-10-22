@@ -260,6 +260,70 @@ assert artifact['status'] == 'complete'
 PY
 }
 
+@test "provider read failures stop and reap the process" {
+  python3 - "$ACTION_DIR/export.py" "$TMP_ROOT/provider.pid" <<'PY'
+import importlib.util
+import os
+from pathlib import Path
+import sys
+
+spec = importlib.util.spec_from_file_location("redline_code_index_export", sys.argv[1])
+assert spec is not None and spec.loader is not None
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+pid_file = Path(sys.argv[2])
+provider = """
+import os
+from pathlib import Path
+import sys
+import time
+
+Path(sys.argv[1]).write_text(str(os.getpid()), encoding="utf-8")
+sys.stdout.buffer.write(b"[")
+sys.stdout.buffer.flush()
+time.sleep(30)
+"""
+original_read = module.os.read
+original_select = module.selectors.DefaultSelector.select
+
+
+def fail_read(_descriptor, _length):
+    raise OSError("forced provider read failure")
+
+
+def select_then_fail_read(selector, timeout=None):
+    events = original_select(selector, timeout)
+    module.os.read = fail_read
+    return events
+
+
+module.selectors.DefaultSelector.select = select_then_fail_read
+try:
+    try:
+        module.run_provider_json(
+            [sys.executable, "-c", provider, str(pid_file)],
+            os.environ.copy(),
+            5,
+        )
+    except OSError as error:
+        assert str(error) == "forced provider read failure"
+    else:
+        raise AssertionError("provider read failure was not propagated")
+finally:
+    module.os.read = original_read
+    module.selectors.DefaultSelector.select = original_select
+
+provider_pid = int(pid_file.read_text(encoding="utf-8"))
+try:
+    os.kill(provider_pid, 0)
+except ProcessLookupError:
+    pass
+else:
+    os.kill(provider_pid, 9)
+    raise AssertionError("provider process was not stopped")
+PY
+}
+
 @test "the base cache is reused without re-indexing after a new head commit" {
   prepare_action
   build_action '' success

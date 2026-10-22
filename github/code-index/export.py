@@ -425,30 +425,36 @@ def run_provider_json(
 
     output = bytearray()
     deadline = time.monotonic() + timeout_seconds
-    selector = selectors.DefaultSelector()
-    selector.register(process.stdout, selectors.EVENT_READ)
+    selector: selectors.BaseSelector | None = None
     try:
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                stop_provider(process)
-                return False, None
-            if not selector.select(remaining):
-                stop_provider(process)
-                return False, None
-            chunk = os.read(
-                process.stdout.fileno(),
-                min(64 * 1024, MAX_QUERY_OUTPUT_BYTES + 1 - len(output)),
-            )
-            if not chunk:
-                break
-            output.extend(chunk)
-            if len(output) > MAX_QUERY_OUTPUT_BYTES:
-                stop_provider(process)
-                return False, None
-    finally:
-        selector.close()
-        process.stdout.close()
+        try:
+            selector = selectors.DefaultSelector()
+            selector.register(process.stdout, selectors.EVENT_READ)
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    stop_provider(process)
+                    return False, None
+                if not selector.select(remaining):
+                    stop_provider(process)
+                    return False, None
+                chunk = os.read(
+                    process.stdout.fileno(),
+                    min(64 * 1024, MAX_QUERY_OUTPUT_BYTES + 1 - len(output)),
+                )
+                if not chunk:
+                    break
+                output.extend(chunk)
+                if len(output) > MAX_QUERY_OUTPUT_BYTES:
+                    stop_provider(process)
+                    return False, None
+        finally:
+            if selector is not None:
+                selector.close()
+            process.stdout.close()
+    except BaseException:
+        stop_provider(process)
+        raise
 
     try:
         returncode = process.wait(timeout=max(0.001, deadline - time.monotonic()))

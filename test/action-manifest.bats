@@ -4,6 +4,7 @@ setup() {
   ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   ACTION="$ROOT/github/action.yaml"
   REUSABLE_WORKFLOW="$ROOT/.github/workflows/code-review.yml"
+  DOGFOOD_WORKFLOW="$ROOT/.github/workflows/dogfood-review.yml"
 }
 
 @test "action declares the fixed review input surface" {
@@ -97,6 +98,14 @@ PY
   ! grep -Fq 'report-style: ${{ inputs.report-style }}' "$REUSABLE_WORKFLOW"
   ! grep -Fq 'credential-isolation: ${{ inputs.credential-isolation }}' "$REUSABLE_WORKFLOW"
   ! grep -Fq 'container-engine: ${{ inputs.container-engine }}' "$REUSABLE_WORKFLOW"
+}
+
+@test "dogfood workflow gates the complete review input set on model credentials" {
+  grep -Fq "backend: \${{ secrets.model-auth != '' && 'pi' || '' }}" "$DOGFOOD_WORKFLOW"
+  grep -Fq "model-config: \${{ secrets.model-auth != '' && '{\"provider\":\"openrouter\",\"endpoint\":\"https://openrouter.ai/api/v1\",\"model\":\"z-ai/glm-5.3-flash\"}' || '' }}" "$DOGFOOD_WORKFLOW"
+  grep -Fq 'model-auth: ${{ secrets.model-auth }}' "$DOGFOOD_WORKFLOW"
+  ! grep -Fq 'Install pi harness binary' "$DOGFOOD_WORKFLOW"
+  ! grep -Fq 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent' "$DOGFOOD_WORKFLOW"
 }
 
 @test "action keeps the context bundle step and both artifact uploads" {

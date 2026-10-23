@@ -16,7 +16,6 @@ import { join } from 'node:path';
 import {
   isRecord,
   nodeProcessSpawner,
-  parseJsonLines,
   runBoundedProcess,
   type BoundedRunResult,
   type ProcessSpawner,
@@ -31,7 +30,7 @@ import type {
 } from './types.js';
 
 /** Event boundaries forwarded as heartbeat lines; event content never is. */
-const PI_HEARTBEAT_EVENTS = new Set(['message_end', 'turn_end', 'agent_end']);
+const PI_HEARTBEAT_EVENTS = new Set(['message_end', 'turn_end', 'agent_end', 'agent_settled']);
 
 /** Event kinds whose `delta` is the model's readable streaming text. */
 const PI_TEXT_DELTA_EVENTS = new Set(['thinking_delta', 'text_delta']);
@@ -40,6 +39,44 @@ const PI_TEXT_END_EVENTS = new Set(['thinking_end', 'text_end']);
 
 /** Per-run cap on forwarded readable text, keeping the run log bounded. */
 const MAX_STREAMED_TEXT_BYTES = 32 * 1024;
+/** Bounded suffixes recorded in no-assistant-text diagnostics. */
+const MAX_DIAGNOSTIC_TYPES = 3;
+
+type PiDiagnosticEventType =
+  | 'session'
+  | 'agent_start'
+  | 'turn_start'
+  | 'message_start'
+  | 'message_update'
+  | 'message_end'
+  | 'turn_end'
+  | 'agent_end'
+  | 'agent_settled'
+  | 'tool_start'
+  | 'tool_update'
+  | 'tool_end'
+  | 'other';
+
+type PiDiagnosticContentType = 'text' | 'thinking' | 'toolCall' | 'image' | 'other' | 'invalid';
+type PiDiagnosticStopReason = 'pending' | 'stop' | 'length' | 'toolUse' | 'error' | 'aborted' | 'deferred' | 'other';
+
+export type PiNoAssistantTextClassification =
+  | 'capture-truncated'
+  | 'malformed-events'
+  | 'missing-turn-end'
+  | 'missing-text-parts'
+  | 'empty-text'
+  | 'model-output-budget-exhausted';
+
+export interface PiAssistantOutputInspection {
+  readonly text: string | undefined;
+  readonly classification: PiNoAssistantTextClassification | undefined;
+  readonly malformedEvents: number;
+  readonly finalEventTypes: readonly PiDiagnosticEventType[];
+  readonly contentPartTypes: readonly PiDiagnosticContentType[];
+  readonly stopReason: PiDiagnosticStopReason | null;
+  readonly outputTokens: number | null;
+}
 
 /**
  * Decodes one pi NDJSON event line into the readable output the run log
@@ -110,30 +147,192 @@ function buildAgentConfig(settings: HarnessSettings): string {
   return `${JSON.stringify(config, null, 2)}\n`;
 }
 
+function diagnosticEventType(value: unknown): PiDiagnosticEventType {
+  switch (value) {
+    case 'session':
+    case 'agent_start':
+    case 'turn_start':
+    case 'message_start':
+    case 'message_update':
+    case 'message_end':
+    case 'turn_end':
+    case 'agent_end':
+    case 'agent_settled':
+      return value;
+    case 'tool_execution_start':
+      return 'tool_start';
+    case 'tool_execution_update':
+      return 'tool_update';
+    case 'tool_execution_end':
+      return 'tool_end';
+    default:
+      return 'other';
+  }
+}
+
+function diagnosticContentType(value: unknown): PiDiagnosticContentType {
+  switch (value) {
+    case 'text':
+    case 'thinking':
+    case 'toolCall':
+    case 'image':
+      return value;
+    default:
+      return typeof value === 'string' ? 'other' : 'invalid';
+  }
+}
+
+function diagnosticStopReason(value: unknown): PiDiagnosticStopReason | null {
+  switch (value) {
+    case 'pending':
+    case 'stop':
+    case 'length':
+    case 'toolUse':
+    case 'error':
+    case 'aborted':
+    case 'deferred':
+      return value;
+    default:
+      return typeof value === 'string' ? 'other' : null;
+  }
+}
+
+function boundedNumber(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
+  return Math.min(Math.floor(value), Number.MAX_SAFE_INTEGER);
+}
+
+/**
+ * Inspects Pi's retained NDJSON without retaining event payloads in the
+ * result. Only bounded type labels and numeric counters leave this function.
+ */
+export function inspectPiAssistantOutput(stdout: string, stdoutTruncated = false): PiAssistantOutputInspection {
+  let lastTurnEnd: Record<string, unknown> | undefined;
+  let lastAssistantMessage: Record<string, unknown> | undefined;
+  let settledAfterLastTurnEnd = false;
+  let malformedEvents = 0;
+  const finalEventTypes: PiDiagnosticEventType[] = [];
+
+  for (const line of stdout.split(/\r?\n/u)) {
+    if (line.trim().length === 0) continue;
+    let event: unknown;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      malformedEvents += 1;
+      continue;
+    }
+    if (!isRecord(event) || typeof event['type'] !== 'string') {
+      malformedEvents += 1;
+      continue;
+    }
+    finalEventTypes.push(diagnosticEventType(event['type']));
+    if (finalEventTypes.length > MAX_DIAGNOSTIC_TYPES) finalEventTypes.shift();
+    if (event['type'] === 'turn_start') settledAfterLastTurnEnd = false;
+    if (event['type'] === 'turn_end') {
+      lastTurnEnd = event;
+      settledAfterLastTurnEnd = false;
+    }
+    if (event['type'] === 'agent_settled' && lastTurnEnd !== undefined) settledAfterLastTurnEnd = true;
+    if (event['type'] === 'turn_end' || event['type'] === 'message_end') {
+      const message = event['message'];
+      if (isRecord(message) && message['role'] === 'assistant') lastAssistantMessage = message;
+    }
+  }
+
+  const turnMessage = lastTurnEnd?.['message'];
+  const finalMessage = isRecord(turnMessage) ? turnMessage : lastAssistantMessage;
+  const diagnosticContent = finalMessage?.['content'];
+  const contentPartTypes = Array.isArray(diagnosticContent)
+    ? diagnosticContent
+        .slice(-MAX_DIAGNOSTIC_TYPES)
+        .map((part) => diagnosticContentType(isRecord(part) ? part['type'] : undefined))
+    : [];
+  const stopReason = diagnosticStopReason(finalMessage?.['stopReason']);
+  const usage = finalMessage?.['usage'];
+  const outputTokens = boundedNumber(isRecord(usage) ? usage['output'] : undefined);
+  const turnContent = isRecord(turnMessage) ? turnMessage['content'] : undefined;
+  const textParts = Array.isArray(turnContent)
+    ? turnContent.filter((part) => isRecord(part) && part['type'] === 'text' && typeof part['text'] === 'string')
+    : [];
+  const text = textParts.map((part) => (part as Record<string, unknown>)['text'] as string).join('');
+
+  if (text.length > 0 && (!stdoutTruncated || settledAfterLastTurnEnd)) {
+    return { text, classification: undefined, malformedEvents, finalEventTypes, contentPartTypes, stopReason, outputTokens };
+  }
+
+  let classification: PiNoAssistantTextClassification;
+  if (stdoutTruncated) classification = 'capture-truncated';
+  else if (stopReason === 'length') classification = 'model-output-budget-exhausted';
+  else if (malformedEvents > 0) classification = 'malformed-events';
+  else if (lastTurnEnd === undefined) classification = 'missing-turn-end';
+  else if (!Array.isArray(turnContent) || textParts.length === 0) classification = 'missing-text-parts';
+  else classification = 'empty-text';
+
+  return {
+    text: undefined,
+    classification,
+    malformedEvents,
+    finalEventTypes,
+    contentPartTypes,
+    stopReason,
+    outputTokens,
+  };
+}
+
 /**
  * Extracts the assistant text from Pi's newline-delimited JSON event stream.
  * The final `turn_end` event carries the assistant message of the turn.
  */
 export function extractPiAssistantText(stdout: string): string | undefined {
-  let lastTurnEnd: Record<string, unknown> | undefined;
-  for (const event of parseJsonLines(stdout)) {
-    if (event['type'] === 'turn_end') lastTurnEnd = event;
-  }
-  if (lastTurnEnd === undefined) return undefined;
-  const message = lastTurnEnd['message'];
-  if (!isRecord(message) || !Array.isArray(message['content'])) return undefined;
-  const parts: string[] = [];
-  for (const part of message['content']) {
-    if (isRecord(part) && part['type'] === 'text' && typeof part['text'] === 'string') {
-      parts.push(part['text']);
-    }
-  }
-  const text = parts.join('');
-  return text.length > 0 ? text : undefined;
+  return inspectPiAssistantOutput(stdout).text;
+}
+
+function diagnosticCause(classification: PiNoAssistantTextClassification): string {
+  if (classification === 'capture-truncated') return 'redline-capture';
+  if (classification === 'model-output-budget-exhausted') return 'model-output-budget';
+  if (classification === 'empty-text' || classification === 'missing-text-parts') return 'provider-output';
+  return 'pi-event-stream';
+}
+
+function safeMetric(value: number | null | undefined): number | null {
+  return boundedNumber(value);
+}
+
+/** Serializes a schema-tagged, metadata-only diagnostic below the 500-character artifact limit. */
+function noAssistantTextDiagnostic(
+  result: BoundedRunResult,
+  inspection: PiAssistantOutputInspection,
+  timeToFirstTextMs: number | null,
+): string {
+  const classification = inspection.classification ?? 'missing-text-parts';
+  const retainedStdoutBytes = Buffer.byteLength(result.stdout, 'utf8');
+  const retainedStderrBytes = Buffer.byteLength(result.stderr, 'utf8');
+  const diagnostic = {
+    schema: 'pi-no-text/v1',
+    class: classification,
+    cause: diagnosticCause(classification),
+    exit: result.code,
+    durationMs: safeMetric(result.durationMs),
+    startupMs: safeMetric(result.processStartupMs),
+    firstTextMs: safeMetric(timeToFirstTextMs),
+    // Stream tuples are [total bytes, retained bytes, truncated].
+    stdout: [safeMetric(result.stdoutBytes) ?? retainedStdoutBytes, retainedStdoutBytes, result.stdoutTruncated],
+    stderr: [safeMetric(result.stderrBytes) ?? retainedStderrBytes, retainedStderrBytes, result.stderrTruncated ?? false],
+    malformed: inspection.malformedEvents,
+    events: inspection.finalEventTypes,
+    parts: inspection.contentPartTypes,
+    stop: inspection.stopReason,
+    outputTokens: inspection.outputTokens,
+  };
+  const serialized = JSON.stringify(diagnostic);
+  if (serialized.length <= 500) return serialized;
+  return JSON.stringify({ ...diagnostic, events: [], parts: [] });
 }
 
 function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null): HarnessRun {
-  const text = result.code === 0 ? extractPiAssistantText(result.stdout) : undefined;
+  const inspection = result.code === 0 ? inspectPiAssistantOutput(result.stdout, result.stdoutTruncated) : undefined;
+  const text = inspection?.text;
   const telemetry = {
     processStartupMs: result.processStartupMs ?? null,
     timeToFirstTextMs,
@@ -154,16 +353,15 @@ function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null
     };
   }
   if (text === undefined) {
+    const diagnostic = result.code === 0 && inspection !== undefined
+      ? noAssistantTextDiagnostic(result, inspection, timeToFirstTextMs)
+      : result.stderr || result.error || `pi exited with code ${result.code ?? 'null'} and produced no assistant text`;
     return {
       status: 'failed',
       harness: 'pi',
       exitCode: result.code,
       text: '',
-      diagnostic:
-        result.stderr ||
-        (result.error !== undefined
-          ? result.error
-          : `pi exited with code ${result.code ?? 'null'} and produced no assistant text`),
+      diagnostic,
       durationMs: result.durationMs,
       telemetry,
     };

@@ -1,0 +1,2 @@
+{"type":"message_start","message":{"role":"assistant"}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"RETAINED_OUTPUT_MARKER"}}

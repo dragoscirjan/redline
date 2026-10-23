@@ -1,0 +1,2 @@
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"complete but uncommitted"}],"stopReason":"stop","usage":{"output":4}}}
+{"type":"agent_end"}

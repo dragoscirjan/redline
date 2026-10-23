@@ -1,0 +1,3 @@
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"thinking","thinking":"PRIVATE_REASONING_MARKER"}],"stopReason":"length","usage":{"output":256}}}
+{"type":"turn_end","message":{"role":"assistant","content":[{"type":"thinking","thinking":"PRIVATE_REASONING_MARKER"}],"stopReason":"length","usage":{"output":256}}}
+{"type":"agent_end"}

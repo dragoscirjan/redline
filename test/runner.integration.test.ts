@@ -779,6 +779,41 @@ describe('runFileReviews', () => {
     }
   });
 
+  it('persists a bounded Pi no-text diagnostic without model or stderr content', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      const diagnostic = JSON.stringify({
+        schema: 'pi-no-text/v1',
+        class: 'missing-text-parts',
+        cause: 'provider-output',
+        exit: 0,
+        durationMs: 10,
+        startupMs: 1,
+        firstTextMs: null,
+        stdout: [12, 12, false],
+        stderr: [20, 20, false],
+        malformed: 0,
+        events: ['message_end', 'turn_end', 'agent_end'],
+        parts: ['thinking'],
+        stop: 'stop',
+        outputTokens: 8,
+      });
+      executor.script([{ status: 'failed', diagnostic }]);
+
+      await runFileReviews({ environment: environment.review!, executor });
+      const record = JSON.parse(
+        await readFile(join(fixture.output, 'reviews', '000001.json'), 'utf8'),
+      ) as { reason?: string };
+
+      expect(record.reason).toBe(diagnostic);
+      expect(record.reason).not.toMatch(/prompt|source text|raw output|reasoning|credential|stderr content/u);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('skips files the bundle marks as not reviewed', async () => {
     const fixture = await createBundleFixture({ reviewed: false });
     try {

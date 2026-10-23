@@ -45,6 +45,16 @@ core makes.
   enters a process argument.
 - Assistant text is extracted from the final `turn_end` event of Pi's
   newline-delimited JSON stream.
+- When Pi exits 0 without final assistant text, the file is omitted without
+  an automatic retry. Its reason is a bounded `pi-no-text/v1` JSON diagnostic
+  that classifies capture truncation, malformed events, a missing `turn_end`,
+  missing or empty text parts, or model output-budget exhaustion. The payload
+  contains only exit status, timings, byte counts, truncation flags, bounded
+  event/content-part types, stop reason, and output-token count. Its `stdout`
+  and `stderr` tuples are `[total bytes, retained bytes, truncated]`; prompt,
+  source, raw output, stderr text, reasoning, and credentials are excluded.
+  Truncated output is accepted only when a retained `agent_settled` event
+  confirms that the selected `turn_end` is final.
 
 ### OpenCode
 

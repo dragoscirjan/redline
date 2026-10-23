@@ -28,7 +28,7 @@
   "targets": {
     "warmIndexP95Ms": 600000,
     "coldIndexP95Ms": 900000,
-    "minimumLiveRuns": 5
+    "minimumLiveCorpusRuns": 5
   },
   "quality": {
     "passed": true,

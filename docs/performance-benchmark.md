@@ -38,7 +38,7 @@ A live capture uses the pinned profile:
 - CGC 0.5.7 context;
 - sequential execution.
 
-Run at least five repetitions to make the SLO gate eligible:
+Run at least five fixed-corpus repetitions to make the SLO gate eligible. This minimum applies to benchmark executions, not to the number of historical workflow-stage samples in each cache condition:
 
 ```bash
 REDLINE_LIVE_BENCHMARK=1 \

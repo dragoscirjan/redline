@@ -50,7 +50,7 @@ interface PerformanceConfiguration {
 interface PerformanceTargets {
   readonly warmIndexP95Ms: number;
   readonly coldIndexP95Ms: number;
-  readonly minimumLiveRuns: number;
+  readonly minimumLiveCorpusRuns: number;
 }
 
 interface IndexSample extends CodeContextTimings {
@@ -276,7 +276,11 @@ function parseProfile(value: unknown): PerformanceProfile {
     throw new Error('performance profile.configuration.execution must be sequential');
   }
   const targets = record(input['targets'], 'performance profile.targets');
-  exactKeys(targets, ['warmIndexP95Ms', 'coldIndexP95Ms', 'minimumLiveRuns'], 'performance profile.targets');
+  exactKeys(
+    targets,
+    ['warmIndexP95Ms', 'coldIndexP95Ms', 'minimumLiveCorpusRuns'],
+    'performance profile.targets',
+  );
   const conditionsInput = input['conditions'];
   if (!Array.isArray(conditionsInput) || conditionsInput.length !== 2) {
     throw new Error('performance profile.conditions must contain warm-index and cold-index');
@@ -352,7 +356,12 @@ function parseProfile(value: unknown): PerformanceProfile {
     targets: {
       warmIndexP95Ms: integer(targets['warmIndexP95Ms'], 'performance profile.targets.warmIndexP95Ms', 1),
       coldIndexP95Ms: integer(targets['coldIndexP95Ms'], 'performance profile.targets.coldIndexP95Ms', 1),
-      minimumLiveRuns: integer(targets['minimumLiveRuns'], 'performance profile.targets.minimumLiveRuns', 1, MAX_RUNS),
+      minimumLiveCorpusRuns: integer(
+        targets['minimumLiveCorpusRuns'],
+        'performance profile.targets.minimumLiveCorpusRuns',
+        1,
+        MAX_RUNS,
+      ),
     },
     conditions,
   };
@@ -759,7 +768,9 @@ function conditionResults(
     const targetMs = condition.id === 'warm-index'
       ? profile.targets.warmIndexP95Ms
       : profile.targets.coldIndexP95Ms;
-    const sloEligible = source === 'live' && runs.length >= profile.targets.minimumLiveRuns && quality.passed;
+    const sloEligible = source === 'live'
+      && runs.length >= profile.targets.minimumLiveCorpusRuns
+      && quality.passed;
     const withinTarget = values.p95Ms <= targetMs;
     return {
       id: condition.id,

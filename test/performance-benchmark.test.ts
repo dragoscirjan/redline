@@ -67,6 +67,7 @@ describe('review performance benchmark', () => {
         incompletePublicationRuns: 0,
       },
     });
+    expect(report.targets.minimumLiveCorpusRuns).toBe(5);
     expect(report.runs).toHaveLength(1);
     const run = report.runs[0]!;
     expect(run.modeledReviewMs).toBe(1_208_000);
@@ -191,6 +192,7 @@ describe('review performance benchmark', () => {
 
   it('loads bounded production index samples for both cache conditions', async () => {
     const profile = await loadPerformanceProfile(PROFILE);
+    expect(profile.targets.minimumLiveCorpusRuns).toBe(5);
     expect(profile.conditions).toHaveLength(2);
     expect(profile.conditions[0]).toMatchObject({ id: 'warm-index', cache: 'restored' });
     expect(profile.conditions[0]?.samples).toHaveLength(3);

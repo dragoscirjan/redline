@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "issue": 150,
+  "observedAt": "2026-10-23T23:25:03Z",
+  "mode": "live-pi-local-openai-compatible-mock",
+  "piVersion": "1.3.0",
+  "sourceBase": "d1883d42197ae8b491f3cf7c66ef5a338181f597",
+  "result": {
+    "status": "failed",
+    "exitCode": 0,
+    "diagnostic": {
+      "schema": "pi-no-text/v1",
+      "class": "missing-text-parts",
+      "cause": "provider-output",
+      "exit": 0,
+      "durationMs": 189,
+      "startupMs": 4,
+      "firstTextMs": null,
+      "stdout": [
+        2810,
+        2810,
+        false
+      ],
+      "stderr": [
+        0,
+        0,
+        false
+      ],
+      "malformed": 0,
+      "events": [
+        "turn_end",
+        "agent_end",
+        "other"
+      ],
+      "parts": [],
+      "stop": "stop",
+      "outputTokens": 0
+    }
+  },
+  "historicalObservations": [
+    {
+      "workflowRun": 39855691750,
+      "path": "test/action-manifest.bats",
+      "durationMs": 101572,
+      "finalHeartbeatEvents": [
+        "message_end",
+        "turn_end",
+        "agent_end"
+      ],
+      "legacyReason": "pi exited with code 0 and produced no assistant text"
+    },
+    {
+      "workflowRun": 39856452560,
+      "path": ".github/workflows/dogfood-review.yml",
+      "durationMs": 534540,
+      "finalHeartbeatEvents": [
+        "message_end",
+        "turn_end",
+        "agent_end"
+      ],
+      "legacyReason": "pi exited with code 0 and produced no assistant text"
+    }
+  ],
+  "dataPolicy": {
+    "rawStdoutPersisted": false,
+    "rawStderrPersisted": false,
+    "promptPersisted": false,
+    "modelContentPersisted": false,
+    "reasoningPersisted": false,
+    "credentialPersisted": false
+  }
+}

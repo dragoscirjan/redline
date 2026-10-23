@@ -1,0 +1,3 @@
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":""}],"stopReason":"stop","usage":{"output":0}}}
+{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":""}],"stopReason":"stop","usage":{"output":0}}}
+{"type":"agent_end"}

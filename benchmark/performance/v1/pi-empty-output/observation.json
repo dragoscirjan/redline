@@ -13,7 +13,7 @@
       "class": "missing-text-parts",
       "cause": "provider-output",
       "exit": 0,
-      "durationMs": 189,
+      "durationMs": 158,
       "startupMs": 4,
       "firstTextMs": null,
       "stdout": [
@@ -30,7 +30,7 @@
       "events": [
         "turn_end",
         "agent_end",
-        "other"
+        "agent_settled"
       ],
       "parts": [],
       "stop": "stop",

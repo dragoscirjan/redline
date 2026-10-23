@@ -314,6 +314,38 @@ describe('inspectPiAssistantOutput', () => {
     expect(inspection.classification).toBe(classification);
     expect(inspection).toMatchObject(causeEvidence);
   });
+
+  it('accepts retained text after Pi confirms the selected turn is settled', () => {
+    const stdout = [
+      JSON.stringify({
+        type: 'turn_end',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'complete' }] },
+      }),
+      JSON.stringify({ type: 'agent_end' }),
+      JSON.stringify({ type: 'agent_settled', aborted: false }),
+    ].join('\n');
+
+    const inspection = inspectPiAssistantOutput(stdout, true);
+
+    expect(inspection.text).toBe('complete');
+    expect(inspection.classification).toBeUndefined();
+    expect(inspection.finalEventTypes).toEqual(['turn_end', 'agent_end', 'agent_settled']);
+  });
+
+  it('rejects retained text when truncation hides whether the selected turn settled', () => {
+    const stdout = [
+      JSON.stringify({
+        type: 'turn_end',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'possibly stale' }] },
+      }),
+      JSON.stringify({ type: 'agent_end' }),
+    ].join('\n');
+
+    const inspection = inspectPiAssistantOutput(stdout, true);
+
+    expect(inspection.text).toBeUndefined();
+    expect(inspection.classification).toBe('capture-truncated');
+  });
 });
 
 describe('extractPiAssistantText', () => {

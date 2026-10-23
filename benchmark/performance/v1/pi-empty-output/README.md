@@ -6,7 +6,7 @@ Issue [#150](https://github.com/dragoscirjan/redline/issues/150) requires a boun
 
 On 2026-10-23, Pi 1.3.0 ran through Redline's production Pi executor against the repository's local OpenAI-compatible mock endpoint. The endpoint returned an empty assistant response with a normal stop. Pi emitted its live event stream and exited with status 0.
 
-The `pi-no-text/v1` diagnostic classified the result as `missing-text-parts` with cause `provider-output`. The retained stream was complete: 2,810 of 2,810 stdout bytes, no stderr, no malformed events, and no final content-part types. The final bounded event-type suffix was `turn_end`, `agent_end`, `other`.
+The `pi-no-text/v1` diagnostic classified the result as `missing-text-parts` with cause `provider-output`. The retained stream was complete: 2,810 of 2,810 stdout bytes, no stderr, no malformed events, and no final content-part types. The final bounded event-type suffix was `turn_end`, `agent_end`, `agent_settled`.
 
 This controlled run reproduces the exit-0/no-assistant-text symptom and verifies the new classification path. It does not claim that the same provider behavior caused the two earlier intermittent dogfood failures.
 

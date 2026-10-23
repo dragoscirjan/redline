@@ -30,7 +30,7 @@ import type {
 } from './types.js';
 
 /** Event boundaries forwarded as heartbeat lines; event content never is. */
-const PI_HEARTBEAT_EVENTS = new Set(['message_end', 'turn_end', 'agent_end']);
+const PI_HEARTBEAT_EVENTS = new Set(['message_end', 'turn_end', 'agent_end', 'agent_settled']);
 
 /** Event kinds whose `delta` is the model's readable streaming text. */
 const PI_TEXT_DELTA_EVENTS = new Set(['thinking_delta', 'text_delta']);
@@ -51,6 +51,7 @@ type PiDiagnosticEventType =
   | 'message_end'
   | 'turn_end'
   | 'agent_end'
+  | 'agent_settled'
   | 'tool_start'
   | 'tool_update'
   | 'tool_end'
@@ -156,6 +157,7 @@ function diagnosticEventType(value: unknown): PiDiagnosticEventType {
     case 'message_end':
     case 'turn_end':
     case 'agent_end':
+    case 'agent_settled':
       return value;
     case 'tool_execution_start':
       return 'tool_start';
@@ -207,6 +209,7 @@ function boundedNumber(value: unknown): number | null {
 export function inspectPiAssistantOutput(stdout: string, stdoutTruncated = false): PiAssistantOutputInspection {
   let lastTurnEnd: Record<string, unknown> | undefined;
   let lastAssistantMessage: Record<string, unknown> | undefined;
+  let settledAfterLastTurnEnd = false;
   let malformedEvents = 0;
   const finalEventTypes: PiDiagnosticEventType[] = [];
 
@@ -225,7 +228,12 @@ export function inspectPiAssistantOutput(stdout: string, stdoutTruncated = false
     }
     finalEventTypes.push(diagnosticEventType(event['type']));
     if (finalEventTypes.length > MAX_DIAGNOSTIC_TYPES) finalEventTypes.shift();
-    if (event['type'] === 'turn_end') lastTurnEnd = event;
+    if (event['type'] === 'turn_start') settledAfterLastTurnEnd = false;
+    if (event['type'] === 'turn_end') {
+      lastTurnEnd = event;
+      settledAfterLastTurnEnd = false;
+    }
+    if (event['type'] === 'agent_settled' && lastTurnEnd !== undefined) settledAfterLastTurnEnd = true;
     if (event['type'] === 'turn_end' || event['type'] === 'message_end') {
       const message = event['message'];
       if (isRecord(message) && message['role'] === 'assistant') lastAssistantMessage = message;
@@ -249,7 +257,7 @@ export function inspectPiAssistantOutput(stdout: string, stdoutTruncated = false
     : [];
   const text = textParts.map((part) => (part as Record<string, unknown>)['text'] as string).join('');
 
-  if (!stdoutTruncated && text.length > 0) {
+  if (text.length > 0 && (!stdoutTruncated || settledAfterLastTurnEnd)) {
     return { text, classification: undefined, malformedEvents, finalEventTypes, contentPartTypes, stopReason, outputTokens };
   }
 

@@ -53,6 +53,8 @@ core makes.
   event/content-part types, stop reason, and output-token count. Its `stdout`
   and `stderr` tuples are `[total bytes, retained bytes, truncated]`; prompt,
   source, raw output, stderr text, reasoning, and credentials are excluded.
+  Truncated output is accepted only when a retained `agent_settled` event
+  confirms that the selected `turn_end` is final.
 
 ### OpenCode
 

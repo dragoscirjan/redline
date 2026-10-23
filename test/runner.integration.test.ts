@@ -486,14 +486,24 @@ describe('runFileReviews', () => {
         { text: reviewDocument({ version: 2, fileId: '000001', outcome: 'clean', findings: [] }) },
       ]);
       const progress: string[] = [];
+      const validated: unknown[] = [];
       const result = await runFileReviews({
         environment: environment.review!,
         executor,
+        onFileValidated: (event) => validated.push(event),
         onFileDone: (record) => progress.push(`${record.path}: ${record.outcome}`),
       });
 
       expect(result.exitCode).toBe(0);
       expect(progress).toEqual(['src/example.ts: clean']);
+      expect(validated).toEqual([{
+        fileId: '000001',
+        path: 'src/example.ts',
+        outcome: 'clean',
+        durationMs: 1,
+        findingCount: 0,
+        rejectedCandidateCount: 0,
+      }]);
     } finally {
       await fixture.cleanup();
     }

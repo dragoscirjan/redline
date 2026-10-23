@@ -49,6 +49,15 @@ import { createReviewWriter, type FollowUpArtifact, type VerificationArtifact } 
 const MAX_REASON_CHARS = 500;
 export const VERIFICATION_TIMEOUT_MS = 10 * 60 * 1_000;
 
+export interface FileReviewValidationEvent {
+  readonly fileId: string;
+  readonly path: string;
+  readonly outcome: FileReviewRecord['outcome'];
+  readonly durationMs: number;
+  readonly findingCount: number;
+  readonly rejectedCandidateCount: number;
+}
+
 export interface ReviewRunInput {
   readonly environment: ReviewEnvironment;
   /** Executor override for tests; defaults to the registry for the harness. */
@@ -70,10 +79,10 @@ export interface ReviewRunInput {
   readonly onFileStart?: ((record: { readonly path: string }) => void) | undefined;
   /**
    * Called after model output and review validation complete, immediately
-   * before the per-file record is written. Performance tooling uses this
-   * boundary without observing prompt or model content.
+   * before the per-file record is written. The bounded projection excludes
+   * prompts, raw model output, diagnostics, and verification artifacts.
    */
-  readonly onFileValidated?: ((record: FileReviewRecord) => void) | undefined;
+  readonly onFileValidated?: ((event: FileReviewValidationEvent) => void) | undefined;
   /**
    * Live harness output tap while a file's prompt runs. Harnesses forward
    * bounded heartbeat lines and readable text fragments (redacted and
@@ -611,7 +620,14 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
         input.harnessStreamMode,
         input.verifyCandidates,
       );
-      input.onFileValidated?.(record);
+      input.onFileValidated?.({
+        fileId: record.fileId,
+        path: record.path,
+        outcome: record.outcome,
+        durationMs: record.durationMs,
+        findingCount: record.findings.length,
+        rejectedCandidateCount: record.rejectedCandidates.length,
+      });
       records.push(record);
       await writer.writeFileReview(record);
       input.onFileDone?.(record);

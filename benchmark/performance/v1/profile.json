@@ -67,6 +67,38 @@
           "indexMs": 0,
           "queryMs": 20913,
           "saveMs": null
+        },
+        {
+          "source": "https://github.com/dragoscirjan/redline/actions/runs/39851845510",
+          "checkoutFetchMs": 2028,
+          "runtimeSetupMs": 626,
+          "dependencyInstallBuildMs": 6903,
+          "harnessInstallMs": 8020,
+          "contextBundleMs": 145,
+          "reviewValidationWritingMs": 141,
+          "publicationMs": 2765,
+          "otherMs": 6571,
+          "installationMs": 2785,
+          "restoreMs": 1403,
+          "indexMs": 0,
+          "queryMs": 21140,
+          "saveMs": null
+        },
+        {
+          "source": "https://github.com/dragoscirjan/redline/actions/runs/39850826196",
+          "checkoutFetchMs": 1026,
+          "runtimeSetupMs": 3115,
+          "dependencyInstallBuildMs": 8078,
+          "harnessInstallMs": 9019,
+          "contextBundleMs": 140,
+          "reviewValidationWritingMs": 125,
+          "publicationMs": 2508,
+          "otherMs": 4975,
+          "installationMs": 2225,
+          "restoreMs": 620,
+          "indexMs": 0,
+          "queryMs": 21064,
+          "saveMs": null
         }
       ]
     },

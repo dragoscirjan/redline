@@ -195,7 +195,7 @@ describe('review performance benchmark', () => {
     expect(profile.targets.minimumLiveCorpusRuns).toBe(5);
     expect(profile.conditions).toHaveLength(2);
     expect(profile.conditions[0]).toMatchObject({ id: 'warm-index', cache: 'restored' });
-    expect(profile.conditions[0]?.samples).toHaveLength(3);
+    expect(profile.conditions[0]?.samples).toHaveLength(5);
     expect(profile.conditions[1]).toMatchObject({ id: 'cold-index', cache: 'built' });
     expect(profile.conditions[1]?.samples).toHaveLength(5);
     expect(profile.conditions[1]?.samples.some((sample) => sample.indexMs > 0)).toBe(true);

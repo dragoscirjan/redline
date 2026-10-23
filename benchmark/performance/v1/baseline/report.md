@@ -12,21 +12,21 @@
 
 | Condition | Cache | Samples | Index p50 | Index p95 | Total p50 | Total p95 | Maximum | Target | SLO gate |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| warm-index | restored | 3 | 23.7 s | 23.8 s | 1255.7 s | 1256.4 s | 1256.4 s | 600.0 s | not eligible |
+| warm-index | restored | 5 | 23.8 s | 25.3 s | 1256.4 s | 1260.8 s | 1260.8 s | 600.0 s | not eligible |
 | cold-index | built | 5 | 130.3 s | 242.1 s | 1362.7 s | 1474.3 s | 1474.3 s | 900.0 s | not eligible |
 
 ## Production workflow stage medians
 
 | Condition | Checkout/fetch | Runtime setup | Dependency install/build | Harness install | Context bundle | Validation/writing | Publication | Other bounded overhead |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| warm-index | 1.0 s | 0.9 s | 6.8 s | 9.0 s | 0.2 s | 0.2 s | 2.3 s | 4.8 s |
+| warm-index | 1.0 s | 0.9 s | 6.9 s | 9.0 s | 0.1 s | 0.1 s | 2.5 s | 5.0 s |
 | cold-index | 1.0 s | 0.7 s | 6.2 s | 8.0 s | 0.1 s | 0.2 s | 2.7 s | 5.5 s |
 
 ## Index stage medians
 
 | Condition | Provider installation | Cache restore | Index build | Query/export | Cache save |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| warm-index | 2.2 s | 0.7 s | 0.0 s | 20.9 s | 0.0 s |
+| warm-index | 2.2 s | 0.7 s | 0.0 s | 21.1 s | 0.0 s |
 | cold-index | 2.3 s | 0.4 s | 119.7 s | 0.2 s | 0.0 s |
 
 ## Coverage and validity

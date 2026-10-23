@@ -104,31 +104,42 @@ function buildConfig(
   return `${JSON.stringify(config, null, 2)}\n`;
 }
 
+/** Text payload from one OpenCode JSON event, when present. */
+function openCodeTextPart(line: string): string | undefined {
+  const trimmed = line.trim();
+  if (trimmed.length === 0) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (!isRecord(parsed) || !isRecord(parsed['part']) || parsed['part']['type'] !== 'text') return undefined;
+    const text = parsed['part']['text'];
+    return typeof text === 'string' && text.length > 0 ? text : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Extracts the assistant text from OpenCode's newline-delimited JSON event
  * stream. Text parts arrive as `{"part":{"type":"text","text":...}}` events.
  */
 export function extractOpenCodeAssistantText(stdout: string): string | undefined {
-  const parts: string[] = [];
-  for (const line of stdout.split('\n')) {
-    const trimmed = line.trim();
-    if (trimmed.length === 0) continue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      continue;
-    }
-    if (isRecord(parsed) && isRecord(parsed['part']) && parsed['part']['type'] === 'text') {
-      const text = parsed['part']['text'];
-      if (typeof text === 'string' && text.length > 0) parts.push(text);
-    }
-  }
+  const parts = stdout.split('\n').flatMap((line) => {
+    const text = openCodeTextPart(line);
+    return text === undefined ? [] : [text];
+  });
   return parts.length > 0 ? parts.join('') : undefined;
 }
 
-function toHarnessRun(result: BoundedRunResult): HarnessRun {
+function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null): HarnessRun {
   const text = result.code === 0 ? extractOpenCodeAssistantText(result.stdout) : undefined;
+  const telemetry = {
+    processStartupMs: result.processStartupMs ?? null,
+    timeToFirstTextMs,
+    stdoutBytes: result.stdoutBytes ?? Buffer.byteLength(result.stdout, 'utf8'),
+    stderrBytes: result.stderrBytes ?? Buffer.byteLength(result.stderr, 'utf8'),
+    stdoutTruncated: result.stdoutTruncated,
+    stderrTruncated: result.stderrTruncated ?? false,
+  };
   if (result.timedOut) {
     return {
       status: 'timed-out',
@@ -137,6 +148,7 @@ function toHarnessRun(result: BoundedRunResult): HarnessRun {
       text: '',
       diagnostic: result.stderr,
       durationMs: result.durationMs,
+      telemetry,
     };
   }
   if (text === undefined) {
@@ -151,6 +163,7 @@ function toHarnessRun(result: BoundedRunResult): HarnessRun {
           ? result.error
           : `opencode exited with code ${result.code ?? 'null'} and produced no assistant text`),
       durationMs: result.durationMs,
+      telemetry,
     };
   }
   return {
@@ -160,6 +173,7 @@ function toHarnessRun(result: BoundedRunResult): HarnessRun {
     text,
     diagnostic: result.stderr,
     durationMs: result.durationMs,
+    telemetry,
   };
 }
 
@@ -228,6 +242,8 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
       // Every `opencode run` is a fresh process, so the agent system prompt
       // (the fixed review policy) is rewritten before each invocation.
       await writeFile(state.configFile, buildConfig(state.modelConfig, prompt.system), { mode: 0o600 });
+      const invocationStartedAt = Date.now();
+      let timeToFirstTextMs: number | null = null;
       const result = await runBoundedProcess(spawner, {
         command: state.command,
         args: state.args,
@@ -235,17 +251,16 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
         env: state.env,
         stdin: prompt.user,
         timeoutMs: options?.timeoutMs ?? state.timeoutMs,
-        // `opencode run --format json` prints once at the end, so there is
-        // nothing to heartbeat on stdout; stderr diagnostics forward live.
-        ...(options?.onOutputLine !== undefined
-          ? {
-              onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {
-                if (stream === 'stderr') options.onOutputLine?.({ stream, kind: 'line', line });
-              },
-            }
-          : {}),
+        // `opencode run --format json` emits model text at the end. Capture
+        // first-text latency even when live log streaming is not requested.
+        onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {
+          if (stream === 'stdout' && timeToFirstTextMs === null && openCodeTextPart(line) !== undefined) {
+            timeToFirstTextMs = Math.max(0, Date.now() - invocationStartedAt);
+          }
+          if (stream === 'stderr') options?.onOutputLine?.({ stream, kind: 'line', line });
+        },
       });
-      return toHarnessRun(result);
+      return toHarnessRun(result, timeToFirstTextMs);
     },
   };
 }

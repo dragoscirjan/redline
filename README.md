@@ -17,6 +17,7 @@ Product documentation:
 - [Dogfood reviews](docs/dogfood-review.md)
 - [Runnable review configuration](docs/runnable-review-configuration.md)
 - [Review reporting](docs/review-reporting.md)
+- [Review performance benchmark](docs/performance-benchmark.md)
 
 ## Development
 

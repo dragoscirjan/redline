@@ -33,6 +33,7 @@ export default defineConfig({
           { text: 'Runnable review configuration', link: '/runnable-review-configuration' },
           { text: 'Harness executor', link: '/harness-executor' },
           { text: 'Review-quality benchmark', link: '/review-quality-benchmark' },
+          { text: 'Performance benchmark', link: '/performance-benchmark' },
           { text: 'Change-impact planning', link: '/change-impact' },
           { text: 'Code intelligence', link: '/code-intelligence' },
           { text: 'Review output', link: '/review-reporting' },

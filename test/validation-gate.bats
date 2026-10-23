@@ -27,6 +27,22 @@ PY
   [ "$status" -eq 0 ]
 }
 
+@test "CI performance baseline guard includes untracked files" {
+  run python3 - "$ROOT" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+ci = (root / '.github' / 'workflows' / 'ci.yml').read_text()
+assert 'git status --porcelain --untracked-files=all -- benchmark/performance/v1/baseline' in ci, \
+    'the deterministic baseline guard must detect new and renamed files'
+assert 'performance baseline changed:' in ci, \
+    'baseline drift must produce an explicit CI diagnostic'
+PY
+  printf '%s\n' "$output"
+  [ "$status" -eq 0 ]
+}
+
 @test "every Mise task references existing tasks and nonempty package scripts" {
   run python3 - "$ROOT" <<'PY'
 import json

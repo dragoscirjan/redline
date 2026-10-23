@@ -22,6 +22,7 @@ The action fetches the pull request's base and head commits as Git data, builds 
 - [Runnable review configuration](/runnable-review-configuration) — the environment contract, `model-config`, and `model-auth`.
 - [Harness executor](/harness-executor) — how Pi and OpenCode are configured and driven, and how to add a harness.
 - [Review output](/review-reporting) — per-file review records, validation, and the run summary.
+- [Performance benchmark](/performance-benchmark) — the fixed 20-file latency baseline, telemetry, and live SLO capture.
 
 ## Status
 

@@ -132,8 +132,16 @@ export function extractPiAssistantText(stdout: string): string | undefined {
   return text.length > 0 ? text : undefined;
 }
 
-function toHarnessRun(result: BoundedRunResult): HarnessRun {
+function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null): HarnessRun {
   const text = result.code === 0 ? extractPiAssistantText(result.stdout) : undefined;
+  const telemetry = {
+    processStartupMs: result.processStartupMs ?? null,
+    timeToFirstTextMs,
+    stdoutBytes: result.stdoutBytes ?? Buffer.byteLength(result.stdout, 'utf8'),
+    stderrBytes: result.stderrBytes ?? Buffer.byteLength(result.stderr, 'utf8'),
+    stdoutTruncated: result.stdoutTruncated,
+    stderrTruncated: result.stderrTruncated ?? false,
+  };
   if (result.timedOut) {
     return {
       status: 'timed-out',
@@ -142,6 +150,7 @@ function toHarnessRun(result: BoundedRunResult): HarnessRun {
       text: '',
       diagnostic: result.stderr,
       durationMs: result.durationMs,
+      telemetry,
     };
   }
   if (text === undefined) {
@@ -156,6 +165,7 @@ function toHarnessRun(result: BoundedRunResult): HarnessRun {
           ? result.error
           : `pi exited with code ${result.code ?? 'null'} and produced no assistant text`),
       durationMs: result.durationMs,
+      telemetry,
     };
   }
   return {
@@ -165,6 +175,7 @@ function toHarnessRun(result: BoundedRunResult): HarnessRun {
     text,
     diagnostic: result.stderr,
     durationMs: result.durationMs,
+    telemetry,
   };
 }
 
@@ -252,6 +263,8 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
           });
         }
       };
+      const invocationStartedAt = Date.now();
+      let timeToFirstTextMs: number | null = null;
       const result = await runBoundedProcess(spawner, {
         command: state.command,
         args,
@@ -259,28 +272,27 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         env: state.env,
         stdin: prompt.user,
         timeoutMs: options?.timeoutMs ?? state.timeoutMs,
-        ...(options?.onOutputLine !== undefined
-          ? {
-              onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {
-                if (streamMode === 'off') return;
-                if (stream === 'stderr') {
-                  options.onOutputLine?.({ stream, kind: 'line', line });
-                  return;
-                }
-                const event = streamEventLine(line);
-                if (event !== undefined) {
-                  forwardText(event.text);
-                  return;
-                }
-                const type = /^\s*\{"type":"([a-z_]+)"/u.exec(line)?.[1];
-                if (streamMode === 'text' && type !== undefined && PI_HEARTBEAT_EVENTS.has(type)) {
-                  options.onOutputLine?.({ stream, kind: 'line', line: `pi event: ${type}` });
-                }
-              },
-            }
-          : {}),
+        onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {
+          if (stream === 'stderr') {
+            if (streamMode !== 'off') options?.onOutputLine?.({ stream, kind: 'line', line });
+            return;
+          }
+          const event = streamEventLine(line);
+          if (event?.kind === 'text' && timeToFirstTextMs === null) {
+            timeToFirstTextMs = Math.max(0, Date.now() - invocationStartedAt);
+          }
+          if (streamMode === 'off' || options?.onOutputLine === undefined) return;
+          if (event !== undefined) {
+            forwardText(event.text);
+            return;
+          }
+          const type = /^\s*\{"type":"([a-z_]+)"/u.exec(line)?.[1];
+          if (streamMode === 'text' && type !== undefined && PI_HEARTBEAT_EVENTS.has(type)) {
+            options.onOutputLine({ stream, kind: 'line', line: `pi event: ${type}` });
+          }
+        },
       });
-      return toHarnessRun(result);
+      return toHarnessRun(result, timeToFirstTextMs);
     },
   };
 }

@@ -18,13 +18,12 @@ function textStream(chunks: string[]): AsyncIterable<Uint8Array> {
 describe('readBounded', () => {
   it('reads a full stream under the limit', async () => {
     const result = await readBounded(textStream(['hello ', 'world']), 1024);
-    expect(result).toEqual({ text: 'hello world', truncated: false });
+    expect(result).toEqual({ text: 'hello world', truncated: false, retainedBytes: 11, totalBytes: 11 });
   });
 
   it('drops bytes beyond the limit and reports truncation', async () => {
     const result = await readBounded(textStream(['abcdef', 'ghij']), 4);
-    expect(result.text).toBe('abcd');
-    expect(result.truncated).toBe(true);
+    expect(result).toMatchObject({ text: 'abcd', truncated: true, retainedBytes: 4, totalBytes: 10 });
   });
 
   it('rejects an invalid limit', async () => {
@@ -43,6 +42,13 @@ describe('runBoundedProcess', () => {
     expect(result.timedOut).toBe(false);
     expect(result.stdout).toBe('out');
     expect(result.stderr).toBe('err');
+    expect(result).toMatchObject({
+      stdoutBytes: 3,
+      stderrBytes: 3,
+      stdoutTruncated: false,
+      stderrTruncated: false,
+    });
+    expect(result.processStartupMs).toBeGreaterThanOrEqual(0);
   });
 
   it('streams prompts larger than the operating-system argument limit through bounded stdin', async () => {
@@ -142,8 +148,12 @@ describe('runBoundedProcess', () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     reader.cancel();
     const bounded = await reader.result();
-    expect(bounded.text).toBe('partial-');
-    expect(bounded.truncated).toBe(true);
+    expect(bounded).toMatchObject({
+      text: 'partial-',
+      truncated: true,
+      retainedBytes: 8,
+      totalBytes: 8,
+    });
   });
 
   it('reports a missing executable as a failed spawn', async () => {

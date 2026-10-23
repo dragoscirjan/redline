@@ -18,6 +18,14 @@ run = "pnpm run benchmark"
 description = "Run the opt-in live-model benchmark capture"
 run = "pnpm run benchmark:live-model"
 
+[tasks."benchmark:performance"]
+description = "Run the deterministic 20-file performance baseline"
+run = "pnpm run benchmark:performance"
+
+[tasks."benchmark:performance-live"]
+description = "Run the opt-in live 20-file performance capture"
+run = "pnpm run benchmark:performance:live"
+
 [tasks."benchmark:live-verification"]
 description = "Opt-in independent live discovery-to-verifier capture; never runs in CI"
 run = "pnpm run benchmark:live-verification"

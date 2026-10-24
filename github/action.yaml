@@ -124,20 +124,16 @@ runs:
       run: |
         set -euo pipefail
         # Review execution is enabled only when the full review input set is
-        # present. Validate presence without exposing model credentials to the
-        # dependency installer or the type checker.
+        # present. Validate presence without exposing model credentials.
         if [[ "$REVIEW_BACKEND_PRESENT" == 'true' || "$REVIEW_MODEL_CONFIG_PRESENT" == 'true' || "$REVIEW_MODEL_AUTH_PRESENT" == 'true' ]]; then
           if [[ "$REVIEW_BACKEND_PRESENT" != 'true' || "$REVIEW_MODEL_CONFIG_PRESENT" != 'true' || "$REVIEW_MODEL_AUTH_PRESENT" != 'true' ]]; then
             printf 'Review execution requires backend, model-config, and model-auth together.\n' >&2
             exit 2
           fi
         fi
-        # The action checkout is the trusted base revision for pull_request
-        # events. Pull request code is never installed, built, or executed.
-        corepack enable
-        corepack prepare pnpm@10.33.0 --activate
-        pnpm install --frozen-lockfile --ignore-scripts
-        pnpm run typecheck
+        # Direct source execution has no project runtime dependency. Do not
+        # install packages on the review critical path. Pull request code is
+        # never installed, built, or executed.
         test -f src/review/cli.ts
         test -f src/action/review.ts
         test -f src/context-bundle.ts

@@ -1,0 +1,165 @@
+name: Install frozen dependencies
+
+description: Restore a bounded pnpm store, install frozen dependencies without lifecycle scripts, and record telemetry.
+
+inputs:
+  telemetry-label:
+    description: Stable label used for the telemetry file and artifact.
+    required: true
+
+outputs:
+  cache-hit:
+    description: Whether the exact pnpm-store cache key was restored.
+    value: ${{ steps.cache-restore.outputs.cache-hit }}
+  install-ms:
+    description: Frozen dependency installation duration in milliseconds.
+    value: ${{ steps.install.outputs.install-ms }}
+  store-size-bytes:
+    description: pnpm store size after installation.
+    value: ${{ steps.measure.outputs.store-size-bytes }}
+  telemetry-file:
+    description: Absolute path to the dependency-install telemetry JSON file.
+    value: ${{ steps.measure.outputs.telemetry-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare pinned pnpm store
+      id: prepare
+      shell: bash
+      env:
+        PNPM_STORE_PATH: ${{ runner.temp }}/redline-pnpm-store-v1
+        TELEMETRY_LABEL: ${{ inputs.telemetry-label }}
+      run: |
+        set -euo pipefail
+        [[ "$TELEMETRY_LABEL" =~ ^[A-Za-z0-9_.-]+$ ]]
+        test -f pnpm-lock.yaml
+        corepack enable
+        corepack prepare pnpm@10.33.0 --activate
+        mkdir -p "$PNPM_STORE_PATH"
+        pnpm config set store-dir "$PNPM_STORE_PATH"
+        printf 'store-path=%s\n' "$PNPM_STORE_PATH" >> "$GITHUB_OUTPUT"
+
+    - name: Restore bounded pnpm store
+      id: cache-restore
+      continue-on-error: true
+      uses: actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+      with:
+        path: ${{ steps.prepare.outputs.store-path }}
+        key: redline-pnpm-store-v1-${{ runner.os }}-${{ runner.arch }}-node24-pnpm10.33.0-${{ hashFiles('pnpm-lock.yaml') }}
+
+    - name: Install frozen dependencies
+      id: install
+      shell: bash
+      env:
+        CACHE_HIT: ${{ steps.cache-restore.outputs.cache-hit }}
+        CACHE_RESTORE_OUTCOME: ${{ steps.cache-restore.outcome }}
+        PNPM_STORE_PATH: ${{ steps.prepare.outputs.store-path }}
+      run: |
+        set -uo pipefail
+        started_ns=$(date +%s%N)
+        disposition='miss'
+        if [[ "$CACHE_RESTORE_OUTCOME" != 'success' ]]; then
+          disposition='restore-failed'
+        elif [[ "$CACHE_HIT" == 'true' ]]; then
+          disposition='hit'
+        fi
+
+        set +e
+        pnpm install --frozen-lockfile --ignore-scripts
+        status=$?
+        set -e
+        if (( status != 0 )) && [[ "$CACHE_HIT" == 'true' ]]; then
+          printf 'Cached pnpm store failed installation; retrying from an empty store.\n' >&2
+          rm -rf "$PNPM_STORE_PATH" node_modules
+          mkdir -p "$PNPM_STORE_PATH"
+          pnpm config set store-dir "$PNPM_STORE_PATH"
+          disposition='cache-recovery'
+          set +e
+          pnpm install --frozen-lockfile --ignore-scripts
+          status=$?
+          set -e
+        fi
+
+        finished_ns=$(date +%s%N)
+        printf 'install-ms=%s\n' "$(( (finished_ns - started_ns) / 1000000 ))" >> "$GITHUB_OUTPUT"
+        printf 'disposition=%s\n' "$disposition" >> "$GITHUB_OUTPUT"
+        if (( status == 0 )); then
+          printf 'install-outcome=success\n' >> "$GITHUB_OUTPUT"
+        else
+          printf 'install-outcome=failed\n' >> "$GITHUB_OUTPUT"
+        fi
+        exit "$status"
+
+    - name: Measure dependency cache
+      id: measure
+      if: ${{ always() }}
+      shell: bash
+      env:
+        CACHE_HIT: ${{ steps.cache-restore.outputs.cache-hit }}
+        CACHE_RESTORE_OUTCOME: ${{ steps.cache-restore.outcome }}
+        INSTALL_DISPOSITION: ${{ steps.install.outputs.disposition }}
+        INSTALL_MS: ${{ steps.install.outputs.install-ms }}
+        INSTALL_OUTCOME: ${{ steps.install.outputs.install-outcome }}
+        MAX_STORE_BYTES: '536870912'
+        PNPM_STORE_PATH: ${{ steps.prepare.outputs.store-path }}
+        TELEMETRY_LABEL: ${{ inputs.telemetry-label }}
+      run: |
+        set -euo pipefail
+        store_size=0
+        if [[ -d "$PNPM_STORE_PATH" ]]; then
+          store_size=$(du -sb "$PNPM_STORE_PATH" | cut -f1)
+        fi
+        save_eligible=false
+        if [[ "$INSTALL_OUTCOME" == 'success' ]] && (( store_size <= MAX_STORE_BYTES )); then
+          save_eligible=true
+        fi
+
+        telemetry_dir="${RUNNER_TEMP}/redline-pnpm-telemetry"
+        telemetry_file="${telemetry_dir}/${TELEMETRY_LABEL}.json"
+        mkdir -p "$telemetry_dir"
+        cache_hit=false
+        if [[ "$CACHE_HIT" == 'true' ]]; then cache_hit=true; fi
+        printf '{\n' > "$telemetry_file"
+        printf '  "version": 1,\n' >> "$telemetry_file"
+        printf '  "label": "%s",\n' "$TELEMETRY_LABEL" >> "$telemetry_file"
+        printf '  "cacheKeyVersion": "redline-pnpm-store-v1",\n' >> "$telemetry_file"
+        printf '  "cacheHit": %s,\n' "$cache_hit" >> "$telemetry_file"
+        printf '  "restoreOutcome": "%s",\n' "${CACHE_RESTORE_OUTCOME:-unknown}" >> "$telemetry_file"
+        printf '  "installDisposition": "%s",\n' "${INSTALL_DISPOSITION:-not-run}" >> "$telemetry_file"
+        printf '  "installOutcome": "%s",\n' "${INSTALL_OUTCOME:-not-run}" >> "$telemetry_file"
+        printf '  "installMs": %s,\n' "${INSTALL_MS:-0}" >> "$telemetry_file"
+        printf '  "storeSizeBytes": %s,\n' "$store_size" >> "$telemetry_file"
+        printf '  "maximumStoreBytes": %s\n' "$MAX_STORE_BYTES" >> "$telemetry_file"
+        printf '}\n' >> "$telemetry_file"
+
+        printf 'store-size-bytes=%s\n' "$store_size" >> "$GITHUB_OUTPUT"
+        printf 'save-eligible=%s\n' "$save_eligible" >> "$GITHUB_OUTPUT"
+        printf 'telemetry-file=%s\n' "$telemetry_file" >> "$GITHUB_OUTPUT"
+        {
+          printf '## pnpm dependency cache — %s\n\n' "$TELEMETRY_LABEL"
+          printf -- '- Cache hit: `%s`\n' "$cache_hit"
+          printf -- '- Restore outcome: `%s`\n' "${CACHE_RESTORE_OUTCOME:-unknown}"
+          printf -- '- Install disposition: `%s`\n' "${INSTALL_DISPOSITION:-not-run}"
+          printf -- '- Install duration: `%s ms`\n' "${INSTALL_MS:-0}"
+          printf -- '- Store size: `%s bytes`\n' "$store_size"
+          printf -- '- Store save bound: `%s bytes`\n' "$MAX_STORE_BYTES"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Save bounded pnpm store
+      id: cache-save
+      if: ${{ steps.cache-restore.outputs.cache-hit != 'true' && steps.measure.outputs.save-eligible == 'true' }}
+      continue-on-error: true
+      uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+      with:
+        path: ${{ steps.prepare.outputs.store-path }}
+        key: redline-pnpm-store-v1-${{ runner.os }}-${{ runner.arch }}-node24-pnpm10.33.0-${{ hashFiles('pnpm-lock.yaml') }}
+
+    - name: Upload dependency telemetry
+      if: ${{ always() }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: pnpm-store-${{ inputs.telemetry-label }}-${{ github.run_id }}-attempt${{ github.run_attempt }}
+        path: ${{ steps.measure.outputs.telemetry-file }}
+        if-no-files-found: error
+        retention-days: 14

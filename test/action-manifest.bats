@@ -141,7 +141,7 @@ assert any(step.get('name') == 'Fail visible warmup errors' for step in steps)
 PY
 }
 
-@test "documentation workflow publishes directly without nested concurrency" {
+@test "documentation workflow publishes through a destination pull request" {
   grep -Fq 'group: docs-publish-redline' "$DOCS_WORKFLOW"
   grep -Fq 'name: Build and publish the site' "$DOCS_WORKFLOW"
   grep -Fq 'DOCS_BASE=/projects/redline/ pnpm run docs' "$DOCS_WORKFLOW"
@@ -152,8 +152,15 @@ PY
   grep -Fq 'path: documentation-repository' "$DOCS_WORKFLOW"
   grep -Fq 'rsync -a --delete' "$DOCS_WORKFLOW"
   grep -Fq 'documentation-repository/projects/redline/' "$DOCS_WORKFLOW"
-  grep -Fq "commit -m 'docs(redline): update documentation site'" "$DOCS_WORKFLOW"
-  grep -Fq 'push origin main' "$DOCS_WORKFLOW"
+  grep -Fq 'GH_TOKEN: ${{ secrets.GH_TOKEN }}' "$DOCS_WORKFLOW"
+  grep -Fq 'publish_branch="automation/redline-docs-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"' "$DOCS_WORKFLOW"
+  grep -Fq 'git -C documentation-repository push --set-upstream origin "$publish_branch"' "$DOCS_WORKFLOW"
+  grep -Fq 'gh pr create \' "$DOCS_WORKFLOW"
+  grep -Fq -- '--repo dragoscirjan/dragoscirjan.github.io' "$DOCS_WORKFLOW"
+  grep -Fq 'gh pr merge \' "$DOCS_WORKFLOW"
+  grep -Fq -- '--match-head-commit "$publish_head"' "$DOCS_WORKFLOW"
+  grep -Fq -- '--delete-branch' "$DOCS_WORKFLOW"
+  ! grep -Fq 'push origin main' "$DOCS_WORKFLOW"
   ! grep -Fq 'uses: dragoscirjan/dragoscirjan.github.io/.github/workflows/docs.yml' "$DOCS_WORKFLOW"
 }
 

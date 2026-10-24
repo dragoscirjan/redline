@@ -34,7 +34,7 @@ import {
   type SnapshotUncertainty,
   type SourceProvenance,
   type SourceSpan,
-} from './types.js';
+} from './types.ts';
 
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/u;
 const DIGEST_PATTERN = /^(?:sha256:[0-9a-f]{64}|sha512:[0-9a-f]{128})$/u;

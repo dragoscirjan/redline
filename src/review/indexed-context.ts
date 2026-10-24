@@ -8,15 +8,15 @@ import {
   type CodeContextStatus,
   type CodeContextTimings,
   type RelatedCodeSpan,
-} from '../code-context/artifact.js';
-import { checkedFile, type ReviewBundle, type ReviewManifestFile } from './bundle.js';
+} from '../code-context/artifact.ts';
+import { checkedFile, type ReviewBundle, type ReviewManifestFile } from './bundle.ts';
 import type {
   GraphReference,
   ReviewCodeContextCacheStatus,
   ReviewCodeContextCoverage,
   ReviewCodeContextReason,
   ReviewCodeContextRunCoverage,
-} from './types.js';
+} from './types.ts';
 
 export const MAX_INDEXED_CONTEXT_SOURCE_FILE_BYTES = 2 * 1024 * 1024;
 export const MAX_INDEXED_CONTEXT_SOURCE_BYTES = 48 * 1024;

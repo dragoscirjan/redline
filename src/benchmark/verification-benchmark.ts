@@ -1,16 +1,16 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { HarnessExecutor, HarnessPrompt, HarnessRun, HarnessSettings, PreparedHarness } from '../harness-executor/types.js';
-import { parseDuration } from '../duration.js';
-import type { ReviewEnvironment } from '../review/environment.js';
-import { runFileReviews } from '../review/runner.js';
-import type { FileReviewRecord } from '../review/types.js';
-import { VERIFICATION_PROMPT_ID } from '../review/verification-prompt.js';
+import type { HarnessExecutor, HarnessPrompt, HarnessRun, HarnessSettings, PreparedHarness } from '../harness-executor/types.ts';
+import { parseDuration } from '../duration.ts';
+import type { ReviewEnvironment } from '../review/environment.ts';
+import { runFileReviews } from '../review/runner.ts';
+import type { FileReviewRecord } from '../review/types.ts';
+import { VERIFICATION_PROMPT_ID } from '../review/verification-prompt.ts';
 import {
   loadBenchmarkCorpus, materializeBenchmarkFixture, scoreBenchmarkCase,
   type BenchmarkCaseResult, type BenchmarkFixture, type BenchmarkMode, type FixtureRecording,
-} from './benchmark.js';
+} from './benchmark.ts';
 
 export interface RecordedDecision {
   readonly fixtureId: string;

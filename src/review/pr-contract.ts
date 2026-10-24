@@ -1,10 +1,10 @@
-import type { CodeContextDiagnostic, CodeContextTimings } from '../code-context/artifact.js';
-import type { ReviewBundle } from './bundle.js';
-import type { ReviewEnvironment } from './environment.js';
-import type { LoadedReviewCodeContext } from './indexed-context.js';
-import { MAX_FILE_FINDINGS } from './report.js';
-import { synthesizeReview } from './synthesis.js';
-import { validateSourceEvidence } from './source-evidence.js';
+import type { CodeContextDiagnostic, CodeContextTimings } from '../code-context/artifact.ts';
+import type { ReviewBundle } from './bundle.ts';
+import type { ReviewEnvironment } from './environment.ts';
+import type { LoadedReviewCodeContext } from './indexed-context.ts';
+import { MAX_FILE_FINDINGS } from './report.ts';
+import { synthesizeReview } from './synthesis.ts';
+import { validateSourceEvidence } from './source-evidence.ts';
 import type {
   FileReviewRecord,
   FindingClassification,
@@ -16,8 +16,8 @@ import type {
   ReviewCoverageFacet,
   ReviewLimitation,
   ValidatedFinding,
-} from './types.js';
-import { PULL_REQUEST_REVIEW_VERSION, REVIEW_RUN_SUMMARY_VERSION } from './types.js';
+} from './types.ts';
+import { PULL_REQUEST_REVIEW_VERSION, REVIEW_RUN_SUMMARY_VERSION } from './types.ts';
 
 function validateGraphReferences(
   bundle: ReviewBundle,

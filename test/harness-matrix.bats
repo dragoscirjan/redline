@@ -7,7 +7,7 @@
 
 setup() {
   ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
-  CLI="$ROOT/dist/src/review/cli.js"
+  CLI="$ROOT/src/review/cli.ts"
   TMP="$(mktemp -d)"
   OUTPUT="$TMP/harness-reviews"
 }
@@ -16,7 +16,7 @@ teardown() {
   rm -rf "$TMP"
 }
 
-@test "requires a prior build of the CLI" {
+@test "uses the TypeScript source CLI" {
   [ -f "$CLI" ]
 }
 

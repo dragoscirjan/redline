@@ -6,11 +6,11 @@
  * and the GitHub Action are unaffected.
  */
 
-import { EchoHarnessExecutor } from './echo-executor.js';
-import { createOpenCodeExecutor } from './opencode-executor.js';
-import { createPiExecutor } from './pi-executor.js';
-import type { ProcessSpawner } from './process-runner.js';
-import { HARNESS_NAMES, type HarnessExecutor, type HarnessName } from './types.js';
+import { EchoHarnessExecutor } from './echo-executor.ts';
+import { createOpenCodeExecutor } from './opencode-executor.ts';
+import { createPiExecutor } from './pi-executor.ts';
+import type { ProcessSpawner } from './process-runner.ts';
+import { HARNESS_NAMES, type HarnessExecutor, type HarnessName } from './types.ts';
 
 export interface HarnessExecutorOptions {
   /** Harness binary override, used by tests and the CI matrix. */

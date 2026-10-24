@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { writeCodeIndexValueReport } from './code-index-value.js';
+import { writeCodeIndexValueReport } from './code-index-value.ts';
 
 interface Options {
   readonly capture: string;

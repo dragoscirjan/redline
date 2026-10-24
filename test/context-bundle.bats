@@ -2,7 +2,8 @@
 
 setup() {
   ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
-  SCRIPT="$ROOT/dist/src/context-bundle.js"
+  RUNTIME="${SOURCE_RUNTIME:-node}"
+  SCRIPT="$ROOT/src/context-bundle.ts"
   TMP="$(mktemp -d)"
   REPO="$TMP/repo"
   mkdir -p "$REPO/src" "$REPO/config"
@@ -71,7 +72,7 @@ JS
 }
 
 @test "rejects missing arguments" {
-  run node "$SCRIPT"
+  run "$RUNTIME" "$SCRIPT"
   [ "$status" -eq 2 ]
 }
 

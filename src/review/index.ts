@@ -8,14 +8,14 @@ export {
   type ReviewMode,
   type SelectedModelCredential,
   parseReviewEnvironment,
-} from './environment.js';
+} from './environment.ts';
 export {
   REVIEW_BUNDLE_VERSION,
   type ReviewBundle,
   type ReviewManifest,
   type ReviewManifestFile,
   loadReviewBundle,
-} from './bundle.js';
+} from './bundle.ts';
 export {
   MAX_INDEXED_CONTEXT_SOURCE_BYTES,
   MAX_INDEXED_CONTEXT_SOURCE_BYTES_PER_FILE,
@@ -27,8 +27,8 @@ export {
   type PromptCodeContext,
   type ResolvedRelatedCodeSpan,
   type ReviewCodeContextInput,
-} from './indexed-context.js';
-export { FILE_REVIEW_PROMPT_ID, FILE_REVIEW_PROMPT_VERSION, buildFileReviewPrompt, loadReviewPolicy } from './prompt.js';
+} from './indexed-context.ts';
+export { FILE_REVIEW_PROMPT_ID, FILE_REVIEW_PROMPT_VERSION, buildFileReviewPrompt, loadReviewPolicy } from './prompt.ts';
 export {
   FILE_REVIEW_DOCUMENT_VERSION,
   MAX_FILE_FINDINGS,
@@ -37,12 +37,12 @@ export {
   parseChangedLines,
   parseFileReviewDocument,
   parseReusableReviewFinding,
-} from './report.js';
+} from './report.ts';
 export {
   buildPullRequestReview,
   derivePullRequestVerdict,
   validateFindingReferences,
-} from './pr-contract.js';
+} from './pr-contract.ts';
 export {
   buildRemediation,
   formatSpan,
@@ -51,8 +51,8 @@ export {
   renderFixPrompt,
   resolveSpanLines,
   spanLocation,
-} from './remediation.js';
-export { createReviewWriter } from './writer.js';
+} from './remediation.ts';
+export { createReviewWriter } from './writer.ts';
 export {
   REVIEW_REUSE_CACHE_VERSION,
   REVIEW_REUSE_TELEMETRY_VERSION,
@@ -63,9 +63,9 @@ export {
   type ReviewReuseCache,
   type ReviewReuseCacheStats,
   type ReviewReuseCandidate,
-} from './reuse.js';
-export { runFileReviews, type ReviewRunInput, type ReviewRunResult } from './runner.js';
-export { main } from './cli.js';
+} from './reuse.ts';
+export { runFileReviews, type ReviewRunInput, type ReviewRunResult } from './runner.ts';
+export { main } from './cli.ts';
 export {
   FILE_REVIEW_RECORD_VERSION,
   FINDING_SCOPES,
@@ -94,4 +94,4 @@ export {
   type ReviewRunSummaryFile,
   type SourceEvidence,
   type ValidatedFinding,
-} from './types.js';
+} from './types.ts';

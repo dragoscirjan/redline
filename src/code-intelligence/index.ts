@@ -7,8 +7,8 @@ export {
   parseCodeIntelligenceSnapshot,
   providerCompatibilityDigest,
   snapshotCompatibilityDigest,
-} from './contracts.js';
-export { CodeIntelligenceProviderRegistry } from './registry.js';
+} from './contracts.ts';
+export { CodeIntelligenceProviderRegistry } from './registry.ts';
 export {
   CODE_INTELLIGENCE_CAPABILITIES,
   CODE_INTELLIGENCE_CONTRACT_VERSION,
@@ -58,4 +58,4 @@ export {
   type SnapshotUncertainty,
   type SourceProvenance,
   type SourceSpan,
-} from './types.js';
+} from './types.ts';

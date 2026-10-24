@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { GitHubReviewPublisher } from '../../src/publish/github-publisher.js';
-import type { FileReviewPublication, ReviewScope } from '../../src/publish/types.js';
+import { GitHubReviewPublisher } from '../../src/publish/github-publisher.ts';
+import type { FileReviewPublication, ReviewScope } from '../../src/publish/types.ts';
 
 const HEAD = 'b'.repeat(40);
 const SCOPE: ReviewScope = { repository: 'owner/repository', pullRequest: 14, head: HEAD };

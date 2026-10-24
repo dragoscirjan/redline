@@ -10,9 +10,9 @@ import {
   materializeBenchmarkFixture,
   type BenchmarkMode,
   type FixtureRecording,
-} from './benchmark.js';
-import { parseDuration, type Duration } from '../duration.js';
-import { createHarnessExecutor, isHarnessName } from '../harness-executor/registry.js';
+} from './benchmark.ts';
+import { parseDuration, type Duration } from '../duration.ts';
+import { createHarnessExecutor, isHarnessName } from '../harness-executor/registry.ts';
 import type {
   HarnessExecuteOptions,
   HarnessExecutor,
@@ -20,14 +20,14 @@ import type {
   HarnessRun,
   HarnessSettings,
   PreparedHarness,
-} from '../harness-executor/types.js';
+} from '../harness-executor/types.ts';
 import {
   parseModelConfig,
   selectModelCredential,
   type ReviewEnvironment,
-} from '../review/environment.js';
-import { runFileReviews } from '../review/runner.js';
-import { FINDING_SCOPES, type FileReviewRecord, type FindingScope, type ReviewRunSummary } from '../review/types.js';
+} from '../review/environment.ts';
+import { runFileReviews } from '../review/runner.ts';
+import { FINDING_SCOPES, type FileReviewRecord, type FindingScope, type ReviewRunSummary } from '../review/types.ts';
 
 const LIVE_CAPTURE_VERSION = 1 as const;
 
@@ -68,19 +68,21 @@ interface LiveModelCapture {
 
 class MeasuringExecutor implements HarnessExecutor {
   readonly harness: HarnessExecutor['harness'];
+  readonly #delegate: HarnessExecutor;
   promptBytes = 0;
 
-  constructor(private readonly delegate: HarnessExecutor) {
+  constructor(delegate: HarnessExecutor) {
+    this.#delegate = delegate;
     this.harness = delegate.harness;
   }
 
   prepare(settings: HarnessSettings): Promise<PreparedHarness> {
-    return this.delegate.prepare(settings);
+    return this.#delegate.prepare(settings);
   }
 
   execute(prepared: PreparedHarness, prompt: HarnessPrompt, options?: HarnessExecuteOptions): Promise<HarnessRun> {
     this.promptBytes += Buffer.byteLength(prompt.system, 'utf8') + Buffer.byteLength(prompt.user, 'utf8');
-    return this.delegate.execute(prepared, prompt, options);
+    return this.#delegate.execute(prepared, prompt, options);
   }
 }
 

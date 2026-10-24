@@ -12,10 +12,10 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { createHarnessExecutor } from '../src/harness-executor/registry.js';
-import { parseReviewEnvironment } from '../src/review/environment.js';
-import { runFileReviews } from '../src/review/runner.js';
-import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.js';
+import { createHarnessExecutor } from '../src/harness-executor/registry.ts';
+import { parseReviewEnvironment } from '../src/review/environment.ts';
+import { runFileReviews } from '../src/review/runner.ts';
+import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
 
 const ENABLED = process.env.REDLINE_LIVE_HARNESS_TESTS === '1';
 

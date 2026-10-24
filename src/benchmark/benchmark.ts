@@ -7,23 +7,23 @@ import type {
   HarnessRun,
   HarnessSettings,
   PreparedHarness,
-} from '../harness-executor/types.js';
+} from '../harness-executor/types.ts';
 import {
   parseCodeContextArtifact,
   type CodeContextArtifact,
   type CodeContextProvider,
   type CodeContextTimings,
-} from '../code-context/artifact.js';
-import { parseDuration } from '../duration.js';
-import type { ReviewEnvironment } from '../review/environment.js';
-import { parseChangedLines, type ChangedLines } from '../review/report.js';
-import { runFileReviews } from '../review/runner.js';
+} from '../code-context/artifact.ts';
+import { parseDuration } from '../duration.ts';
+import type { ReviewEnvironment } from '../review/environment.ts';
+import { parseChangedLines, type ChangedLines } from '../review/report.ts';
+import { runFileReviews } from '../review/runner.ts';
 import type {
   FileReviewRecord,
   FindingSide,
   ReviewCodeContextReason,
   ReviewCodeContextRunCoverage,
-} from '../review/types.js';
+} from '../review/types.ts';
 
 const BENCHMARK_VERSION = 2 as const;
 const FIXTURE_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;

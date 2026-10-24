@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { requireActionFollowUpConfig } from '../src/action/review.js';
+import { requireActionFollowUpConfig } from '../src/action/review.ts';
 
 describe('action-owned verification configuration', () => {
   const valid = {

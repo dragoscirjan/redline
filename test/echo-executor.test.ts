@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EchoHarnessExecutor } from '../src/harness-executor/echo-executor.js';
-import type { HarnessSettings } from '../src/harness-executor/types.js';
+import { EchoHarnessExecutor } from '../src/harness-executor/echo-executor.ts';
+import type { HarnessSettings } from '../src/harness-executor/types.ts';
 
 const SETTINGS: HarnessSettings = {
   model: { provider: 'mock', endpoint: 'http://127.0.0.1:8787/v1', model: 'test-model' },

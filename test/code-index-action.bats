@@ -175,7 +175,7 @@ print(json.dumps({
 PY
 }
 
-@test "secondary action pins CGC and actions/cache without provider configuration inputs" {
+@test "secondary action pins provider runtimes and actions/cache without provider configuration inputs" {
   if ! python3 -c 'import yaml' 2>/dev/null; then
     skip 'PyYAML is required to validate action.yaml'
   fi
@@ -189,6 +189,10 @@ assert action['inputs']['provider']['default'] == 'cgc'
 assert action['inputs']['mode']['default'] == 'review'
 steps = action['runs']['steps']
 uses = [step.get('uses') for step in steps]
+node = next(step for step in steps if step.get('name') == 'Set up fixed GitNexus Node runtime')
+assert node['if'] == "${{ inputs.provider == 'gitnexus' }}"
+assert node['uses'] == 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38'
+assert node['with']['node-version'] == 24
 sha = 'cdf6c1fa76f9f475f3d7449005a359c84ca0f306'
 assert f'actions/cache/restore@{sha}' in uses
 assert f'actions/cache/save@{sha}' in uses
@@ -200,6 +204,7 @@ assert action['outputs']['context-file']['value'] == '${{ steps.finalize.outputs
 for output in ('cache-hit', 'cache-identity', 'cache-save-outcome', 'cache-size-bytes', 'duration-ms', 'index-ms', 'warmup-result'):
     assert action['outputs'][output]['value'] == '${{ steps.finalize.outputs.' + output + ' }}'
 PY
+  grep -Fq 'readonly INSTALLER="$REPOSITORY_ROOT/src/code-index/install-gitnexus.ts"' "$ACTION_DIR/run-gitnexus.sh"
 }
 
 @test "secondary action rejects unsupported execution modes" {
@@ -690,8 +695,8 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const [root, reviewDirectory, runnerTemp, provider, base, head] = process.argv.slice(2);
-const { FollowUpBudget, parseFollowUpResults } = await import(pathToFileURL(join(root, 'dist/src/code-context/follow-up.js')));
-const { createActionFollowUpExecutor } = await import(pathToFileURL(join(root, 'dist/src/action/follow-up.js')));
+const { FollowUpBudget, parseFollowUpResults } = await import(pathToFileURL(join(root, 'src/code-context/follow-up.ts')));
+const { createActionFollowUpExecutor } = await import(pathToFileURL(join(root, 'src/action/follow-up.ts')));
 const candidateId = 'f-' + 'b'.repeat(24);
 const request = new FollowUpBudget().plan({ repository: 'owner/repository', base, head },
   '000001', 'src/cache.ts', [candidateId], [{ candidateId, direction: 'incoming' }]);

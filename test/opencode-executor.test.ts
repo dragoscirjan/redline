@@ -6,9 +6,9 @@ import {
   createOpenCodeExecutor,
   extractOpenCodeAssistantText,
   OPENCODE_REVIEW_AGENT,
-} from '../src/harness-executor/opencode-executor.js';
-import type { ProcessSpawner, SpawnedProcess } from '../src/harness-executor/process-runner.js';
-import type { HarnessSettings } from '../src/harness-executor/types.js';
+} from '../src/harness-executor/opencode-executor.ts';
+import type { ProcessSpawner, SpawnedProcess } from '../src/harness-executor/process-runner.ts';
+import type { HarnessSettings } from '../src/harness-executor/types.ts';
 
 const SETTINGS: HarnessSettings = {
   model: { provider: 'mock', endpoint: 'http://127.0.0.1:8787/v1', model: 'test-model' },

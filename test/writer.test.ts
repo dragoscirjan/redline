@@ -1,12 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { createReviewWriter } from '../src/review/writer.js';
-import type { FileReviewRecord, PublishedFinding, ReviewRunSummary } from '../src/review/types.js';
+import { createReviewWriter } from '../src/review/writer.ts';
+import type { FileReviewRecord, PublishedFinding, ReviewRunSummary } from '../src/review/types.ts';
 import {
   publishedFinding as basePublishedFinding,
   pullRequestReview,
-} from './helpers/finding.js';
+} from './helpers/finding.ts';
 
 const DISABLED_CONTEXT = {
   status: 'disabled' as const,

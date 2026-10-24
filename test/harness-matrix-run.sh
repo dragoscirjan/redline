@@ -11,6 +11,11 @@
 set -euo pipefail
 
 HARNESS="${1:?usage: harness-matrix-run.sh <echo|pi|opencode>}"
+TYPESCRIPT_RUNTIME="${SOURCE_RUNTIME:-node}"
+case "$TYPESCRIPT_RUNTIME" in
+  node|bun) ;;
+  *) printf 'unsupported TypeScript runtime: %s\n' "$TYPESCRIPT_RUNTIME" >&2; exit 2 ;;
+esac
 case "$HARNESS" in
   echo|pi|opencode) ;;
   *) printf 'unsupported harness: %s\n' "$HARNESS" >&2; exit 2 ;;
@@ -55,7 +60,7 @@ HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
 git -C "$REPO" worktree add --detach "$TMP/source" "$HEAD_SHA" >/dev/null 2>&1
 (
   cd "$TMP/source"
-  node "$ROOT/dist/src/context-bundle.js" \
+  "$TYPESCRIPT_RUNTIME" "$ROOT/src/context-bundle.ts" \
     --base "$BASE_SHA" \
     --head "$HEAD_SHA" \
     --output "$TMP/review" \
@@ -91,7 +96,7 @@ REDLINE_OUTPUT_DIR="$OUTPUT_DIR" \
 REDLINE_MODEL_CONFIG="$MODEL_CONFIG" \
 REDLINE_MODEL_AUTH='{"mock":"test-key"}' \
 REDLINE_TIMEOUT=10m \
-node "$ROOT/dist/src/review/cli.js"
+"$TYPESCRIPT_RUNTIME" "$ROOT/src/action/review.ts"
 
 # Assert the review outcome for the single fixture file. Echo is the
 # deterministic clean harness; pi and opencode must produce the scripted,

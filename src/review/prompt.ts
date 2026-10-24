@@ -11,7 +11,6 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { lstat, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,26 +20,18 @@ import {
   readCheckedText,
   type ReviewBundle,
   type ReviewManifestFile,
-} from './bundle.js';
-import type { PromptCodeContext } from './indexed-context.js';
-import type { FindingScope } from './types.js';
+} from './bundle.ts';
+import type { PromptCodeContext } from './indexed-context.ts';
+import type { FindingScope } from './types.ts';
 
 export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v4' as const;
 export const FILE_REVIEW_PROMPT_VERSION = 4 as const;
 
 const PROMPT_MODULES = ['core-policy.md', 'review-phases.md', 'file-reporting.md'] as const;
 
-/**
- * Resolves the policy directory from the module location. The source tree
- * (`src/review/`) and the compiled tree (`dist/src/review/`) sit at different
- * depths relative to `prompts/`, so both candidates are probed.
- */
+/** Resolves the fixed policy directory from the TypeScript source module. */
 function defaultPromptRoot(): string {
   const moduleDirectory = fileURLToPath(new URL('.', import.meta.url));
-  for (const candidate of ['../../prompts/v7/', '../../../prompts/v7/']) {
-    const path = resolve(moduleDirectory, candidate);
-    if (existsSync(path)) return path;
-  }
   return resolve(moduleDirectory, '../../prompts/v7/');
 }
 const DEFAULT_PROMPT_ROOT = defaultPromptRoot();

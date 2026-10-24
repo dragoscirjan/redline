@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CodeIntelligenceProviderRegistry } from '../src/code-intelligence/registry.js';
+import { CodeIntelligenceProviderRegistry } from '../src/code-intelligence/registry.ts';
 import type {
   CodeIntelligenceProvider,
   CodeIntelligenceProviderDescriptor,
@@ -8,10 +8,14 @@ import type {
   SnapshotBuildRequest,
   SnapshotOpenRequest,
   SnapshotOperationResult,
-} from '../src/code-intelligence/types.js';
+} from '../src/code-intelligence/types.ts';
 
 class StubProvider implements CodeIntelligenceProvider {
-  constructor(readonly id: string) {}
+  readonly id: string;
+
+  constructor(id: string) {
+    this.id = id;
+  }
 
   async describe(): Promise<CodeIntelligenceProviderDescriptor> {
     throw new Error('not used');

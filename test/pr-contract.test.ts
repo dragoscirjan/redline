@@ -1,22 +1,22 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadReviewBundle } from '../src/review/bundle.js';
-import type { LoadedReviewCodeContext } from '../src/review/indexed-context.js';
+import { loadReviewBundle } from '../src/review/bundle.ts';
+import type { LoadedReviewCodeContext } from '../src/review/indexed-context.ts';
 import {
   buildPullRequestReview,
   derivePullRequestVerdict,
   validateFindingReferences,
-} from '../src/review/pr-contract.js';
-import { graphReferenceDigest, parseFileReviewDocument } from '../src/review/report.js';
+} from '../src/review/pr-contract.ts';
+import { graphReferenceDigest, parseFileReviewDocument } from '../src/review/report.ts';
 import type {
   FileReviewRecord,
   GraphReference,
   PullRequestFinding,
   ValidatedFinding,
-} from '../src/review/types.js';
-import { createBundleFixture, BASE_SHA, HEAD_SHA } from './helpers/bundle.js';
-import { publishedFinding, pullRequestReview, reviewFinding } from './helpers/finding.js';
+} from '../src/review/types.ts';
+import { createBundleFixture, BASE_SHA, HEAD_SHA } from './helpers/bundle.ts';
+import { publishedFinding, pullRequestReview, reviewFinding } from './helpers/finding.ts';
 
 function context(
   overrides: Partial<LoadedReviewCodeContext['coverage']> = {},

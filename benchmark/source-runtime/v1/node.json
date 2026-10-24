@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "capturedAt": "2026-10-24T18:33:19.874Z",
+  "runtime": "node",
+  "runtimeVersion": "v24.21.0",
+  "environment": {
+    "platform": "linux",
+    "architecture": "x64"
+  },
+  "startupMs": {
+    "samples": 5,
+    "minimum": 63,
+    "p50NearestRank": 64,
+    "p95NearestRank": 67,
+    "maximum": 67
+  },
+  "echoReviewMs": {
+    "samples": 3,
+    "minimum": 163,
+    "p50NearestRank": 165,
+    "p95NearestRank": 184,
+    "maximum": 184
+  },
+  "samples": {
+    "startupMs": [
+      63,
+      65,
+      64,
+      63,
+      67
+    ],
+    "echoReviewMs": [
+      184,
+      163,
+      165
+    ]
+  },
+  "limits": [
+    "Local process measurements include operating-system and filesystem noise.",
+    "The echo review measures direct-source bundle and review execution without model or network latency.",
+    "The result does not show that Bun improves model-bound review latency."
+  ]
+}

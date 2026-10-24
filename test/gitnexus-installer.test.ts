@@ -15,7 +15,7 @@ import {
   type GitNexusDownloadRequest,
   type GitNexusDownloader,
   type GitNexusInstallationSources,
-} from '../src/code-index/gitnexus-installer.js';
+} from '../src/code-index/gitnexus-installer.ts';
 
 const temporaryDirectories: string[] = [];
 
@@ -35,12 +35,15 @@ function digest(algorithm: 'sha256' | 'sha512', content: string): string {
 
 class FixtureDownloader implements GitNexusDownloader {
   readonly requests: GitNexusDownloadRequest[] = [];
+  readonly #content: string | ((url: string) => string);
 
-  constructor(readonly content: string | ((url: string) => string)) {}
+  constructor(content: string | ((url: string) => string)) {
+    this.#content = content;
+  }
 
   async download(request: GitNexusDownloadRequest): Promise<void> {
     this.requests.push(request);
-    const selected = typeof this.content === 'string' ? this.content : this.content(request.url);
+    const selected = typeof this.#content === 'string' ? this.#content : this.#content(request.url);
     await writeFile(request.destination, selected, { mode: 0o600 });
   }
 }

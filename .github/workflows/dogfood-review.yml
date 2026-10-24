@@ -17,6 +17,11 @@ on:
         required: false
         type: number
         default: 4
+      runtime:
+        description: Trusted TypeScript runtime, node or bun. Default node.
+        required: false
+        type: string
+        default: node
       artifact-retention-days:
         description: Number of days to retain the review artifacts
         required: false
@@ -91,6 +96,7 @@ jobs:
           finding-scope: defects-and-risks
           verbosity: ${{ inputs.verbosity }}
           review-concurrency: ${{ inputs.review-concurrency }}
+          runtime: ${{ inputs.runtime }}
           github-token: ${{ secrets.github-token }}
           github-app-id: ${{ secrets.redline-review-app-id }}
           github-app-key: ${{ secrets.redline-review-private-key }}

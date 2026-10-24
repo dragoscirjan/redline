@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveChangeImpact } from '../src/change-impact/planner.js';
+import { deriveChangeImpact } from '../src/change-impact/planner.ts';
 import type {
   ChangeImpactInput,
   CodeIntelligenceSnapshot,
@@ -8,7 +8,7 @@ import type {
   GraphEdge,
   GraphNode,
   ImpactConfiguration,
-} from '../src/change-impact/types.js';
+} from '../src/change-impact/types.ts';
 
 const BASE = 'a'.repeat(40);
 const HEAD = 'b'.repeat(40);

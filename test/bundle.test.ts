@@ -1,8 +1,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadReviewBundle, parseReviewManifest } from '../src/review/bundle.js';
-import { BASE_SHA, createBundleFixture, HEAD_SHA } from './helpers/bundle.js';
+import { loadReviewBundle, parseReviewManifest } from '../src/review/bundle.ts';
+import { BASE_SHA, createBundleFixture, HEAD_SHA } from './helpers/bundle.ts';
 
 describe('parseReviewManifest', () => {
   const validEntry = {

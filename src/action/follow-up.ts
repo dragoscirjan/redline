@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
-import type { FollowUpRequestBatch } from '../code-context/follow-up.js';
-import { nodeProcessSpawner, runBoundedProcess, type ProcessSpawner } from '../process-runner.js';
+import type { FollowUpRequestBatch } from '../code-context/follow-up.ts';
+import { nodeProcessSpawner, runBoundedProcess, type ProcessSpawner } from '../process-runner.ts';
 
 const WORKER_TIMEOUT_MS = 120_000;
 const MAX_RESULT_BYTES = 256 * 1024;

@@ -7,7 +7,7 @@ import type {
   CodeContextProvider,
   CodeContextStatus,
   CodeContextTimings,
-} from '../code-context/artifact.js';
+} from '../code-context/artifact.ts';
 
 export type FindingScope = 'defects' | 'defects-and-risks';
 export const FINDING_SCOPES: readonly FindingScope[] = ['defects', 'defects-and-risks'];

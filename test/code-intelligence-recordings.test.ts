@@ -4,14 +4,14 @@ import {
   assertQueryResultMatches,
   parseCodeIntelligenceQuery,
   parseCodeIntelligenceRecording,
-} from '../src/code-intelligence/contracts.js';
-import { CodeIntelligenceProviderRegistry } from '../src/code-intelligence/registry.js';
+} from '../src/code-intelligence/contracts.ts';
+import { CodeIntelligenceProviderRegistry } from '../src/code-intelligence/registry.ts';
 import type {
   CodeIntelligenceQuery,
   CodeIntelligenceRecording,
   CodeIntelligenceSnapshot,
-} from '../src/code-intelligence/types.js';
-import { RecordedCodeIntelligenceProvider } from './helpers/code-intelligence-conformance.js';
+} from '../src/code-intelligence/types.ts';
+import { RecordedCodeIntelligenceProvider } from './helpers/code-intelligence-conformance.ts';
 
 async function load(name: 'gitnexus' | 'cgc'): Promise<CodeIntelligenceRecording> {
   const text = await readFile(new URL(`./fixtures/code-intelligence/${name}.json`, import.meta.url), 'utf8');

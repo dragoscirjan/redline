@@ -47,6 +47,10 @@ inputs:
     description: Maximum simultaneous per-file model calls. Must be an integer from 1 through 8.
     required: false
     default: "4"
+  runtime:
+    description: Trusted TypeScript runtime, node or bun. This does not select harness or code-index provider runtimes.
+    required: false
+    default: node
   verbosity:
     description: Live model stream in the run log - silent (per-file lines only), progress (one dot per model text chunk), full-output (readable stream text). Default progress.
     required: false
@@ -80,6 +84,7 @@ runs:
         INDEXING: ${{ inputs.indexing }}
         INDEXING_PROVIDER: ${{ inputs.indexing-provider }}
         REVIEW_CONCURRENCY: ${{ inputs.review-concurrency }}
+        TYPESCRIPT_RUNTIME: ${{ inputs.runtime }}
         ARTIFACT_RETENTION_DAYS: ${{ inputs.artifact-retention-days }}
       run: |
         set -euo pipefail
@@ -93,27 +98,36 @@ runs:
         [[ "$INDEXING" == 'enabled' || "$INDEXING" == 'disabled' ]]
         [[ "$INDEXING_PROVIDER" == 'cgc' || "$INDEXING_PROVIDER" == 'gitnexus' ]]
         [[ "$REVIEW_CONCURRENCY" =~ ^[1-8]$ ]]
+        [[ "$TYPESCRIPT_RUNTIME" == 'node' || "$TYPESCRIPT_RUNTIME" == 'bun' ]]
         [[ "$ARTIFACT_RETENTION_DAYS" =~ ^[0-9]+$ ]]
         (( ARTIFACT_RETENTION_DAYS >= 1 && ARTIFACT_RETENTION_DAYS <= 90 ))
 
     - name: Set up pinned Node runtime
+      if: ${{ inputs.runtime == 'node' }}
       uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
       with:
         node-version: 24
 
-    - name: Build trusted TypeScript
+    - name: Set up pinned Bun runtime
+      if: ${{ inputs.runtime == 'bun' }}
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      with:
+        bun-version: 1.4.4
+
+    - name: Check trusted TypeScript source
       shell: bash
       working-directory: ${{ github.action_path }}/../
       env:
-        REVIEW_BACKEND: ${{ inputs.backend }}
-        REVIEW_MODEL_CONFIG: ${{ inputs.model-config }}
-        REVIEW_MODEL_AUTH: ${{ inputs.model-auth }}
+        REVIEW_BACKEND_PRESENT: ${{ inputs.backend != '' }}
+        REVIEW_MODEL_CONFIG_PRESENT: ${{ inputs.model-config != '' }}
+        REVIEW_MODEL_AUTH_PRESENT: ${{ inputs.model-auth != '' }}
       run: |
         set -euo pipefail
         # Review execution is enabled only when the full review input set is
-        # present. Partial input must fail loudly instead of silently degrading.
-        if [[ -n "$REVIEW_BACKEND" || -n "$REVIEW_MODEL_CONFIG" || -n "$REVIEW_MODEL_AUTH" ]]; then
-          if [[ -z "$REVIEW_BACKEND" || -z "$REVIEW_MODEL_CONFIG" || -z "$REVIEW_MODEL_AUTH" ]]; then
+        # present. Validate presence without exposing model credentials to the
+        # dependency installer or the type checker.
+        if [[ "$REVIEW_BACKEND_PRESENT" == 'true' || "$REVIEW_MODEL_CONFIG_PRESENT" == 'true' || "$REVIEW_MODEL_AUTH_PRESENT" == 'true' ]]; then
+          if [[ "$REVIEW_BACKEND_PRESENT" != 'true' || "$REVIEW_MODEL_CONFIG_PRESENT" != 'true' || "$REVIEW_MODEL_AUTH_PRESENT" != 'true' ]]; then
             printf 'Review execution requires backend, model-config, and model-auth together.\n' >&2
             exit 2
           fi
@@ -123,10 +137,10 @@ runs:
         corepack enable
         corepack prepare pnpm@10.33.0 --activate
         pnpm install --frozen-lockfile --ignore-scripts
-        pnpm run build
-        test -f dist/src/review/cli.js
-        test -f dist/src/action/review.js
-        test -f dist/src/context-bundle.js
+        pnpm run typecheck
+        test -f src/review/cli.ts
+        test -f src/action/review.ts
+        test -f src/context-bundle.ts
 
     # Two-phase token flow: token 1 exists for the review-start (and
     # failure) notifications minted while the review data is collected;
@@ -166,11 +180,12 @@ runs:
         REDLINE_REPOSITORY: ${{ (steps.app-token-start.outputs.token || inputs.github-token) != '' && github.repository || '' }}
         REDLINE_PULL_REQUEST: ${{ (steps.app-token-start.outputs.token || inputs.github-token) != '' && github.event.pull_request.number || '' }}
         REDLINE_HEAD: ${{ (steps.app-token-start.outputs.token || inputs.github-token) != '' && github.event.pull_request.head.sha || '' }}
+        TYPESCRIPT_RUNTIME: ${{ inputs.runtime }}
       run: |
         set -euo pipefail
         # Authoritative input validation runs even in context-only mode, so
         # invalid optional inputs fail instead of passing silently.
-        node dist/src/review/cli.js --validate-only
+        "$TYPESCRIPT_RUNTIME" src/review/cli.ts --validate-only
 
     - name: Restore validated per-file review records
       id: review-cache-restore
@@ -218,9 +233,10 @@ runs:
       env:
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        TYPESCRIPT_RUNTIME: ${{ inputs.runtime }}
       run: |
         set -euo pipefail
-        node "${{ github.action_path }}/../dist/src/context-bundle.js" \
+        "$TYPESCRIPT_RUNTIME" "${{ github.action_path }}/../src/context-bundle.ts" \
           --base "$BASE_SHA" \
           --head "$HEAD_SHA" \
           --output "$GITHUB_WORKSPACE/review" \
@@ -240,6 +256,12 @@ runs:
         if-no-files-found: error
         include-hidden-files: true
         retention-days: ${{ inputs.artifact-retention-days }}
+
+    - name: Set up fixed harness Node runtime
+      if: ${{ inputs.runtime == 'bun' && (inputs.backend == 'pi' || inputs.backend == 'opencode') }}
+      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+      with:
+        node-version: 24
 
     - name: Ensure harness binary
       if: ${{ inputs.backend == 'pi' || inputs.backend == 'opencode' }}
@@ -274,12 +296,13 @@ runs:
         REDLINE_REPOSITORY: ${{ github.repository }}
         REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
         REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
+        TYPESCRIPT_RUNTIME: ${{ inputs.runtime }}
       run: |
         set -euo pipefail
         # The "review in progress" comment goes out before the review: a
         # run can take tens of minutes and the PR must not look abandoned.
         # A failed announcement is logged and the review continues.
-        node "${{ github.action_path }}/../dist/src/review/cli.js" --announce-only
+        "$TYPESCRIPT_RUNTIME" "${{ github.action_path }}/../src/review/cli.ts" --announce-only
 
     - name: Run harness review
       id: review
@@ -305,13 +328,14 @@ runs:
         # Explicit gate: scripted replay is not independent live-model evidence.
         # Never enable until the recall, clean-change, and latency gates pass.
         CODE_INDEX_VERIFICATION_ENABLED: 'false'
+        TYPESCRIPT_RUNTIME: ${{ inputs.runtime }}
       run: |
         set -euo pipefail
         # Token-free by design: the review process carries no publication
         # credential at all. Publication happens in its own step with a
         # freshly minted token, so the token lifetime never bounds the
         # review duration.
-        node "${{ github.action_path }}/../dist/src/action/review.js"
+        "$TYPESCRIPT_RUNTIME" "${{ github.action_path }}/../src/action/review.ts"
 
     - name: Save validated per-file review records
       if: ${{ always() && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
@@ -341,6 +365,7 @@ runs:
         REDLINE_REPOSITORY: ${{ github.repository }}
         REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
         REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
+        TYPESCRIPT_RUNTIME: ${{ inputs.runtime }}
       run: |
         set -euo pipefail
         # Fresh token, seconds-old: loads the written records and summary
@@ -352,7 +377,7 @@ runs:
         publication_output=$(mktemp "$RUNNER_TEMP/redline-publication.XXXXXX")
         trap 'rm -f "$publication_output"' EXIT
         set +e
-        node "${{ github.action_path }}/../dist/src/review/cli.js" --publish-only >"$publication_output"
+        "$TYPESCRIPT_RUNTIME" "${{ github.action_path }}/../src/review/cli.ts" --publish-only >"$publication_output"
         publication_status=$?
         set -e
         cat "$publication_output"
@@ -390,11 +415,12 @@ runs:
         REDLINE_PULL_REQUEST: ${{ github.event.pull_request.number }}
         REDLINE_HEAD: ${{ github.event.pull_request.head.sha }}
         REDLINE_FAILURE_REASON: The review run failed; see the run log and artifacts for diagnostics.
+        TYPESCRIPT_RUNTIME: ${{ inputs.runtime }}
       run: |
         set -euo pipefail
         # Replaces the "review in progress" comment with the failure state
         # so it never stays at running. Best effort.
-        node "${{ github.action_path }}/../dist/src/review/cli.js" --announce-failure
+        "$TYPESCRIPT_RUNTIME" "${{ github.action_path }}/../src/review/cli.ts" --announce-failure
 
     - name: Upload review output artifact
       if: ${{ always() && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}

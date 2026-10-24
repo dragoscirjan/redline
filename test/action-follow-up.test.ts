@@ -3,9 +3,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { createActionFollowUpExecutor } from '../src/action/follow-up.js';
-import { FollowUpBudget } from '../src/code-context/follow-up.js';
-import type { ProcessSpawner, SpawnRequest, SpawnedProcess } from '../src/process-runner.js';
+import { createActionFollowUpExecutor } from '../src/action/follow-up.ts';
+import { FollowUpBudget } from '../src/code-context/follow-up.ts';
+import type { ProcessSpawner, SpawnRequest, SpawnedProcess } from '../src/process-runner.ts';
 
 function plan() {
   const candidateId = `f-${'1'.repeat(24)}`;
@@ -14,12 +14,16 @@ function plan() {
 }
 
 class ResultSpawner implements ProcessSpawner {
-  constructor(private readonly mode: 'missing' | 'empty' | 'oversized') {}
+  readonly #mode: 'missing' | 'empty' | 'oversized';
+
+  constructor(mode: 'missing' | 'empty' | 'oversized') {
+    this.#mode = mode;
+  }
 
   spawn(request: SpawnRequest): SpawnedProcess {
     const path = request.args[request.args.indexOf('--output') + 1];
     if (path === undefined) throw new Error('missing worker output path');
-    if (this.mode !== 'missing') writeFileSync(path, this.mode === 'empty' ? '' : 'x'.repeat(256 * 1024 + 1));
+    if (this.#mode !== 'missing') writeFileSync(path, this.#mode === 'empty' ? '' : 'x'.repeat(256 * 1024 + 1));
     return {
       stdout: (async function* () {})(),
       stderr: (async function* () {})(),

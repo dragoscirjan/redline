@@ -2,14 +2,14 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { codeContextGraphFactDigest } from '../src/code-context/artifact.js';
-import { loadReviewBundle } from '../src/review/bundle.js';
+import { codeContextGraphFactDigest } from '../src/code-context/artifact.ts';
+import { loadReviewBundle } from '../src/review/bundle.ts';
 import {
   codeContextForFile,
   loadReviewCodeContext,
   MAX_INDEXED_CONTEXT_SOURCE_BYTES_PER_FILE,
-} from '../src/review/indexed-context.js';
-import { BASE_SHA, createBundleFixture, HEAD_SHA } from './helpers/bundle.js';
+} from '../src/review/indexed-context.ts';
+import { BASE_SHA, createBundleFixture, HEAD_SHA } from './helpers/bundle.ts';
 
 const REPOSITORY = 'owner/repository';
 

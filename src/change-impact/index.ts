@@ -1,10 +1,10 @@
-export { deriveChangeImpact } from './planner.js';
+export { deriveChangeImpact } from './planner.ts';
 export {
   createChangeImpactWriter,
   renderChangeImpactMarkdown,
   renderContextPlanMarkdown,
   type ChangeImpactWriter,
-} from './writer.js';
+} from './writer.ts';
 export {
   CHANGE_IMPACT_MAP_VERSION,
   CONTEXT_PLAN_VERSION,
@@ -48,4 +48,4 @@ export {
   type TestReachability,
   type TraversalBudget,
   type TruncationReason,
-} from './types.js';
+} from './types.ts';

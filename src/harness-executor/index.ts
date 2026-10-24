@@ -9,19 +9,19 @@ export {
   type HarnessRunStatus,
   type HarnessSettings,
   type PreparedHarness,
-} from './types.js';
+} from './types.ts';
 export {
   createHarnessExecutor,
   isHarnessName,
   type HarnessExecutorOptions,
-} from './registry.js';
-export { EchoHarnessExecutor } from './echo-executor.js';
-export { createPiExecutor, extractPiAssistantText, PI_CREDENTIAL_ENV_NAME } from './pi-executor.js';
+} from './registry.ts';
+export { EchoHarnessExecutor } from './echo-executor.ts';
+export { createPiExecutor, extractPiAssistantText, PI_CREDENTIAL_ENV_NAME } from './pi-executor.ts';
 export {
   createOpenCodeExecutor,
   extractOpenCodeAssistantText,
   OPENCODE_REVIEW_AGENT,
-} from './opencode-executor.js';
+} from './opencode-executor.ts';
 export {
   createBoundedReader,
   isRecord,
@@ -37,4 +37,4 @@ export {
   type BoundedText,
   type ProcessSpawner,
   type SpawnedProcess,
-} from './process-runner.js';
+} from './process-runner.ts';

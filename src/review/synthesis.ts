@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { MAX_PUBLISHED_FILE_REVIEWS, MAX_PUBLISHED_INLINE_COMMENTS } from './publication-limits.js';
-import type { PullRequestFinding, ReviewSynthesis, ReviewSynthesisDecision, ReviewSynthesisGroup } from './types.js';
+import { MAX_PUBLISHED_FILE_REVIEWS, MAX_PUBLISHED_INLINE_COMMENTS } from './publication-limits.ts';
+import type { PullRequestFinding, ReviewSynthesis, ReviewSynthesisDecision, ReviewSynthesisGroup } from './types.ts';
 
 function normalize(value: string): string {
   return value.trim().replace(/\s+/gu, ' ').toLocaleLowerCase('en-US');

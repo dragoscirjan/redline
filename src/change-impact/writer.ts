@@ -1,6 +1,6 @@
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ChangeImpactMap, ReviewContextPlan } from './types.js';
+import type { ChangeImpactMap, ReviewContextPlan } from './types.ts';
 
 let temporarySequence = 0;
 

@@ -2,8 +2,9 @@
 
 setup() {
   ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
-  CLI="$ROOT/dist/src/review/cli.js"
-  SCRIPT="$ROOT/dist/src/context-bundle.js"
+  RUNTIME="${SOURCE_RUNTIME:-node}"
+  CLI="$ROOT/src/review/cli.ts"
+  SCRIPT="$ROOT/src/context-bundle.ts"
   TMP="$(mktemp -d)"
   REPO="$TMP/repo"
   mkdir -p "$REPO/src"
@@ -30,26 +31,27 @@ teardown() {
 build_bundle() {
   (
     cd "$TMP/source"
-    node "$SCRIPT" --base "$BASE" --head "$HEAD" --output "$TMP/review" --source "$TMP/source-at-head"
+    "$RUNTIME" "$SCRIPT" --base "$BASE" --head "$HEAD" --output "$TMP/review" --source "$TMP/source-at-head"
   )
 }
 
-@test "requires a prior build of the CLI" {
+@test "uses the TypeScript source CLI" {
   [ -f "$CLI" ]
 }
 
 @test "validate-only rejects partial review inputs" {
-  REDLINE_HARNESS=pi run node "$CLI" --validate-only
+  REDLINE_HARNESS=pi run "$RUNTIME" "$CLI" --validate-only
   [ "$status" -eq 2 ]
 }
 
 @test "validate-only rejects unknown REDLINE variables" {
-  REDLINE_HARNESSS=typo run node "$CLI" --validate-only
+  REDLINE_HARNESSS=typo run "$RUNTIME" "$CLI" --validate-only
   [ "$status" -eq 2 ]
 }
 
 @test "context-only mode validates and exits zero" {
-  REDLINE_FINDING_SCOPE=defects run node "$CLI" --validate-only
+  REDLINE_FINDING_SCOPE=defects run "$RUNTIME" "$CLI" --validate-only
+  printf '%s\n' "$output"
   [ "$status" -eq 0 ]
   [[ "$output" == *'"mode":"context-only"'* ]]
 }
@@ -62,7 +64,8 @@ build_bundle() {
   REDLINE_OUTPUT_DIR="$TMP/output" \
   REDLINE_MODEL_CONFIG='{"provider":"mock","endpoint":"http://127.0.0.1:9/v1","model":"test-model"}' \
   REDLINE_MODEL_AUTH='{"mock":"test-key"}' \
-  run node "$CLI"
+  run "$RUNTIME" "$CLI"
+  printf '%s\n' "$output"
   [ "$status" -eq 0 ]
   [[ "$output" == *'"reviewedFiles":1'* ]]
   [ -f "$TMP/output/reviews/000001.json" ]
@@ -121,6 +124,6 @@ build_bundle() {
   REDLINE_OUTPUT_DIR="$TMP/output" \
   REDLINE_MODEL_CONFIG='{"provider":"mock","endpoint":"http://127.0.0.1:9/v1","model":"test-model"}' \
   REDLINE_MODEL_AUTH='{"mock":"test-key"}' \
-  run node "$CLI"
+  run "$RUNTIME" "$CLI"
   [ "$status" -eq 1 ]
 }

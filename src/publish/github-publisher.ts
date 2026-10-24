@@ -13,8 +13,8 @@
  * comments.
  */
 
-import { byteLength, isRecord } from '../review/bundle.js';
-import type { FileReviewPublication, ReviewPublisher, ReviewScope } from './types.js';
+import { byteLength, isRecord } from '../review/bundle.ts';
+import type { FileReviewPublication, ReviewPublisher, ReviewScope } from './types.ts';
 
 const API_ROOT = 'https://api.github.com';
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -51,12 +51,15 @@ async function boundedErrorBody(response: Response): Promise<string | undefined>
 }
 
 export class GitHubApiError extends Error {
-  constructor(request: string, readonly status: number, detail?: string) {
+  readonly status: number;
+
+  constructor(request: string, status: number, detail?: string) {
     // GitHub error bodies carry the actionable reason (for example
     // "Resource not accessible by integration"); keep a bounded copy
     // without risking large or irrelevant payloads.
     const bounded = detail === undefined || detail.length === 0 ? '' : `: ${detail.slice(0, 400)}`;
     super(`GitHub API request failed (${request}) with status ${status}${bounded}`);
+    this.status = status;
   }
 }
 

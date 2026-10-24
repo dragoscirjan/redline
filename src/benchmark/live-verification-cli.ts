@@ -6,14 +6,14 @@ import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { loadBenchmarkCorpus, materializeBenchmarkFixture, type FixtureRecording } from './benchmark.js';
-import { parseDuration } from '../duration.js';
-import { createHarnessExecutor, isHarnessName } from '../harness-executor/registry.js';
-import type { HarnessExecuteOptions, HarnessExecutor, HarnessPrompt, HarnessRun, HarnessSettings, PreparedHarness } from '../harness-executor/types.js';
-import { parseModelConfig, selectModelCredential, type ReviewEnvironment } from '../review/environment.js';
-import { runFileReviews } from '../review/runner.js';
-import { VERIFICATION_PROMPT_ID } from '../review/verification-prompt.js';
-import type { FileReviewRecord } from '../review/types.js';
+import { loadBenchmarkCorpus, materializeBenchmarkFixture, type FixtureRecording } from './benchmark.ts';
+import { parseDuration } from '../duration.ts';
+import { createHarnessExecutor, isHarnessName } from '../harness-executor/registry.ts';
+import type { HarnessExecuteOptions, HarnessExecutor, HarnessPrompt, HarnessRun, HarnessSettings, PreparedHarness } from '../harness-executor/types.ts';
+import { parseModelConfig, selectModelCredential, type ReviewEnvironment } from '../review/environment.ts';
+import { runFileReviews } from '../review/runner.ts';
+import { VERIFICATION_PROMPT_ID } from '../review/verification-prompt.ts';
+import type { FileReviewRecord } from '../review/types.ts';
 
 interface Configuration {
   readonly harness: 'pi' | 'opencode';
@@ -33,6 +33,7 @@ function configuration(env: NodeJS.ProcessEnv): Configuration {
 
 class ReplayDiscoveryExecutor implements HarnessExecutor {
   readonly harness: HarnessExecutor['harness'];
+  readonly #delegate: HarnessExecutor;
   readonly discovery: HarnessRun[] = [];
   phase: 'discovery' | 'verification' = 'discovery';
   discoveryPromptBytes = 0;
@@ -40,17 +41,18 @@ class ReplayDiscoveryExecutor implements HarnessExecutor {
   verificationCalls = 0;
   #replayOffset = 0;
 
-  constructor(private readonly delegate: HarnessExecutor) {
+  constructor(delegate: HarnessExecutor) {
+    this.#delegate = delegate;
     this.harness = delegate.harness;
   }
 
-  prepare(settings: HarnessSettings): Promise<PreparedHarness> { return this.delegate.prepare(settings); }
+  prepare(settings: HarnessSettings): Promise<PreparedHarness> { return this.#delegate.prepare(settings); }
 
   async execute(prepared: PreparedHarness, prompt: HarnessPrompt, options?: HarnessExecuteOptions): Promise<HarnessRun> {
     const bytes = Buffer.byteLength(prompt.system, 'utf8') + Buffer.byteLength(prompt.user, 'utf8');
     if (this.phase === 'discovery') {
       this.discoveryPromptBytes += bytes;
-      const result = await this.delegate.execute(prepared, prompt, options);
+      const result = await this.#delegate.execute(prepared, prompt, options);
       this.discovery.push(result);
       return result;
     }
@@ -62,7 +64,7 @@ class ReplayDiscoveryExecutor implements HarnessExecutor {
     }
     this.verificationCalls += 1;
     this.verificationPromptBytes += bytes;
-    return this.delegate.execute(prepared, prompt, options);
+    return this.#delegate.execute(prepared, prompt, options);
   }
 
   assertCompleteReplay(): void {

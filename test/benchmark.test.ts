@@ -8,9 +8,9 @@ import {
   runRecordedBenchmark,
   scoreBenchmarkCase,
   writeBenchmarkReport,
-} from '../src/benchmark/benchmark.js';
-import type { FileReviewRecord, PublishedFinding } from '../src/review/types.js';
-import { publishedFinding } from './helpers/finding.js';
+} from '../src/benchmark/benchmark.ts';
+import type { FileReviewRecord, PublishedFinding } from '../src/review/types.ts';
+import { publishedFinding } from './helpers/finding.ts';
 
 const CORPUS = resolve('benchmark/review-quality/v2');
 const HISTORICAL_BASELINE = resolve('benchmark/review-quality/v1/baseline/report.json');

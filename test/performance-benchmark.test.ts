@@ -2,15 +2,15 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { HarnessExecutor } from '../src/harness-executor/types.js';
-import { loadPerformanceCorpus } from '../src/benchmark/performance-corpus.js';
+import type { HarnessExecutor } from '../src/harness-executor/types.ts';
+import { loadPerformanceCorpus } from '../src/benchmark/performance-corpus.ts';
 import {
   loadPerformanceProfile,
   renderPerformanceMarkdown,
   runPerformanceBenchmark,
   writePerformanceReport,
-} from '../src/benchmark/performance.js';
-import { parseDuration } from '../src/duration.js';
+} from '../src/benchmark/performance.ts';
+import { parseDuration } from '../src/duration.ts';
 
 const CORPUS = resolve('benchmark/performance/v1/corpus.json');
 const PROFILE = resolve('benchmark/performance/v1/profile.json');

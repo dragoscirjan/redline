@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { FileReviewValidator, parseChangedLines, parseFileReviewDocument } from '../src/review/report.js';
-import type { ReviewFinding } from '../src/review/types.js';
-import type { ReviewManifestFile } from '../src/review/bundle.js';
-import { reviewFinding } from './helpers/finding.js';
+import { FileReviewValidator, parseChangedLines, parseFileReviewDocument } from '../src/review/report.ts';
+import type { ReviewFinding } from '../src/review/types.ts';
+import type { ReviewManifestFile } from '../src/review/bundle.ts';
+import { reviewFinding } from './helpers/finding.ts';
 
 const DIFF =
   'diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1,4 +1,4 @@\n context\n-old line\n+new line\n more context\n';

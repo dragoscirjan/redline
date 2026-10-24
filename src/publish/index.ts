@@ -3,12 +3,12 @@ export {
   type InlineReviewComment,
   type ReviewPublisher,
   type ReviewScope,
-} from './types.js';
+} from './types.ts';
 export {
   GitHubApiError,
   GitHubReviewPublisher,
   type GitHubReviewPublisherOptions,
-} from './github-publisher.js';
+} from './github-publisher.ts';
 export {
   type RunningSummaryInfo,
   type SummaryPublicationNotes,
@@ -20,7 +20,7 @@ export {
   renderRunningSummaryBody,
   renderSummaryBody,
   summaryMarker,
-} from './render.js';
+} from './render.ts';
 export {
   MAX_PUBLISHED_FILE_REVIEWS,
   MAX_PUBLISHED_INLINE_COMMENTS,
@@ -29,4 +29,4 @@ export {
   type PublicationFileResult,
   type PublicationOutcome,
   publishRecords,
-} from './service.js';
+} from './service.ts';

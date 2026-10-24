@@ -19,7 +19,7 @@ import {
   runBoundedProcess,
   type BoundedRunResult,
   type ProcessSpawner,
-} from './process-runner.js';
+} from './process-runner.ts';
 import type {
   HarnessExecuteOptions,
   HarnessExecutor,
@@ -27,7 +27,7 @@ import type {
   HarnessRun,
   HarnessSettings,
   PreparedHarness,
-} from './types.js';
+} from './types.ts';
 
 /** Event boundaries forwarded as heartbeat lines; event content never is. */
 const PI_HEARTBEAT_EVENTS = new Set(['message_end', 'turn_end', 'agent_end', 'agent_settled']);

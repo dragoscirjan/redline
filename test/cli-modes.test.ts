@@ -1,18 +1,18 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { main } from '../src/review/cli.js';
-import { loadPublishedRun } from '../src/review/run-output.js';
-import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.js';
+import { main } from '../src/review/cli.ts';
+import { loadPublishedRun } from '../src/review/run-output.ts';
+import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
 
 const HEAD = 'b'.repeat(40);
 
 function fakePublisher(head = HEAD): {
-  publisher: import('../src/publish/index.js').ReviewPublisher;
+  publisher: import('../src/publish/index.ts').ReviewPublisher;
   calls: { currentHead: number; publishFileReview: number; upsertSummary: number; bodies: string[] };
 } {
   const calls = { currentHead: 0, publishFileReview: 0, upsertSummary: 0, bodies: [] as string[] };
-  const publisher: import('../src/publish/index.js').ReviewPublisher = {
+  const publisher: import('../src/publish/index.ts').ReviewPublisher = {
     async currentHead() {
       calls.currentHead += 1;
       return head;

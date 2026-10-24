@@ -1,5 +1,5 @@
 import { performance } from 'node:perf_hooks';
-import { parseCodeIntelligenceSnapshot } from '../code-intelligence/contracts.js';
+import { parseCodeIntelligenceSnapshot } from '../code-intelligence/contracts.ts';
 import {
   CHANGE_IMPACT_MAP_VERSION,
   CONTEXT_PLAN_VERSION,
@@ -34,7 +34,7 @@ import {
   type TestReachability,
   type TraversalBudget,
   type TruncationReason,
-} from './types.js';
+} from './types.ts';
 
 const CONTEXT_CATEGORY_ORDER: Readonly<Record<ContextCategory, number>> = {
   'diff-declaration': 0,

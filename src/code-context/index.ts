@@ -13,4 +13,4 @@ export {
   type CodeContextTimings,
   type CodeContextVersion,
   type RelatedCodeSpan,
-} from './artifact.js';
+} from './artifact.ts';

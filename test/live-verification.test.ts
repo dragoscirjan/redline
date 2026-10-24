@@ -2,7 +2,7 @@ import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { judgeLiveVerification } from '../src/benchmark/judge-live-verification.js';
+import { judgeLiveVerification } from '../src/benchmark/judge-live-verification.ts';
 
 const directory = resolve('benchmark/review-quality/verification-v1/live-model');
 const verifierV3Directory = resolve('benchmark/review-quality/verification-v1/live-model-v3');

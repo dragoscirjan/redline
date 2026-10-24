@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { main, performanceExitCode } from '../src/benchmark/performance-cli.js';
+import { main, performanceExitCode } from '../src/benchmark/performance-cli.ts';
 
 const CORPUS = resolve('benchmark/performance/v1/corpus.json');
 const PROFILE = resolve('benchmark/performance/v1/profile.json');

@@ -4,11 +4,8 @@ lockfile = true
 [tools]
 pnpm = "10.33.0"
 node = "24"
+bun = "1.4.4"
 python = "3.12"
-
-[tasks.build]
-description = "Compile TypeScript sources and tests"
-run = "pnpm run build"
 
 [tasks.benchmark]
 description = "Run the deterministic recorded review-quality benchmark"
@@ -30,6 +27,10 @@ run = "pnpm run benchmark:performance:live"
 description = "Regenerate the checked-in code-index provider value report"
 run = "pnpm run benchmark:code-index-value"
 
+[tasks."benchmark:source-runtime"]
+description = "Measure pinned Node and Bun TypeScript source startup and echo review time"
+run = "pnpm run benchmark:source-runtime"
+
 [tasks."benchmark:live-verification"]
 description = "Opt-in independent live discovery-to-verifier capture; never runs in CI"
 run = "pnpm run benchmark:live-verification"
@@ -47,11 +48,11 @@ description = "Check TypeScript types"
 run = "pnpm run typecheck"
 
 [tasks.test]
-description = "Build and run the Node and Bats test suites"
+description = "Run the Vitest and Bats suites against TypeScript source"
 run = "pnpm test"
 
 [tasks.validate]
-description = "Check types, build and test the code, and build the docs"
+description = "Check types, test TypeScript source, and build the docs"
 run = [
   "mise run typecheck",
   "mise run test",

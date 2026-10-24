@@ -6,8 +6,8 @@ import {
   parsePublishOnlyEnvironment,
   parseReviewEnvironment,
   selectModelCredential,
-} from '../src/review/environment.js';
-import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.js';
+} from '../src/review/environment.ts';
+import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
 
 const MODEL_CONFIG = JSON.stringify({ provider: 'mock', endpoint: 'http://127.0.0.1:8787/v1', model: 'test-model' });
 const MODEL_AUTH = JSON.stringify({ mock: 'test-key' });

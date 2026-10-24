@@ -1,13 +1,13 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FollowUpBudget, type FollowUpRequestBatch } from '../src/code-context/follow-up.js';
-import { loadReviewBundle } from '../src/review/bundle.js';
-import { classifyFollowUpSourceFailure, followUpSourcesByCandidate, resolveFollowUpResults } from '../src/review/follow-up.js';
-import { SourceMismatchError } from '../src/review/source-evidence.js';
-import { parseVerificationDocument, validateVerificationDocument } from '../src/review/verification.js';
-import { BASE_SHA, createBundleFixture, HEAD_SHA } from './helpers/bundle.js';
-import { reviewFinding } from './helpers/finding.js';
+import { FollowUpBudget, type FollowUpRequestBatch } from '../src/code-context/follow-up.ts';
+import { loadReviewBundle } from '../src/review/bundle.ts';
+import { classifyFollowUpSourceFailure, followUpSourcesByCandidate, resolveFollowUpResults } from '../src/review/follow-up.ts';
+import { SourceMismatchError } from '../src/review/source-evidence.ts';
+import { parseVerificationDocument, validateVerificationDocument } from '../src/review/verification.ts';
+import { BASE_SHA, createBundleFixture, HEAD_SHA } from './helpers/bundle.ts';
+import { reviewFinding } from './helpers/finding.ts';
 
 const candidateId = `f-${'1'.repeat(24)}`;
 const provider = { id: 'cgc' as const, version: '0.5.7' };

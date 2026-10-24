@@ -16,9 +16,9 @@
 
 import { lstat, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { byteLength, ensureInside, type ReviewBundle, type ReviewManifestFile } from './bundle.js';
-import type { ChangedLines } from './report.js';
-import type { FindingSide, ValidatedFinding } from './types.js';
+import { byteLength, ensureInside, type ReviewBundle, type ReviewManifestFile } from './bundle.ts';
+import type { ChangedLines } from './report.ts';
+import type { FindingSide, ValidatedFinding } from './types.ts';
 
 /** Spans longer than this are not embedded; the fix prompt cites them only. */
 export const MAX_SPAN_LINES = 200;

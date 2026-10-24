@@ -169,7 +169,7 @@ describe('checkout benchmark strategy correctness', () => {
     await assertEquivalent(await createForcePushedFork(parent), parent);
   }, 120_000);
 
-  it('preserves the primary sample failure while cleaning the workspace', async () => {
+  it('preserves the primary sample failure when a run aborts', async () => {
     const parent = await root();
     const repository = await createMergeRepository(parent);
     const invalid = { ...repository, head: 'f'.repeat(40) };

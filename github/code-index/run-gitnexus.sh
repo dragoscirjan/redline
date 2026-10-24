@@ -130,6 +130,7 @@ prepare() {
 
   write_output available true
   write_output cache-path "$CACHE_ROOT"
+  write_output cache-identity "${cache_prefix}-${base}"
   write_output cache-primary-key "${cache_prefix}-${base}-${run_suffix}"
   write_output cache-base-prefix "${cache_prefix}-${base}-"
 }
@@ -145,6 +146,7 @@ build() {
   python3 "$SCRIPT_DIR/export.py" build \
     --provider "$PROVIDER_ID" \
     --provider-version "$PROVIDER_VERSION" \
+    --mode "${REDLINE_CODE_INDEX_MODE:-review}" \
     --base "${REDLINE_CODE_INDEX_BASE}" \
     --head "${REDLINE_CODE_INDEX_HEAD}" \
     --repository "${REDLINE_CODE_INDEX_REPOSITORY}" \

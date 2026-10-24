@@ -50,6 +50,7 @@ EOF
   export GITHUB_RUN_ID=123
   export GITHUB_RUN_ATTEMPT=1
   export REDLINE_CODE_INDEX_PROVIDER=cgc
+  export REDLINE_CODE_INDEX_MODE=review
   export REDLINE_CODE_INDEX_BASE="$BASE"
   export REDLINE_CODE_INDEX_HEAD="$HEAD_REVISION"
   export REDLINE_CODE_INDEX_REPOSITORY='owner/repository'
@@ -183,8 +184,9 @@ import sys
 from pathlib import Path
 import yaml
 action = yaml.safe_load(Path(sys.argv[1]).read_text())
-assert set(action['inputs']) == {'provider', 'base', 'head', 'repository', 'output-directory'}
+assert set(action['inputs']) == {'provider', 'mode', 'base', 'head', 'repository', 'output-directory'}
 assert action['inputs']['provider']['default'] == 'cgc'
+assert action['inputs']['mode']['default'] == 'review'
 steps = action['runs']['steps']
 uses = [step.get('uses') for step in steps]
 sha = 'cdf6c1fa76f9f475f3d7449005a359c84ca0f306'
@@ -195,7 +197,17 @@ assert restore['with']['restore-keys'].strip() == '${{ steps.prepare.outputs.cac
 assert 'cache-exact-prefix' not in restore['with']['restore-keys']
 assert 'cache-compatible-prefix' not in restore['with']['restore-keys']
 assert action['outputs']['context-file']['value'] == '${{ steps.finalize.outputs.context-file }}'
+for output in ('cache-hit', 'cache-identity', 'cache-save-outcome', 'cache-size-bytes', 'duration-ms', 'index-ms', 'warmup-result'):
+    assert action['outputs'][output]['value'] == '${{ steps.finalize.outputs.' + output + ' }}'
 PY
+}
+
+@test "secondary action rejects unsupported execution modes" {
+  export REDLINE_CODE_INDEX_MODE=invalid
+  run bash "$ACTION_DIR/run.sh" prepare
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Unsupported code-index mode: invalid"* ]]
+  [ ! -e "$RUNNER_TEMP/redline-code-index" ]
 }
 
 @test "cold and restored-base fake-CGC runs export equivalent validated context" {
@@ -383,6 +395,56 @@ assert any(item['code'] == 'cache-restore-invalid' for item in artifact['diagnos
 PY
 }
 
+@test "cache identity rejects provider, repository, configuration, revision, and platform mismatches" {
+  prepare_action
+  cgc_identity=$(grep '^cache-identity=' "$GITHUB_OUTPUT" | tail -n 1 | cut -d= -f2-)
+  build_action '' success
+
+  for field in provider providerVersion repository revision configuration sourceRoot; do
+    python3 - "$RUNNER_TEMP/redline-code-index/cache/state.json" "$field" "$HEAD_REVISION" <<'PY'
+import json, sys
+path, field, head = sys.argv[1:]
+state = json.load(open(path, encoding='utf-8'))
+replacements = {
+    'provider': 'gitnexus',
+    'providerVersion': '0.0.0',
+    'repository': 'other/repository',
+    'revision': head,
+    'configuration': 'other-configuration',
+    'sourceRoot': '/other/source',
+}
+state[field] = replacements[field]
+with open(path, 'w', encoding='utf-8') as handle:
+    json.dump(state, handle)
+PY
+    : > "$PROVIDER/calls.log"
+    build_action "redline-code-index-mismatched-$field" success
+    [ "$(grep -c '^index ' "$PROVIDER/calls.log")" -eq 1 ]
+    python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" <<'PY'
+import json, sys
+artifact = json.load(open(sys.argv[1], encoding='utf-8'))
+assert any(item['code'] == 'cache-restore-invalid' for item in artifact['diagnostics'])
+PY
+  done
+
+  export REDLINE_CODE_INDEX_PROVIDER=gitnexus
+  export REDLINE_GITNEXUS_EXECUTABLE="$GITNEXUS_PROVIDER/dist/cli/index.js"
+  export REDLINE_GITNEXUS_RUNTIME
+  REDLINE_GITNEXUS_RUNTIME=$(command -v node)
+  unset REDLINE_CGC_EXECUTABLE
+  export RUNNER_ARCH=X64
+  : > "$GITHUB_OUTPUT"
+  prepare_action
+  x64_identity=$(grep '^cache-identity=' "$GITHUB_OUTPUT" | tail -n 1 | cut -d= -f2-)
+  export RUNNER_ARCH=ARM64
+  : > "$GITHUB_OUTPUT"
+  prepare_action
+  arm64_identity=$(grep '^cache-identity=' "$GITHUB_OUTPUT" | tail -n 1 | cut -d= -f2-)
+
+  [[ "$cgc_identity" != "$x64_identity" ]]
+  [[ "$x64_identity" != "$arm64_identity" ]]
+}
+
 @test "provider failure writes unavailable context and keeps the action successful" {
   prepare_action
   printf 'index-fail\n' > "$PROVIDER/mode"
@@ -409,7 +471,7 @@ PY
   ! grep -Fq 'status=' "$GITHUB_OUTPUT"
 }
 
-@test "unsupported changed files still build a reusable base-revision repository cache" {
+@test "unsupported-only reviews skip a no-benefit cold index" {
   git -C "$REPOSITORY" reset -q --hard "$BASE"
   mkdir -p "$REPOSITORY/.github/workflows"
   printf 'name: cache-test\n' > "$REPOSITORY/.github/workflows/cache-test.yml"
@@ -422,22 +484,75 @@ PY
   : > "$PROVIDER/calls.log"
   build_action '' success
 
-  grep -Fq 'cache-ready=true' "$GITHUB_OUTPUT"
-  grep -Fq "index $RUNNER_TEMP/redline-code-index/source --no-progress" "$PROVIDER/calls.log"
-  [ -f "$RUNNER_TEMP/redline-code-index/cache/state.json" ]
-  python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$RUNNER_TEMP/redline-code-index/cache/state.json" "$BASE" <<'PY'
+  grep -Fq 'cache-ready=false' "$GITHUB_OUTPUT"
+  ! grep -Fq "index $RUNNER_TEMP/redline-code-index/source --no-progress" "$PROVIDER/calls.log"
+  [ ! -f "$RUNNER_TEMP/redline-code-index/cache/state.json" ]
+  python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" <<'PY'
 import json, sys
 artifact = json.load(open(sys.argv[1], encoding='utf-8'))
-state = json.load(open(sys.argv[2], encoding='utf-8'))
 assert artifact['status'] == 'unsupported'
 assert artifact['files'] == [{
     'changedPath': '.github/workflows/cache-test.yml',
     'status': 'unsupported',
     'related': [],
 }]
-assert any(item['code'] == 'no-supported-changed-files' for item in artifact['diagnostics'])
-assert artifact['timings']['indexMs'] >= 0
-assert state['revision'] == sys.argv[3]
+codes = {item['code'] for item in artifact['diagnostics']}
+assert {'no-supported-changed-files', 'cold-index-skipped'} <= codes
+assert artifact['timings']['indexMs'] == 0
+PY
+}
+
+@test "warmup builds an exact-base cache that a later review reuses without indexing" {
+  review_head="$HEAD_REVISION"
+  export REDLINE_CODE_INDEX_MODE=warmup
+  export REDLINE_CODE_INDEX_HEAD="$BASE"
+
+  prepare_action
+  cache_identity=$(grep '^cache-identity=' "$GITHUB_OUTPUT" | tail -n 1 | cut -d= -f2-)
+  : > "$PROVIDER/calls.log"
+  build_action '' success
+
+  grep -Fq 'cache-ready=true' "$GITHUB_OUTPUT"
+  grep -Fq "index $RUNNER_TEMP/redline-code-index/source --no-progress" "$PROVIDER/calls.log"
+  [ -f "$RUNNER_TEMP/redline-code-index/cache/state.json" ]
+  python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$BASE" <<'PY'
+import json, sys
+artifact = json.load(open(sys.argv[1], encoding='utf-8'))
+assert artifact['revision'] == artifact['baseRevision'] == sys.argv[2]
+assert artifact['files'] == []
+assert any(item['code'] == 'exact-base-warmup' for item in artifact['diagnostics'])
+PY
+  run bash "$ACTION_DIR/run.sh" save-start
+  [ "$status" -eq 0 ]
+  export REDLINE_CODE_INDEX_CACHE_IDENTITY="$cache_identity"
+  export REDLINE_CODE_INDEX_CACHE_READY=true
+  export REDLINE_CODE_INDEX_CACHE_SAVE_OUTCOME=success
+  run bash "$ACTION_DIR/run.sh" finalize
+  [ "$status" -eq 0 ]
+  grep -Fq 'warmup-result=saved' "$GITHUB_OUTPUT"
+  grep -Fq "cache-identity=$cache_identity" "$GITHUB_OUTPUT"
+
+  export REDLINE_CODE_INDEX_MODE=review
+  export REDLINE_CODE_INDEX_HEAD="$review_head"
+  : > "$PROVIDER/calls.log"
+  build_action "$cache_identity" success
+  ! grep -Fq "index $RUNNER_TEMP/redline-code-index/source --no-progress" "$PROVIDER/calls.log"
+  export REDLINE_CODE_INDEX_CACHE_READY=false
+  export REDLINE_CODE_INDEX_CACHE_SAVE_OUTCOME=skipped
+  run bash "$ACTION_DIR/run.sh" finalize
+  [ "$status" -eq 0 ]
+  grep -Fq 'cache-hit=true' "$GITHUB_OUTPUT"
+  grep -Fq 'index-ms=0' "$GITHUB_OUTPUT"
+  grep -Fq 'warmup-result=not-requested' "$GITHUB_OUTPUT"
+  python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" "$RUNNER_TEMP/redline-code-index/cache/state.json" "$BASE" "$review_head" <<'PY'
+import json, sys
+artifact = json.load(open(sys.argv[1], encoding='utf-8'))
+state = json.load(open(sys.argv[2], encoding='utf-8'))
+assert artifact['revision'] == sys.argv[4]
+assert artifact['baseRevision'] == state['revision'] == sys.argv[3]
+assert artifact['status'] == 'complete'
+assert artifact['timings']['indexMs'] == 0
+assert any(item['code'] == 'cache-base-revision' for item in artifact['diagnostics'])
 PY
 }
 

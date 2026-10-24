@@ -873,6 +873,9 @@ def source_validated_contexts(
 
 def build_artifact(args: argparse.Namespace) -> bool:
     base, head, repository = validate_identity(args.base, args.head, args.repository)
+    mode = args.mode
+    if mode == "warmup" and base != head:
+        raise ValueError("warmup mode requires identical base and head revisions")
     output = checked_output_directory(args.output_directory, args.workspace)
     workspace = Path(args.workspace).resolve(strict=True)
     repository_root = Path(git(workspace, ["rev-parse", "--show-toplevel"]).decode("utf-8").strip()).resolve(strict=True)
@@ -899,8 +902,10 @@ def build_artifact(args: argparse.Namespace) -> bool:
     export_source(repository_root, base, source_root)
     export_source(repository_root, head, head_source_root)
     provider_name = "CGC" if provider == "cgc" else "GitNexus"
-    add_diagnostic(diagnostics, "info", "graph-base-revision", f"{provider_name} graph provenance is pull request base revision {base}.")
+    add_diagnostic(diagnostics, "info", "graph-base-revision", f"{provider_name} graph provenance is exact base revision {base}.")
     changed, changed_paths_truncated = parse_changed_paths(repository_root, base, head, diagnostics)
+    if mode == "warmup":
+        add_diagnostic(diagnostics, "info", "exact-base-warmup", f"Preparing the exact default-branch {provider_name} graph for revision {base}.")
     files: list[dict[str, Any]] = []
     supported_paths: list[str] = []
     missing_from_base = False
@@ -933,8 +938,8 @@ def build_artifact(args: argparse.Namespace) -> bool:
     if not supported_paths:
         if any(file_entry["status"] == "partial" for file_entry in files):
             add_diagnostic(diagnostics, "warning", "no-base-query-anchors", "No supported changed file exists in the base graph; exact-head source review remains available.")
-        else:
-            add_diagnostic(diagnostics, "info", "no-supported-changed-files", f"No head-present changed file uses a language supported by the pinned {provider_name} integration; the base graph was still indexed for cache reuse.")
+        elif mode == "review":
+            add_diagnostic(diagnostics, "info", "no-supported-changed-files", f"No head-present changed file uses a language supported by the pinned {provider_name} integration.")
 
     queryable_paths, query_path_truncated = query_paths(provider, supported_paths, source_root)
     if query_path_truncated:
@@ -973,6 +978,13 @@ def build_artifact(args: argparse.Namespace) -> bool:
         add_diagnostic(diagnostics, "warning", "cache-restore-invalid", f"The restored {provider_name} database failed identity or query validation and was rebuilt once.")
 
     cache_reused = cache_valid
+    if not supported_paths and mode == "review" and not cache_reused:
+        add_diagnostic(diagnostics, "info", "cold-index-skipped", "No changed file can use graph context, so cold base indexing was skipped; the default-branch warmup owns cache preparation.")
+        measured["indexMs"] = 0
+        status = "partial" if changed_paths_truncated else aggregate_status(files)
+        write_artifact(output, make_artifact(repository, head, status, files, diagnostics, measured))
+        return False
+
     rebuilt = False
     if cache_reused:
         add_diagnostic(
@@ -1031,7 +1043,9 @@ def build_artifact(args: argparse.Namespace) -> bool:
     if not supported_paths:
         cache_ready = False if cache_reused else prepare_cache(provider, cache_root, repository, base, args.configuration_id, source_root, diagnostics)
         status = "partial" if changed_paths_truncated else aggregate_status(files)
-        write_artifact(output, make_artifact(repository, head, status, files, diagnostics, measured))
+        artifact = make_artifact(repository, head, status, files, diagnostics, measured)
+        artifact["baseRevision"] = base
+        write_artifact(output, artifact)
         return cache_ready
 
     provider_to_changed = {
@@ -1130,6 +1144,7 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--installation-ms", type=int, required=True)
 
     build_command = commands.add_parser("build")
+    build_command.add_argument("--mode", choices=("review", "warmup"), required=True)
     for name in (
         "provider", "provider-version", "base", "head", "repository", "output-directory", "workspace", "source-root", "head-source-root",
         "cache-root", "provider-home", "executable", "runtime-executable", "query-adapter", "configuration-id", "cache-matched-key", "cache-restore-outcome", "result-file",

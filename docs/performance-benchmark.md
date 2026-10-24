@@ -52,7 +52,7 @@ mise run benchmark:performance-live -- \
 
 The live output path is mandatory. Live reports use owner-only file permissions. The selected credential and endpoint credential value are never written to the report.
 
-The warm-index target is p95 at or below 10 minutes. The cold-index target is p95 at or below 15 minutes. A target cannot pass unless all live runs pass the quality gate.
+The warm-index target is p95 at or below 10 minutes. The cold-index target is p95 at or below 15 minutes. The warm condition represents a validated exact-base cache hit and therefore requires `indexMs: 0`; the cold condition includes provider indexing. A target cannot pass unless all live runs pass the quality gate.
 
 ## Measurements
 

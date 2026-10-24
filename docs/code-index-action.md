@@ -1,6 +1,6 @@
 # Code-index action
 
-`github/code-index` is a secondary composite action that prepares bounded code context for an exact pull request head. The published Redline action invokes it before review execution. The review core does not install an indexer, open an index database, or invoke provider commands.
+`github/code-index` is a secondary composite action that prepares bounded code context or an exact-revision provider cache. The published Redline action invokes it before review execution. The review core does not install an indexer, open an index database, or invoke provider commands.
 
 The action supports two pinned providers:
 
@@ -30,6 +30,16 @@ The child writes `code-context.json` and exposes its absolute path and coverage 
 
 The review validates the artifact identity and resolves every selected span again from its captured exact-head source. Missing, invalid, unsupported, or unavailable context remains file-only review with explicit degraded coverage.
 
+## Default-branch warmup
+
+`.github/workflows/code-index-warmup.yml` runs after every push to `main`. It checks out that exact trusted revision, then warms CGC and GitNexus with a two-job maximum. Workflow concurrency cancels an older warmup when a newer default-branch revision arrives, so only the newest base continues.
+
+The warmup calls the same secondary action in `warmup` mode with identical base and head revisions. It therefore uses the same provider pin, platform identity, configuration digest, repository digest, database validation, and cache key format as pull-request review. A later pull request based on that revision restores the validated database and records `indexMs: 0`.
+
+Each provider job writes a step summary and uploads `code-context.json`. The summary records the validated hit or save result, cache identity, cache size, index time, and total measured time. Review artifacts record the validated hit diagnostic and index timing, so warmup-to-review hit rates can be calculated from workflow artifacts. Warmup failures fail only the post-push warmup job; they cannot block the merge that already produced the revision. Reviews still degrade to normal cold indexing or file-only coverage when the cache is absent.
+
+The workflow executes only trusted Redline tooling from the default branch. Provider input is an action-created `git archive`; it does not execute indexed source, repository hooks, provider configuration, tests, or package scripts from pull requests.
+
 ## What the action does
 
 1. Acquires and validates the selected pinned provider without using pull-request package files.
@@ -37,20 +47,22 @@ The review validates the artifact identity and resolves every selected span agai
 3. Exports both the exact base and exact head with `git archive`.
 4. Removes symlinks and repository-supplied provider configuration from both temporary source trees.
 5. Validates and reuses a restored base database without running provider indexing again.
-6. On a cache miss or invalid restore, indexes the full exported base repository regardless of whether the changed files use a supported language.
-7. Uses supported changed files that exist in the base graph as bounded relationship-query anchors.
-8. Resolves every selected path and line range against the exported exact-head source.
-9. Writes the provider-neutral bounded artifact atomically.
-10. Saves a validated base database only after a cache miss or invalid restore.
+6. On a cache miss or invalid restore, indexes the full exported base repository when at least one changed file can use graph context.
+7. In `warmup` mode, indexes the exact default-branch revision even though base and head are identical.
+8. In review mode, returns explicit unsupported or partial context without cold indexing when no changed file can anchor a query.
+9. Uses supported changed files that exist in the base graph as bounded relationship-query anchors.
+10. Resolves every selected path and line range against the exported exact-head source.
+11. Writes the provider-neutral bounded artifact atomically.
+12. Saves a validated base database only after a cache miss or invalid restore.
 
-Repository builds, scripts, package installers, tests, and Git hooks are never run. GitNexus runs in `--index-only --skip-git --skip-fts` mode against an action-created archive and action-owned storage; repository AI-context files and skills are never generated. The graph is identified by `pull_request.base.sha`, so every new head commit in the same pull request reuses it without re-indexing. If the base revision changes, the action creates a new cache. New head-only files receive explicit partial graph coverage, while every selected span is still re-resolved from captured exact-head source.
+The indexed repository's builds, scripts, package installers, tests, and Git hooks are never run. The warmup workflow builds only trusted Redline tooling from the default branch when the GitNexus installer is required. GitNexus runs in `--index-only --skip-git --skip-fts` mode against an action-created archive and action-owned storage; repository AI-context files and skills are never generated. The graph is identified by `pull_request.base.sha`, so every new head commit in the same pull request reuses it without re-indexing. If the base revision changes, the action creates a new cache. New head-only files receive explicit partial graph coverage, while every selected span is still re-resolved from captured exact-head source.
 
 ## Artifact contract
 
 The version 1 artifact contains:
 
 - provider ID and exact version;
-- repository, exact head revision, and the exact base graph revision when graph facts are present;
+- repository, exact head revision, and the exact base graph revision when a validated database exists;
 - top-level coverage status;
 - per-changed-file coverage;
 - related repository path, one-based line range, and fixed selection reason;
@@ -83,11 +95,11 @@ redline-code-index-v2-gitnexus-1.6.12-<platform>-<repository-digest>-<configurat
 
 The save key adds the exact base SHA, workflow run ID, and attempt. The only restore prefix includes that same exact base SHA; there is no cross-base or cross-provider fallback. A valid restored database is queried directly, no indexing command runs, and the existing cache is not saved again. The run suffix allows a validated rebuild to supersede an immutable invalid cache entry.
 
-The cache root contains only provider database files, the provider's bounded registry when required, and a small identity sidecar. The action rejects symlinks and non-regular entries and verifies provider version, repository, configuration, exact base revision, stable source path, and a bounded graph query before reuse. A validated base graph is cached even when none of the changed files can anchor a relationship query. Cache restore or save failure does not invalidate context produced during the current run.
+The cache root contains only provider database files, the provider's bounded registry when required, and a small identity sidecar. The action rejects symlinks and non-regular entries and verifies provider version, repository, configuration, exact base revision, stable source path, and a bounded graph query before reuse. Default-branch warmup prepares caches when a review has no useful query anchor; unsupported-only reviews no longer pay that cold-index cost. Cache restore or save failure does not invalidate context produced during the current run.
 
 ## Tests
 
-Normal CI uses fake CGC and GitNexus providers and performs no provider download. It covers cold and restored-base equivalence, no-reindex reuse across head commits, exact-base and provider cache identity, invalid restore rebuilding, bounded queries, source validation, and provider failure fallback.
+Normal CI uses fake CGC and GitNexus providers and performs no provider download. It covers cold and restored-base equivalence, exact-base warmup followed by a zero-index review hit, unsupported-only cold-index avoidance, no-reindex reuse across head commits, exact-base and provider cache identity, invalid restore rebuilding, bounded queries, source validation, and provider failure fallback.
 
 Live smoke tests are separate opt-ins:
 

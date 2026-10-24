@@ -100,7 +100,8 @@ async function captureCase(
     }
     const environment: ReviewEnvironment = {
       harness: conf.harness, model: conf.model, credential: conf.credential,
-      findingScope: 'defects', timeout: conf.timeout, reviewConcurrency: 1, codeContext,
+      findingScope: 'defects', timeout: conf.timeout, runTimeout: conf.timeout,
+      reviewConcurrency: 1, codeContext,
       reviewDirectory: paths.review, sourceDirectory: paths.source, outputDirectory: paths.output,
     };
     const discovery = await runFileReviews({ environment, executor });

@@ -215,9 +215,16 @@ export async function main(
               harness: parsed.review?.harness,
               publication: parsed.publication !== undefined,
               timeoutMinutes: parsed.timeout.minutes,
+              fileTimeoutMinutes: parsed.timeout.minutes,
+              runTimeoutMinutes: parsed.runTimeout.minutes,
               reviewConcurrency: parsed.review?.reviewConcurrency,
             }
-          : { mode: 'context-only', timeoutMinutes: parsed.timeout.minutes },
+          : {
+              mode: 'context-only',
+              timeoutMinutes: parsed.timeout.minutes,
+              fileTimeoutMinutes: parsed.timeout.minutes,
+              runTimeoutMinutes: parsed.runTimeout.minutes,
+            },
       ),
     );
     return 0;

@@ -27,6 +27,38 @@ async function createSettings(
 }
 
 /** Spawner double that records the spawn request and returns scripted output. */
+interface ScriptedProcess {
+  readonly stdout: string;
+  readonly code: number | null;
+  readonly stderr?: string | undefined;
+}
+
+class SequenceSpawner implements ProcessSpawner {
+  readonly requests: Array<{ command: string; args: string[]; stdin?: string | undefined;
+    env?: Record<string, string | undefined> | undefined }> = [];
+  readonly #scripts: ScriptedProcess[];
+
+  constructor(scripts: readonly ScriptedProcess[]) {
+    this.#scripts = [...scripts];
+  }
+
+  spawn(request: { command: string; args: readonly string[]; stdin?: string | undefined;
+    env?: Record<string, string | undefined> | undefined }): SpawnedProcess {
+    this.requests.push({ command: request.command, args: [...request.args], stdin: request.stdin, env: request.env });
+    const script = this.#scripts.shift();
+    if (script === undefined) throw new Error('sequence spawner ran out of scripts');
+    const encoder = new TextEncoder();
+    const stdout = encoder.encode(script.stdout);
+    const stderr = encoder.encode(script.stderr ?? '');
+    return {
+      stdout: (async function* () { yield stdout; })(),
+      stderr: (async function* () { yield stderr; })(),
+      wait: async () => ({ code: script.code }),
+      kill: () => undefined,
+    };
+  }
+}
+
 class RecordingSpawner implements ProcessSpawner {
   readonly requests: Array<{ command: string; args: string[]; stdin?: string | undefined;
     env?: Record<string, string | undefined> | undefined }> = [];
@@ -84,7 +116,13 @@ describe('createPiExecutor', () => {
       expect(modelsJson.providers.mock.baseUrl).toBe('http://127.0.0.1:8787/v1');
       expect(modelsJson.providers.mock.api).toBe('openai-completions');
       expect(modelsJson.providers.mock.apiKey).toBe(`$${PI_CREDENTIAL_ENV_NAME}`);
-      expect(modelsJson.providers.mock.models).toEqual([{ id: 'test-model' }]);
+      expect(modelsJson.providers.mock.models).toEqual([{
+        id: 'test-model', reasoning: false, maxTokens: 16_384,
+      }]);
+      expect(JSON.parse(await readFile(join(agentDirectory!, 'settings.json'), 'utf8'))).toEqual({
+        defaultThinkingLevel: 'off',
+        retry: { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } },
+      });
 
       expect(request.command).toBe('pi-fake');
       expect(request.args.slice(0, -1)).toEqual([
@@ -93,6 +131,8 @@ describe('createPiExecutor', () => {
         'json',
         '--no-session',
         '--no-tools',
+        '--thinking',
+        'off',
         '--provider',
         'mock',
         '--model',
@@ -108,8 +148,131 @@ describe('createPiExecutor', () => {
       expect(request.env?.[PI_CREDENTIAL_ENV_NAME]).toBe('test-key');
       // No ambient credentials leak into the child environment.
       expect(Object.keys(request.env ?? {}).sort()).toEqual(
-        ['HOME', 'LANG', 'PATH', 'PI_CODING_AGENT_DIR', PI_CREDENTIAL_ENV_NAME].sort(),
+        ['HOME', 'LANG', 'PATH', 'PI_CODING_AGENT_DIR', 'PI_SKIP_VERSION_CHECK', PI_CREDENTIAL_ENV_NAME].sort(),
       );
+    } finally {
+      await settings.cleanup();
+    }
+  });
+
+  it('uses benchmark-only thinking, output, and structured-output overrides without changing isolation', async () => {
+    const settings = await createSettings();
+    try {
+      const spawner = new RecordingSpawner();
+      const executor = createPiExecutor({
+        command: 'pi-fake',
+        spawner,
+        thinkingLevel: 'low',
+        maxOutputTokens: 8_192,
+        temperature: 0,
+        structuredOutput: 'json-object',
+        transientRetries: 0,
+      });
+      const prepared = await executor.prepare(settings);
+      spawner.script('{"type":"session"}\n', 0);
+      await executor.execute(prepared, { system: 'SYS', user: 'USER' });
+
+      const request = spawner.requests[0]!;
+      expect(request.args).toContain('low');
+      const modelsJson = JSON.parse(await readFile(join(request.env!.PI_CODING_AGENT_DIR!, 'models.json'), 'utf8'));
+      expect(modelsJson.providers.mock.models).toEqual([{
+        id: 'test-model',
+        reasoning: true,
+        maxTokens: 8_192,
+        samplingParams: { temperature: 0, response_format: { type: 'json_object' } },
+      }]);
+    } finally {
+      await settings.cleanup();
+    }
+  });
+
+  it('retries one classified transient empty provider response in a fresh invocation', async () => {
+    const settings = await createSettings();
+    try {
+      const empty = '{"type":"turn_end","message":{"role":"assistant","content":[],"stopReason":"stop","usage":{"input":3,"output":0}}}\n';
+      const complete = '{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"complete"}],"stopReason":"stop","usage":{"input":3,"output":1}}}\n';
+      const spawner = new SequenceSpawner([
+        { stdout: empty, code: 0 },
+        { stdout: complete, code: 0 },
+        { stdout: complete, code: 0 },
+      ]);
+      const executor = createPiExecutor({ command: 'pi-fake', spawner });
+      const prepared = await executor.prepare(settings);
+      const run = await executor.execute(prepared, { system: 'SYS', user: 'USER' });
+
+      expect(run.status).toBe('succeeded');
+      expect(run.text).toBe('complete');
+      expect(run.telemetry?.retryCount).toBe(1);
+      expect(run.telemetry?.usage).toMatchObject({
+        inputTokens: 6,
+        outputTokens: 1,
+        totalTokens: 7,
+      });
+      expect(spawner.requests).toHaveLength(2);
+      expect(spawner.requests[0]?.env?.PI_CODING_AGENT_DIR).not.toBe(
+        spawner.requests[1]?.env?.PI_CODING_AGENT_DIR,
+      );
+    } finally {
+      await settings.cleanup();
+    }
+  });
+
+  it('retries one allowlisted transient provider transport failure', async () => {
+    const settings = await createSettings();
+    try {
+      const complete = '{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"complete"}],"stopReason":"stop","usage":{"input":3,"output":1}}}\n';
+      const spawner = new SequenceSpawner([
+        { stdout: '', code: 1, stderr: 'provider returned HTTP 503' },
+        { stdout: complete, code: 0 },
+      ]);
+      const executor = createPiExecutor({ command: 'pi-fake', spawner });
+      const prepared = await executor.prepare(settings);
+      const run = await executor.execute(prepared, { system: 'SYS', user: 'USER' });
+
+      expect(run.status).toBe('succeeded');
+      expect(run.telemetry?.retryCount).toBe(1);
+      expect(spawner.requests).toHaveLength(2);
+    } finally {
+      await settings.cleanup();
+    }
+  });
+
+  it('caps repeated transient empty provider output at one retry', async () => {
+    const settings = await createSettings();
+    try {
+      const empty = '{"type":"turn_end","message":{"role":"assistant","content":[],"stopReason":"stop","usage":{"input":3,"output":0}}}\n';
+      const spawner = new SequenceSpawner([
+        { stdout: empty, code: 0 },
+        { stdout: empty, code: 0 },
+        { stdout: empty, code: 0 },
+      ]);
+      const executor = createPiExecutor({ command: 'pi-fake', spawner });
+      const prepared = await executor.prepare(settings);
+      const run = await executor.execute(prepared, { system: 'SYS', user: 'USER' });
+
+      expect(run.status).toBe('failed');
+      expect(run.telemetry?.retryCount).toBe(1);
+      expect(spawner.requests).toHaveLength(2);
+    } finally {
+      await settings.cleanup();
+    }
+  });
+
+  it('does not retry deterministic output-budget exhaustion', async () => {
+    const settings = await createSettings();
+    try {
+      const spawner = new SequenceSpawner([{
+        stdout: '{"type":"turn_end","message":{"role":"assistant","content":[{"type":"thinking","thinking":"private"}],"stopReason":"length","usage":{"output":4096}}}\n',
+        code: 0,
+      }]);
+      const executor = createPiExecutor({ command: 'pi-fake', spawner });
+      const prepared = await executor.prepare(settings);
+      const run = await executor.execute(prepared, { system: 'SYS', user: 'USER' });
+
+      expect(run.status).toBe('failed');
+      expect(run.diagnostic).toContain('model-output-budget-exhausted');
+      expect(run.telemetry?.retryCount).toBe(0);
+      expect(spawner.requests).toHaveLength(1);
     } finally {
       await settings.cleanup();
     }
@@ -431,7 +594,7 @@ describe('extractPiAssistantText', () => {
         '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"payload ##[error] injected"}}',
         '{"type":"message_update","assistantMessageEvent":{"type":"text_end","content":"full text"}}',
         '{"type":"message_end"}',
-        '{"type":"turn_end"}',
+        '{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"stopReason":"stop","usage":{"input":10,"output":4,"cacheRead":2,"cacheWrite":0,"totalTokens":14,"cost":{"total":0.001}}}}',
         '',
       ].join('\n');
       spawner.script(stdout, 0);
@@ -442,6 +605,15 @@ describe('extractPiAssistantText', () => {
 
       expect(run.telemetry?.timeToFirstTextMs).toBeGreaterThanOrEqual(0);
       expect(run.telemetry?.stdoutBytes).toBe(Buffer.byteLength(stdout, 'utf8'));
+      expect(run.telemetry?.usage).toEqual({
+        inputTokens: 10,
+        outputTokens: 4,
+        cacheReadTokens: 2,
+        cacheWriteTokens: 0,
+        totalTokens: 14,
+        costUsd: 0.001,
+      });
+      expect(run.telemetry?.retryCount).toBe(0);
       const text = tapped.filter((entry) => entry.kind === 'text').map((entry) => entry.line).join('');
       // Readable streaming text, credential-redacted, newline at segment
       // end, and workflow-command syntax neutralized.
@@ -470,7 +642,7 @@ describe('extractPiAssistantText', () => {
         '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"chunk two"}}',
         '{"type":"message_update","assistantMessageEvent":{"type":"text_end","content":"full"}}',
         '{"type":"message_end"}',
-        '{"type":"turn_end"}',
+        '{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"stopReason":"stop","usage":{"input":10,"output":4}}}',
         '',
       ].join('\n');
       spawner.script(stdout, 0);

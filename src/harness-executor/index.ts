@@ -7,6 +7,8 @@ export {
   type HarnessPrompt,
   type HarnessRun,
   type HarnessRunStatus,
+  type HarnessRunTelemetry,
+  type HarnessUsageTelemetry,
   type HarnessSettings,
   type PreparedHarness,
 } from './types.ts';
@@ -16,7 +18,19 @@ export {
   type HarnessExecutorOptions,
 } from './registry.ts';
 export { EchoHarnessExecutor } from './echo-executor.ts';
-export { createPiExecutor, extractPiAssistantText, PI_CREDENTIAL_ENV_NAME } from './pi-executor.ts';
+export {
+  createPiExecutor,
+  DEFAULT_PI_MAX_OUTPUT_TOKENS,
+  DEFAULT_PI_THINKING_LEVEL,
+  extractPiAssistantText,
+  MAX_PI_MAX_OUTPUT_TOKENS,
+  MIN_PI_MAX_OUTPUT_TOKENS,
+  PI_CREDENTIAL_ENV_NAME,
+  PI_THINKING_LEVELS,
+  type PiExecutorOptions,
+  type PiStructuredOutput,
+  type PiThinkingLevel,
+} from './pi-executor.ts';
 export {
   createOpenCodeExecutor,
   extractOpenCodeAssistantText,

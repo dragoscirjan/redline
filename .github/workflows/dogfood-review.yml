@@ -12,6 +12,16 @@ on:
         required: false
         type: string
         default: progress
+      timeout:
+        description: Per-file model deadline.
+        required: false
+        type: string
+        default: 4m
+      run-timeout:
+        description: Whole-review deadline.
+        required: false
+        type: string
+        default: 10m
       review-concurrency:
         description: Maximum simultaneous per-file model calls, from 1 through 8.
         required: false
@@ -95,6 +105,8 @@ jobs:
           # workflow-heavy diffs like this repository's own.
           finding-scope: defects-and-risks
           verbosity: ${{ inputs.verbosity }}
+          timeout: ${{ inputs.timeout }}
+          run-timeout: ${{ inputs.run-timeout }}
           review-concurrency: ${{ inputs.review-concurrency }}
           runtime: ${{ inputs.runtime }}
           github-token: ${{ secrets.github-token }}

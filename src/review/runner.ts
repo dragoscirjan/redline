@@ -14,6 +14,7 @@
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { createHarnessExecutor } from '../harness-executor/registry.ts';
 import { FollowUpBudget, type FollowUpRequestBatch } from '../code-context/follow-up.ts';
 import type { HarnessExecutor, HarnessOutputLine, HarnessStreamMode } from '../harness-executor/types.ts';
@@ -108,6 +109,8 @@ export interface ReviewRunInput {
   readonly onHarnessOutput?: ((output: FileHarnessOutputEvent) => void) | undefined;
   /** Stream presentation for the tap; defaults to the harness's own. */
   readonly harnessStreamMode?: HarnessStreamMode | undefined;
+  /** Monotonic clock override for deterministic deadline tests. */
+  readonly now?: (() => number) | undefined;
 }
 
 export interface ReviewRunResult {
@@ -141,6 +144,45 @@ function fileReviewPath(file: ReviewManifestFile): string {
   return file.newPath ?? file.oldPath ?? file.id;
 }
 
+function remainingRunMs(deadlineAtMs: number, now: () => number): number {
+  return Math.max(0, Math.floor(deadlineAtMs - now()));
+}
+
+function deadlineOmissionRecord(
+  environment: ReviewEnvironment,
+  indexedContext: LoadedReviewCodeContext,
+  file: ReviewManifestFile,
+  verifyCandidates: boolean,
+  reason: string,
+): WritableFileReviewRecord {
+  return {
+    version: FILE_REVIEW_RECORD_VERSION,
+    fileId: file.id,
+    path: fileReviewPath(file),
+    status: file.status,
+    harness: environment.harness,
+    model: environment.model.model,
+    codeContext: codeContextForFile(indexedContext, file).coverage,
+    execution: 'executed',
+    ...(verifyCandidates ? {
+      verification: {
+        status: 'incomplete' as const,
+        requested: 0,
+        accepted: 0,
+        rejected: 0,
+        durationMs: 0,
+        reason,
+      },
+    } : {}),
+    outcome: 'omitted',
+    errorKind: 'run-deadline-exhausted',
+    reason,
+    findings: [],
+    rejectedCandidates: [],
+    durationMs: 0,
+  };
+}
+
 async function reviewOneFile(
   executor: HarnessExecutor,
   prepared: Awaited<ReturnType<HarnessExecutor['prepare']>>,
@@ -154,6 +196,8 @@ async function reviewOneFile(
   harnessStreamMode?: HarnessStreamMode,
   verifyCandidates = false,
   sourceContextStrategy: SourceContextStrategy = 'focused-v1',
+  deadlineAtMs = Number.POSITIVE_INFINITY,
+  now: () => number = () => performance.now(),
 ): Promise<FileReviewRecord & {
   rawModelOutput?: string | undefined;
   verificationArtifact?: VerificationArtifact | undefined;
@@ -181,6 +225,13 @@ async function reviewOneFile(
       },
     } : {}),
   };
+
+  if (remainingRunMs(deadlineAtMs, now) === 0) {
+    return deadlineOmissionRecord(
+      environment, indexedContext, file, verifyCandidates,
+      'whole-review deadline exhausted before this file started',
+    );
+  }
 
   // Preparation (diff reading, validator construction, prompt assembly) is
   // per-file work: its failures produce an omitted record, never an abort.
@@ -215,18 +266,33 @@ async function reviewOneFile(
     };
   }
 
+  const remainingBeforeModelMs = remainingRunMs(deadlineAtMs, now);
+  if (remainingBeforeModelMs === 0) {
+    return deadlineOmissionRecord(
+      environment, indexedContext, file, verifyCandidates,
+      'whole-review deadline exhausted during file preparation',
+    );
+  }
+  const modelTimeoutMs = Math.min(environment.timeout.milliseconds, remainingBeforeModelMs);
+  const modelBoundedByRunDeadline = remainingBeforeModelMs <= environment.timeout.milliseconds;
   const run = await executor.execute(prepared, prompt, {
     invocation: { fileId: file.id, path: fileReviewPath(file) },
+    timeoutMs: modelTimeoutMs,
     ...(onHarnessOutput === undefined ? {} : { onOutputLine: onHarnessOutput }),
     ...(harnessStreamMode === undefined ? {} : { streamMode: harnessStreamMode }),
   });
 
   if (run.status !== 'succeeded') {
+    const runDeadlineExhausted = run.status === 'timed-out' && modelBoundedByRunDeadline;
     return {
       ...described,
       outcome: 'omitted',
-      errorKind: run.status === 'timed-out' ? 'harness-timeout' : 'harness-failed',
-      reason: boundedReason(redact(run.diagnostic) || run.status),
+      errorKind: runDeadlineExhausted
+        ? 'run-deadline-exhausted'
+        : run.status === 'timed-out' ? 'harness-timeout' : 'harness-failed',
+      reason: runDeadlineExhausted
+        ? 'whole-review deadline exhausted during model execution'
+        : boundedReason(redact(run.diagnostic) || run.status),
       findings: [],
       rejectedCandidates: [],
       durationMs: run.durationMs,
@@ -329,8 +395,15 @@ async function reviewOneFile(
         const provider = indexedContext.coverage.provider;
         const startedAt = Date.now();
         if (provider !== null && followUpExecutor !== undefined) executorStartedAt = startedAt;
+        const remainingBeforeFollowUpMs = remainingRunMs(deadlineAtMs, now);
+        if (remainingBeforeFollowUpMs === 0) {
+          throw new Error('whole-review deadline exhausted before follow-up execution');
+        }
         const raw = provider !== null && followUpExecutor !== undefined
-          ? await followUpExecutor(requests, followUpBudget.remainingTimeMs())
+          ? await followUpExecutor(
+              requests,
+              Math.min(followUpBudget.remainingTimeMs(), remainingBeforeFollowUpMs),
+            )
           : JSON.stringify({
             version: 1,
             repository: requests.repository,
@@ -432,9 +505,13 @@ async function reviewOneFile(
           results: followUpResults,
         } }),
       });
+      const verificationRemainingMs = remainingRunMs(deadlineAtMs, now);
+      if (verificationRemainingMs === 0) {
+        throw new Error('whole-review deadline exhausted before candidate verification');
+      }
       const verifiedRun = await executor.execute(prepared, verifierPrompt, {
         invocation: { fileId: file.id, path: fileReviewPath(file) },
-        timeoutMs: VERIFICATION_TIMEOUT_MS,
+        timeoutMs: Math.min(VERIFICATION_TIMEOUT_MS, verificationRemainingMs),
         ...(onHarnessOutput === undefined ? {} : { onOutputLine: onHarnessOutput }),
         ...(harnessStreamMode === undefined ? {} : { streamMode: harnessStreamMode }),
       });
@@ -644,6 +721,9 @@ async function runBoundedWorkerPool<T>(
  */
 export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunResult> {
   const { environment } = input;
+  const now = input.now ?? (() => performance.now());
+  const runStartedAtMs = now();
+  const runDeadlineAtMs = runStartedAtMs + environment.runTimeout.milliseconds;
   const bundle = await loadReviewBundle(environment.reviewDirectory, environment.sourceDirectory);
   const indexedContext = await loadReviewCodeContext(bundle, environment.codeContext);
   const writer = createReviewWriter(environment.outputDirectory);
@@ -748,6 +828,11 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           rejectedCandidates: [],
           durationMs: 0,
         };
+      } else if (remainingRunMs(runDeadlineAtMs, now) === 0) {
+        record = deadlineOmissionRecord(
+          environment, indexedContext, file, verifyCandidates,
+          'whole-review deadline exhausted before this file started',
+        );
       } else {
         const identity = { fileId: file.id, path: fileReviewPath(file) };
         input.onFileStart?.(identity);
@@ -767,6 +852,8 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           input.harnessStreamMode,
           verifyCandidates,
           input.sourceContextStrategy,
+          runDeadlineAtMs,
+          now,
         );
         input.onFileValidated?.({
           ...identity,
@@ -793,6 +880,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       input.onFileDone?.(record);
     });
 
+    const reviewFinishedAtMs = now();
     const records = bundle.manifest.files.flatMap((file, manifestIndex) => {
       if (!file.reviewed) return [];
       const record = recordsByManifestIndex.get(manifestIndex);
@@ -812,6 +900,17 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       omittedFiles: records.filter((record) => record.outcome === 'omitted').length,
       findings: records.reduce((total, record) => total + record.findings.length, 0),
       codeContext: indexedContext.coverage,
+      executionBudget: {
+        version: 1,
+        fileTimeoutMs: environment.timeout.milliseconds,
+        runTimeoutMs: environment.runTimeout.milliseconds,
+        elapsedMs: Math.max(0, Math.ceil(reviewFinishedAtMs - runStartedAtMs)),
+        deadlineExhausted: reviewFinishedAtMs >= runDeadlineAtMs
+          || records.some((record) => record.errorKind === 'run-deadline-exhausted'),
+        deadlineOmittedFiles: records.filter(
+          (record) => record.errorKind === 'run-deadline-exhausted',
+        ).length,
+      },
       reuse: {
         version: REVIEW_REUSE_TELEMETRY_VERSION,
         status: reuseCache === undefined ? 'disabled' : 'enabled',

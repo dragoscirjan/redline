@@ -34,10 +34,10 @@ const REVISION = /^[0-9a-f]{40}$/u;
 const MODES = ['file-only', 'indexed-context'] as const;
 
 export type BenchmarkMode = (typeof MODES)[number];
-type FixtureKind = 'defect' | 'clean';
+export type FixtureKind = 'defect' | 'clean';
 type CoverageStatus = 'complete' | 'partial' | 'unavailable';
 
-interface FixtureFile {
+export interface FixtureFile {
   readonly id: string;
   readonly path: string;
   readonly status: 'M';
@@ -46,14 +46,14 @@ interface FixtureFile {
   readonly diff: string;
 }
 
-interface EvidenceLocation {
+export interface EvidenceLocation {
   readonly path: string;
   readonly side: FindingSide;
   readonly startLine: number;
   readonly endLine: number;
 }
 
-interface ExpectedIssue {
+export interface ExpectedIssue {
   readonly id: string;
   readonly title: string;
   readonly locations: readonly EvidenceLocation[];
@@ -783,6 +783,7 @@ async function runRecording(
       credential: undefined,
       findingScope: 'defects',
       timeout: parseDuration('1m'),
+      runTimeout: parseDuration('10m'),
       reviewConcurrency: 1,
     };
     const result = await runFileReviews({ environment, executor, sourceContextStrategy });

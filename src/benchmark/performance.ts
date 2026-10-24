@@ -649,6 +649,7 @@ async function runOne(
       credential: source === 'recorded' ? undefined : live!.credential,
       findingScope: 'defects',
       timeout: source === 'recorded' ? parseDuration('30m') : live!.timeout,
+      runTimeout: source === 'recorded' ? parseDuration('30m') : live!.timeout,
       reviewConcurrency: profile.configuration.reviewConcurrency,
     };
     const boundaries = new Map<string, {

@@ -21,7 +21,8 @@ jobs:
       indexing-provider: cgc # default; or gitnexus
       credential-isolation: direct
       container-engine: docker
-      timeout: 30m
+      timeout: 4m # per file
+      run-timeout: 10m # whole review
       review-concurrency: 4 # default; valid range 1-8
       runtime: node # default; or bun
     secrets:
@@ -46,7 +47,8 @@ In context-only mode the workflow does not index and uploads only the `<artifact
 | `backend` | `pi`, `opencode`, `echo` | Review harness. Empty (with `model-config` and `model-auth`) keeps context-only behavior. |
 | `model-config` | JSON | Provider-neutral model configuration. See [runnable review configuration](/runnable-review-configuration). |
 | `finding-scope` | `defects`, `defects-and-risks` | Default `defects`. |
-| `timeout` | duration | Default `30m`, capped at `360m`. |
+| `timeout` | duration | Per-file model deadline. Default `4m`, capped at `360m`. |
+| `run-timeout` | duration | Whole-review deadline. Default `10m`, capped at `360m`; unstarted files become explicit omissions. |
 | `review-concurrency` | 1–8 | Maximum simultaneous per-file model calls. Default `4`. |
 | `runtime` | `node`, `bun` | Trusted TypeScript source runtime. Default `node`; Bun is pinned to `1.4.4`. Harness and index-provider runtimes do not change. |
 | `verbosity` | `silent`, `progress`, `full-output` | Live model stream in the run log. Default `progress` (dots). |

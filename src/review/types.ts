@@ -122,6 +122,7 @@ export type FileReviewExecution = 'executed' | 'reused';
 export type FileReviewErrorKind =
   | 'harness-failed'
   | 'harness-timeout'
+  | 'run-deadline-exhausted'
   | 'invalid-output'
   | 'preparation-failed'
   | 'verification-failed';
@@ -228,6 +229,15 @@ export interface ReviewReuseTelemetry {
   readonly savedDurationMs: number;
 }
 
+export interface ReviewExecutionBudgetTelemetry {
+  readonly version: 1;
+  readonly fileTimeoutMs: number;
+  readonly runTimeoutMs: number;
+  readonly elapsedMs: number;
+  readonly deadlineExhausted: boolean;
+  readonly deadlineOmittedFiles: number;
+}
+
 export interface ReviewRunSummary {
   readonly version: typeof REVIEW_RUN_SUMMARY_VERSION;
   readonly harness: string;
@@ -241,6 +251,7 @@ export interface ReviewRunSummary {
   readonly omittedFiles: number;
   readonly findings: number;
   readonly codeContext: ReviewCodeContextRunCoverage;
+  readonly executionBudget?: ReviewExecutionBudgetTelemetry | undefined;
   readonly reuse?: ReviewReuseTelemetry | undefined;
   readonly files: readonly ReviewRunSummaryFile[];
 }

@@ -41,10 +41,15 @@ on:
         type: string
         default: single-block
       timeout:
-        description: Review deadline as a duration, for example 10m, 2h, or 1h30m. Capped at 360m.
+        description: Per-file model deadline as a duration. Capped at 360m.
         required: false
         type: string
-        default: 30m
+        default: 4m
+      run-timeout:
+        description: Whole-review deadline; unstarted files become explicit omissions.
+        required: false
+        type: string
+        default: 10m
       review-concurrency:
         description: Maximum simultaneous per-file model calls, from 1 through 8.
         required: false
@@ -142,6 +147,7 @@ jobs:
           indexing: ${{ inputs.indexing }}
           indexing-provider: ${{ inputs.indexing-provider }}
           timeout: ${{ inputs.timeout }}
+          run-timeout: ${{ inputs.run-timeout }}
           review-concurrency: ${{ inputs.review-concurrency }}
           runtime: ${{ inputs.runtime }}
           artifact-name: ${{ inputs.artifact-name }}

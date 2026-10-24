@@ -27,6 +27,14 @@ run = "pnpm run benchmark:performance:live"
 description = "Regenerate the checked-in code-index provider value report"
 run = "pnpm run benchmark:code-index-value"
 
+[tasks."benchmark:model-execution"]
+description = "Regenerate the checked-in Pi model-execution policy report"
+run = "pnpm run benchmark:model-execution"
+
+[tasks."benchmark:model-execution-live"]
+description = "Run the opt-in live Pi thinking, output-bound, and structured-output capture"
+run = "pnpm run benchmark:model-execution:live"
+
 [tasks."benchmark:source-runtime"]
 description = "Measure pinned Node and Bun TypeScript source startup and echo review time"
 run = "pnpm run benchmark:source-runtime"

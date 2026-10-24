@@ -13,6 +13,7 @@
 
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 import {
   isRecord,
   nodeProcessSpawner,
@@ -26,6 +27,7 @@ import type {
   HarnessPrompt,
   HarnessRun,
   HarnessSettings,
+  HarnessUsageTelemetry,
   PreparedHarness,
 } from './types.ts';
 
@@ -41,6 +43,15 @@ const PI_TEXT_END_EVENTS = new Set(['thinking_end', 'text_end']);
 const MAX_STREAMED_TEXT_BYTES = 32 * 1024;
 /** Bounded suffixes recorded in no-assistant-text diagnostics. */
 const MAX_DIAGNOSTIC_TYPES = 3;
+const PI_TRANSIENT_RETRY_DELAY_MS = 250;
+
+export const PI_THINKING_LEVELS = ['off', 'minimal', 'low'] as const;
+export type PiThinkingLevel = (typeof PI_THINKING_LEVELS)[number];
+export type PiStructuredOutput = 'none' | 'json-object';
+export const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel = 'off';
+export const DEFAULT_PI_MAX_OUTPUT_TOKENS = 16_384;
+export const MIN_PI_MAX_OUTPUT_TOKENS = 1_024;
+export const MAX_PI_MAX_OUTPUT_TOKENS = 16_384;
 
 type PiDiagnosticEventType =
   | 'session'
@@ -75,7 +86,12 @@ export interface PiAssistantOutputInspection {
   readonly finalEventTypes: readonly PiDiagnosticEventType[];
   readonly contentPartTypes: readonly PiDiagnosticContentType[];
   readonly stopReason: PiDiagnosticStopReason | null;
+  readonly inputTokens: number | null;
   readonly outputTokens: number | null;
+  readonly cacheReadTokens: number | null;
+  readonly cacheWriteTokens: number | null;
+  readonly totalTokens: number | null;
+  readonly costUsd: number | null;
 }
 
 /**
@@ -118,6 +134,16 @@ export interface PiExecutorOptions {
   /** Executable override; defaults to the `pi` found on PATH. */
   readonly command?: string | undefined;
   readonly spawner?: ProcessSpawner | undefined;
+  /** Trusted policy override used by controlled benchmarks. */
+  readonly thinkingLevel?: PiThinkingLevel | undefined;
+  /** Trusted policy override used by controlled benchmarks. */
+  readonly maxOutputTokens?: number | undefined;
+  /** Trusted deterministic benchmark override; production leaves provider sampling unchanged. */
+  readonly temperature?: 0 | undefined;
+  /** Benchmark-only native response-format probe; production uses `none`. */
+  readonly structuredOutput?: PiStructuredOutput | undefined;
+  /** Production permits one Redline-controlled retry for classified transient provider failures. */
+  readonly transientRetries?: 0 | 1 | undefined;
 }
 
 export interface PreparedPi extends PreparedHarness {
@@ -127,11 +153,52 @@ export interface PreparedPi extends PreparedHarness {
   readonly cwd: string;
   readonly rootDirectory: string;
   readonly agentConfig: string;
+  readonly settingsConfig: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs: number;
+  readonly transientRetries: 0 | 1;
 }
 
-function buildAgentConfig(settings: HarnessSettings): string {
+interface PiExecutionPolicy {
+  readonly thinkingLevel: PiThinkingLevel;
+  readonly maxOutputTokens: number;
+  readonly temperature: 0 | undefined;
+  readonly structuredOutput: PiStructuredOutput;
+  readonly transientRetries: 0 | 1;
+}
+
+function validatePolicy(options: PiExecutorOptions): PiExecutionPolicy {
+  const thinkingLevel = options.thinkingLevel ?? DEFAULT_PI_THINKING_LEVEL;
+  if (!(PI_THINKING_LEVELS as readonly string[]).includes(thinkingLevel)) {
+    throw new Error('Pi thinking level must be off, minimal, or low');
+  }
+  const maxOutputTokens = options.maxOutputTokens ?? DEFAULT_PI_MAX_OUTPUT_TOKENS;
+  if (!Number.isSafeInteger(maxOutputTokens)
+    || maxOutputTokens < MIN_PI_MAX_OUTPUT_TOKENS
+    || maxOutputTokens > MAX_PI_MAX_OUTPUT_TOKENS) {
+    throw new Error(`Pi max output tokens must be an integer from ${MIN_PI_MAX_OUTPUT_TOKENS} through ${MAX_PI_MAX_OUTPUT_TOKENS}`);
+  }
+  const structuredOutput = options.structuredOutput ?? 'none';
+  if (structuredOutput !== 'none' && structuredOutput !== 'json-object') {
+    throw new Error('Pi structured output must be none or json-object');
+  }
+  const transientRetries = options.transientRetries ?? 1;
+  if (transientRetries !== 0 && transientRetries !== 1) {
+    throw new Error('Pi transient retries must be zero or one');
+  }
+  if (options.temperature !== undefined && options.temperature !== 0) {
+    throw new Error('Pi benchmark temperature must be zero when specified');
+  }
+  return Object.freeze({
+    thinkingLevel,
+    maxOutputTokens,
+    temperature: options.temperature,
+    structuredOutput,
+    transientRetries,
+  });
+}
+
+function buildAgentConfig(settings: HarnessSettings, policy: PiExecutionPolicy): string {
   const provider = settings.model.provider;
   const apiKey = settings.credential === undefined ? 'redline-unauthenticated' : `$${PI_CREDENTIAL_ENV_NAME}`;
   // The environment contract only permits OpenAI-compatible endpoints,
@@ -142,11 +209,34 @@ function buildAgentConfig(settings: HarnessSettings): string {
         baseUrl: settings.model.endpoint,
         api: 'openai-completions',
         apiKey,
-        models: [{ id: settings.model.model }],
+        models: [{
+          id: settings.model.model,
+          reasoning: policy.thinkingLevel !== 'off',
+          maxTokens: policy.maxOutputTokens,
+          ...(policy.temperature === undefined && policy.structuredOutput === 'none' ? {} : {
+            samplingParams: {
+              ...(policy.temperature === undefined ? {} : { temperature: policy.temperature }),
+              ...(policy.structuredOutput === 'json-object'
+                ? { response_format: { type: 'json_object' } }
+                : {}),
+            },
+          }),
+        }],
       },
     },
   };
   return `${JSON.stringify(config, null, 2)}\n`;
+}
+
+function buildSettingsConfig(policy: PiExecutionPolicy): string {
+  return `${JSON.stringify({
+    defaultThinkingLevel: policy.thinkingLevel,
+    retry: {
+      enabled: false,
+      maxRetries: 0,
+      provider: { maxRetries: 0 },
+    },
+  }, null, 2)}\n`;
 }
 
 function diagnosticEventType(value: unknown): PiDiagnosticEventType {
@@ -204,6 +294,11 @@ function boundedNumber(value: unknown): number | null {
   return Math.min(Math.floor(value), Number.MAX_SAFE_INTEGER);
 }
 
+function boundedCost(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
+  return Math.min(value, Number.MAX_SAFE_INTEGER);
+}
+
 /**
  * Inspects Pi's retained NDJSON without retaining event payloads in the
  * result. Only bounded type labels and numeric counters leave this function.
@@ -252,7 +347,15 @@ export function inspectPiAssistantOutput(stdout: string, stdoutTruncated = false
     : [];
   const stopReason = diagnosticStopReason(finalMessage?.['stopReason']);
   const usage = finalMessage?.['usage'];
+  const inputTokens = boundedNumber(isRecord(usage) ? usage['input'] : undefined);
   const outputTokens = boundedNumber(isRecord(usage) ? usage['output'] : undefined);
+  const cacheReadTokens = boundedNumber(isRecord(usage) ? usage['cacheRead'] : undefined);
+  const cacheWriteTokens = boundedNumber(isRecord(usage) ? usage['cacheWrite'] : undefined);
+  const explicitTotalTokens = boundedNumber(isRecord(usage) ? usage['totalTokens'] : undefined);
+  const totalTokens = explicitTotalTokens
+    ?? (inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens);
+  const cost = isRecord(usage) && isRecord(usage['cost']) ? usage['cost'] : undefined;
+  const costUsd = boundedCost(isRecord(cost) ? cost['total'] : undefined);
   const turnContent = isRecord(turnMessage) ? turnMessage['content'] : undefined;
   const textParts = Array.isArray(turnContent)
     ? turnContent.filter((part) => isRecord(part) && part['type'] === 'text' && typeof part['text'] === 'string')
@@ -260,7 +363,20 @@ export function inspectPiAssistantOutput(stdout: string, stdoutTruncated = false
   const text = textParts.map((part) => (part as Record<string, unknown>)['text'] as string).join('');
 
   if (text.length > 0 && (!stdoutTruncated || settledAfterLastTurnEnd)) {
-    return { text, classification: undefined, malformedEvents, finalEventTypes, contentPartTypes, stopReason, outputTokens };
+    return {
+      text,
+      classification: undefined,
+      malformedEvents,
+      finalEventTypes,
+      contentPartTypes,
+      stopReason,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
+      totalTokens,
+      costUsd,
+    };
   }
 
   let classification: PiNoAssistantTextClassification;
@@ -278,7 +394,12 @@ export function inspectPiAssistantOutput(stdout: string, stdoutTruncated = false
     finalEventTypes,
     contentPartTypes,
     stopReason,
+    inputTokens,
     outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    totalTokens,
+    costUsd,
   };
 }
 
@@ -332,7 +453,11 @@ function noAssistantTextDiagnostic(
   return JSON.stringify({ ...diagnostic, events: [], parts: [] });
 }
 
-function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null): HarnessRun {
+function toHarnessRun(
+  result: BoundedRunResult,
+  timeToFirstTextMs: number | null,
+  retryCount = 0,
+): HarnessRun {
   const inspection = result.code === 0 ? inspectPiAssistantOutput(result.stdout, result.stdoutTruncated) : undefined;
   const text = inspection?.text;
   const telemetry = {
@@ -342,6 +467,17 @@ function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null
     stderrBytes: result.stderrBytes ?? Buffer.byteLength(result.stderr, 'utf8'),
     stdoutTruncated: result.stdoutTruncated,
     stderrTruncated: result.stderrTruncated ?? false,
+    ...(inspection === undefined ? {} : {
+      usage: {
+        inputTokens: inspection.inputTokens,
+        outputTokens: inspection.outputTokens,
+        cacheReadTokens: inspection.cacheReadTokens,
+        cacheWriteTokens: inspection.cacheWriteTokens,
+        totalTokens: inspection.totalTokens,
+        costUsd: inspection.costUsd,
+      },
+    }),
+    retryCount,
   };
   if (result.timedOut) {
     return {
@@ -379,9 +515,42 @@ function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null
   };
 }
 
+function mergeUsage(
+  accumulated: HarnessUsageTelemetry | undefined,
+  next: HarnessUsageTelemetry | undefined,
+): HarnessUsageTelemetry | undefined {
+  if (accumulated === undefined) return next;
+  if (next === undefined) return accumulated;
+  const sum = (left: number | null, right: number | null): number | null =>
+    left === null || right === null ? null : left + right;
+  return {
+    inputTokens: sum(accumulated.inputTokens, next.inputTokens),
+    outputTokens: sum(accumulated.outputTokens, next.outputTokens),
+    cacheReadTokens: sum(accumulated.cacheReadTokens, next.cacheReadTokens),
+    cacheWriteTokens: sum(accumulated.cacheWriteTokens, next.cacheWriteTokens),
+    totalTokens: sum(accumulated.totalTokens, next.totalTokens),
+    costUsd: sum(accumulated.costUsd, next.costUsd),
+  };
+}
+
+function isTransientProviderFailure(result: BoundedRunResult): boolean {
+  if (result.timedOut) return false;
+  if (result.code === 0) {
+    const classification = inspectPiAssistantOutput(result.stdout, result.stdoutTruncated).classification;
+    return classification === 'missing-text-parts' || classification === 'empty-text';
+  }
+  const diagnostic = `${result.stderr}\n${result.error}`;
+  return /(?:\b429\b|rate[ -]?limit|\b50[0234]\b|ECONNRESET|ETIMEDOUT|fetch failed|socket hang up)/iu.test(diagnostic);
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecutor {
   const command = options.command ?? 'pi';
   const spawner = options.spawner ?? nodeProcessSpawner;
+  const policy = validatePolicy(options);
   return {
     harness: 'pi',
     async prepare(settings: HarnessSettings): Promise<PreparedPi> {
@@ -393,6 +562,8 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         'json',
         '--no-session',
         '--no-tools',
+        '--thinking',
+        policy.thinkingLevel,
         '--provider',
         settings.model.provider,
         '--model',
@@ -402,6 +573,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         PATH: process.env.PATH,
         HOME: process.env.HOME,
         LANG: process.env.LANG,
+        PI_SKIP_VERSION_CHECK: '1',
       };
       if (settings.credential !== undefined) {
         env[PI_CREDENTIAL_ENV_NAME] = settings.credential.value;
@@ -409,35 +581,32 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
       return Object.freeze({
         harness: 'pi',
         model: settings.model,
-        description: `pi with isolated per-invocation agent directories under ${rootDirectory} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
+        description: `pi with isolated per-invocation agent directories under ${rootDirectory}; thinking=${policy.thinkingLevel}, max-output-tokens=${policy.maxOutputTokens}, temperature=${policy.temperature ?? 'provider-default'}, structured-output=${policy.structuredOutput}, transient-retries=${policy.transientRetries} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
         command,
         args,
         cwd: settings.workDirectory,
         rootDirectory,
-        agentConfig: buildAgentConfig(settings),
+        agentConfig: buildAgentConfig(settings, policy),
+        settingsConfig: buildSettingsConfig(policy),
         env,
         timeoutMs: settings.timeoutMs,
+        transientRetries: policy.transientRetries,
       });
     },
     async execute(prepared: PreparedHarness, prompt: HarnessPrompt, options?: HarnessExecuteOptions): Promise<HarnessRun> {
       const state = prepared as PreparedPi;
-      const invocationDirectory = await mkdtemp(join(state.rootDirectory, 'invocation-'));
-      const systemPromptFile = join(invocationDirectory, 'system-prompt.md');
-      await Promise.all([
-        writeFile(join(invocationDirectory, 'models.json'), state.agentConfig, { mode: 0o600 }),
-        writeFile(systemPromptFile, prompt.system, { mode: 0o600 }),
-      ]);
-      const args = [...state.args, '--system-prompt', systemPromptFile];
-      const env: NodeJS.ProcessEnv = { ...state.env, PI_CODING_AGENT_DIR: invocationDirectory };
-      // Readable live output: the NDJSON event stream is decoded, and the
-      // model's text deltas are forwarded per the stream mode — raw
-      // fragments ('text') or one dot per chunk ('dots'). Text is
-      // redacted against the credential and capped; boundary events stay
-      // compact lines in text mode and are suppressed in dots mode.
+      const totalTimeoutMs = options?.timeoutMs ?? state.timeoutMs;
+      if (!Number.isSafeInteger(totalTimeoutMs) || totalTimeoutMs <= 0) {
+        throw new Error('process timeout is invalid');
+      }
+      const invocationStartedAt = performance.now();
       const streamMode = options?.streamMode ?? 'text';
-      const credential = env[PI_CREDENTIAL_ENV_NAME];
+      const credential = state.env[PI_CREDENTIAL_ENV_NAME];
       let streamedBytes = 0;
       let capReported = false;
+      let retryCount = 0;
+      let accumulatedUsage: HarnessUsageTelemetry | undefined;
+
       const forwardText = (text: string): void => {
         const rendered = streamMode === 'dots' ? (text === '\n' ? '\n' : '.') : text;
         const redacted = credential !== undefined ? rendered.split(credential).join('[redacted]') : rendered;
@@ -456,8 +625,6 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         const bounded = redacted.slice(0, remaining);
         const atRunStart = streamedBytes === 0;
         streamedBytes += Buffer.byteLength(bounded, 'utf8');
-        // The sanitizer also guards after-newline positions inside the
-        // fragment; the run-start flag covers the very first fragment.
         options?.onOutputLine?.({ stream: 'stdout', kind: 'text', line: sanitizeWorkflowCommands(bounded, atRunStart) });
         if (bounded.length < redacted.length && !capReported) {
           capReported = true;
@@ -468,36 +635,75 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
           });
         }
       };
-      const invocationStartedAt = Date.now();
-      let timeToFirstTextMs: number | null = null;
-      const result = await runBoundedProcess(spawner, {
-        command: state.command,
-        args,
-        cwd: state.cwd,
-        env,
-        stdin: prompt.user,
-        timeoutMs: options?.timeoutMs ?? state.timeoutMs,
-        onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {
-          if (stream === 'stderr') {
-            if (streamMode !== 'off') options?.onOutputLine?.({ stream, kind: 'line', line });
-            return;
-          }
-          const event = streamEventLine(line);
-          if (event?.kind === 'text' && timeToFirstTextMs === null) {
-            timeToFirstTextMs = Math.max(0, Date.now() - invocationStartedAt);
-          }
-          if (streamMode === 'off' || options?.onOutputLine === undefined) return;
-          if (event !== undefined) {
-            forwardText(event.text);
-            return;
-          }
-          const type = /^\s*\{"type":"([a-z_]+)"/u.exec(line)?.[1];
-          if (streamMode === 'text' && type !== undefined && PI_HEARTBEAT_EVENTS.has(type)) {
-            options.onOutputLine({ stream, kind: 'line', line: `pi event: ${type}` });
-          }
-        },
-      });
-      return toHarnessRun(result, timeToFirstTextMs);
+
+      for (let attempt = 0; ; attempt += 1) {
+        const remainingTimeoutMs = Math.max(
+          1,
+          Math.floor(totalTimeoutMs - (performance.now() - invocationStartedAt)),
+        );
+        const invocationDirectory = await mkdtemp(join(state.rootDirectory, 'invocation-'));
+        const systemPromptFile = join(invocationDirectory, 'system-prompt.md');
+        await Promise.all([
+          writeFile(join(invocationDirectory, 'models.json'), state.agentConfig, { mode: 0o600 }),
+          writeFile(join(invocationDirectory, 'settings.json'), state.settingsConfig, { mode: 0o600 }),
+          writeFile(systemPromptFile, prompt.system, { mode: 0o600 }),
+        ]);
+        const args = [...state.args, '--system-prompt', systemPromptFile];
+        const env: NodeJS.ProcessEnv = { ...state.env, PI_CODING_AGENT_DIR: invocationDirectory };
+        let timeToFirstTextMs: number | null = null;
+        const result = await runBoundedProcess(spawner, {
+          command: state.command,
+          args,
+          cwd: state.cwd,
+          env,
+          stdin: prompt.user,
+          timeoutMs: remainingTimeoutMs,
+          onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {
+            if (stream === 'stderr') {
+              if (streamMode !== 'off') options?.onOutputLine?.({ stream, kind: 'line', line });
+              return;
+            }
+            const event = streamEventLine(line);
+            if (event?.kind === 'text' && timeToFirstTextMs === null) {
+              timeToFirstTextMs = Math.max(0, Math.ceil(performance.now() - invocationStartedAt));
+            }
+            if (streamMode === 'off' || options?.onOutputLine === undefined) return;
+            if (event !== undefined) {
+              forwardText(event.text);
+              return;
+            }
+            const type = /^\s*\{"type":"([a-z_]+)"/u.exec(line)?.[1];
+            if (streamMode === 'text' && type !== undefined && PI_HEARTBEAT_EVENTS.has(type)) {
+              options.onOutputLine({ stream, kind: 'line', line: `pi event: ${type}` });
+            }
+          },
+        });
+        const run = toHarnessRun(result, timeToFirstTextMs, retryCount);
+        accumulatedUsage = mergeUsage(accumulatedUsage, run.telemetry?.usage);
+        const elapsedMs = Math.max(0, Math.ceil(performance.now() - invocationStartedAt));
+        if (run.status === 'succeeded'
+          || attempt >= state.transientRetries
+          || !isTransientProviderFailure(result)
+          || elapsedMs + PI_TRANSIENT_RETRY_DELAY_MS >= totalTimeoutMs) {
+          return {
+            ...run,
+            durationMs: elapsedMs,
+            telemetry: run.telemetry === undefined ? undefined : {
+              ...run.telemetry,
+              ...(accumulatedUsage === undefined ? {} : { usage: accumulatedUsage }),
+            },
+          };
+        }
+        retryCount += 1;
+        if (streamMode !== 'off') {
+          options?.onOutputLine?.({
+            stream: 'stderr',
+            kind: 'line',
+            line: 'pi transient provider failure; retrying once',
+          });
+        }
+        await delay(PI_TRANSIENT_RETRY_DELAY_MS);
+      }
     },
   };
 }

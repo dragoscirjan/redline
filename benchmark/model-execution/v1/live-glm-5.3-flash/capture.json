@@ -1,0 +1,2215 @@
+{
+  "version": 1,
+  "kind": "live-model-execution",
+  "corpusVersion": 2,
+  "createdAt": "2026-10-24T20:44:43.935Z",
+  "harness": "pi",
+  "provider": "openrouter",
+  "model": "z-ai/glm-5.3-flash",
+  "pricing": {
+    "inputUsdPerToken": 1.5e-7,
+    "outputUsdPerToken": 5e-7,
+    "cacheReadUsdPerToken": 3e-8
+  },
+  "freshProcessProbe": {
+    "samples": [
+      {
+        "status": "succeeded",
+        "durationMs": 211,
+        "processStartupMs": 1,
+        "timeToFirstTextMs": 204,
+        "retryCount": 0,
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 10,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 20,
+          "costUsd": 0
+        }
+      },
+      {
+        "status": "succeeded",
+        "durationMs": 170,
+        "processStartupMs": 1,
+        "timeToFirstTextMs": 164,
+        "retryCount": 0,
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 10,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 20,
+          "costUsd": 0
+        }
+      },
+      {
+        "status": "succeeded",
+        "durationMs": 173,
+        "processStartupMs": 1,
+        "timeToFirstTextMs": 166,
+        "retryCount": 0,
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 10,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 20,
+          "costUsd": 0
+        }
+      },
+      {
+        "status": "succeeded",
+        "durationMs": 173,
+        "processStartupMs": 1,
+        "timeToFirstTextMs": 167,
+        "retryCount": 0,
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 10,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 20,
+          "costUsd": 0
+        }
+      },
+      {
+        "status": "succeeded",
+        "durationMs": 168,
+        "processStartupMs": 0,
+        "timeToFirstTextMs": 163,
+        "retryCount": 0,
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 10,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 20,
+          "costUsd": 0
+        }
+      },
+      {
+        "status": "succeeded",
+        "durationMs": 177,
+        "processStartupMs": 1,
+        "timeToFirstTextMs": 171,
+        "retryCount": 0,
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 10,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 20,
+          "costUsd": 0
+        }
+      },
+      {
+        "status": "succeeded",
+        "durationMs": 170,
+        "processStartupMs": 1,
+        "timeToFirstTextMs": 164,
+        "retryCount": 0,
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 10,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 20,
+          "costUsd": 0
+        }
+      },
+      {
+        "status": "succeeded",
+        "durationMs": 177,
+        "processStartupMs": 1,
+        "timeToFirstTextMs": 171,
+        "retryCount": 0,
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 10,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 20,
+          "costUsd": 0
+        }
+      },
+      {
+        "status": "succeeded",
+        "durationMs": 169,
+        "processStartupMs": 1,
+        "timeToFirstTextMs": 163,
+        "retryCount": 0,
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 10,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 20,
+          "costUsd": 0
+        }
+      },
+      {
+        "status": "succeeded",
+        "durationMs": 175,
+        "processStartupMs": 1,
+        "timeToFirstTextMs": 169,
+        "retryCount": 0,
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 10,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 20,
+          "costUsd": 0
+        }
+      }
+    ]
+  },
+  "modes": [
+    {
+      "id": "off-4096",
+      "thinkingLevel": "off",
+      "maxOutputTokens": 4096,
+      "structuredOutput": "none",
+      "productionEligible": true,
+      "cases": [
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 1,
+          "wallDurationMs": 3044,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 3037,
+              "processStartupMs": 2,
+              "timeToFirstTextMs": 693,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 624,
+                "outputTokens": 251,
+                "cacheReadTokens": 2176,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3051,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 3037,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 1,
+          "wallDurationMs": 4795,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 4793,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 987,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2760,
+                "outputTokens": 698,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3458,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 4793,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 1,
+          "wallDurationMs": 32827,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "failed",
+              "durationMs": 32825,
+              "processStartupMs": 0,
+              "timeToFirstTextMs": 721,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 708,
+                "outputTokens": 4096,
+                "cacheReadTokens": 2048,
+                "cacheWriteTokens": 0,
+                "totalTokens": 6852,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "omitted",
+              "errorKind": "harness-failed",
+              "durationMs": 32825,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 1,
+          "wallDurationMs": 27741,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 27737,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 661,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 1552,
+                "outputTokens": 4096,
+                "cacheReadTokens": 1280,
+                "cacheWriteTokens": 0,
+                "totalTokens": 6928,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 27737,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 2,
+          "wallDurationMs": 14902,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 14900,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 770,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 751,
+                "outputTokens": 1919,
+                "cacheReadTokens": 2048,
+                "cacheWriteTokens": 0,
+                "totalTokens": 4718,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 14900,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 2,
+          "wallDurationMs": 3247,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 3246,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 1178,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2759,
+                "outputTokens": 483,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3242,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 3246,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 2,
+          "wallDurationMs": 38422,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 38419,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 1090,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2755,
+                "outputTokens": 2738,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 5493,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "findings",
+              "durationMs": 38419,
+              "findings": [
+                {
+                  "side": "RIGHT",
+                  "startLine": 2,
+                  "endLine": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 2,
+          "wallDurationMs": 14498,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 14496,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 730,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 1553,
+                "outputTokens": 3633,
+                "cacheReadTokens": 1280,
+                "cacheWriteTokens": 0,
+                "totalTokens": 6466,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 14496,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 3,
+          "wallDurationMs": 15743,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 15739,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 756,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 751,
+                "outputTokens": 1849,
+                "cacheReadTokens": 2048,
+                "cacheWriteTokens": 0,
+                "totalTokens": 4648,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 15739,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 3,
+          "wallDurationMs": 7833,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 7831,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 1196,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 711,
+                "outputTokens": 992,
+                "cacheReadTokens": 2048,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3751,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 7831,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 3,
+          "wallDurationMs": 29414,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 29413,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 1296,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 709,
+                "outputTokens": 4096,
+                "cacheReadTokens": 2048,
+                "cacheWriteTokens": 0,
+                "totalTokens": 6853,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 29413,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 3,
+          "wallDurationMs": 31976,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 31974,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 1168,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2834,
+                "outputTokens": 4066,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 6900,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 31974,
+              "findings": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "minimal-4096",
+      "thinkingLevel": "minimal",
+      "maxOutputTokens": 4096,
+      "structuredOutput": "none",
+      "productionEligible": true,
+      "cases": [
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 1,
+          "wallDurationMs": 1051,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 1049,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 854,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2799,
+                "outputTokens": 53,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 2852,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 1049,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 1,
+          "wallDurationMs": 921,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 919,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 801,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2758,
+                "outputTokens": 45,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 2803,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 919,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 1,
+          "wallDurationMs": 5551,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 5549,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 902,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 580,
+                "outputTokens": 769,
+                "cacheReadTokens": 2176,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3525,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 5549,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 1,
+          "wallDurationMs": 4394,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 4392,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 978,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2833,
+                "outputTokens": 1063,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3896,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 4392,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 2,
+          "wallDurationMs": 2230,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 2228,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 834,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2799,
+                "outputTokens": 393,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3192,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 2228,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 2,
+          "wallDurationMs": 947,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 946,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 810,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2759,
+                "outputTokens": 57,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 2816,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 946,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 2,
+          "wallDurationMs": 4592,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 4591,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 1309,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2756,
+                "outputTokens": 805,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3561,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "findings",
+              "durationMs": 4591,
+              "findings": [
+                {
+                  "side": "RIGHT",
+                  "startLine": 2,
+                  "endLine": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 2,
+          "wallDurationMs": 6433,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 6431,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 886,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2832,
+                "outputTokens": 844,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3676,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 6431,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 3,
+          "wallDurationMs": 1427,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 1424,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 1015,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2799,
+                "outputTokens": 68,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 2867,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 1424,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 3,
+          "wallDurationMs": 1162,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 1161,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 958,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2761,
+                "outputTokens": 49,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 2810,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 1161,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 3,
+          "wallDurationMs": 6214,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 6212,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 785,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2757,
+                "outputTokens": 735,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3492,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 6212,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 3,
+          "wallDurationMs": 3892,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 3888,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 891,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2834,
+                "outputTokens": 1192,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 4026,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "findings",
+              "durationMs": 3888,
+              "findings": [
+                {
+                  "side": "RIGHT",
+                  "startLine": 3,
+                  "endLine": 3
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "low-4096",
+      "thinkingLevel": "low",
+      "maxOutputTokens": 4096,
+      "structuredOutput": "none",
+      "productionEligible": true,
+      "cases": [
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 1,
+          "wallDurationMs": 1722,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 1720,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 702,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2798,
+                "outputTokens": 106,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 2904,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 1720,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 1,
+          "wallDurationMs": 1088,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 1086,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 936,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2758,
+                "outputTokens": 57,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 2815,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 1086,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 1,
+          "wallDurationMs": 4938,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 4937,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 824,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 580,
+                "outputTokens": 814,
+                "cacheReadTokens": 2176,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3570,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "findings",
+              "durationMs": 4937,
+              "findings": [
+                {
+                  "side": "RIGHT",
+                  "startLine": 2,
+                  "endLine": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 1,
+          "wallDurationMs": 6304,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 6301,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 830,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2833,
+                "outputTokens": 626,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3459,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 6301,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 2,
+          "wallDurationMs": 1270,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 1267,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 806,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2800,
+                "outputTokens": 59,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 2859,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 1267,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 2,
+          "wallDurationMs": 956,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 954,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 726,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2759,
+                "outputTokens": 38,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 2797,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 954,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 2,
+          "wallDurationMs": 5902,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 5900,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 731,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2755,
+                "outputTokens": 710,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3465,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 5900,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 2,
+          "wallDurationMs": 4930,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 4926,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 989,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 1552,
+                "outputTokens": 783,
+                "cacheReadTokens": 1280,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3615,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 4926,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 3,
+          "wallDurationMs": 3744,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 3741,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 842,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2799,
+                "outputTokens": 910,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3709,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 3741,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 3,
+          "wallDurationMs": 1478,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 1476,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 895,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2759,
+                "outputTokens": 51,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 2810,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 1476,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 3,
+          "wallDurationMs": 5457,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 5455,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 824,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 707,
+                "outputTokens": 710,
+                "cacheReadTokens": 2048,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3465,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 5455,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 3,
+          "wallDurationMs": 5029,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 5025,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 752,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 1552,
+                "outputTokens": 847,
+                "cacheReadTokens": 1280,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3679,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "findings",
+              "durationMs": 5025,
+              "findings": [
+                {
+                  "side": "RIGHT",
+                  "startLine": 3,
+                  "endLine": 3
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "off-16384",
+      "thinkingLevel": "off",
+      "maxOutputTokens": 16384,
+      "structuredOutput": "none",
+      "productionEligible": true,
+      "cases": [
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 1,
+          "wallDurationMs": 9532,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 9530,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 1046,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 1520,
+                "outputTokens": 1807,
+                "cacheReadTokens": 1280,
+                "cacheWriteTokens": 0,
+                "totalTokens": 4607,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 9530,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 1,
+          "wallDurationMs": 5294,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 5292,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 799,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 711,
+                "outputTokens": 865,
+                "cacheReadTokens": 2048,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3624,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 5292,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 1,
+          "wallDurationMs": 24987,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 24981,
+              "processStartupMs": 2,
+              "timeToFirstTextMs": 784,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 707,
+                "outputTokens": 3874,
+                "cacheReadTokens": 2048,
+                "cacheWriteTokens": 0,
+                "totalTokens": 6629,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "findings",
+              "durationMs": 24981,
+              "findings": [
+                {
+                  "side": "RIGHT",
+                  "startLine": 2,
+                  "endLine": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 1,
+          "wallDurationMs": 10824,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 10822,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 774,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2833,
+                "outputTokens": 1163,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3996,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 10822,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 2,
+          "wallDurationMs": 14954,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 14951,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 1028,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2798,
+                "outputTokens": 1610,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 4408,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 14951,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 2,
+          "wallDurationMs": 6776,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 6774,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 741,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 711,
+                "outputTokens": 788,
+                "cacheReadTokens": 2048,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3547,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 6774,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 2,
+          "wallDurationMs": 26344,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 26341,
+              "processStartupMs": 2,
+              "timeToFirstTextMs": 739,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 708,
+                "outputTokens": 3583,
+                "cacheReadTokens": 2048,
+                "cacheWriteTokens": 0,
+                "totalTokens": 6339,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "findings",
+              "durationMs": 26341,
+              "findings": [
+                {
+                  "side": "RIGHT",
+                  "startLine": 2,
+                  "endLine": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 2,
+          "wallDurationMs": 4208,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 4206,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 923,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2832,
+                "outputTokens": 939,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3771,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 4206,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 3,
+          "wallDurationMs": 7769,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 7765,
+              "processStartupMs": 2,
+              "timeToFirstTextMs": 1379,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2799,
+                "outputTokens": 1419,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 4218,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 7765,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 3,
+          "wallDurationMs": 2900,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 2897,
+              "processStartupMs": 2,
+              "timeToFirstTextMs": 900,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2760,
+                "outputTokens": 619,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3379,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 2897,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 3,
+          "wallDurationMs": 58859,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 58855,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 1235,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 708,
+                "outputTokens": 5355,
+                "cacheReadTokens": 2048,
+                "cacheWriteTokens": 0,
+                "totalTokens": 8111,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "findings",
+              "durationMs": 58855,
+              "findings": [
+                {
+                  "side": "RIGHT",
+                  "startLine": 2,
+                  "endLine": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 3,
+          "wallDurationMs": 10896,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 10894,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 1009,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 657,
+                "outputTokens": 1556,
+                "cacheReadTokens": 2176,
+                "cacheWriteTokens": 0,
+                "totalTokens": 4389,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 10894,
+              "findings": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "off-4096-json",
+      "thinkingLevel": "off",
+      "maxOutputTokens": 4096,
+      "structuredOutput": "json-object",
+      "productionEligible": false,
+      "cases": [
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 1,
+          "wallDurationMs": 10253,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 10251,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 754,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 622,
+                "outputTokens": 1459,
+                "cacheReadTokens": 2176,
+                "cacheWriteTokens": 0,
+                "totalTokens": 4257,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 10251,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 1,
+          "wallDurationMs": 1515,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 1514,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 1027,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 583,
+                "outputTokens": 78,
+                "cacheReadTokens": 2176,
+                "cacheWriteTokens": 0,
+                "totalTokens": 2837,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 1514,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 1,
+          "wallDurationMs": 6134,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 6131,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 780,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 581,
+                "outputTokens": 986,
+                "cacheReadTokens": 2176,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3743,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "findings",
+              "durationMs": 6131,
+              "findings": [
+                {
+                  "side": "RIGHT",
+                  "startLine": 2,
+                  "endLine": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 1,
+          "wallDurationMs": 31282,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "failed",
+              "durationMs": 31279,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 885,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2832,
+                "outputTokens": 4096,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 6928,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "omitted",
+              "errorKind": "harness-failed",
+              "durationMs": 31279,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 2,
+          "wallDurationMs": 3104,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 3102,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 876,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2798,
+                "outputTokens": 557,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3355,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 3102,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 2,
+          "wallDurationMs": 2323,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 2319,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 950,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 582,
+                "outputTokens": 92,
+                "cacheReadTokens": 2176,
+                "cacheWriteTokens": 0,
+                "totalTokens": 2850,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 2319,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 2,
+          "wallDurationMs": 32408,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "failed",
+              "durationMs": 32402,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 889,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 708,
+                "outputTokens": 4096,
+                "cacheReadTokens": 2048,
+                "cacheWriteTokens": 0,
+                "totalTokens": 6852,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "omitted",
+              "errorKind": "harness-failed",
+              "durationMs": 32402,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 2,
+          "wallDurationMs": 30821,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 30818,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 25779,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2831,
+                "outputTokens": 3503,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 6334,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "findings",
+              "durationMs": 30818,
+              "findings": [
+                {
+                  "side": "RIGHT",
+                  "startLine": 3,
+                  "endLine": 3
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-api-extension",
+          "iteration": 3,
+          "wallDurationMs": 21065,
+          "promptBytes": 12369,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 21062,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 1101,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 750,
+                "outputTokens": 2434,
+                "cacheReadTokens": 2048,
+                "cacheWriteTokens": 0,
+                "totalTokens": 5232,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/format.ts",
+              "outcome": "clean",
+              "durationMs": 21062,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "iteration": 3,
+          "wallDurationMs": 9600,
+          "promptBytes": 12323,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 9598,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 813,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2758,
+                "outputTokens": 967,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 3725,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/name.ts",
+              "outcome": "clean",
+              "durationMs": 9598,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "iteration": 3,
+          "wallDurationMs": 31767,
+          "promptBytes": 12233,
+          "runs": [
+            {
+              "status": "failed",
+              "durationMs": 31762,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 744,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 708,
+                "outputTokens": 4096,
+                "cacheReadTokens": 2048,
+                "cacheWriteTokens": 0,
+                "totalTokens": 6852,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/cache.ts",
+              "outcome": "omitted",
+              "errorKind": "harness-failed",
+              "durationMs": 31762,
+              "findings": []
+            }
+          ]
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "iteration": 3,
+          "wallDurationMs": 15293,
+          "promptBytes": 12444,
+          "runs": [
+            {
+              "status": "succeeded",
+              "durationMs": 15286,
+              "processStartupMs": 1,
+              "timeToFirstTextMs": 1131,
+              "retryCount": 0,
+              "usage": {
+                "inputTokens": 2833,
+                "outputTokens": 3312,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "totalTokens": 6145,
+                "costUsd": 0
+              }
+            }
+          ],
+          "records": [
+            {
+              "fileId": "000001",
+              "path": "src/config.ts",
+              "outcome": "omitted",
+              "errorKind": "invalid-output",
+              "durationMs": 15286,
+              "findings": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

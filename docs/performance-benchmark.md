@@ -1,6 +1,6 @@
 # Review performance benchmark
 
-Redline has a fixed 20-file performance corpus under `benchmark/performance/v1/`. It measures the bounded per-file review scheduler and records the effect of each integrated performance-epic change.
+Redline has a fixed 20-file performance corpus under `benchmark/performance/v1/`. It measures the bounded per-file review scheduler and records the effect of each integrated performance-epic change. The separate [model execution benchmark](/model-execution-benchmark) selects Pi thinking, output, retry, deadline, and process-isolation policy.
 
 The corpus contains:
 

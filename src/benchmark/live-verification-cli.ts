@@ -20,6 +20,7 @@ interface Configuration {
   readonly model: ReviewEnvironment['model'];
   readonly credential: ReviewEnvironment['credential'];
   readonly timeout: ReviewEnvironment['timeout'];
+  readonly runTimeout: ReviewEnvironment['runTimeout'];
 }
 
 function configuration(env: NodeJS.ProcessEnv): Configuration {
@@ -27,8 +28,13 @@ function configuration(env: NodeJS.ProcessEnv): Configuration {
   const harness = env.REDLINE_HARNESS ?? '';
   if (!isHarnessName(harness) || harness === 'echo') throw new Error('select pi or opencode for a live verification capture');
   const model = parseModelConfig(env.REDLINE_MODEL_CONFIG ?? '');
-  return { harness, model, credential: selectModelCredential(model, env.REDLINE_MODEL_AUTH ?? ''),
-    timeout: parseDuration(env.REDLINE_TIMEOUT ?? '30m') };
+  return {
+    harness,
+    model,
+    credential: selectModelCredential(model, env.REDLINE_MODEL_AUTH ?? ''),
+    timeout: parseDuration(env.REDLINE_TIMEOUT ?? '4m'),
+    runTimeout: parseDuration(env.REDLINE_RUN_TIMEOUT ?? '10m'),
+  };
 }
 
 class ReplayDiscoveryExecutor implements HarnessExecutor {
@@ -100,7 +106,8 @@ async function captureCase(
     }
     const environment: ReviewEnvironment = {
       harness: conf.harness, model: conf.model, credential: conf.credential,
-      findingScope: 'defects', timeout: conf.timeout, reviewConcurrency: 1, codeContext,
+      findingScope: 'defects', timeout: conf.timeout, runTimeout: conf.runTimeout,
+      reviewConcurrency: 1, codeContext,
       reviewDirectory: paths.review, sourceDirectory: paths.source, outputDirectory: paths.output,
     };
     const discovery = await runFileReviews({ environment, executor });

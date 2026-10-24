@@ -25,11 +25,12 @@ action = yaml.safe_load(Path(sys.argv[1]).read_text())
 inputs = action['inputs']
 assert set(inputs) == {
     'backend', 'model-config', 'model-auth', 'finding-scope',
-    'timeout', 'review-concurrency', 'runtime', 'verbosity', 'indexing', 'indexing-provider', 'artifact-name', 'artifact-retention-days',
+    'timeout', 'run-timeout', 'review-concurrency', 'runtime', 'verbosity', 'indexing', 'indexing-provider', 'artifact-name', 'artifact-retention-days',
     'github-token', 'github-app-id', 'github-app-key',
 }, f'unexpected input surface: {sorted(inputs)}'
 assert inputs['finding-scope']['default'] == 'defects'
-assert inputs['timeout']['default'] == '30m'
+assert inputs['timeout']['default'] == '4m'
+assert inputs['run-timeout']['default'] == '10m'
 assert inputs['review-concurrency']['default'] == '4'
 assert inputs['runtime']['default'] == 'node'
 assert inputs['verbosity']['default'] == 'progress'
@@ -83,6 +84,8 @@ PY
   grep -Fq 'REDLINE_HARNESS: ${{ inputs.backend }}' "$ACTION"
   grep -Fq 'REDLINE_MODEL_CONFIG: ${{ inputs.model-config }}' "$ACTION"
   grep -Fq 'REDLINE_MODEL_AUTH: ${{ inputs.model-auth }}' "$ACTION"
+  grep -Fq 'REDLINE_TIMEOUT: ${{ inputs.timeout }}' "$ACTION"
+  grep -Fq 'REDLINE_RUN_TIMEOUT: ${{ inputs.run-timeout }}' "$ACTION"
   grep -Fq 'REDLINE_REVIEW_DIR: ${{ github.workspace }}/review' "$ACTION"
   grep -Fq 'REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head' "$ACTION"
   grep -Fq 'REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews' "$ACTION"
@@ -108,6 +111,8 @@ PY
   grep -Fq 'uses: $/github' "$REUSABLE_WORKFLOW"
   grep -Fq 'indexing: ${{ inputs.indexing }}' "$REUSABLE_WORKFLOW"
   grep -Fq 'indexing-provider: ${{ inputs.indexing-provider }}' "$REUSABLE_WORKFLOW"
+  grep -Fq 'timeout: ${{ inputs.timeout }}' "$REUSABLE_WORKFLOW"
+  grep -Fq 'run-timeout: ${{ inputs.run-timeout }}' "$REUSABLE_WORKFLOW"
   ! grep -Fq 'uses: dragoscirjan/redline/github@v1' "$REUSABLE_WORKFLOW"
   ! grep -Fq 'uses: $/github/code-index' "$REUSABLE_WORKFLOW"
   ! grep -Fq 'report-style: ${{ inputs.report-style }}' "$REUSABLE_WORKFLOW"
@@ -178,6 +183,8 @@ PY
   grep -Fq "backend: \${{ secrets.model-auth != '' && 'pi' || '' }}" "$DOGFOOD_WORKFLOW"
   grep -Fq "model-config: \${{ secrets.model-auth != '' && '{\"provider\":\"openrouter\",\"endpoint\":\"https://openrouter.ai/api/v1\",\"model\":\"z-ai/glm-5.3-flash\"}' || '' }}" "$DOGFOOD_WORKFLOW"
   grep -Fq 'model-auth: ${{ secrets.model-auth }}' "$DOGFOOD_WORKFLOW"
+  grep -Fq 'timeout: ${{ inputs.timeout }}' "$DOGFOOD_WORKFLOW"
+  grep -Fq 'run-timeout: ${{ inputs.run-timeout }}' "$DOGFOOD_WORKFLOW"
   ! grep -Fq 'Install pi harness binary' "$DOGFOOD_WORKFLOW"
   ! grep -Fq 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent' "$DOGFOOD_WORKFLOW"
 }

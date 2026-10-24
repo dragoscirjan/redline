@@ -15,7 +15,8 @@ The GitHub Action passes every value to the review tool through environment vari
 | `REDLINE_MODEL_CONFIG` | review mode | Model configuration JSON (below). |
 | `REDLINE_MODEL_AUTH` | review mode | Provider-keyed credential map JSON (below). Not consulted when the model config declares `auth: "none"`. |
 | `REDLINE_FINDING_SCOPE` | optional | `defects` (default) or `defects-and-risks`. |
-| `REDLINE_TIMEOUT` | optional | Duration like `10m`, `2h`, `1h30m`. Default `30m`, capped at `360m`. |
+| `REDLINE_TIMEOUT` | optional | Per-file model deadline. Duration like `4m`, `10m`, or `1h30m`; default `4m`, capped at `360m`. |
+| `REDLINE_RUN_TIMEOUT` | optional | Whole-review deadline. Default `10m`, capped at `360m`. Each model call is capped by the remaining run budget. |
 | `REDLINE_REVIEW_CONCURRENCY` | optional | Maximum simultaneous per-file model calls. Integer from `1` through `8`; default `4`. |
 | `REDLINE_REUSE_DIR` | optional in review mode | Action-owned directory for restored and newly validated per-file reuse entries. Requires `REDLINE_REUSE_NAMESPACE`. |
 | `REDLINE_REUSE_NAMESPACE` | with `REDLINE_REUSE_DIR` | Cache identity in `owner/name#pull-request` form. |
@@ -26,6 +27,7 @@ Rules enforced by the parser:
 - Review inputs must arrive together. A partial selection fails instead of degrading to context-only mode.
 - Unknown `REDLINE_*` variables are rejected, so typos fail loudly.
 - Optional values are validated even without review execution.
+- When the whole-review deadline expires, Redline stops starting model calls. It records every remaining reviewed file as an explicit `run-deadline-exhausted` omission instead of silently dropping coverage.
 - Indexed-context path and repository identity arrive together. Configured context that is missing, invalid, stale, unsupported, or unavailable is recorded and degrades to file-only review instead of failing the run.
 - Review-reuse directory and namespace arrive together. Restored entries are untrusted and optional; invalid data degrades to normal per-file execution.
 - No variable accepts free-form review instructions.

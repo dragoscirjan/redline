@@ -165,6 +165,117 @@ async function writeCodeContext(fixture: BundleFixture, value?: object): Promise
 }
 
 describe('runFileReviews', () => {
+  it('stops starting files at the whole-review deadline and records deterministic omissions', async () => {
+    const fixture = await createMultiFileFixture([10, 20, 30]);
+    try {
+      const parsed = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      let currentTimeMs = 0;
+      let calls = 0;
+      const executor: HarnessExecutor = {
+        harness: 'echo',
+        async prepare() {
+          return {
+            harness: 'echo',
+            model: { provider: 'mock', endpoint: 'http://x', model: 'test-model' },
+            description: 'deadline test double',
+          };
+        },
+        async execute(_prepared, _prompt, options) {
+          calls += 1;
+          currentTimeMs = 1_000;
+          const fileId = options?.invocation?.fileId ?? '000000';
+          return {
+            status: 'succeeded', harness: 'echo', exitCode: 0, diagnostic: '', durationMs: 1_000,
+            text: reviewDocument({ version: 4, fileId, outcome: 'clean', findings: [], contextRequests: [] }),
+          };
+        },
+      };
+      const result = await runFileReviews({
+        environment: {
+          ...parsed.review!,
+          timeout: { minutes: 1, milliseconds: 500 },
+          runTimeout: { minutes: 1, milliseconds: 1_000 },
+          reviewConcurrency: 1,
+        },
+        executor,
+        now: () => currentTimeMs,
+      });
+
+      expect(calls).toBe(1);
+      expect(result.exitCode).toBe(0);
+      expect(result.records.map((record) => record.outcome)).toEqual(['clean', 'omitted', 'omitted']);
+      expect(result.records.slice(1).every(
+        (record) => record.errorKind === 'run-deadline-exhausted'
+          && record.reason === 'whole-review deadline exhausted before this file started',
+      )).toBe(true);
+      expect(result.summary.executionBudget).toEqual({
+        version: 1,
+        fileTimeoutMs: 500,
+        runTimeoutMs: 1_000,
+        elapsedMs: 1_000,
+        deadlineExhausted: true,
+        deadlineOmittedFiles: 2,
+      });
+      expect(await readFile(join(fixture.output, 'reviews/summary.md'), 'utf8')).toContain(
+        '**Deadline result:** exhausted; 2 files omitted, 1000 ms elapsed',
+      );
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('caps a file invocation at the remaining whole-review budget', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const parsed = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      executor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      const result = await runFileReviews({
+        environment: {
+          ...parsed.review!,
+          timeout: { minutes: 1, milliseconds: 2_000 },
+          runTimeout: { minutes: 1, milliseconds: 1_000 },
+        },
+        executor,
+        now: () => 0,
+      });
+
+      expect(executor.options[0]?.timeoutMs).toBe(1_000);
+      expect(result.summary.executionBudget?.deadlineExhausted).toBe(false);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('labels a harness timeout caused by the remaining run budget as deadline exhaustion', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const parsed = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ScriptedExecutor();
+      executor.script([{ status: 'timed-out', diagnostic: 'process exceeded timeout', durationMs: 1_000 }]);
+      const result = await runFileReviews({
+        environment: {
+          ...parsed.review!,
+          timeout: { minutes: 1, milliseconds: 2_000 },
+          runTimeout: { minutes: 1, milliseconds: 1_000 },
+        },
+        executor,
+        now: () => 0,
+      });
+
+      expect(executor.options[0]?.timeoutMs).toBe(1_000);
+      expect(result.records[0]).toMatchObject({
+        outcome: 'omitted',
+        errorKind: 'run-deadline-exhausted',
+        reason: 'whole-review deadline exhausted during model execution',
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('bounds active model calls, starts largest diffs first, and restores manifest order', async () => {
     const fixture = await createMultiFileFixture([10, 600, 100, 500, 200, 400]);
     try {
@@ -431,7 +542,8 @@ describe('runFileReviews', () => {
       const result = await runFileReviews({ environment: environment.review!, executor, verifyCandidates: true });
       expect(executor.prompts).toHaveLength(2);
       expect(executor.prompts[1]?.system).toContain('redline-verification/v3');
-      expect(executor.options[1]?.timeoutMs).toBe(VERIFICATION_TIMEOUT_MS);
+      expect(executor.options[1]?.timeoutMs).toBeGreaterThan(0);
+      expect(executor.options[1]?.timeoutMs).toBeLessThanOrEqual(VERIFICATION_TIMEOUT_MS);
       expect(result.records[0]?.outcome).toBe('findings');
       expect(result.records[0]?.verification).toMatchObject({ status: 'completed', requested: 1, accepted: 1 });
       expect(result.records[0]?.findings[0]?.verification.status).toBe('confirmed');

@@ -77,7 +77,8 @@ function liveConfiguration(environment: NodeJS.ProcessEnv): LivePerformanceConfi
     harness,
     model,
     credential: selectModelCredential(model, environment.REDLINE_MODEL_AUTH ?? ''),
-    timeout: parseDuration(environment.REDLINE_TIMEOUT ?? '30m'),
+    timeout: parseDuration(environment.REDLINE_TIMEOUT ?? '4m'),
+    runTimeout: parseDuration(environment.REDLINE_RUN_TIMEOUT ?? '10m'),
     executorFactory: () => createHarnessExecutor(harness),
   };
 }

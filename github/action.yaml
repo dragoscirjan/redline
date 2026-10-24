@@ -40,9 +40,13 @@ inputs:
     required: false
     default: defects
   timeout:
-    description: Review deadline as a duration, for example 10m, 2h, or 1h30m. Capped at 360m; values above the cap are rejected.
+    description: Per-file model deadline as a duration, for example 4m or 10m. Capped at 360m; values above the cap are rejected.
     required: false
-    default: 30m
+    default: 4m
+  run-timeout:
+    description: Whole-review deadline as a duration. Files not started before expiry are recorded as explicit omissions.
+    required: false
+    default: 10m
   review-concurrency:
     description: Maximum simultaneous per-file model calls. Must be an integer from 1 through 8.
     required: false
@@ -161,6 +165,7 @@ runs:
         REDLINE_MODEL_AUTH: ${{ inputs.model-auth }}
         REDLINE_FINDING_SCOPE: ${{ inputs.finding-scope }}
         REDLINE_TIMEOUT: ${{ inputs.timeout }}
+        REDLINE_RUN_TIMEOUT: ${{ inputs.run-timeout }}
         REDLINE_REVIEW_CONCURRENCY: ${{ inputs.review-concurrency }}
         REDLINE_VERBOSITY: ${{ inputs.verbosity }}
         REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
@@ -311,6 +316,7 @@ runs:
         REDLINE_MODEL_AUTH: ${{ inputs.model-auth }}
         REDLINE_FINDING_SCOPE: ${{ inputs.finding-scope }}
         REDLINE_TIMEOUT: ${{ inputs.timeout }}
+        REDLINE_RUN_TIMEOUT: ${{ inputs.run-timeout }}
         REDLINE_REVIEW_CONCURRENCY: ${{ inputs.review-concurrency }}
         REDLINE_VERBOSITY: ${{ inputs.verbosity }}
         REDLINE_REVIEW_DIR: ${{ github.workspace }}/review

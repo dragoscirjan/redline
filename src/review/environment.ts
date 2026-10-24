@@ -8,7 +8,7 @@
  * even in context-only mode so misconfiguration never passes silently.
  */
 
-import { DEFAULT_TIMEOUT_MINUTES, MAX_TIMEOUT_MINUTES, parseDuration, type Duration } from '../duration.ts';
+import { MAX_TIMEOUT_MINUTES, parseDuration, type Duration } from '../duration.ts';
 import { isHarnessName } from '../harness-executor/registry.ts';
 import type { HarnessName } from '../harness-executor/types.ts';
 import type { ReviewCodeContextInput } from './indexed-context.ts';
@@ -25,6 +25,7 @@ export const REDLINE_ENV_KEYS = [
   'REDLINE_MODEL_AUTH',
   'REDLINE_FINDING_SCOPE',
   'REDLINE_TIMEOUT',
+  'REDLINE_RUN_TIMEOUT',
   'REDLINE_REVIEW_CONCURRENCY',
   'REDLINE_REUSE_DIR',
   'REDLINE_REUSE_NAMESPACE',
@@ -42,7 +43,8 @@ export type ReviewVerbosity = (typeof VERBOSITIES)[number];
 /** `progress` (dots) is the default: alive without flooding the log. */
 export const DEFAULT_VERBOSITY: ReviewVerbosity = 'progress';
 
-export const DEFAULT_TIMEOUT_INPUT = `${DEFAULT_TIMEOUT_MINUTES}m`;
+export const DEFAULT_TIMEOUT_INPUT = '4m';
+export const DEFAULT_RUN_TIMEOUT_INPUT = '10m';
 export const DEFAULT_REVIEW_CONCURRENCY = 4;
 export const MIN_REVIEW_CONCURRENCY = 1;
 export const MAX_REVIEW_CONCURRENCY = 8;
@@ -110,7 +112,10 @@ export interface ReviewEnvironment {
   /** Undefined in the credential-less profile (`auth: "none"`). */
   readonly credential: SelectedModelCredential | undefined;
   readonly findingScope: FindingScope;
+  /** Maximum time for one file's complete harness invocation. */
   readonly timeout: Duration;
+  /** Maximum wall time for the complete review run before remaining files are omitted. */
+  readonly runTimeout: Duration;
   /** Trusted maximum number of simultaneous per-file harness calls. */
   readonly reviewConcurrency: number;
   /** Optional action-owned cross-run record cache; restored contents remain untrusted. */
@@ -132,6 +137,7 @@ export interface PublicationEnvironment {
 export interface ParsedReviewEnvironment {
   readonly mode: ReviewMode;
   readonly timeout: Duration;
+  readonly runTimeout: Duration;
   readonly verbosity: ReviewVerbosity;
   readonly review: ReviewEnvironment | undefined;
   readonly publication: PublicationEnvironment | undefined;
@@ -241,8 +247,8 @@ function optionalFindingScope(raw: string | undefined): FindingScope {
   return selected as FindingScope;
 }
 
-function optionalTimeout(raw: string | undefined): Duration {
-  const selected = raw !== undefined && raw.length > 0 ? raw : DEFAULT_TIMEOUT_INPUT;
+function optionalTimeout(raw: string | undefined, fallback: string): Duration {
+  const selected = raw !== undefined && raw.length > 0 ? raw : fallback;
   return parseDuration(selected, { maximumMinutes: MAX_TIMEOUT_MINUTES });
 }
 
@@ -398,7 +404,8 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
   // Optional values are validated in both modes so typos fail loudly.
   const findingScope = optionalFindingScope(environment.REDLINE_FINDING_SCOPE);
   const verbosity = optionalVerbosity(environment.REDLINE_VERBOSITY);
-  const timeout = optionalTimeout(environment.REDLINE_TIMEOUT);
+  const timeout = optionalTimeout(environment.REDLINE_TIMEOUT, DEFAULT_TIMEOUT_INPUT);
+  const runTimeout = optionalTimeout(environment.REDLINE_RUN_TIMEOUT, DEFAULT_RUN_TIMEOUT_INPUT);
   const reviewConcurrency = optionalReviewConcurrency(environment.REDLINE_REVIEW_CONCURRENCY);
   const publication = optionalPublication(environment);
   const codeContext = optionalCodeContext(environment);
@@ -410,7 +417,9 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
     if (publication !== undefined) throw new Error('publication requires review execution');
     if (codeContext !== undefined) throw new Error('indexed code context requires review execution');
     if (reuse !== undefined) throw new Error('review reuse requires review execution');
-    return Object.freeze({ mode: 'context-only', timeout, verbosity, review: undefined, publication: undefined });
+    return Object.freeze({
+      mode: 'context-only', timeout, runTimeout, verbosity, review: undefined, publication: undefined,
+    });
   }
   const missing = REVIEW_REQUIRED_KEYS.filter((key) => !provided.includes(key));
   const credentialLessAllowed =
@@ -447,8 +456,9 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
     credential,
     findingScope,
     timeout,
+    runTimeout,
     reviewConcurrency,
     reuse,
   });
-  return Object.freeze({ mode: 'review', timeout, verbosity, review, publication });
+  return Object.freeze({ mode: 'review', timeout, runTimeout, verbosity, review, publication });
 }

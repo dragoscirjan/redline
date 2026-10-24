@@ -17,7 +17,8 @@ describe('parseReviewEnvironment', () => {
     const parsed = parseReviewEnvironment({});
     expect(parsed.mode).toBe('context-only');
     expect(parsed.review).toBeUndefined();
-    expect(parsed.timeout.minutes).toBe(30);
+    expect(parsed.timeout.minutes).toBe(4);
+    expect(parsed.runTimeout.minutes).toBe(10);
   });
 
   it('validates optional values even in context-only mode', () => {
@@ -25,6 +26,7 @@ describe('parseReviewEnvironment', () => {
       /finding scope is unsupported/u,
     );
     expect(() => parseReviewEnvironment({ REDLINE_TIMEOUT: 'nope' })).toThrow(/not a valid duration/u);
+    expect(() => parseReviewEnvironment({ REDLINE_RUN_TIMEOUT: '0m' })).toThrow(/positive duration/u);
   });
 
   it('rejects unknown REDLINE_* variables', () => {
@@ -135,7 +137,8 @@ describe('parseReviewEnvironment', () => {
       expect(parsed.review?.model.endpoint).toBe('http://127.0.0.1:8787/v1');
       expect(parsed.review?.credential).toEqual({ provider: 'mock', value: 'test-key' });
       expect(parsed.review?.findingScope).toBe('defects');
-      expect(parsed.review?.timeout.minutes).toBe(30);
+      expect(parsed.review?.timeout.minutes).toBe(4);
+      expect(parsed.review?.runTimeout.minutes).toBe(10);
       expect(parsed.review?.reviewConcurrency).toBe(4);
       expect(parsed.review?.codeContext).toBeUndefined();
     } finally {
@@ -252,9 +255,11 @@ describe('parseReviewEnvironment', () => {
       REDLINE_MODEL_AUTH: MODEL_AUTH,
       REDLINE_FINDING_SCOPE: 'defects-and-risks',
       REDLINE_TIMEOUT: '10m',
+      REDLINE_RUN_TIMEOUT: '15m',
     });
     expect(parsed.review?.findingScope).toBe('defects-and-risks');
     expect(parsed.review?.timeout.minutes).toBe(10);
+    expect(parsed.review?.runTimeout.minutes).toBe(15);
   });
 });
 

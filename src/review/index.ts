@@ -100,6 +100,7 @@ export {
   type ReviewCodeContextReason,
   type ReviewCodeContextRunCoverage,
   type ReviewCodeContextStatus,
+  type ReviewExecutionBudgetTelemetry,
   type ReviewFinding,
   type ReviewLimitation,
   type ReviewReuseTelemetry,

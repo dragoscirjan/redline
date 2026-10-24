@@ -45,15 +45,22 @@ jobs:
           pnpm test
           pnpm run docs
 
-      - name: Verify deterministic performance baseline
+      - name: Verify deterministic performance evidence
         shell: bash
         run: |
           set -euo pipefail
           pnpm run benchmark:performance
-          baseline_changes="$(git status --porcelain --untracked-files=all -- benchmark/performance/v1/baseline)"
-          if [[ -n "$baseline_changes" ]]; then
-            printf 'performance baseline changed:\n%s\n' "$baseline_changes" >&2
-            git diff -- benchmark/performance/v1/baseline >&2
+          pnpm run benchmark:model-execution
+          evidence_changes="$(git status --porcelain --untracked-files=all -- \
+            benchmark/performance/v1/baseline \
+            benchmark/model-execution/v1/live-glm-5.3-flash/report.json \
+            benchmark/model-execution/v1/live-glm-5.3-flash/report.md)"
+          if [[ -n "$evidence_changes" ]]; then
+            printf 'performance evidence changed:\n%s\n' "$evidence_changes" >&2
+            git diff -- \
+              benchmark/performance/v1/baseline \
+              benchmark/model-execution/v1/live-glm-5.3-flash/report.json \
+              benchmark/model-execution/v1/live-glm-5.3-flash/report.md >&2
             exit 1
           fi
 

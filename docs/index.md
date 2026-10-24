@@ -23,6 +23,7 @@ The action fetches the pull request's base and head commits as Git data, builds 
 - [Harness executor](/harness-executor) — how Pi and OpenCode are configured and driven, and how to add a harness.
 - [Review output](/review-reporting) — per-file review records, validation, and the run summary.
 - [Performance benchmark](/performance-benchmark) — the fixed 20-file latency baseline, telemetry, and live SLO capture.
+- [Model execution benchmark](/model-execution-benchmark) — Pi thinking, output-token, structured-output, deadline, retry, cost, and process-isolation evidence.
 
 ## Status
 

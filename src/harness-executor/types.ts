@@ -43,6 +43,15 @@ export interface HarnessPrompt {
 
 export type HarnessRunStatus = 'succeeded' | 'failed' | 'timed-out';
 
+export interface HarnessUsageTelemetry {
+  readonly inputTokens: number | null;
+  readonly outputTokens: number | null;
+  readonly cacheReadTokens: number | null;
+  readonly cacheWriteTokens: number | null;
+  readonly totalTokens: number | null;
+  readonly costUsd: number | null;
+}
+
 export interface HarnessRunTelemetry {
   /** Synchronous time spent creating the child process; null for in-process executors. */
   readonly processStartupMs: number | null;
@@ -53,6 +62,10 @@ export interface HarnessRunTelemetry {
   readonly stderrBytes: number;
   readonly stdoutTruncated: boolean;
   readonly stderrTruncated: boolean;
+  /** Metadata only: prompts, responses, and reasoning are never retained here. */
+  readonly usage?: HarnessUsageTelemetry | undefined;
+  /** Number of Redline-controlled retries after the initial attempt. */
+  readonly retryCount?: number | undefined;
 }
 
 export interface HarnessRun {

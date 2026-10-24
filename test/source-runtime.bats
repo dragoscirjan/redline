@@ -48,6 +48,16 @@ teardown() {
   [ -f "$TMP/code-index-value.json" ]
   [ -f "$TMP/code-index-value.md" ]
 
+  run "$RUNTIME" "$ROOT/src/benchmark/model-execution-cli.ts" report \
+    --corpus "$ROOT/benchmark/review-quality/v2" \
+    --capture "$ROOT/benchmark/model-execution/v1/live-glm-5.3-flash/capture.json" \
+    --output-json "$TMP/model-execution.json" \
+    --output-markdown "$TMP/model-execution.md"
+  printf '%s\n' "$output"
+  [ "$status" -eq 0 ]
+  [ -f "$TMP/model-execution.json" ]
+  [ -f "$TMP/model-execution.md" ]
+
   run "$RUNTIME" "$ROOT/src/benchmark/verification-cli.ts" \
     --output "$TMP/verification.json"
   printf '%s\n' "$output"
@@ -67,6 +77,12 @@ teardown() {
 @test "loads opt-in and installer entrypoints without emitted JavaScript" {
   run env -u REDLINE_LIVE_BENCHMARK "$RUNTIME" "$ROOT/src/benchmark/live-cli.ts" \
     --output "$TMP/live-model.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'set REDLINE_LIVE_BENCHMARK=1'* ]]
+
+  run env -u REDLINE_LIVE_BENCHMARK "$RUNTIME" "$ROOT/src/benchmark/model-execution-cli.ts" capture \
+    --capture "$TMP/live-model-execution.json" \
+    --input-price 0 --output-price 0 --cache-read-price 0
   [ "$status" -eq 1 ]
   [[ "$output" == *'set REDLINE_LIVE_BENCHMARK=1'* ]]
 

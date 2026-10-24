@@ -12,6 +12,8 @@
     "benchmark:live-model": "node src/benchmark/live-cli.ts",
     "benchmark:performance": "node src/benchmark/performance-cli.ts",
     "benchmark:code-index-value": "node src/benchmark/code-index-value-cli.ts",
+    "benchmark:model-execution": "node src/benchmark/model-execution-cli.ts report --capture benchmark/model-execution/v1/live-glm-5.3-flash/capture.json --output-json benchmark/model-execution/v1/live-glm-5.3-flash/report.json --output-markdown benchmark/model-execution/v1/live-glm-5.3-flash/report.md",
+    "benchmark:model-execution:live": "node src/benchmark/model-execution-cli.ts capture --capture benchmark/model-execution/v1/live-glm-5.3-flash/capture.json --input-price 0.00000015 --output-price 0.0000005 --cache-read-price 0.00000003 && pnpm run benchmark:model-execution",
     "benchmark:source-runtime": "node src/benchmark/source-runtime-cli.ts --runtime node && bun src/benchmark/source-runtime-cli.ts --runtime bun",
     "benchmark:performance:live": "node src/benchmark/performance-cli.ts --live",
     "benchmark:verification": "node src/benchmark/verification-cli.ts",

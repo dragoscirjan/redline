@@ -164,6 +164,10 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
     ...(summary.codeContext.diagnosticCodes.length === 0 ? [] : [
       `- **Index diagnostics:** ${summary.codeContext.diagnosticCodes.join(', ')}`,
     ]),
+    ...(summary.executionBudget === undefined ? [] : [
+      `- **Execution deadlines:** ${summary.executionBudget.fileTimeoutMs} ms per file, ${summary.executionBudget.runTimeoutMs} ms whole run`,
+      `- **Deadline result:** ${summary.executionBudget.deadlineExhausted ? 'exhausted' : 'completed within budget'}; ${summary.executionBudget.deadlineOmittedFiles} files omitted, ${summary.executionBudget.elapsedMs} ms elapsed`,
+    ]),
     ...(summary.reuse === undefined ? [] : [
       `- **Review reuse:** ${summary.reuse.status}; ${summary.reuse.reusedFiles} reused, ${summary.reuse.executedFiles} executed, ${summary.reuse.savedDurationMs} ms estimated saved`,
       `- **Restored cache:** ${summary.reuse.restoredEntries} valid entries, ${summary.reuse.invalidEntries} invalid entries ignored`,

@@ -57,7 +57,9 @@ The production review action executes trusted TypeScript source without running 
 - cache saves are skipped above 512 MiB and save failures do not change the install result;
 - every job writes and uploads versioned JSON telemetry with cache disposition, install duration, and store size.
 
-`node_modules` remains uncached because no recorded comparison proves a net benefit over restoring the pnpm store and running the frozen offline-capable linker. Cold/warm CI measurements and the review-action startup delta are recorded with the implementation evidence; neither changes the model-bound latency claim above.
+PR #169 workflow run `40125277504` measured a 113.55 MiB store. Four exact-key misses installed in 1,043–1,489 ms (p50 1,160 ms); six warm exact-key hits installed in 504–1,089 ms (p50 546 ms). Removing project setup from the timed review action reduced the observed Node smoke from 14,097 ms to 6,712–8,651 ms and the Bun smoke from 9,771 ms to 4,284–7,151 ms. These are deterministic echo-harness samples, not model-bound latency measurements.
+
+`node_modules` remains uncached because this capture does not prove a net benefit over restoring the 113.55 MiB pnpm store and running the frozen linker. The complete evidence is checked in at `benchmark/dependency-install/v1/ci-pr-169.json`.
 
 The baseline uses four workers and largest-diff-first scheduling. It retains 1,208 seconds of total modeled model work and models 340 seconds of review wall time. The previous sequential baseline reported 1,260.8 seconds warm-index p95 and 1,474.3 seconds cold-index p95. The four-worker baseline reports 392.8 seconds warm and 606.3 seconds cold. Both are below the epic targets, but the report remains SLO-ineligible until at least five current live fixed-corpus runs pass the quality gate.
 

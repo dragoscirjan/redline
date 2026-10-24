@@ -8,10 +8,15 @@ on:
   workflow_call:
     inputs:
       verbosity:
-        description: Live model stream in the run log - silent (per-file lines only), progress (one dot per model text chunk), or full-output (readable stream text). Default progress.
+        description: Live model stream in the run log - silent, bounded progress, or full-output. Default progress.
         required: false
         type: string
         default: progress
+      review-eligibility:
+        description: Optional strict eligibility policy JSON from the trusted workflow; empty loads the exact-base .redline policy when present.
+        required: false
+        type: string
+        default: ""
       timeout:
         description: Per-file model deadline.
         required: false
@@ -105,6 +110,7 @@ jobs:
           # workflow-heavy diffs like this repository's own.
           finding-scope: defects-and-risks
           verbosity: ${{ inputs.verbosity }}
+          review-eligibility: ${{ inputs.review-eligibility }}
           timeout: ${{ inputs.timeout }}
           run-timeout: ${{ inputs.run-timeout }}
           review-concurrency: ${{ inputs.review-concurrency }}

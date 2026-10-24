@@ -23,6 +23,7 @@ export interface BundleFixtureOptions {
   readonly diff?: string;
   readonly headContent?: string;
   readonly reviewed?: boolean;
+  readonly exclusionReason?: string;
 }
 
 export async function createBundleFixture(options: BundleFixtureOptions = {}): Promise<BundleFixture> {
@@ -34,6 +35,7 @@ export async function createBundleFixture(options: BundleFixtureOptions = {}): P
   await mkdir(join(review, 'base-files'), { recursive: true });
   await mkdir(join(source, 'src'), { recursive: true });
 
+  const reviewed = options.reviewed ?? true;
   const manifestEntry = {
     id: '000001',
     status: 'M',
@@ -45,14 +47,21 @@ export async function createBundleFixture(options: BundleFixtureOptions = {}): P
     binary: false,
     diffFile: 'diffs/000001.diff',
     baseFile: 'base-files/000001',
-    ...(options.reviewed !== undefined ? { reviewed: options.reviewed } : {}),
+    reviewed,
+    exclusionReason: reviewed ? null : options.exclusionReason ?? 'excluded test fixture',
     ...(options.manifestOverrides ?? {}),
   };
 
   await writeFile(join(review, 'revisions.txt'), `base=${BASE_SHA}\nhead=${HEAD_SHA}\n`);
   await writeFile(
     join(review, 'manifest.json'),
-    JSON.stringify({ version: 1, base: BASE_SHA, head: HEAD_SHA, files: [manifestEntry] }),
+    JSON.stringify({
+      version: 2,
+      base: BASE_SHA,
+      head: HEAD_SHA,
+      eligibility: { version: 1, source: 'built-in', path: null, digest: null, includeRules: 0, excludeRules: 0 },
+      files: [manifestEntry],
+    }),
   );
   await writeFile(
     join(review, 'diffs/000001.diff'),

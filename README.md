@@ -16,6 +16,7 @@ Product documentation:
 - [Reusable review workflow](docs/reusable-review-workflow.md)
 - [Dogfood reviews](docs/dogfood-review.md)
 - [Runnable review configuration](docs/runnable-review-configuration.md)
+- [Review eligibility](docs/review-eligibility.md)
 - [Review reporting](docs/review-reporting.md)
 - [Review performance benchmark](docs/performance-benchmark.md)
 - [Model execution benchmark](docs/model-execution-benchmark.md)

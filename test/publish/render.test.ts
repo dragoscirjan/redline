@@ -165,12 +165,31 @@ describe('renderSummaryBody', () => {
     const body = renderSummaryBody(SCOPE, REVIEW, { publishedFileReviews: 1, failedFileReviews: 0, failedInlineComments: 0 });
     expect(body).toContain('## Redline pull request review');
     expect(body).toContain('- **Verdict:** blocked');
-    expect(body).toContain('- **Files:** 2 reviewed · 0 omitted');
+    expect(body).toContain('- **Files:** 2 required reviews · 0 omitted · 0 excluded by trusted policy');
     expect(body).toContain('- **Findings:** 1');
     expect(body).toContain('- `src/example.ts`: findings — 1 finding(s)');
     expect(body).toContain('- `src/other.ts`: clean');
     expect(body).toContain('**Publication:** 1 file review published.');
     expect(body.trimEnd().split('\n').at(-1)).toBe(summaryMarker(SCOPE));
+  });
+
+  it('lists every trusted-policy exclusion with its reason', () => {
+    const review = {
+      ...REVIEW,
+      coverage: {
+        ...REVIEW.coverage,
+        files: {
+          ...REVIEW.coverage.files,
+          excluded: ['benchmark/example/capture.json'],
+          excludedDetails: [{ fileId: '000003', path: 'benchmark/example/capture.json', reason: 'generated raw benchmark capture' }],
+        },
+      },
+    };
+    const body = renderSummaryBody(SCOPE, review, {
+      publishedFileReviews: 0, failedFileReviews: 0, failedInlineComments: 0,
+    });
+    expect(body).toContain('1 excluded by trusted policy');
+    expect(body).toContain('`benchmark/example/capture.json` — generated raw benchmark capture');
   });
 
   it('reports publication failures when present', () => {

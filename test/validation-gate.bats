@@ -37,6 +37,8 @@ assert prefix in ci, 'the deterministic evidence guard must detect new and renam
 guard = ci.split(prefix, 1)[1].split(')"', 1)[0]
 assert 'benchmark/performance/v1/baseline' in guard
 assert 'benchmark/model-execution/v1/live-glm-5.3-flash/report.json' in guard
+assert 'benchmark/review-eligibility/v1/report.json' in guard
+assert 'benchmark/review-eligibility/v1/report.md' in guard
 assert 'performance evidence changed:' in ci, \
     'evidence drift must produce an explicit CI diagnostic'
 PY

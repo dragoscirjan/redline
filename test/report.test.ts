@@ -18,6 +18,7 @@ function manifestFile(overrides: Partial<ReviewManifestFile> = {}): ReviewManife
     deletions: 1,
     binary: false,
     reviewed: true,
+    exclusionReason: null,
     diffFile: 'diffs/000001.diff',
     baseFile: 'base-files/000001',
     ...overrides,

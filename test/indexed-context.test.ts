@@ -207,6 +207,7 @@ describe('review indexed context', () => {
         deletions: 0,
         binary: false,
         reviewed: false,
+        exclusionReason: 'generated or vendored directory',
         diffFile: 'diffs/000002.diff',
         baseFile: null,
       });

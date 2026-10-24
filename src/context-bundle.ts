@@ -2,9 +2,10 @@
 /** Builds the deterministic, untrusted-data-only pull request review bundle. */
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createWriteStream } from 'node:fs';
+import { constants, createWriteStream } from 'node:fs';
 import {
   mkdir,
+  open,
   readFile,
   rm,
   stat,
@@ -15,6 +16,15 @@ import type { Writable } from 'node:stream';
 import { finished } from 'node:stream/promises';
 import { TextDecoder } from 'node:util';
 import { pathToFileURL } from 'node:url';
+import {
+  DEFAULT_REVIEW_ELIGIBILITY_PATH,
+  MAX_REVIEW_ELIGIBILITY_BYTES,
+  decideReviewEligibility,
+  parseReviewEligibilityPolicy,
+  policyDigest,
+  type ReviewEligibilityPolicy,
+  type ReviewEligibilityPolicyMetadata,
+} from './review-eligibility.ts';
 
 const MAX_CAPTURE_BYTES = 1024 * 1024;
 const MAX_DIAGNOSTIC_BYTES = 64 * 1024;
@@ -34,6 +44,7 @@ interface Arguments {
   readonly head: string;
   readonly output: string;
   readonly sourceDirectory: string | null;
+  readonly eligibilityPolicyFile: string | null;
 }
 
 interface ManifestFile {
@@ -48,12 +59,13 @@ interface ManifestFile {
   readonly diffFile: string;
   readonly baseFile: string | null;
   readonly reviewed: boolean;
+  readonly exclusionReason: string | null;
 }
 
 class UsageError extends Error {}
 
 function usage(program: string): string {
-  return `Usage: ${program} --base <commit> --head <commit> --output <review-dir> [--source <source-dir>]`;
+  return `Usage: ${program} --base <commit> --head <commit> --output <review-dir> [--source <source-dir>] [--eligibility-policy-file <trusted-json-file>]`;
 }
 
 function parseArguments(values: readonly string[], program: string): Arguments {
@@ -61,6 +73,7 @@ function parseArguments(values: readonly string[], program: string): Arguments {
   let head = '';
   let output = '';
   let sourceDirectory: string | null = null;
+  let eligibilityPolicyFile: string | null = null;
   for (let index = 0; index < values.length;) {
     const key = values[index];
     const value = values[index + 1];
@@ -69,13 +82,14 @@ function parseArguments(values: readonly string[], program: string): Arguments {
     else if (key === '--head') head = value;
     else if (key === '--output') output = value;
     else if (key === '--source') sourceDirectory = value;
+    else if (key === '--eligibility-policy-file') eligibilityPolicyFile = value;
     else throw new UsageError(usage(program));
     index += 2;
   }
   if (base.length === 0 || head.length === 0 || output.length === 0) {
     throw new UsageError(usage(program));
   }
-  return { base, head, output, sourceDirectory };
+  return { base, head, output, sourceDirectory, eligibilityPolicyFile };
 }
 
 function appendBounded(chunks: Buffer[], chunk: Buffer, state: { bytes: number }, maximum: number): void {
@@ -270,19 +284,114 @@ function parseNumstat(value: Buffer): { additions: number | null; deletions: num
   };
 }
 
-function reviewedFile(binary: boolean, paths: readonly (string | null)[]): boolean {
-  if (binary) return false;
-  for (const candidate of paths) {
-    if (candidate === null) continue;
-    const segments = candidate.split('/').filter((segment) => segment.length > 0);
-    if (segments.length === 0) continue;
-    if (LOCK_FILES.has(segments.at(-1)!)) return false;
-    if (segments.slice(0, -1).some((segment) => GENERATED_DIRECTORY_NAMES.has(segment))) return false;
-  }
-  return true;
+interface LoadedEligibilityPolicy {
+  readonly policy: ReviewEligibilityPolicy | undefined;
+  readonly metadata: ReviewEligibilityPolicyMetadata;
 }
 
-async function buildManifest(repo: string, base: string, head: string, output: string): Promise<ManifestFile[]> {
+async function parsePolicyFile(path: string): Promise<{ readonly raw: string; readonly policy: ReviewEligibilityPolicy }> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW).catch(() => undefined);
+  if (handle === undefined) {
+    throw new Error('trusted review eligibility policy must be a regular file, not a symlink');
+  }
+  try {
+    const info = await handle.stat();
+    if (!info.isFile()) {
+      throw new Error('trusted review eligibility policy must be a regular file, not a symlink');
+    }
+    if (info.size > MAX_REVIEW_ELIGIBILITY_BYTES) {
+      throw new Error('review eligibility policy exceeds its byte limit');
+    }
+    const raw = await handle.readFile({ encoding: 'utf8' });
+    return { raw, policy: parseReviewEligibilityPolicy(raw) };
+  } finally {
+    await handle.close();
+  }
+}
+
+async function loadEligibilityPolicy(
+  repo: string,
+  base: string,
+  trustedPolicyFile: string | null,
+): Promise<LoadedEligibilityPolicy> {
+  if (trustedPolicyFile !== null) {
+    const loaded = await parsePolicyFile(trustedPolicyFile);
+    return {
+      policy: loaded.policy,
+      metadata: {
+        version: 1,
+        source: 'trusted-workflow',
+        path: null,
+        digest: policyDigest(loaded.raw),
+        includeRules: loaded.policy.include.length,
+        excludeRules: loaded.policy.exclude.length,
+      },
+    };
+  }
+
+  const entries = UTF8.decode(await runGit(
+    repo,
+    ['ls-tree', '-z', base, '--', DEFAULT_REVIEW_ELIGIBILITY_PATH],
+  )).split('\0').filter((entry) => entry.length > 0);
+  if (entries.length === 0) {
+    return {
+      policy: undefined,
+      metadata: {
+        version: 1,
+        source: 'built-in',
+        path: null,
+        digest: null,
+        includeRules: 0,
+        excludeRules: 0,
+      },
+    };
+  }
+  const match = entries.length === 1
+    ? /^(100644|100755) blob [0-9a-f]+\t(.+)$/u.exec(entries[0] as string)
+    : null;
+  if (match === null || match[2] !== DEFAULT_REVIEW_ELIGIBILITY_PATH) {
+    throw new Error('trusted base review eligibility policy must be one regular file');
+  }
+  const raw = UTF8.decode(await runGit(repo, ['show', `${base}:${DEFAULT_REVIEW_ELIGIBILITY_PATH}`]));
+  const policy = parseReviewEligibilityPolicy(raw);
+  return {
+    policy,
+    metadata: {
+      version: 1,
+      source: 'trusted-base',
+      path: DEFAULT_REVIEW_ELIGIBILITY_PATH,
+      digest: policyDigest(raw),
+      includeRules: policy.include.length,
+      excludeRules: policy.exclude.length,
+    },
+  };
+}
+
+function reviewedFile(
+  binary: boolean,
+  paths: readonly (string | null)[],
+  policy: ReviewEligibilityPolicy | undefined,
+): { readonly reviewed: boolean; readonly reason: string | null } {
+  if (binary) return { reviewed: false, reason: 'binary diff; not reviewable as text' };
+  const candidates = paths.filter((candidate): candidate is string => candidate !== null);
+  for (const candidate of candidates) {
+    const segments = candidate.split('/').filter((segment) => segment.length > 0);
+    if (segments.length === 0) continue;
+    if (LOCK_FILES.has(segments.at(-1)!)) return { reviewed: false, reason: 'lock file' };
+    if (segments.slice(0, -1).some((segment) => GENERATED_DIRECTORY_NAMES.has(segment))) {
+      return { reviewed: false, reason: 'generated or vendored directory' };
+    }
+  }
+  return decideReviewEligibility(candidates, policy);
+}
+
+async function buildManifest(
+  repo: string,
+  base: string,
+  head: string,
+  output: string,
+  policy: ReviewEligibilityPolicy | undefined,
+): Promise<ManifestFile[]> {
   const nameStatus = splitNul(await readFile(join(output, 'raw/name-status.z')));
   const numstat = splitNul(await readFile(join(output, 'raw/numstat.z')));
   const files: ManifestFile[] = [];
@@ -329,9 +438,9 @@ async function buildManifest(repo: string, base: string, head: string, output: s
     const diffPaths = status === 'D' ? [oldPath] : [...new Set([oldPath, newPath])].sort();
     await runGitToFile(repo, ['diff', '--no-ext-diff', '--find-renames', '--binary', base, head, '--', ...diffPaths], join(output, diffFile));
 
-    const reviewed = reviewedFile(binary, [oldPath, newPath]);
+    const eligibility = reviewedFile(binary, [oldPath, newPath], policy);
     let baseFile: string | null = null;
-    if (status === 'D' || status === 'R' || (reviewed && status !== 'A')) {
+    if (status === 'D' || status === 'R' || (eligibility.reviewed && status !== 'A')) {
       baseFile = `base-files/${id}`;
       const path = join(output, baseFile);
       if (!await runGitToFile(repo, ['show', `${base}:${oldPath}`], path, true)) {
@@ -351,7 +460,8 @@ async function buildManifest(repo: string, base: string, head: string, output: s
       binary,
       diffFile,
       baseFile,
-      reviewed,
+      reviewed: eligibility.reviewed,
+      exclusionReason: eligibility.reason,
     });
   }
   if (numstatIndex !== numstat.length) throw new Error('Unmatched numstat records');
@@ -385,8 +495,12 @@ async function buildBundle(args: Arguments, cwd: string): Promise<void> {
     await runGitToFile(repo, ['rev-parse', head], commitIds);
   }
 
-  const files = await buildManifest(repo, base, head, args.output);
-  await writeFile(join(args.output, 'manifest.json'), `${JSON.stringify({ version: 1, base, head, files }, null, 2)}\n`);
+  const eligibility = await loadEligibilityPolicy(repo, base, args.eligibilityPolicyFile);
+  const files = await buildManifest(repo, base, head, args.output, eligibility.policy);
+  await writeFile(
+    join(args.output, 'manifest.json'),
+    `${JSON.stringify({ version: 2, base, head, eligibility: eligibility.metadata, files }, null, 2)}\n`,
+  );
 
   const commits = UTF8.decode(await readFile(commitIds)).split('\n').filter((commit) => commit.length > 0);
   for (const commit of commits) {
@@ -395,7 +509,7 @@ async function buildBundle(args: Arguments, cwd: string): Promise<void> {
 
   await writeFile(join(args.output, 'README.md'), `# Pull request review bundle
 
-Review the final base-to-head change. Commit history describes intent; the source checkout at HEAD provides file context. The reviewed flag in manifest.json is precomputed deterministically: lock files, vendored dependencies, build output, and binary files are excluded from review.
+Review the final base-to-head change. Commit history describes intent; the source checkout at HEAD provides file context. The reviewed flag and exclusionReason in manifest.json are precomputed deterministically from built-in rules plus an optional strict policy loaded from the trusted base revision or trusted workflow input. Pull-request head content cannot change its own eligibility.
 
 Base: ${base}
 Head: ${head}

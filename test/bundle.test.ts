@@ -18,13 +18,29 @@ describe('parseReviewManifest', () => {
     baseFile: 'base-files/000001',
   };
 
-  it('accepts a valid manifest and defaults reviewed to true', () => {
-    const manifest = parseReviewManifest({ version: 1, base: BASE_SHA, head: HEAD_SHA, files: [validEntry] });
-    expect(manifest.files[0]?.reviewed).toBe(true);
+  it('accepts legacy v1 and explicit v2 eligibility metadata', () => {
+    const legacy = parseReviewManifest({ version: 1, base: BASE_SHA, head: HEAD_SHA, files: [validEntry] });
+    expect(legacy.files[0]).toMatchObject({ reviewed: true, exclusionReason: null });
+
+    const current = parseReviewManifest({
+      version: 2,
+      base: BASE_SHA,
+      head: HEAD_SHA,
+      eligibility: {
+        version: 1,
+        source: 'trusted-base',
+        path: '.redline/review-eligibility.json',
+        digest: 'c'.repeat(64),
+        includeRules: 0,
+        excludeRules: 1,
+      },
+      files: [{ ...validEntry, reviewed: false, exclusionReason: 'generated raw benchmark capture' }],
+    });
+    expect(current.files[0]).toMatchObject({ reviewed: false, exclusionReason: 'generated raw benchmark capture' });
   });
 
   it('rejects unsupported versions, commit shapes, and duplicate ids', () => {
-    expect(() => parseReviewManifest({ version: 2, base: BASE_SHA, head: HEAD_SHA, files: [] })).toThrow(
+    expect(() => parseReviewManifest({ version: 3, base: BASE_SHA, head: HEAD_SHA, files: [] })).toThrow(
       /unsupported version/u,
     );
     expect(() => parseReviewManifest({ version: 1, base: 'short', head: HEAD_SHA, files: [] })).toThrow(
@@ -38,6 +54,20 @@ describe('parseReviewManifest', () => {
         files: [validEntry, { ...validEntry }],
       }),
     ).toThrow(/unique six-digit value/u);
+  });
+
+  it('requires a reason exactly when a v2 file is excluded', () => {
+    const eligibility = {
+      version: 1, source: 'built-in', path: null, digest: null, includeRules: 0, excludeRules: 0,
+    };
+    expect(() => parseReviewManifest({
+      version: 2, base: BASE_SHA, head: HEAD_SHA, eligibility,
+      files: [{ ...validEntry, reviewed: false, exclusionReason: null }],
+    })).toThrow(/required for excluded files/u);
+    expect(() => parseReviewManifest({
+      version: 2, base: BASE_SHA, head: HEAD_SHA, eligibility,
+      files: [{ ...validEntry, reviewed: true, exclusionReason: 'not allowed' }],
+    })).toThrow(/must be null/u);
   });
 
   it('rejects unknown fields and mismatched diff/base file references', () => {

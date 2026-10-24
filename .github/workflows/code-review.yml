@@ -21,10 +21,15 @@ on:
         type: string
         default: defects
       verbosity:
-        description: Live model stream in the run log - silent, progress (dots), or full-output. Default progress.
+        description: Live model stream in the run log - silent, bounded progress, or full-output. Default progress.
         required: false
         type: string
         default: progress
+      review-eligibility:
+        description: Optional strict eligibility policy JSON from this trusted workflow. Empty loads .redline/review-eligibility.json from the exact base revision.
+        required: false
+        type: string
+        default: ""
       indexing:
         description: Indexed-context mode, enabled or disabled. Default enabled.
         required: false
@@ -144,6 +149,7 @@ jobs:
           github-token: ${{ secrets.github-token }}
           finding-scope: ${{ inputs.finding-scope }}
           verbosity: ${{ inputs.verbosity }}
+          review-eligibility: ${{ inputs.review-eligibility }}
           indexing: ${{ inputs.indexing }}
           indexing-provider: ${{ inputs.indexing-provider }}
           timeout: ${{ inputs.timeout }}

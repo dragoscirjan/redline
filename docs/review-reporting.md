@@ -84,7 +84,7 @@ Coverage facets use only these states: `completed`, `incomplete`, `unavailable`,
 
 The PR record states:
 
-- considered and omitted files;
+- considered required files, omitted required reviews, and trusted-policy exclusions with one deterministic reason per file;
 - changed-symbol availability;
 - diff, base-source, head-source, and indexed-context retrieval;
 - required baseline specialist completion;
@@ -96,7 +96,7 @@ The PR record states:
 - truncation, finding, source-byte, and related-span budgets;
 - rejected candidates, opt-in verifier completion and explicit falsifications, action-owned follow-up completion, synthesis publication budgets and suppressions, remediation availability, and fix-verification availability.
 
-Unavailable optional code intelligence is explicit but does not by itself make the run inconclusive. An omitted required file, invalid candidate, or inconclusive verifier makes required baseline coverage incomplete. A successful verifier falsification or deduplication is recorded but does not invalidate otherwise complete coverage.
+Unavailable optional code intelligence is explicit but does not by itself make the run inconclusive. A trusted-policy exclusion is listed separately and never counted as a completed review or required omission. An omitted required file, invalid candidate, or inconclusive verifier makes required baseline coverage incomplete. A successful verifier falsification or deduplication is recorded but does not invalidate otherwise complete coverage.
 
 ## Deterministic verdicts
 
@@ -137,7 +137,9 @@ Migration is explicit:
 - Version-2 harness documents remain accepted during migration. Redline maps their validated fields into version 4 records and labels every unavailable rich field as legacy-derived or unresolved; it does not reinterpret missing evidence as completed analysis.
 - Per-file record version 4 adds the rich finding and rejected-candidate contract.
 - PR-level record version 2 adds optional synthesis and publication coverage. The publish-only loader migrates legacy version-1 non-verified records; it rejects a verified version-1 record before migration so the synthesis-plan check cannot be bypassed.
-- Run summary version 3 remains unchanged as a subordinate compatibility artifact; it gains additive reuse telemetry, execution-budget telemetry, per-file execution fields, and indexed-context cache, diagnostic-code, and stage-timing telemetry.
+- Run summary version 3 remains unchanged as a subordinate compatibility artifact; it gains optional additive trusted-policy exclusion records, reuse telemetry, execution-budget telemetry, per-file execution fields, and indexed-context cache, diagnostic-code, and stage-timing telemetry. Readers treat absent exclusion records as an empty legacy list.
+- Pull-request review version 2 retains the existing `coverage.files.excluded` path array and adds optional `coverage.files.excludedDetails` records with file ids and reasons.
+- Context-bundle manifest version 2 records strict eligibility-policy provenance plus `exclusionReason` for every non-reviewed file. Legacy version-1 manifests remain readable with a conservative legacy reason.
 - Review policy `redline-file-review/v5` uses the fixed modules in `prompts/v7/` with focused source-context payload versions 3 and 4. The full-file payload versions 1 and 2 remain available only for reproducible benchmark comparison. Earlier prompt policies remain archived for versioned recordings.
 
 Fix execution and learning stages are not implemented. The follow-up worker and synthesis plan are implemented behind the verifier activation gate; they are not production quality claims.

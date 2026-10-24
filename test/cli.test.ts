@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { main, progressCallbacks, type CliDependencies } from '../src/review/cli.ts';
 import type { ReviewPublisher } from '../src/publish/index.ts';
+import type { FileReviewRecord } from '../src/review/types.ts';
 import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
 
 describe('redline-review CLI', () => {
@@ -40,6 +41,53 @@ describe('redline-review CLI', () => {
     }
   });
 
+  it('bounds progress logs while retaining start, completion, and failure diagnostics', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const callbacks = progressCallbacks('progress');
+      callbacks.onFileStart({ fileId: '000001', path: 'src/one.ts' });
+      for (let index = 0; index < 1_000; index += 1) {
+        callbacks.onHarnessOutput?.({
+          fileId: '000001', path: 'src/one.ts', stream: 'stdout', kind: 'text', line: '.',
+        });
+      }
+      for (let index = 0; index < 30; index += 1) {
+        callbacks.onHarnessOutput?.({
+          fileId: '000001', path: 'src/one.ts', stream: 'stderr', kind: 'line',
+          line: index === 0 ? '429 provider diagnostic with secret-source-text' : `provider diagnostic ${index}`,
+        });
+      }
+      callbacks.onFileDone({
+        version: 4,
+        fileId: '000001',
+        path: 'src/one.ts',
+        status: 'M',
+        harness: 'pi',
+        model: 'test-model',
+        codeContext: { status: 'disabled', provider: null, revision: null, relatedSpans: 0, sourceBytes: 0, reason: 'not-configured' },
+        outcome: 'omitted',
+        errorKind: 'harness-failed',
+        reason: 'provider failed',
+        findings: [],
+        rejectedCandidates: [],
+        durationMs: 10,
+      } satisfies FileReviewRecord);
+
+      const output = stderr.mock.calls.map((call) => String(call[0])).join('');
+      expect(output).toContain('[000001 src/one.ts] reviewing…');
+      expect(output).toContain('model activity: 1 text chunks');
+      expect(output).toContain('model activity: 25 text chunks');
+      expect(output).toContain('harness stderr diagnostic: rate-limit');
+      expect(output).not.toContain('secret-source-text');
+      expect(output.match(/harness stderr diagnostic:/gu)).toHaveLength(16);
+      expect(output).toContain('model stream: 1000 text chunks');
+      expect(output).toContain('omitted (harness-failed)');
+      expect(output.length).toBeLessThan(5_000);
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
   it('rejects unsupported arguments', async () => {
     expect(await main(['--nonsense'])).toBe(2);
     expect(await main(['run'])).toBe(2);
@@ -70,8 +118,15 @@ describe('redline-review CLI', () => {
       const { join } = await import('node:path');
       const summary = JSON.parse(
         await readFile(join(fixture.output, 'reviews', 'summary.json'), 'utf8'),
-      ) as { mode?: string; reviewedFiles: number };
+      ) as {
+        mode?: string;
+        reviewedFiles: number;
+        executionBudget?: { fileTimeoutMs: number; runTimeoutMs: number; elapsedMs: number };
+        files: Array<{ durationMs?: number }>;
+      };
       expect(summary.reviewedFiles).toBe(1);
+      expect(summary.executionBudget).toMatchObject({ fileTimeoutMs: 240_000, runTimeoutMs: 600_000 });
+      expect(summary.executionBudget?.elapsedMs).toBeGreaterThanOrEqual(0);
     } finally {
       await fixture.cleanup();
     }

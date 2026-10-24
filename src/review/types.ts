@@ -238,6 +238,12 @@ export interface ReviewExecutionBudgetTelemetry {
   readonly deadlineOmittedFiles: number;
 }
 
+export interface ReviewExcludedFile {
+  readonly fileId: string;
+  readonly path: string;
+  readonly reason: string;
+}
+
 export interface ReviewRunSummary {
   readonly version: typeof REVIEW_RUN_SUMMARY_VERSION;
   readonly harness: string;
@@ -249,6 +255,8 @@ export interface ReviewRunSummary {
   readonly manifestFiles: number;
   readonly reviewedFiles: number;
   readonly omittedFiles: number;
+  /** Added in summary v3; absent on legacy v3 artifacts written before eligibility reporting. */
+  readonly excludedFiles?: readonly ReviewExcludedFile[];
   readonly findings: number;
   readonly codeContext: ReviewCodeContextRunCoverage;
   readonly executionBudget?: ReviewExecutionBudgetTelemetry | undefined;
@@ -267,7 +275,10 @@ export interface ReviewCoverageFacet {
 export interface ReviewFileCoverage extends ReviewCoverageFacet {
   readonly considered: readonly string[];
   readonly omitted: readonly string[];
+  /** Stable legacy path list retained for version-2 PR review compatibility. */
   readonly excluded: readonly string[];
+  /** Additive reason-bearing detail for trusted-policy exclusions. */
+  readonly excludedDetails?: readonly ReviewExcludedFile[];
 }
 
 export interface ReviewSpecialistCoverage extends ReviewCoverageFacet {

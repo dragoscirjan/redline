@@ -185,6 +185,9 @@ export function renderSummaryBody(
   notes: SummaryPublicationNotes,
 ): string {
   const omitted = review.files.filter((file) => file.outcome === 'omitted').length;
+  const excludedDetails = review.coverage.files.excludedDetails ?? review.coverage.files.excluded.map(
+    (path) => ({ path, reason: 'excluded by legacy review policy' }),
+  );
   const lines = [
     '## Redline pull request review',
     '',
@@ -192,7 +195,7 @@ export function renderSummaryBody(
     `- **Revisions:** \`${review.base.slice(0, 12)}\`…\`${review.head.slice(0, 12)}\``,
     `- **Harness:** ${review.harness} (${review.provider}/${review.model})`,
     `- **Finding scope:** ${review.findingScope}`,
-    `- **Files:** ${review.files.length} reviewed · ${omitted} omitted`,
+    `- **Files:** ${review.files.length} required reviews · ${omitted} omitted · ${review.coverage.files.excluded.length} excluded by trusted policy`,
     `- **Findings:** ${review.findings.length}`,
     `- **Rejected candidates:** ${review.rejectedCandidates.length}`,
     `- **Required coverage:** files ${review.coverage.files.status}; baseline review ${review.coverage.specialists[0]?.status ?? 'unavailable'}`,
@@ -223,6 +226,15 @@ export function renderSummaryBody(
         lines.push(`- \`${decision.fileId}:${decision.findingId}\` — ${decision.status}: ${decision.reason}`);
       }
       if (suppressed.length > 20) lines.push(`- …${suppressed.length - 20} more; inspect review.json.`);
+    }
+  }
+  if (excludedDetails.length > 0) {
+    lines.push('', '**Excluded by trusted eligibility policy:**');
+    for (const file of excludedDetails.slice(0, 50)) {
+      lines.push(`- \`${escapeBackticks(file.path)}\` — ${escapeBackticks(file.reason)}`);
+    }
+    if (excludedDetails.length > 50) {
+      lines.push(`- …${excludedDetails.length - 50} more exclusions in review.json.`);
     }
   }
   if (review.verdict.reasons.length > 0) {

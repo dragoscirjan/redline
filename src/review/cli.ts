@@ -36,6 +36,9 @@ import {
 const USAGE_ERROR_EXIT = 2;
 const RUN_FAILURE_EXIT = 1;
 const MAX_LIVE_OUTPUT_CHARS_PER_FILE = 32 * 1024;
+const MAX_PROGRESS_DIAGNOSTIC_LINES_PER_FILE = 16;
+const MAX_PROGRESS_ACTIVITY_UPDATES_PER_FILE = 8;
+const PROGRESS_ACTIVITY_INTERVAL = 25;
 
 function writeLine(stream: NodeJS.WriteStream, value: string): void {
   stream.write(`${value}\n`);
@@ -53,6 +56,16 @@ function fileStartLine(file: FileReviewIdentity): void {
   writeLine(process.stderr, `redline-review: [${file.fileId} ${file.path}] reviewing…`);
 }
 
+function classifyProgressDiagnostic(line: string): string {
+  if (/rate.?limit|too many requests|\b429\b/iu.test(line)) return 'rate-limit';
+  if (/unauthori[sz]ed|forbidden|api.?key|\b401\b|\b403\b/iu.test(line)) return 'authentication';
+  if (/timed?\s*out|deadline/iu.test(line)) return 'timeout';
+  if (/connect|socket|dns|network|econn/iu.test(line)) return 'connection';
+  if (/retry|backoff/iu.test(line)) return 'retry';
+  if (/\b5\d\d\b|server error|service unavailable/iu.test(line)) return 'provider-server';
+  return 'other';
+}
+
 /**
  * Maps the verbosity level to the runner's progress callbacks. Executed
  * files emit start/done lines; restored files emit one reused completion
@@ -66,6 +79,41 @@ export function progressCallbacks(verbosity: ReviewVerbosity): {
 } {
   if (verbosity === 'silent') {
     return { onFileStart: fileStartLine, onFileDone: progressLine };
+  }
+  if (verbosity === 'progress') {
+    const textChunks = new Map<string, number>();
+    const activityUpdates = new Map<string, number>();
+    const diagnosticLines = new Map<string, number>();
+    return {
+      onFileStart: fileStartLine,
+      onHarnessOutput(output) {
+        if (output.kind === 'text') {
+          const chunks = (textChunks.get(output.fileId) ?? 0) + 1;
+          textChunks.set(output.fileId, chunks);
+          const updates = activityUpdates.get(output.fileId) ?? 0;
+          if (updates < MAX_PROGRESS_ACTIVITY_UPDATES_PER_FILE
+            && (chunks === 1 || chunks % PROGRESS_ACTIVITY_INTERVAL === 0)) {
+            activityUpdates.set(output.fileId, updates + 1);
+            writeLine(process.stderr, `redline-review: [${output.fileId} ${output.path}] model activity: ${chunks} text chunks`);
+          }
+          return;
+        }
+        const used = diagnosticLines.get(output.fileId) ?? 0;
+        if (used >= MAX_PROGRESS_DIAGNOSTIC_LINES_PER_FILE) return;
+        diagnosticLines.set(output.fileId, used + 1);
+        const lineLength = Array.from(output.line).length;
+        const category = classifyProgressDiagnostic(output.line);
+        writeLine(process.stderr, `redline-review: [${output.fileId} ${output.path}] harness ${output.stream} diagnostic: ${category} (${lineLength} chars)`);
+      },
+      onFileDone(record) {
+        const chunks = textChunks.get(record.fileId) ?? 0;
+        if (chunks > 0) {
+          writeLine(process.stderr, `redline-review: [${record.fileId} ${record.path}] model stream: ${chunks} text chunks`);
+        }
+        progressLine(record);
+      },
+      harnessStreamMode: 'dots',
+    };
   }
   const emitted = new Map<string, number>();
   const truncated = new Set<string>();
@@ -86,7 +134,7 @@ export function progressCallbacks(verbosity: ReviewVerbosity): {
     onFileStart: fileStartLine,
     onFileDone: progressLine,
     onHarnessOutput: harnessLine,
-    harnessStreamMode: verbosity === 'progress' ? 'dots' : 'text',
+    harnessStreamMode: 'text',
   };
 }
 

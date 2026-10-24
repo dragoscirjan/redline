@@ -1094,17 +1094,28 @@ describe('runFileReviews', () => {
     }
   });
 
-  it('skips files the bundle marks as not reviewed', async () => {
-    const fixture = await createBundleFixture({ reviewed: false });
+  it('reports files excluded by trusted eligibility without treating them as required omissions', async () => {
+    const fixture = await createBundleFixture({ reviewed: false, exclusionReason: 'generated raw benchmark capture' });
     try {
       const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
       const executor = new ScriptedExecutor();
       const result = await runFileReviews({ environment: environment.review!, executor });
       expect(executor.prompts).toHaveLength(0);
       expect(result.summary.reviewedFiles).toBe(0);
+      expect(result.summary.omittedFiles).toBe(0);
+      expect(result.summary.excludedFiles).toEqual([{
+        fileId: '000001', path: 'src/example.ts', reason: 'generated raw benchmark capture',
+      }]);
+      expect(result.review.coverage.files).toMatchObject({
+        status: 'completed',
+        considered: [],
+        omitted: [],
+        excluded: ['src/example.ts'],
+        excludedDetails: [{ fileId: '000001', path: 'src/example.ts', reason: 'generated raw benchmark capture' }],
+      });
       expect(result.exitCode).toBe(0);
-      const summaryFiles = await readFile(join(fixture.output, 'reviews', 'summary.json'), 'utf8');
-      expect(summaryFiles).toContain('"reviewedFiles": 0');
+      const summaryFiles = await readFile(join(fixture.output, 'reviews', 'summary.md'), 'utf8');
+      expect(summaryFiles).toContain('`src/example.ts` — generated raw benchmark capture');
     } finally {
       await fixture.cleanup();
     }
@@ -1161,6 +1172,8 @@ describe('runFileReviews', () => {
         additions: 1,
         deletions: 0,
         binary: false,
+        reviewed: true,
+        exclusionReason: null,
         diffFile: 'diffs/000002.diff',
         baseFile: null,
       });

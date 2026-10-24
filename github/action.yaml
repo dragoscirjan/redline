@@ -56,9 +56,13 @@ inputs:
     required: false
     default: node
   verbosity:
-    description: Live model stream in the run log - silent (per-file lines only), progress (one dot per model text chunk), full-output (readable stream text). Default progress.
+    description: Live model stream in the run log - silent (per-file lines only), progress (bounded model activity and diagnostics), full-output (readable stream text). Default progress.
     required: false
     default: progress
+  review-eligibility:
+    description: Optional strict review eligibility policy JSON supplied by the trusted workflow. When empty, Redline loads .redline/review-eligibility.json from the exact base revision when present.
+    required: false
+    default: ""
   indexing:
     description: Indexed-context mode, enabled or disabled. Enabled builds bounded context inside this action; unavailable context degrades to file-only review.
     required: false
@@ -234,14 +238,30 @@ runs:
       env:
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        REVIEW_ELIGIBILITY: ${{ inputs.review-eligibility }}
         TYPESCRIPT_RUNTIME: ${{ inputs.runtime }}
       run: |
         set -euo pipefail
+        eligibility_args=()
+        eligibility_file=""
+        cleanup_eligibility() {
+          if [[ -n "$eligibility_file" ]]; then
+            rm -f -- "$eligibility_file"
+          fi
+        }
+        trap cleanup_eligibility EXIT
+        if [[ -n "$REVIEW_ELIGIBILITY" ]]; then
+          eligibility_file="$RUNNER_TEMP/redline-review-eligibility.json"
+          umask 077
+          printf '%s' "$REVIEW_ELIGIBILITY" > "$eligibility_file"
+          eligibility_args=(--eligibility-policy-file "$eligibility_file")
+        fi
         "$TYPESCRIPT_RUNTIME" "${{ github.action_path }}/../src/context-bundle.ts" \
           --base "$BASE_SHA" \
           --head "$HEAD_SHA" \
           --output "$GITHUB_WORKSPACE/review" \
-          --source "$GITHUB_WORKSPACE/source-at-head"
+          --source "$GITHUB_WORKSPACE/source-at-head" \
+          "${eligibility_args[@]}"
         if [[ -f "$GITHUB_WORKSPACE/pr-requirements.md" ]]; then
           cp "$GITHUB_WORKSPACE/pr-requirements.md" "$GITHUB_WORKSPACE/review/requirements.md"
         fi

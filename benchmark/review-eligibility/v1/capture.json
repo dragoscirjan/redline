@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "kind": "review-eligibility-observation",
+  "capturedAt": "2026-10-24T20:56:38Z",
+  "repository": "dragoscirjan/redline",
+  "pullRequest": 171,
+  "runId": 40132029782,
+  "runUrl": "https://github.com/dragoscirjan/redline/actions/runs/40132029782",
+  "head": "8677c6be51e37903cbbb8111fe2480fe284fd83f",
+  "run": {
+    "files": 42,
+    "diffBytes": 212026,
+    "modelDurationMs": 1286445,
+    "findings": 1,
+    "omitted": 16
+  },
+  "classes": [
+    {
+      "id": "benchmark-capture",
+      "pattern": "benchmark/**/capture.json",
+      "candidateDefault": true,
+      "files": [
+        {
+          "path": "benchmark/model-execution/v1/live-glm-5.3-flash/capture.json",
+          "diffBytes": 63669,
+          "modelDurationMs": 3987,
+          "outcome": "clean",
+          "findings": 0,
+          "rejectedCandidates": 0
+        }
+      ]
+    },
+    {
+      "id": "benchmark-report",
+      "pattern": "benchmark/**/report.{json,md}",
+      "candidateDefault": false,
+      "files": [
+        {
+          "path": "benchmark/model-execution/v1/live-glm-5.3-flash/report.json",
+          "diffBytes": 6401,
+          "modelDurationMs": 3135,
+          "outcome": "clean",
+          "findings": 0,
+          "rejectedCandidates": 0
+        },
+        {
+          "path": "benchmark/model-execution/v1/live-glm-5.3-flash/report.md",
+          "diffBytes": 3414,
+          "modelDurationMs": 1932,
+          "outcome": "clean",
+          "findings": 0,
+          "rejectedCandidates": 0
+        }
+      ]
+    },
+    {
+      "id": "generated-snapshot",
+      "pattern": "**/__snapshots__/** or **/*.snap",
+      "candidateDefault": false,
+      "files": []
+    }
+  ]
+}

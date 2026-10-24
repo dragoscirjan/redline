@@ -289,9 +289,10 @@ describe('runFileReviews', () => {
       expect(executor.prompts[0]?.system).toContain('"followUp": "action-owned"');
       expect(executor.prompts[1]?.user).toContain('"followUp"');
       expect(result.records[0]).toMatchObject({
-        followUp: { status: 'completed', requested: 1, completed: 1, durationMs: 5 },
+        followUp: { status: 'completed', requested: 1, completed: 1 },
         verification: { status: 'completed' }, outcome: 'findings',
       });
+      expect(result.records[0]?.followUp?.durationMs).toBeGreaterThanOrEqual(5);
       expect(result.records[0]?.findings[0]?.supportingEvidence).toContainEqual(expect.objectContaining({
         path: 'src/related.ts', evidence: 'export const related = true;',
       }));

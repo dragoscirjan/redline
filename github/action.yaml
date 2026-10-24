@@ -156,6 +156,8 @@ runs:
         REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
         REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head
         REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
+        REDLINE_REUSE_DIR: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' && format('{0}/redline-review-cache', runner.temp) || '' }}
+        REDLINE_REUSE_NAMESPACE: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' && format('{0}#{1}', github.repository, github.event.pull_request.number) || '' }}
         # The publication context arrives together or not at all: the
         # repository, pull request, and head only count as provided when a
         # publication token is present. The App installation token is
@@ -169,6 +171,17 @@ runs:
         # Authoritative input validation runs even in context-only mode, so
         # invalid optional inputs fail instead of passing silently.
         node dist/src/review/cli.js --validate-only
+
+    - name: Restore validated per-file review records
+      id: review-cache-restore
+      if: ${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
+      continue-on-error: true
+      uses: actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+      with:
+        path: ${{ runner.temp }}/redline-review-cache
+        key: redline-review-v2-${{ github.repository_id }}-pr-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: |
+          redline-review-v2-${{ github.repository_id }}-pr-${{ github.event.pull_request.number }}-
 
     - name: Fetch pull request commits as data
       shell: bash
@@ -284,6 +297,8 @@ runs:
         REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
         REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head
         REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
+        REDLINE_REUSE_DIR: ${{ runner.temp }}/redline-review-cache
+        REDLINE_REUSE_NAMESPACE: ${{ format('{0}#{1}', github.repository, github.event.pull_request.number) }}
         REDLINE_CODE_CONTEXT: ${{ steps.code-index.outputs.context-file }}
         REDLINE_CODE_CONTEXT_REPOSITORY: ${{ steps.code-index.outputs.context-file != '' && github.repository || '' }}
         CODE_INDEX_PROVIDER: ${{ inputs.indexing-provider }}
@@ -297,6 +312,14 @@ runs:
         # freshly minted token, so the token lifetime never bounds the
         # review duration.
         node "${{ github.action_path }}/../dist/src/action/review.js"
+
+    - name: Save validated per-file review records
+      if: ${{ always() && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
+      continue-on-error: true
+      uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+      with:
+        path: ${{ runner.temp }}/redline-review-cache
+        key: redline-review-v2-${{ github.repository_id }}-pr-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ github.run_attempt }}
 
     - name: Generate Redline App token for publication
       id: app-token-publish

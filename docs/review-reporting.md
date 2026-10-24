@@ -115,6 +115,14 @@ Per-file records are version 4. Every record includes `rejectedCandidates` and r
 
 GitHub inline comments remain anchored only to the validated trigger. Supporting evidence, graph references, and impact paths explain the finding but cannot relocate publication.
 
+### Cross-run reuse telemetry
+
+The GitHub Action can restore a version-2 PR-scoped review cache before it builds the worker queue. A per-file record is reusable only when its versioned semantic fingerprint matches the current fixed policy and schema, harness and model configuration, finding scope, timeout, authoritative diff, bounded base/head content, requirements, and resolved indexed context. Exact commit identifiers are normalized to base/head roles, then every restored finding is remapped and revalidated against the current revisions. Current synthesis, budgets, omissions, verdict, stale-head check, and publication are always rebuilt.
+
+Per-file JSON and Markdown report `execution: executed | reused`. Reused records also report `savedDurationMs`, based on the prior validated execution. `summary.json` and `summary.md` include version-1 reuse telemetry: cache status, valid restored entries, invalid entries ignored, reused files, executed files, and estimated model time saved. Cache data retains bounded, already-redacted rendered suggestions so reused findings keep the same apply-able patch. It never includes prompts, raw model output, verification artifacts, credentials, or publication tokens.
+
+Only `clean` and `findings` results are written to the cache. Omissions, harness failures, timeouts, invalid output, incomplete verification, and verifier runs that consumed the shared follow-up budget are excluded. Corrupt, oversized, stale, path-mismatched, or evidence-invalid entries degrade to normal review execution.
+
 ## Compatibility and migration
 
 Migration is explicit:
@@ -123,7 +131,7 @@ Migration is explicit:
 - Version-2 harness documents remain accepted during migration. Redline maps their validated fields into version 4 records and labels every unavailable rich field as legacy-derived or unresolved; it does not reinterpret missing evidence as completed analysis.
 - Per-file record version 4 adds the rich finding and rejected-candidate contract.
 - PR-level record version 2 adds optional synthesis and publication coverage. The publish-only loader migrates legacy version-1 non-verified records; it rejects a verified version-1 record before migration so the synthesis-plan check cannot be bypassed.
-- Run summary version 3 remains unchanged as a subordinate compatibility artifact.
+- Run summary version 3 remains unchanged as a subordinate compatibility artifact; it gains additive reuse telemetry and per-file execution fields.
 - Review policy `redline-file-review/v4` lives in `prompts/v7/`. Earlier prompts remain archived for versioned recordings.
 
 Fix execution and learning stages are not implemented. The follow-up worker and synthesis plan are implemented behind the verifier activation gate; they are not production quality claims.

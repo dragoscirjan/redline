@@ -114,6 +114,8 @@ function renderRecordMarkdown(record: FileReviewRecord): string {
     `- **Outcome:** ${record.outcome}`,
     `- **Harness:** ${record.harness} (${record.model})`,
     `- **Duration:** ${record.durationMs} ms`,
+    `- **Execution:** ${record.execution ?? 'executed'}`,
+    ...(record.savedDurationMs === undefined ? [] : [`- **Estimated model time saved:** ${record.savedDurationMs} ms`]),
     `- **Indexed context:** ${record.codeContext.status}; ${record.codeContext.relatedSpans} spans, ${record.codeContext.sourceBytes} source bytes`,
   ];
   if (record.codeContext.provider !== null) {
@@ -155,11 +157,15 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
     `- **Omitted:** ${summary.omittedFiles}`,
     `- **Findings:** ${summary.findings}`,
     `- **Indexed context:** ${summary.codeContext.status}; ${summary.codeContext.filesWithContext} files, ${summary.codeContext.relatedSpans} spans, ${summary.codeContext.sourceBytes} source bytes`,
+    ...(summary.reuse === undefined ? [] : [
+      `- **Review reuse:** ${summary.reuse.status}; ${summary.reuse.reusedFiles} reused, ${summary.reuse.executedFiles} executed, ${summary.reuse.savedDurationMs} ms estimated saved`,
+      `- **Restored cache:** ${summary.reuse.restoredEntries} valid entries, ${summary.reuse.invalidEntries} invalid entries ignored`,
+    ]),
     '',
     '## Files',
     '',
-    '| File | Outcome | Findings | Indexed context |',
-    '| --- | --- | --- | --- |',
+    '| File | Outcome | Execution | Findings | Indexed context |',
+    '| --- | --- | --- | --- | --- |',
   ];
   for (const file of summary.files) {
     const spans =
@@ -167,7 +173,7 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
         ? ` (${file.findingSpans.join(', ')})`
         : '';
     lines.push(
-      `| ${file.path} | ${file.outcome} | ${file.findingCount}${spans} | ${file.codeContext.status} (${file.codeContext.relatedSpans} spans) |`,
+      `| ${file.path} | ${file.outcome} | ${file.execution ?? 'executed'} | ${file.findingCount}${spans} | ${file.codeContext.status} (${file.codeContext.relatedSpans} spans) |`,
     );
   }
   return `${lines.join('\n')}\n`;

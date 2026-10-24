@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseReviewEnvironment } from '../src/review/environment.js';
@@ -6,7 +6,9 @@ import { runFileReviews } from '../src/review/runner.js';
 import type { HarnessExecuteOptions, HarnessExecutor, HarnessPrompt, HarnessRun, PreparedHarness } from '../src/harness-executor/types.js';
 import { loadReviewBundle } from '../src/review/bundle.js';
 import { FileReviewValidator } from '../src/review/report.js';
+import { loadReviewReuseCache } from '../src/review/reuse.js';
 import { VERIFICATION_TIMEOUT_MS } from '../src/review/runner.js';
+import { MAX_REVIEW_REASON_CHARS } from '../src/review/types.js';
 import {
   cleanReviewEnvironment,
   createBundleFixture,
@@ -50,6 +52,14 @@ class ScriptedExecutor implements HarnessExecutor {
 
 function reviewDocument(value: object): string {
   return JSON.stringify(value);
+}
+
+function reuseReviewEnvironment(fixture: BundleFixture): NodeJS.ProcessEnv {
+  return {
+    ...cleanReviewEnvironment(fixture, 'echo'),
+    REDLINE_REUSE_DIR: join(fixture.root, 'review-reuse'),
+    REDLINE_REUSE_NAMESPACE: 'owner/repository#42',
+  };
 }
 
 async function createMultiFileFixture(diffPadding: readonly number[]): Promise<BundleFixture> {
@@ -281,9 +291,10 @@ describe('runFileReviews', () => {
       expect(executor.prompts[0]?.system).toContain('"followUp": "action-owned"');
       expect(executor.prompts[1]?.user).toContain('"followUp"');
       expect(result.records[0]).toMatchObject({
-        followUp: { status: 'completed', requested: 1, completed: 1, durationMs: 5 },
+        followUp: { status: 'completed', requested: 1, completed: 1 },
         verification: { status: 'completed' }, outcome: 'findings',
       });
+      expect(result.records[0]?.followUp?.durationMs).toBeGreaterThanOrEqual(5);
       expect(result.records[0]?.findings[0]?.supportingEvidence).toContainEqual(expect.objectContaining({
         path: 'src/related.ts', evidence: 'export const related = true;',
       }));
@@ -847,7 +858,7 @@ describe('runFileReviews', () => {
       expect(markdown).toContain('-new line');
       expect(markdown).toContain('+guarded line');
       const summaryMarkdown = await readFile(join(fixture.output, 'reviews', 'summary.md'), 'utf8');
-      expect(summaryMarkdown).toContain('| src/example.ts | findings | 1 (1) | disabled (0 spans) |');
+      expect(summaryMarkdown).toContain('| src/example.ts | findings | executed | 1 (1) | disabled (0 spans) |');
     } finally {
       await fixture.cleanup();
     }
@@ -1146,6 +1157,440 @@ describe('runFileReviews', () => {
       expect(record.rejectedCandidates).toHaveLength(1);
       expect(record.rejectedCandidates[0]?.reason).not.toContain('test-key');
       expect(record.rejectedCandidates[0]?.reason).toContain('[redacted]');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('reuses an unchanged validated file across a later head without a model call', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const firstEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const firstExecutor = new ScriptedExecutor();
+      firstExecutor.script([{
+        text: reviewDocument({
+          version: 4,
+          fileId: '000001',
+          outcome: 'clean',
+          findings: [],
+          contextRequests: [],
+        }),
+        durationMs: 321,
+      }]);
+      const first = await runFileReviews({ environment: firstEnvironment.review!, executor: firstExecutor });
+      expect(first.summary.reuse).toMatchObject({ reusedFiles: 0, executedFiles: 1, savedDurationMs: 0 });
+      const [cacheEntry] = await readdir(join(fixture.root, 'review-reuse', 'entries'));
+      const cacheText = await readFile(join(fixture.root, 'review-reuse', 'entries', cacheEntry as string), 'utf8');
+      expect(cacheText).not.toContain('rawModelOutput');
+      expect(cacheText).not.toContain('REDLINE_UNTRUSTED_FILE_CONTEXT');
+      expect(cacheText).not.toContain('test-key');
+
+      const nextHead = 'c'.repeat(40);
+      const manifest = JSON.parse(await readFile(join(fixture.review, 'manifest.json'), 'utf8')) as {
+        version: 1;
+        base: string;
+        head: string;
+        files: unknown[];
+      };
+      await writeFile(join(fixture.review, 'manifest.json'), JSON.stringify({ ...manifest, head: nextHead }));
+      await writeFile(join(fixture.review, 'revisions.txt'), `base=${BASE_SHA}\nhead=${nextHead}\n`);
+
+      const secondEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const secondExecutor = new ScriptedExecutor();
+      const second = await runFileReviews({ environment: secondEnvironment.review!, executor: secondExecutor });
+
+      expect(secondExecutor.prompts).toHaveLength(0);
+      expect(second.records[0]).toMatchObject({ outcome: 'clean', execution: 'reused', durationMs: 0, savedDurationMs: 321 });
+      expect(second.summary.head).toBe(nextHead);
+      expect(second.review.head).toBe(nextHead);
+      expect(second.summary.reuse).toMatchObject({
+        status: 'enabled',
+        restoredEntries: 1,
+        reusedFiles: 1,
+        executedFiles: 0,
+        savedDurationMs: 321,
+      });
+      const recordMarkdown = await readFile(join(fixture.output, 'reviews', '000001.md'), 'utf8');
+      const summaryMarkdown = await readFile(join(fixture.output, 'reviews', 'summary.md'), 'utf8');
+      expect(recordMarkdown).toContain('**Execution:** reused');
+      expect(recordMarkdown).toContain('**Estimated model time saved:** 321 ms');
+      expect(summaryMarkdown).toContain('**Review reuse:** enabled; 1 reused, 0 executed, 321 ms estimated saved');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('reuses findings only after remapping and revalidating current source evidence', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      await writeFile(join(fixture.source, 'src/related.ts'), 'stable contract\n');
+      const candidate = reviewFinding({
+        evidence: 'new',
+        suggestedChange: 'fixed',
+        remediationStatus: 'proposed',
+        supportingEvidence: [{
+          role: 'contract',
+          revision: HEAD_SHA,
+          path: 'src/related.ts',
+          startLine: 1,
+          endLine: 1,
+          evidence: 'stable contract',
+        }],
+      });
+      const firstEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const firstExecutor = new ScriptedExecutor();
+      firstExecutor.script([{
+        text: reviewDocument({
+          version: 4,
+          fileId: '000001',
+          outcome: 'findings',
+          findings: [candidate],
+          contextRequests: [],
+        }),
+        durationMs: 444,
+      }]);
+      const first = await runFileReviews({ environment: firstEnvironment.review!, executor: firstExecutor });
+      const firstFindingId = first.records[0]?.findings[0]?.id;
+      const firstSuggestion = first.records[0]?.findings[0]?.suggestion;
+      expect(firstSuggestion).toBe('-new\n+fixed');
+
+      const nextHead = 'c'.repeat(40);
+      const manifest = JSON.parse(await readFile(join(fixture.review, 'manifest.json'), 'utf8')) as {
+        version: 1;
+        base: string;
+        head: string;
+        files: unknown[];
+      };
+      await writeFile(join(fixture.review, 'manifest.json'), JSON.stringify({ ...manifest, head: nextHead }));
+      await writeFile(join(fixture.review, 'revisions.txt'), `base=${BASE_SHA}\nhead=${nextHead}\n`);
+
+      const secondEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const secondExecutor = new ScriptedExecutor();
+      const second = await runFileReviews({ environment: secondEnvironment.review!, executor: secondExecutor });
+      const restoredFinding = second.records[0]?.findings[0];
+
+      expect(secondExecutor.prompts).toHaveLength(0);
+      expect(second.records[0]).toMatchObject({ outcome: 'findings', execution: 'reused', savedDurationMs: 444 });
+      expect(restoredFinding?.supportingEvidence[0]?.revision).toBe(nextHead);
+      expect(restoredFinding?.id).not.toBe(firstFindingId);
+      expect(restoredFinding?.suggestion).toBe(firstSuggestion);
+      expect(restoredFinding?.remediationStatus).toBe('proposed');
+      expect(restoredFinding?.fixPrompt).toContain('src/example.ts:1');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('restores cached rejected-candidate reasons that include the truncation ellipsis', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const executor = new ScriptedExecutor();
+      executor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      const first = await runFileReviews({ environment: environment.review!, executor });
+      const record = first.records[0];
+      expect(record).toBeDefined();
+
+      const fingerprint = `sha256:${'a'.repeat(64)}`;
+      const reason = `${'x'.repeat(MAX_REVIEW_REASON_CHARS)}…`;
+      const cache = await loadReviewReuseCache(environment.review!.reuse!);
+      await cache.write(
+        'src/example.ts',
+        fingerprint,
+        BASE_SHA,
+        HEAD_SHA,
+        {
+          ...record!,
+          rejectedCandidates: [{ index: 0, stage: 'verification', code: 'bounded-reason', reason }],
+        },
+        10,
+        false,
+      );
+
+      const restored = await loadReviewReuseCache(environment.review!.reuse!);
+      expect(restored.stats).toEqual({ restoredEntries: 1, invalidEntries: 0 });
+      expect(restored.match('src/example.ts', fingerprint)?.result.rejectedCandidates[0]?.reason).toBe(reason);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('reuses verifier-mode clean records only when verification is complete or not applicable', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const firstEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const firstExecutor = new ScriptedExecutor();
+      firstExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      const first = await runFileReviews({
+        environment: firstEnvironment.review!,
+        executor: firstExecutor,
+        verifyCandidates: true,
+      });
+      expect(first.records[0]?.verification?.status).toBe('not-applicable');
+
+      const secondEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const secondExecutor = new ScriptedExecutor();
+      const second = await runFileReviews({
+        environment: secondEnvironment.review!,
+        executor: secondExecutor,
+        verifyCandidates: true,
+      });
+
+      expect(secondExecutor.prompts).toHaveLength(0);
+      expect(second.records[0]).toMatchObject({ execution: 'reused', outcome: 'clean' });
+      expect(second.records[0]?.verification?.status).toBe('not-applicable');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('keeps completed per-file cache entries when a later worker aborts the run', async () => {
+    const fixture = await createMultiFileFixture([10, 20]);
+    try {
+      const firstEnvironment = parseReviewEnvironment({
+        ...reuseReviewEnvironment(fixture),
+        REDLINE_REVIEW_CONCURRENCY: '1',
+      });
+      const firstExecutor = new ScriptedExecutor();
+      firstExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      await expect(runFileReviews({ environment: firstEnvironment.review!, executor: firstExecutor })).rejects.toThrow(
+        /scripted executor ran out/u,
+      );
+
+      const secondEnvironment = parseReviewEnvironment({
+        ...reuseReviewEnvironment(fixture),
+        REDLINE_REVIEW_CONCURRENCY: '1',
+      });
+      const secondExecutor = new ScriptedExecutor();
+      secondExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000002', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      const second = await runFileReviews({ environment: secondEnvironment.review!, executor: secondExecutor });
+
+      expect(secondExecutor.prompts).toHaveLength(1);
+      expect(second.records.map((record) => record.execution)).toEqual(['reused', 'executed']);
+      expect(second.summary.reuse).toMatchObject({ reusedFiles: 1, executedFiles: 1 });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('never reuses an omitted harness result', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const firstEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const firstExecutor = new ScriptedExecutor();
+      firstExecutor.script([{ status: 'failed', diagnostic: 'provider failed', durationMs: 10 }]);
+      const first = await runFileReviews({ environment: firstEnvironment.review!, executor: firstExecutor });
+      expect(first.records[0]?.outcome).toBe('omitted');
+
+      const secondEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const secondExecutor = new ScriptedExecutor();
+      secondExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      const second = await runFileReviews({ environment: secondEnvironment.review!, executor: secondExecutor });
+
+      expect(secondExecutor.prompts).toHaveLength(1);
+      expect(second.records[0]?.execution).toBe('executed');
+      expect(second.summary.reuse?.restoredEntries).toBe(0);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('executes a file again when its authoritative diff changes', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const firstEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const firstExecutor = new ScriptedExecutor();
+      firstExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      await runFileReviews({ environment: firstEnvironment.review!, executor: firstExecutor });
+
+      await writeFile(
+        join(fixture.review, 'diffs/000001.diff'),
+        'diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1 +1 @@\n-old\n+changed\n',
+      );
+      await writeFile(join(fixture.source, 'src/example.ts'), 'changed\n');
+      const secondEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const secondExecutor = new ScriptedExecutor();
+      secondExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      const second = await runFileReviews({ environment: secondEnvironment.review!, executor: secondExecutor });
+
+      expect(secondExecutor.prompts).toHaveLength(1);
+      expect(second.records[0]?.execution).toBe('executed');
+      expect(second.summary.reuse?.reusedFiles).toBe(0);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('executes a file again when trusted review configuration changes', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const firstEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const firstExecutor = new ScriptedExecutor();
+      firstExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      await runFileReviews({ environment: firstEnvironment.review!, executor: firstExecutor });
+
+      const secondEnvironment = parseReviewEnvironment({
+        ...reuseReviewEnvironment(fixture),
+        REDLINE_TIMEOUT: '31m',
+      });
+      const secondExecutor = new ScriptedExecutor();
+      secondExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      const second = await runFileReviews({ environment: secondEnvironment.review!, executor: secondExecutor });
+
+      expect(secondExecutor.prompts).toHaveLength(1);
+      expect(second.records[0]?.execution).toBe('executed');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('executes a file again when pull request requirements change', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      await writeFile(join(fixture.review, 'requirements.md'), 'Preserve behavior A.\n');
+      const firstEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const firstExecutor = new ScriptedExecutor();
+      firstExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      await runFileReviews({ environment: firstEnvironment.review!, executor: firstExecutor });
+
+      await writeFile(join(fixture.review, 'requirements.md'), 'Preserve behavior B.\n');
+      const secondEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const secondExecutor = new ScriptedExecutor();
+      secondExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      const second = await runFileReviews({ environment: secondEnvironment.review!, executor: secondExecutor });
+
+      expect(secondExecutor.prompts).toHaveLength(1);
+      expect(second.records[0]?.execution).toBe('executed');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('executes a file again when its resolved indexed context changes', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      await writeFile(join(fixture.source, 'src/related.ts'), 'related one\nrelated two\n');
+      const contextPath = await writeCodeContext(fixture);
+      const environmentValues = {
+        ...reuseReviewEnvironment(fixture),
+        REDLINE_CODE_CONTEXT: contextPath,
+        REDLINE_CODE_CONTEXT_REPOSITORY: 'owner/repository',
+      };
+      const firstEnvironment = parseReviewEnvironment(environmentValues);
+      const firstExecutor = new ScriptedExecutor();
+      firstExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      await runFileReviews({ environment: firstEnvironment.review!, executor: firstExecutor });
+
+      await writeFile(join(fixture.source, 'src/related.ts'), 'changed one\nchanged two\n');
+      const secondEnvironment = parseReviewEnvironment(environmentValues);
+      const secondExecutor = new ScriptedExecutor();
+      secondExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      const second = await runFileReviews({ environment: secondEnvironment.review!, executor: secondExecutor });
+
+      expect(secondExecutor.prompts).toHaveLength(1);
+      expect(second.records[0]?.execution).toBe('executed');
+      expect(second.summary.reuse?.reusedFiles).toBe(0);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('revalidates cached supporting evidence and executes when current source disagrees', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      await writeFile(join(fixture.source, 'src/related.ts'), 'stable contract\n');
+      const candidate = reviewFinding({
+        evidence: 'new',
+        supportingEvidence: [{
+          role: 'contract',
+          revision: HEAD_SHA,
+          path: 'src/related.ts',
+          startLine: 1,
+          endLine: 1,
+          evidence: 'stable contract',
+        }],
+      });
+      const firstEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const firstExecutor = new ScriptedExecutor();
+      firstExecutor.script([{ text: reviewDocument({
+        version: 4,
+        fileId: '000001',
+        outcome: 'findings',
+        findings: [candidate],
+        contextRequests: [],
+      }) }]);
+      await runFileReviews({ environment: firstEnvironment.review!, executor: firstExecutor });
+
+      await writeFile(join(fixture.source, 'src/related.ts'), 'changed contract\n');
+      const secondEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const secondExecutor = new ScriptedExecutor();
+      secondExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      const second = await runFileReviews({ environment: secondEnvironment.review!, executor: secondExecutor });
+
+      expect(secondExecutor.prompts).toHaveLength(1);
+      expect(second.records[0]?.outcome).toBe('clean');
+      expect(second.records[0]?.execution).toBe('executed');
+      expect(second.summary.reuse?.invalidEntries).toBe(1);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('ignores a corrupt restored entry and performs a normal review', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const firstEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const firstExecutor = new ScriptedExecutor();
+      firstExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      await runFileReviews({ environment: firstEnvironment.review!, executor: firstExecutor });
+      const entriesDirectory = join(fixture.root, 'review-reuse', 'entries');
+      const [entry] = await readdir(entriesDirectory);
+      const entryPath = join(entriesDirectory, entry as string);
+      const cached = JSON.parse(await readFile(entryPath, 'utf8')) as {
+        result: { executionDurationMs: number };
+      };
+      cached.result.executionDurationMs += 1;
+      await writeFile(entryPath, JSON.stringify(cached));
+
+      const secondEnvironment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const secondExecutor = new ScriptedExecutor();
+      secondExecutor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      const second = await runFileReviews({ environment: secondEnvironment.review!, executor: secondExecutor });
+
+      expect(secondExecutor.prompts).toHaveLength(1);
+      expect(second.summary.reuse).toMatchObject({ invalidEntries: 1, reusedFiles: 0, executedFiles: 1 });
     } finally {
       await fixture.cleanup();
     }

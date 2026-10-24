@@ -62,7 +62,7 @@ In context-only mode the workflow does not index and uploads only the `<artifact
 
 ## What the run produces
 
-Two artifacts: `<artifact-name>-context` with the review context bundle, source-at-head export, and bounded `code-context.json` when indexing runs; and `<artifact-name>-reviews` with the per-file review records and run summary described in [review output](/review-reporting) (the latter only when review execution is enabled). When `github-token` is supplied, publication adds one review per file with findings and a managed summary comment to the pull request; see [publication](/github-composite-action#publication).
+Two artifacts: `<artifact-name>-context` with the review context bundle, source-at-head export, and bounded `code-context.json` when indexing runs; and `<artifact-name>-reviews` with the per-file review records and run summary described in [review output](/review-reporting) (the latter only when review execution is enabled). Configured reviews automatically restore and save a PR-scoped cache of fingerprint-matched validated per-file results; cache availability is optional, and the artifact reports reuse counts and estimated time saved. When `github-token` is supplied, publication adds one review per file with findings and a managed summary comment to the pull request; see [publication](/github-composite-action#publication).
 
 ## Calling within Redline itself
 

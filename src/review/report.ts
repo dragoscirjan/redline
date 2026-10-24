@@ -16,6 +16,7 @@ import type {
   FindingScope,
   FindingSeverity,
   FindingSide,
+  FindingVerificationStatus,
   GraphReference,
   ImpactPath,
   RejectedCandidate,
@@ -218,7 +219,10 @@ function parseImpactPath(
   return { status, steps, ...(limitation === undefined ? {} : { limitation }) };
 }
 
-function parseRichFinding(value: unknown): ReviewFinding {
+function parseRichFinding(
+  value: unknown,
+  verificationStatuses: readonly FindingVerificationStatus[] = ['unverified'],
+): ReviewFinding {
   if (!isRecord(value)) throw new Error('finding must be an object');
   assertOnlyKeys(
     value,
@@ -269,9 +273,11 @@ function parseRichFinding(value: unknown): ReviewFinding {
   }
   if (!isRecord(value.verification)) throw new Error('finding.verification must be an object');
   assertOnlyKeys(value.verification, ['status', 'reason'], 'finding.verification');
-  if (value.verification.status !== 'unverified') {
-    throw new Error('finding.verification.status must be unverified during discovery');
-  }
+  const verificationStatus = enumValue(
+    value.verification.status,
+    verificationStatuses,
+    'finding.verification.status',
+  );
   const remediationStatus = enumValue(
     value.remediationStatus,
     ['guidance', 'proposed'] as const,
@@ -311,7 +317,7 @@ function parseRichFinding(value: unknown): ReviewFinding {
     fix: boundedString(value.fix, 'finding.fix', 4_096),
     regressionTest: boundedString(value.regressionTest, 'finding.regressionTest', 4_096),
     verification: {
-      status: 'unverified',
+      status: verificationStatus,
       reason: boundedString(value.verification.reason, 'finding.verification.reason', 1_024),
     },
     remediationStatus,
@@ -370,6 +376,11 @@ function parseLegacyFinding(value: unknown): ReviewFinding {
     remediationStatus: suggestedChange === undefined ? 'guidance' : 'proposed',
     ...(suggestedChange !== undefined ? { suggestedChange } : {}),
   };
+}
+
+/** Parses a bounded finding restored from the untrusted cross-run reuse cache. */
+export function parseReusableReviewFinding(value: unknown): ReviewFinding {
+  return parseRichFinding(value, ['unverified', 'confirmed']);
 }
 
 function unwrapCodeFence(raw: string): string {

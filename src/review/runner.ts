@@ -29,10 +29,17 @@ import { buildFileReviewPrompt, type FileReviewPrompt } from './prompt.js';
 import { buildPullRequestReview, validateFindingReferences } from './pr-contract.js';
 import { FileReviewValidator, parseFileReviewDocument } from './report.js';
 import { buildRemediation, formatSpan } from './remediation.js';
+import {
+  buildReviewSemanticFingerprint,
+  loadReviewReuseCache,
+  restoreReusableFileReview,
+  REVIEW_REUSE_TELEMETRY_VERSION,
+} from './reuse.js';
 import { parseVerificationDocument, validateVerificationDocument } from './verification.js';
 import { buildVerificationPrompt } from './verification-prompt.js';
 import {
   FILE_REVIEW_RECORD_VERSION,
+  MAX_REVIEW_REASON_CHARS,
   REVIEW_RUN_SUMMARY_VERSION,
   type FileReviewRecord,
   type FileFollowUpCoverage,
@@ -46,7 +53,6 @@ import {
 } from './types.js';
 import { createReviewWriter, type FollowUpArtifact, type VerificationArtifact } from './writer.js';
 
-const MAX_REASON_CHARS = 500;
 export const VERIFICATION_TIMEOUT_MS = 10 * 60 * 1_000;
 
 export interface FileReviewIdentity {
@@ -109,7 +115,9 @@ export interface ReviewRunResult {
 
 function boundedReason(value: string): string {
   const normalized = value.replaceAll('\n', ' ').trim();
-  return normalized.length > MAX_REASON_CHARS ? `${normalized.slice(0, MAX_REASON_CHARS)}…` : normalized;
+  return normalized.length > MAX_REVIEW_REASON_CHARS
+    ? `${normalized.slice(0, MAX_REVIEW_REASON_CHARS)}…`
+    : normalized;
 }
 
 /**
@@ -154,6 +162,7 @@ async function reviewOneFile(
     harness: environment.harness,
     model: environment.model.model,
     codeContext: fileContext.coverage,
+    execution: 'executed' as const,
     ...(verifyCandidates ? {
       verification: {
         status: 'incomplete' as const,
@@ -572,9 +581,13 @@ interface ReviewTask {
   readonly estimatedPromptBytes: number;
 }
 
-async function reviewTasks(bundle: ReviewBundle, concurrency: number): Promise<readonly ReviewTask[]> {
+async function reviewTasks(
+  bundle: ReviewBundle,
+  concurrency: number,
+  selectedManifestIndexes: ReadonlySet<number>,
+): Promise<readonly ReviewTask[]> {
   const tasks = await Promise.all(bundle.manifest.files.flatMap((file, manifestIndex) =>
-    file.reviewed
+    file.reviewed && selectedManifestIndexes.has(manifestIndex)
       ? [stat(join(bundle.root, file.diffFile)).then(
           (value): ReviewTask => ({ file, manifestIndex, estimatedPromptBytes: value.size }),
           (): ReviewTask => ({
@@ -629,19 +642,84 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
   // Independent verification is not active in production. Keep its shared
   // follow-up budgets manifest-ordered until the activation gate permits a
   // separately measured parallel verifier path.
-  const concurrency = input.verifyCandidates === true ? 1 : environment.reviewConcurrency;
-  const tasks = await reviewTasks(bundle, concurrency);
+  const verifyCandidates = input.verifyCandidates === true;
+  const concurrency = verifyCandidates ? 1 : environment.reviewConcurrency;
+  const reuseCache = environment.reuse === undefined
+    ? undefined
+    : await loadReviewReuseCache(environment.reuse);
+  const recordsByManifestIndex = new Map<number, WritableFileReviewRecord>();
+  const fingerprintsByManifestIndex = new Map<number, string>();
+  let rejectedReuseCandidates = 0;
 
-  const workDirectory = await mkdtemp(join(tmpdir(), 'redline-review-'));
+  // Restored data is processed before the worker queue exists. A cache
+  // failure or current-evidence mismatch is only a miss: the file proceeds
+  // through the normal harness path.
+  if (reuseCache !== undefined) {
+    for (const [manifestIndex, file] of bundle.manifest.files.entries()) {
+      if (!file.reviewed || file.binary) continue;
+      const fileContext = codeContextForFile(indexedContext, file);
+      const followUpAvailable = verifyCandidates && environment.codeContext !== undefined
+        && input.followUpExecutor !== undefined && fileContext.coverage.provider !== null;
+      let fingerprint: string;
+      try {
+        fingerprint = await buildReviewSemanticFingerprint({
+          bundle,
+          file,
+          environment,
+          indexedContext,
+          verifyCandidates,
+          followUpAvailable,
+        });
+        fingerprintsByManifestIndex.set(manifestIndex, fingerprint);
+      } catch {
+        continue;
+      }
+      const candidate = reuseCache.match(fileReviewPath(file), fingerprint);
+      if (candidate === undefined) continue;
+      try {
+        const record = await restoreReusableFileReview({
+          candidate,
+          bundle,
+          file,
+          environment,
+          indexedContext,
+          verifyCandidates,
+        });
+        await writer.writeFileReview(record);
+        recordsByManifestIndex.set(manifestIndex, record);
+        await reuseCache.write(
+          record.path,
+          fingerprint,
+          bundle.manifest.base,
+          bundle.manifest.head,
+          record,
+          record.savedDurationMs ?? 0,
+          verifyCandidates,
+        ).catch(() => undefined);
+        input.onFileDone?.(record);
+      } catch {
+        // Cache content is untrusted and optional. A current-evidence
+        // validation failure is counted and falls through to normal review.
+        rejectedReuseCandidates += 1;
+      }
+    }
+  }
+
+  const selectedManifestIndexes = new Set(bundle.manifest.files.flatMap((file, manifestIndex) =>
+    file.reviewed && !recordsByManifestIndex.has(manifestIndex) ? [manifestIndex] : []));
+  const tasks = await reviewTasks(bundle, concurrency, selectedManifestIndexes);
+  let workDirectory: string | undefined;
   try {
-    const prepared = await executor.prepare({
-      model: environment.model,
-      credential: environment.credential,
-      timeoutMs: environment.timeout.milliseconds,
-      workDirectory,
-    });
+    if (tasks.length > 0) workDirectory = await mkdtemp(join(tmpdir(), 'redline-review-'));
+    const prepared = tasks.length === 0
+      ? undefined
+      : await executor.prepare({
+          model: environment.model,
+          credential: environment.credential,
+          timeoutMs: environment.timeout.milliseconds,
+          workDirectory: workDirectory as string,
+        });
 
-    const recordsByManifestIndex = new Map<number, WritableFileReviewRecord>();
     const followUpBudget = new FollowUpBudget();
     await runBoundedWorkerPool(tasks, concurrency, async ({ file, manifestIndex }) => {
       let record: WritableFileReviewRecord;
@@ -654,6 +732,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           harness: environment.harness,
           model: environment.model.model,
           codeContext: codeContextForFile(indexedContext, file).coverage,
+          execution: 'executed',
           outcome: 'omitted',
           reason: 'binary diff; not reviewable as text',
           findings: [],
@@ -668,7 +747,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           : (output: HarnessOutputLine): void => input.onHarnessOutput?.({ ...identity, ...output });
         record = await reviewOneFile(
           executor,
-          prepared,
+          prepared as Awaited<ReturnType<HarnessExecutor['prepare']>>,
           environment,
           bundle,
           indexedContext,
@@ -677,7 +756,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           input.followUpExecutor,
           onHarnessOutput,
           input.harnessStreamMode,
-          input.verifyCandidates,
+          verifyCandidates,
         );
         input.onFileValidated?.({
           ...identity,
@@ -689,16 +768,27 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       }
       await writer.writeFileReview(record);
       recordsByManifestIndex.set(manifestIndex, record);
+      const fingerprint = fingerprintsByManifestIndex.get(manifestIndex);
+      if (reuseCache !== undefined && fingerprint !== undefined) {
+        await reuseCache.write(
+          record.path,
+          fingerprint,
+          bundle.manifest.base,
+          bundle.manifest.head,
+          record,
+          record.durationMs,
+          verifyCandidates,
+        ).catch(() => undefined);
+      }
       input.onFileDone?.(record);
     });
 
-    const records = tasks
-      .map((task) => ({ task, record: recordsByManifestIndex.get(task.manifestIndex) }))
-      .sort((left, right) => left.task.manifestIndex - right.task.manifestIndex)
-      .map(({ record }) => {
-        if (record === undefined) throw new Error('bounded review worker did not produce a file record');
-        return record;
-      });
+    const records = bundle.manifest.files.flatMap((file, manifestIndex) => {
+      if (!file.reviewed) return [];
+      const record = recordsByManifestIndex.get(manifestIndex);
+      if (record === undefined) throw new Error('review run did not produce a file record');
+      return [record];
+    });
     const summary: ReviewRunSummary = {
       version: REVIEW_RUN_SUMMARY_VERSION,
       harness: environment.harness,
@@ -712,19 +802,30 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       omittedFiles: records.filter((record) => record.outcome === 'omitted').length,
       findings: records.reduce((total, record) => total + record.findings.length, 0),
       codeContext: indexedContext.coverage,
+      reuse: {
+        version: REVIEW_REUSE_TELEMETRY_VERSION,
+        status: reuseCache === undefined ? 'disabled' : 'enabled',
+        restoredEntries: reuseCache?.stats.restoredEntries ?? 0,
+        invalidEntries: (reuseCache?.stats.invalidEntries ?? 0) + rejectedReuseCandidates,
+        reusedFiles: records.filter((record) => record.execution === 'reused').length,
+        executedFiles: records.filter((record) => record.execution !== 'reused').length,
+        savedDurationMs: records.reduce((total, record) => total + (record.savedDurationMs ?? 0), 0),
+      },
       files: records.map((record): ReviewRunSummaryFile => ({
         fileId: record.fileId,
         path: record.path,
         outcome: record.outcome,
         errorKind: record.errorKind,
         codeContext: record.codeContext,
+        execution: record.execution,
+        savedDurationMs: record.savedDurationMs,
         findingCount: record.findings.length,
         findingSpans: record.findings.map((finding) => formatSpan(finding.startLine, finding.endLine)),
       })),
     };
     await writer.writeSummary(summary);
     const review = buildPullRequestReview({
-      bundle, environment, records, indexedContext, synthesize: input.verifyCandidates === true,
+      bundle, environment, records, indexedContext, synthesize: verifyCandidates,
     });
     await writer.writePullRequestReview(review);
 
@@ -739,6 +840,6 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       exitCode: validatedReviews > 0 || records.length === 0 ? 0 : 1,
     };
   } finally {
-    await rm(workDirectory, { recursive: true, force: true });
+    if (workDirectory !== undefined) await rm(workDirectory, { recursive: true, force: true });
   }
 }

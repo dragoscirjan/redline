@@ -126,14 +126,13 @@ describe('createPiExecutor', () => {
         executor.execute(prepared, { system: 'SYSTEM-B', user: 'USER-B' }),
       ]);
 
-      const [first, second] = spawner.requests;
+      const first = spawner.requests.find((request) => request.stdin === 'USER-A');
+      const second = spawner.requests.find((request) => request.stdin === 'USER-B');
       expect(first?.env?.PI_CODING_AGENT_DIR).toBeDefined();
       expect(second?.env?.PI_CODING_AGENT_DIR).toBeDefined();
       expect(first?.env?.PI_CODING_AGENT_DIR).not.toBe(second?.env?.PI_CODING_AGENT_DIR);
       expect(await readFile(first!.args.at(-1)!, 'utf8')).toBe('SYSTEM-A');
       expect(await readFile(second!.args.at(-1)!, 'utf8')).toBe('SYSTEM-B');
-      expect(first?.stdin).toBe('USER-A');
-      expect(second?.stdin).toBe('USER-B');
       expect(await readFile(join(first!.env!.PI_CODING_AGENT_DIR!, 'models.json'), 'utf8'))
         .toBe(await readFile(join(second!.env!.PI_CODING_AGENT_DIR!, 'models.json'), 'utf8'));
     } finally {

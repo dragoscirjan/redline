@@ -43,14 +43,22 @@ export interface VerificationPromptOptions {
   readonly policyRoot?: string | undefined;
 }
 
+export async function loadVerificationPolicy(
+  policyRoot = defaultPolicyRoot(),
+): Promise<{ readonly text: string; readonly digest: string }> {
+  const root = await checkedDirectory(policyRoot, 'verifier policy directory');
+  const text = `${(await readCheckedText(root, 'policy.md', 64 * 1024, 'verifier policy')).replaceAll('\r\n', '\n').trimEnd()}\n`;
+  return { text, digest: digest(text) };
+}
+
 /** Uses a separate fixed policy and user payload; no discovery conversation is inherited. */
 export async function buildVerificationPrompt(options: VerificationPromptOptions): Promise<FileReviewPrompt> {
   if (options.candidates.length === 0 || options.candidates.length > 10) {
     throw new Error('verifier needs a bounded nonempty candidate list');
   }
-  const root = await checkedDirectory(options.policyRoot ?? defaultPolicyRoot(), 'verifier policy directory');
-  const policy = `${(await readCheckedText(root, 'policy.md', 64 * 1024, 'verifier policy')).replaceAll('\r\n', '\n').trimEnd()}\n`;
-  const policyDigest = digest(policy);
+  const loadedPolicy = await loadVerificationPolicy(options.policyRoot);
+  const policy = loadedPolicy.text;
+  const policyDigest = loadedPolicy.digest;
   const system = `${policy}\n# Trusted run configuration\n\n${JSON.stringify({
     policyId: VERIFICATION_PROMPT_ID,
     policyDigest,

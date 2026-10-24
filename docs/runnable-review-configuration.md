@@ -17,6 +17,8 @@ The GitHub Action passes every value to the review tool through environment vari
 | `REDLINE_FINDING_SCOPE` | optional | `defects` (default) or `defects-and-risks`. |
 | `REDLINE_TIMEOUT` | optional | Duration like `10m`, `2h`, `1h30m`. Default `30m`, capped at `360m`. |
 | `REDLINE_REVIEW_CONCURRENCY` | optional | Maximum simultaneous per-file model calls. Integer from `1` through `8`; default `4`. |
+| `REDLINE_REUSE_DIR` | optional in review mode | Action-owned directory for restored and newly validated per-file reuse entries. Requires `REDLINE_REUSE_NAMESPACE`. |
+| `REDLINE_REUSE_NAMESPACE` | with `REDLINE_REUSE_DIR` | Cache identity in `owner/name#pull-request` form. |
 | `REDLINE_VERBOSITY` | optional | `silent` (per-file lines only), `progress` (one dot per model text chunk, default), or `full-output` (readable stream text). |
 
 Rules enforced by the parser:
@@ -25,6 +27,7 @@ Rules enforced by the parser:
 - Unknown `REDLINE_*` variables are rejected, so typos fail loudly.
 - Optional values are validated even without review execution.
 - Indexed-context path and repository identity arrive together. Configured context that is missing, invalid, stale, unsupported, or unavailable is recorded and degrades to file-only review instead of failing the run.
+- Review-reuse directory and namespace arrive together. Restored entries are untrusted and optional; invalid data degrades to normal per-file execution.
 - No variable accepts free-form review instructions.
 
 ## Model configuration

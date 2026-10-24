@@ -4,6 +4,7 @@ export {
   type ParsedReviewEnvironment,
   type PublicationEnvironment,
   type ReviewEnvironment,
+  type ReviewReuseEnvironment,
   type ReviewMode,
   type SelectedModelCredential,
   parseReviewEnvironment,
@@ -35,6 +36,7 @@ export {
   FileReviewValidator,
   parseChangedLines,
   parseFileReviewDocument,
+  parseReusableReviewFinding,
 } from './report.js';
 export {
   buildPullRequestReview,
@@ -51,6 +53,17 @@ export {
   spanLocation,
 } from './remediation.js';
 export { createReviewWriter } from './writer.js';
+export {
+  REVIEW_REUSE_CACHE_VERSION,
+  REVIEW_REUSE_TELEMETRY_VERSION,
+  REVIEW_SEMANTIC_FINGERPRINT_VERSION,
+  buildReviewSemanticFingerprint,
+  loadReviewReuseCache,
+  restoreReusableFileReview,
+  type ReviewReuseCache,
+  type ReviewReuseCacheStats,
+  type ReviewReuseCandidate,
+} from './reuse.js';
 export { runFileReviews, type ReviewRunInput, type ReviewRunResult } from './runner.js';
 export { main } from './cli.js';
 export {
@@ -59,6 +72,7 @@ export {
   PULL_REQUEST_REVIEW_VERSION,
   REVIEW_RUN_SUMMARY_VERSION,
   type FileReviewErrorKind,
+  type FileReviewExecution,
   type FileReviewOutcome,
   type FileReviewRecord,
   type GraphReference,
@@ -74,6 +88,7 @@ export {
   type ReviewCodeContextStatus,
   type ReviewFinding,
   type ReviewLimitation,
+  type ReviewReuseTelemetry,
   type ReviewRunSummary,
   type ReviewRunSummaryFile,
   type SourceEvidence,

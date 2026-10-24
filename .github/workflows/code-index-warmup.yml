@@ -73,13 +73,13 @@ jobs:
         run: |
           {
             printf '## %s exact-base warmup\n\n' "$PROVIDER"
-            printf -- '- Result: `%s`\n' "${RESULT:-failed}"
-            printf -- '- Cache hit: `%s`\n' "${CACHE_HIT:-false}"
-            printf -- '- Cache identity: `%s`\n' "${CACHE_IDENTITY:-unavailable}"
-            printf -- '- Cache save: `%s`\n' "${CACHE_SAVE_OUTCOME:-skipped}"
-            printf -- '- Cache size: `%s` bytes\n' "${CACHE_SIZE_BYTES:-0}"
-            printf -- '- Index duration: `%s` ms\n' "${INDEX_MS:-0}"
-            printf -- '- Total measured duration: `%s` ms\n' "${DURATION_MS:-0}"
+            printf -- "- Result: \`%s\`\n" "${RESULT:-failed}"
+            printf -- "- Cache hit: \`%s\`\n" "${CACHE_HIT:-false}"
+            printf -- "- Cache identity: \`%s\`\n" "${CACHE_IDENTITY:-unavailable}"
+            printf -- "- Cache save: \`%s\`\n" "${CACHE_SAVE_OUTCOME:-skipped}"
+            printf -- "- Cache size: \`%s\` bytes\n" "${CACHE_SIZE_BYTES:-0}"
+            printf -- "- Index duration: \`%s\` ms\n" "${INDEX_MS:-0}"
+            printf -- "- Total measured duration: \`%s\` ms\n" "${DURATION_MS:-0}"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload warmup diagnostics

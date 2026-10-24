@@ -34,6 +34,7 @@
     "savedPercent": null,
     "material": false,
     "cacheEvaluation": "not-eligible",
+    "rejectedStrategies": [],
     "reason": "The manual GitHub-hosted benchmark must run after this workflow is available on the default branch."
   },
   "limitations": [

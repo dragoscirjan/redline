@@ -120,6 +120,7 @@ export interface CheckoutBenchmarkDecision {
   readonly savedPercent: number | null;
   readonly material: boolean;
   readonly cacheEvaluation: 'not-eligible' | 'eligible';
+  readonly rejectedStrategies: readonly CheckoutStrategy[];
   readonly reason: string;
 }
 
@@ -404,15 +405,21 @@ function benchmarkDecision(
   profile: CheckoutBenchmarkProfile,
   strategies: readonly CheckoutStrategyAggregate[],
 ): CheckoutBenchmarkDecision {
-  if (strategies.some((entry) => !entry.equivalent)) {
+  const correctStrategies = STRATEGY_SIMPLICITY.filter((strategyId) =>
+    profile.repositories.every((repositoryEntry) => strategies.some((entry) =>
+      entry.repositoryId === repositoryEntry.id && entry.strategy === strategyId && entry.equivalent)));
+  const rejectedStrategies = STRATEGY_SIMPLICITY.filter((strategyId) => !correctStrategies.includes(strategyId));
+  if (!correctStrategies.includes('full')) {
     return {
       status: 'invalid', selectedStrategy: null, fastestStrategy: null, largeRepositoryId: null,
       savedMs: null, savedPercent: null, material: false, cacheEvaluation: 'not-eligible',
-      reason: 'At least one strategy changed the authoritative bundle, source export, or revision-list digest.',
+      rejectedStrategies,
+      reason: 'Repeated full-checkout samples changed the authoritative bundle, source export, or revision-list digest.',
     };
   }
   const large = profile.repositories.find((entry) => entry.sizeClass === 'large') as CheckoutBenchmarkRepository;
-  const candidates = strategies.filter((entry) => entry.repositoryId === large.id);
+  const candidates = strategies.filter((entry) =>
+    entry.repositoryId === large.id && correctStrategies.includes(entry.strategy));
   const fastest = [...candidates].sort((left, right) => left.criticalPathMs.p95NearestRank - right.criticalPathMs.p95NearestRank)[0] as CheckoutStrategyAggregate;
   const full = candidates.find((entry) => entry.strategy === 'full') as CheckoutStrategyAggregate;
   const window = fastest.criticalPathMs.p95NearestRank * (1 + profile.materiality.simplicityWindowPercent / 100);
@@ -434,9 +441,12 @@ function benchmarkDecision(
       savedMs,
       savedPercent,
       material,
-      cacheEvaluation: material ? 'eligible' : 'not-eligible',
+      cacheEvaluation: 'not-eligible',
+      rejectedStrategies,
       reason: selected.strategy === 'full'
-        ? 'Full checkout remains within the agreed simplicity window of the fastest correct strategy.'
+        ? rejectedStrategies.length === 0
+          ? 'Full checkout remains within the agreed simplicity window of the fastest correct strategy.'
+          : `Full checkout is retained because ${rejectedStrategies.join(' and ')} changed authoritative output on at least one repository.`
         : `The simplest correct alternative saves ${savedMs} ms (${savedPercent}%), below the combined materiality gate.`,
     };
   }
@@ -449,6 +459,7 @@ function benchmarkDecision(
     savedPercent,
     material: true,
     cacheEvaluation: 'eligible',
+    rejectedStrategies,
     reason: `${selected.strategy} is the simplest correct strategy within ${profile.materiality.simplicityWindowPercent}% of fastest and crosses both materiality thresholds.`,
   };
 }
@@ -477,6 +488,7 @@ export function pendingCheckoutBenchmarkAggregate(profile: CheckoutBenchmarkProf
     decision: {
       status: 'pending', selectedStrategy: null, fastestStrategy: null, largeRepositoryId: null,
       savedMs: null, savedPercent: null, material: false, cacheEvaluation: 'not-eligible',
+      rejectedStrategies: [],
       reason: 'The manual GitHub-hosted benchmark must run after this workflow is available on the default branch.',
     },
     limitations: LIMITATIONS,
@@ -606,7 +618,7 @@ export function parseCheckoutBenchmarkAggregate(value: unknown): CheckoutBenchma
   const decisionValue = record(item.decision, 'aggregate.decision');
   exactKeys(decisionValue, [
     'status', 'selectedStrategy', 'fastestStrategy', 'largeRepositoryId', 'savedMs', 'savedPercent', 'material',
-    'cacheEvaluation', 'reason',
+    'cacheEvaluation', 'rejectedStrategies', 'reason',
   ], 'aggregate.decision');
   const nullableStrategy = (value: unknown, label: string): CheckoutStrategy | null =>
     value === null ? null : strategy(value, label);
@@ -623,8 +635,14 @@ export function parseCheckoutBenchmarkAggregate(value: unknown): CheckoutBenchma
     throw new Error('aggregate decision status is unsupported');
   }
   if (typeof decisionValue.material !== 'boolean'
-    || (decisionValue.cacheEvaluation !== 'not-eligible' && decisionValue.cacheEvaluation !== 'eligible')) {
+    || (decisionValue.cacheEvaluation !== 'not-eligible' && decisionValue.cacheEvaluation !== 'eligible')
+    || !Array.isArray(decisionValue.rejectedStrategies) || decisionValue.rejectedStrategies.length > CHECKOUT_STRATEGIES.length) {
     throw new Error('aggregate decision fields are invalid');
+  }
+  const rejectedStrategies = decisionValue.rejectedStrategies.map((entry, index) =>
+    strategy(entry, `aggregate.decision.rejectedStrategies[${index}]`));
+  if (new Set(rejectedStrategies).size !== rejectedStrategies.length) {
+    throw new Error('aggregate decision rejected strategies contain duplicates');
   }
   const capturedAt = item.capturedAt === null ? null : boundedText(item.capturedAt, 'aggregate.capturedAt', 64);
   const runUrl = item.runUrl === null ? null : boundedText(item.runUrl, 'aggregate.runUrl', 500);
@@ -665,6 +683,7 @@ export function parseCheckoutBenchmarkAggregate(value: unknown): CheckoutBenchma
       savedPercent: nullableNumber(decisionValue.savedPercent, 'aggregate.decision.savedPercent'),
       material: decisionValue.material,
       cacheEvaluation: decisionValue.cacheEvaluation,
+      rejectedStrategies,
       reason: boundedText(decisionValue.reason, 'aggregate.decision.reason', 500),
     },
     limitations: item.limitations.map((entry, index) => boundedText(entry, `aggregate.limitations[${index}]`, 500)),
@@ -741,6 +760,7 @@ export function renderCheckoutBenchmarkReport(aggregate: CheckoutBenchmarkAggreg
       `- Fastest strategy: ${aggregate.decision.fastestStrategy ?? 'none'}`,
       `- Saved on large repository: ${aggregate.decision.savedMs === null ? 'n/a' : milliseconds(aggregate.decision.savedMs)} (${aggregate.decision.savedPercent === null ? 'n/a' : `${aggregate.decision.savedPercent}%`})`,
       `- Material: ${aggregate.decision.material ? 'yes' : 'no'}`,
+      `- Rejected strategies: ${aggregate.decision.rejectedStrategies.length === 0 ? 'none' : aggregate.decision.rejectedStrategies.join(', ')}`,
       `- Git object cache evaluation: ${aggregate.decision.cacheEvaluation}`,
     );
   }

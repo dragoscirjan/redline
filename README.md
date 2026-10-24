@@ -19,6 +19,7 @@ Product documentation:
 - [Review eligibility](docs/review-eligibility.md)
 - [Review reporting](docs/review-reporting.md)
 - [Review performance benchmark](docs/performance-benchmark.md)
+- [Checkout and exact-revision benchmark](docs/checkout-benchmark.md)
 - [Model execution benchmark](docs/model-execution-benchmark.md)
 
 ## Development

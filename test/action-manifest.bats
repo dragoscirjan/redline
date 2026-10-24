@@ -9,6 +9,7 @@ setup() {
   WARMUP_WORKFLOW="$ROOT/.github/workflows/code-index-warmup.yml"
   DOCS_WORKFLOW="$ROOT/.github/workflows/docs.publish.yml"
   CI_WORKFLOW="$ROOT/.github/workflows/ci.yml"
+  CHECKOUT_BENCHMARK_WORKFLOW="$ROOT/.github/workflows/checkout-benchmark.yml"
   DEPENDENCY_ACTION="$ROOT/.github/actions/install-dependencies/action.yaml"
 }
 
@@ -295,6 +296,19 @@ PY
   grep -Fq 'installMs' "$DEPENDENCY_ACTION"
   ! grep -A3 'uses: actions/cache/restore@' "$DEPENDENCY_ACTION" | grep -Fq 'node_modules'
   ! grep -A3 'uses: actions/cache/save@' "$DEPENDENCY_ACTION" | grep -Fq 'node_modules'
+}
+
+@test "checkout benchmark is manual, bounded, and does not alter production checkout" {
+  grep -Fq 'workflow_dispatch: {}' "$CHECKOUT_BENCHMARK_WORKFLOW"
+  grep -Fq 'timeout-minutes: 180' "$CHECKOUT_BENCHMARK_WORKFLOW"
+  grep -Fq 'persist-credentials: false' "$CHECKOUT_BENCHMARK_WORKFLOW"
+  grep -Fq 'node src/benchmark/checkout-live-cli.ts' "$CHECKOUT_BENCHMARK_WORKFLOW"
+  grep -Fq 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1' "$CHECKOUT_BENCHMARK_WORKFLOW"
+  grep -Fq 'retention-days: 30' "$CHECKOUT_BENCHMARK_WORKFLOW"
+  ! grep -Fq 'pnpm install' "$CHECKOUT_BENCHMARK_WORKFLOW"
+  ! grep -Fq 'github/action.yaml' "$CHECKOUT_BENCHMARK_WORKFLOW"
+  ! grep -Fq 'filter: blob:none' "$ACTION"
+  ! grep -Fq 'fetch-depth: 1' "$ACTION"
 }
 
 @test "action validates and forwards the trusted runtime before repository data" {

@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "kind": "checkout-benchmark-profile",
+  "repetitions": 5,
+  "commandTimeoutMs": 1200000,
+  "materiality": {
+    "minimumSavedMs": 30000,
+    "minimumSavedPercent": 5,
+    "simplicityWindowPercent": 10
+  },
+  "strategies": [
+    "full",
+    "shallow",
+    "partial"
+  ],
+  "repositories": [
+    {
+      "id": "redline-small",
+      "label": "Redline",
+      "sizeClass": "small",
+      "repository": "dragoscirjan/redline",
+      "baseUrl": "https://github.com/dragoscirjan/redline.git",
+      "headUrl": "https://github.com/dragoscirjan/redline.git",
+      "base": "03a4578c8db581a04455edda3c11c0653138f64e",
+      "head": "739bc3d3e51f23097d3b856dd363af5aa7fae4f2"
+    },
+    {
+      "id": "vscode-large",
+      "label": "Microsoft Visual Studio Code",
+      "sizeClass": "large",
+      "repository": "microsoft/vscode",
+      "baseUrl": "https://github.com/microsoft/vscode.git",
+      "headUrl": "https://github.com/microsoft/vscode.git",
+      "base": "e4c1bc2b7853e5c667ca0d9a6bd4b458c5b4a7e9",
+      "head": "86db3b69224f75a786f815684bc96fc0eb5d9300"
+    }
+  ]
+}

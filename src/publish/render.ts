@@ -185,6 +185,9 @@ export function renderSummaryBody(
   notes: SummaryPublicationNotes,
 ): string {
   const omitted = review.files.filter((file) => file.outcome === 'omitted').length;
+  const excludedDetails = review.coverage.files.excludedDetails ?? review.coverage.files.excluded.map(
+    (path) => ({ path, reason: 'excluded by legacy review policy' }),
+  );
   const lines = [
     '## Redline pull request review',
     '',
@@ -225,13 +228,13 @@ export function renderSummaryBody(
       if (suppressed.length > 20) lines.push(`- …${suppressed.length - 20} more; inspect review.json.`);
     }
   }
-  if (review.coverage.files.excluded.length > 0) {
+  if (excludedDetails.length > 0) {
     lines.push('', '**Excluded by trusted eligibility policy:**');
-    for (const file of review.coverage.files.excluded.slice(0, 50)) {
+    for (const file of excludedDetails.slice(0, 50)) {
       lines.push(`- \`${escapeBackticks(file.path)}\` — ${escapeBackticks(file.reason)}`);
     }
-    if (review.coverage.files.excluded.length > 50) {
-      lines.push(`- …${review.coverage.files.excluded.length - 50} more exclusions in review.json.`);
+    if (excludedDetails.length > 50) {
+      lines.push(`- …${excludedDetails.length - 50} more exclusions in review.json.`);
     }
   }
   if (review.verdict.reasons.length > 0) {

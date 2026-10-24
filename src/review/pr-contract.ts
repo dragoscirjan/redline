@@ -99,7 +99,7 @@ function coverageFor(
   const followUpRequested = records.reduce((total, record) => total + (record.followUp?.requested ?? 0), 0);
   const followUpIncomplete = records.filter((record) => record.followUp?.status === 'incomplete').length;
   const indexedStatus = indexStatus(context);
-  const excluded = bundle.manifest.files
+  const excludedDetails = bundle.manifest.files
     .filter((file) => !file.reviewed)
     .map((file) => ({
       fileId: file.id,
@@ -111,11 +111,12 @@ function coverageFor(
       status: omitted.length === 0 ? 'completed' : 'incomplete',
       required: true,
       reason: omitted.length === 0
-        ? `${considered.length} required reviewable files produced records; ${excluded.length} files were explicitly excluded by trusted bundle policy`
+        ? `${considered.length} required reviewable files produced records; ${excludedDetails.length} files were explicitly excluded by trusted bundle policy`
         : `${omitted.length} required files were omitted`,
       considered,
       omitted,
-      excluded,
+      excluded: excludedDetails.map((file) => file.path),
+      excludedDetails,
     },
     changedSymbols: facet(
       'unavailable',

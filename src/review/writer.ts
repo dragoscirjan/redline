@@ -146,6 +146,7 @@ function renderRecordMarkdown(record: FileReviewRecord): string {
 }
 
 function renderSummaryMarkdown(summary: ReviewRunSummary): string {
+  const excludedFiles = summary.excludedFiles ?? [];
   const lines = [
     `# Review run summary`,
     '',
@@ -155,7 +156,7 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
     `- **Manifest files:** ${summary.manifestFiles}`,
     `- **Reviewed:** ${summary.reviewedFiles}`,
     `- **Omitted required reviews:** ${summary.omittedFiles}`,
-    `- **Excluded by trusted policy:** ${summary.excludedFiles.length}`,
+    `- **Excluded by trusted policy:** ${excludedFiles.length}`,
     `- **Findings:** ${summary.findings}`,
     `- **Indexed context:** ${summary.codeContext.status}; ${summary.codeContext.filesWithContext} files, ${summary.codeContext.relatedSpans} spans, ${summary.codeContext.sourceBytes} source bytes`,
     `- **Index cache:** ${summary.codeContext.cache}`,
@@ -188,14 +189,17 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
       `| ${file.path} | ${file.outcome} | ${file.execution ?? 'executed'} | ${file.findingCount}${spans} | ${file.codeContext.status} (${file.codeContext.relatedSpans} spans) |`,
     );
   }
-  if (summary.excludedFiles.length > 0) {
+  if (excludedFiles.length > 0) {
     lines.push('', '## Excluded by trusted eligibility policy', '');
-    for (const file of summary.excludedFiles) lines.push(`- \`${file.path}\` — ${file.reason}`);
+    for (const file of excludedFiles) lines.push(`- \`${file.path}\` — ${file.reason}`);
   }
   return `${lines.join('\n')}\n`;
 }
 
 function renderPullRequestReviewMarkdown(review: PullRequestReviewRecord): string {
+  const excludedDetails = review.coverage.files.excludedDetails ?? review.coverage.files.excluded.map(
+    (path) => ({ path, reason: 'excluded by legacy review policy' }),
+  );
   const lines = [
     '# Pull request review',
     '',
@@ -222,9 +226,9 @@ function renderPullRequestReviewMarkdown(review: PullRequestReviewRecord): strin
     '',
     ...review.limitations.map((limitation) => `- ${limitation.required ? 'Required' : 'Advisory'} — ${limitation.code}: ${limitation.message}`),
   ];
-  if (review.coverage.files.excluded.length > 0) {
+  if (excludedDetails.length > 0) {
     lines.push('', '## Excluded by trusted eligibility policy', '');
-    for (const file of review.coverage.files.excluded) lines.push(`- \`${file.path}\` — ${file.reason}`);
+    for (const file of excludedDetails) lines.push(`- \`${file.path}\` — ${file.reason}`);
   }
   lines.push('', '## Findings', '');
   if (review.findings.length === 0) lines.push('No validated findings.');

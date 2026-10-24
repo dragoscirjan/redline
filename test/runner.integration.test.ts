@@ -1110,7 +1110,8 @@ describe('runFileReviews', () => {
         status: 'completed',
         considered: [],
         omitted: [],
-        excluded: [{ fileId: '000001', path: 'src/example.ts', reason: 'generated raw benchmark capture' }],
+        excluded: ['src/example.ts'],
+        excludedDetails: [{ fileId: '000001', path: 'src/example.ts', reason: 'generated raw benchmark capture' }],
       });
       expect(result.exitCode).toBe(0);
       const summaryFiles = await readFile(join(fixture.output, 'reviews', 'summary.md'), 'utf8');

@@ -180,7 +180,8 @@ describe('renderSummaryBody', () => {
         ...REVIEW.coverage,
         files: {
           ...REVIEW.coverage.files,
-          excluded: [{ fileId: '000003', path: 'benchmark/example/capture.json', reason: 'generated raw benchmark capture' }],
+          excluded: ['benchmark/example/capture.json'],
+          excludedDetails: [{ fileId: '000003', path: 'benchmark/example/capture.json', reason: 'generated raw benchmark capture' }],
         },
       },
     };

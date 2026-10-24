@@ -137,7 +137,8 @@ Migration is explicit:
 - Version-2 harness documents remain accepted during migration. Redline maps their validated fields into version 4 records and labels every unavailable rich field as legacy-derived or unresolved; it does not reinterpret missing evidence as completed analysis.
 - Per-file record version 4 adds the rich finding and rejected-candidate contract.
 - PR-level record version 2 adds optional synthesis and publication coverage. The publish-only loader migrates legacy version-1 non-verified records; it rejects a verified version-1 record before migration so the synthesis-plan check cannot be bypassed.
-- Run summary version 3 remains unchanged as a subordinate compatibility artifact; it gains additive trusted-policy exclusion records, reuse telemetry, execution-budget telemetry, per-file execution fields, and indexed-context cache, diagnostic-code, and stage-timing telemetry.
+- Run summary version 3 remains unchanged as a subordinate compatibility artifact; it gains optional additive trusted-policy exclusion records, reuse telemetry, execution-budget telemetry, per-file execution fields, and indexed-context cache, diagnostic-code, and stage-timing telemetry. Readers treat absent exclusion records as an empty legacy list.
+- Pull-request review version 2 retains the existing `coverage.files.excluded` path array and adds optional `coverage.files.excludedDetails` records with file ids and reasons.
 - Context-bundle manifest version 2 records strict eligibility-policy provenance plus `exclusionReason` for every non-reviewed file. Legacy version-1 manifests remain readable with a conservative legacy reason.
 - Review policy `redline-file-review/v5` uses the fixed modules in `prompts/v7/` with focused source-context payload versions 3 and 4. The full-file payload versions 1 and 2 remain available only for reproducible benchmark comparison. Earlier prompt policies remain archived for versioned recordings.
 

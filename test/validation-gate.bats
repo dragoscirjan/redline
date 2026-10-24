@@ -39,6 +39,10 @@ assert 'benchmark/performance/v1/baseline' in guard
 assert 'benchmark/model-execution/v1/live-glm-5.3-flash/report.json' in guard
 assert 'benchmark/review-eligibility/v1/report.json' in guard
 assert 'benchmark/review-eligibility/v1/report.md' in guard
+assert 'benchmark/checkout/v1/profile.json' in guard
+assert 'benchmark/checkout/v1/aggregate.json' in guard
+assert 'benchmark/checkout/v1/report.md' in guard
+assert 'pnpm run benchmark:checkout' in ci
 assert 'performance evidence changed:' in ci, \
     'evidence drift must produce an explicit CI diagnostic'
 PY

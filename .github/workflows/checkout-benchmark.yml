@@ -1,0 +1,49 @@
+name: Checkout benchmark
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checkout-benchmark
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    name: Five-run checkout benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - name: Check out trusted Redline source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: 24
+
+      - name: Measure checkout strategies
+        shell: bash
+        env:
+          OUTPUT_DIRECTORY: ${{ runner.temp }}/checkout-benchmark
+        run: |
+          set -euo pipefail
+          node src/benchmark/checkout-live-cli.ts \
+            benchmark/checkout/v1/profile.json \
+            "$OUTPUT_DIRECTORY"
+          cat "$OUTPUT_DIRECTORY/report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload raw and aggregate evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: checkout-benchmark-${{ github.run_id }}
+          path: ${{ runner.temp }}/checkout-benchmark
+          if-no-files-found: warn
+          retention-days: 30

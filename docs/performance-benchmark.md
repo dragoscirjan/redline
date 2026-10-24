@@ -75,6 +75,12 @@ The performance benchmark assembles a full-file baseline prompt in a recorded pr
 
 On the representative 20-file corpus, focused source selection reduces aggregate prompt volume from 388,473 to 266,257 bytes: 122,216 bytes, or 31.46%. The median file saves 2,434 bytes, or 15.34%. The stable four-characters-per-token estimate falls from 97,132 to 66,579 input tokens, a reduction of 30,553. Every corpus file is smaller with the focused strategy. The review-quality corpus separately replays both strategies and records unchanged root-cause, evidence, false-positive, and coverage results.
 
+## Checkout and exact-revision measurement
+
+The separate [checkout benchmark](/checkout-benchmark) compares full-history, shallow exact-revision, and blobless partial Git strategies on pinned Redline and Visual Studio Code revisions. It separates checkout, exact fetch, object hydration, context-bundle, index-source-export, object-store, and critical-path measurements. Synthetic tests prove fork, force-push, merge-commit, and shallow-history behavior before any production change.
+
+The benchmark is manual and evidence-gated. Redline retains the production full-history checkout unless five GitHub-hosted runs show a correct alternative saves at least 30 seconds and 5% of the critical path. Git object caching is not evaluated unless that uncached gate is crossed.
+
 ## Run an opt-in live capture
 
 A live capture uses the pinned profile:

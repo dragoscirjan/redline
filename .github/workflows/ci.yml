@@ -52,12 +52,16 @@ jobs:
           pnpm run benchmark:performance
           pnpm run benchmark:model-execution
           pnpm run benchmark:review-eligibility
+          pnpm run benchmark:checkout
           evidence_changes="$(git status --porcelain --untracked-files=all -- \
             benchmark/performance/v1/baseline \
             benchmark/model-execution/v1/live-glm-5.3-flash/report.json \
             benchmark/model-execution/v1/live-glm-5.3-flash/report.md \
             benchmark/review-eligibility/v1/report.json \
-            benchmark/review-eligibility/v1/report.md)"
+            benchmark/review-eligibility/v1/report.md \
+            benchmark/checkout/v1/profile.json \
+            benchmark/checkout/v1/aggregate.json \
+            benchmark/checkout/v1/report.md)"
           if [[ -n "$evidence_changes" ]]; then
             printf 'performance evidence changed:\n%s\n' "$evidence_changes" >&2
             git diff -- \
@@ -65,7 +69,10 @@ jobs:
               benchmark/model-execution/v1/live-glm-5.3-flash/report.json \
               benchmark/model-execution/v1/live-glm-5.3-flash/report.md \
               benchmark/review-eligibility/v1/report.json \
-              benchmark/review-eligibility/v1/report.md >&2
+              benchmark/review-eligibility/v1/report.md \
+              benchmark/checkout/v1/profile.json \
+              benchmark/checkout/v1/aggregate.json \
+              benchmark/checkout/v1/report.md >&2
             exit 1
           fi
 

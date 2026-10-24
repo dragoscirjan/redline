@@ -35,6 +35,7 @@ export default defineConfig({
           { text: 'Harness executor', link: '/harness-executor' },
           { text: 'Review-quality benchmark', link: '/review-quality-benchmark' },
           { text: 'Performance benchmark', link: '/performance-benchmark' },
+          { text: 'Checkout benchmark', link: '/checkout-benchmark' },
           { text: 'Model execution benchmark', link: '/model-execution-benchmark' },
           { text: 'Change-impact planning', link: '/change-impact' },
           { text: 'Code intelligence', link: '/code-intelligence' },

@@ -1,8 +1,8 @@
 # Builds the documentation site and publishes it under projects/redline/ in
 # the dragoscirjan.github.io repository.
 #
-# The publish job uses the actor-owned PAT only for the destination checkout
-# and push; a caller GITHUB_TOKEN cannot push to a different repository.
+# The publish job uses the actor-owned PAT only for destination contents and
+# pull-request operations; a caller GITHUB_TOKEN cannot write another repository.
 name: Publish documentation
 
 on:
@@ -58,6 +58,8 @@ jobs:
 
       - name: Publish Redline documentation
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           set -euo pipefail
           mkdir -p documentation-repository/projects/redline
@@ -65,14 +67,34 @@ jobs:
             docs/.vitepress/dist/ \
             documentation-repository/projects/redline/
 
-          git -C documentation-repository config user.name 'github-actions[bot]'
-          git -C documentation-repository config user.email 'github-actions[bot]@users.noreply.github.com'
           git -C documentation-repository add -- projects/redline
-
           if git -C documentation-repository diff --cached --quiet; then
             printf 'Redline documentation is unchanged; nothing to publish.\n'
             exit 0
           fi
 
-          git -C documentation-repository commit -m 'docs(redline): update documentation site'
-          git -C documentation-repository push origin main
+          publisher_login="$(gh api user --jq '.login')"
+          publisher_id="$(gh api user --jq '.id')"
+          publish_branch="automation/redline-docs-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          publish_commit='docs(redline): update documentation site'
+
+          git -C documentation-repository config user.name "$publisher_login"
+          git -C documentation-repository config \
+            user.email "${publisher_id}+${publisher_login}@users.noreply.github.com"
+          git -C documentation-repository switch -c "$publish_branch"
+          git -C documentation-repository commit -m "$publish_commit"
+          git -C documentation-repository push --set-upstream origin "$publish_branch"
+
+          publish_head="$(git -C documentation-repository rev-parse HEAD)"
+          publish_pr="$(gh pr create \
+            --repo dragoscirjan/dragoscirjan.github.io \
+            --base main \
+            --head "$publish_branch" \
+            --title "$publish_commit" \
+            --body "Automated from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}.")"
+          gh pr merge \
+            --repo dragoscirjan/dragoscirjan.github.io \
+            --squash \
+            --delete-branch \
+            --match-head-commit "$publish_head" \
+            "$publish_pr"

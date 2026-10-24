@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "repository": "dragoscirjan/redline",
+  "pullRequest": 169,
+  "commit": "0ef21ef8e8bc219f58eb9fc76c38859a97dfc6f4",
+  "workflowRun": {
+    "id": 40125277504,
+    "coldAttempt": 1,
+    "warmAttempt": 2
+  },
+  "configuration": {
+    "cacheKeyVersion": "redline-pnpm-store-v1",
+    "node": "24",
+    "pnpm": "10.33.0",
+    "maximumStoreBytes": 536870912,
+    "lifecycleScripts": false,
+    "nodeModulesCached": false
+  },
+  "store": {
+    "sizeBytes": 119068463,
+    "sizeMiB": 113.55
+  },
+  "installMs": {
+    "coldMiss": {
+      "samples": [1043, 1160, 1406, 1489],
+      "summary": {
+        "samples": 4,
+        "minimum": 1043,
+        "p50NearestRank": 1160,
+        "p95NearestRank": 1489,
+        "maximum": 1489
+      }
+    },
+    "warmHit": {
+      "samples": [517, 636, 1089, 792, 546, 504],
+      "summary": {
+        "samples": 6,
+        "minimum": 504,
+        "p50NearestRank": 546,
+        "p95NearestRank": 1089,
+        "maximum": 1089
+      }
+    }
+  },
+  "reviewActionMs": {
+    "before": {
+      "source": "benchmark/source-runtime/v1/ci-pr-168.json",
+      "node": [14097],
+      "bun": [9771]
+    },
+    "after": {
+      "node": [8651, 6712],
+      "bun": [4284, 7151]
+    },
+    "observedRemoved": {
+      "node": [5446, 7385],
+      "bun": [5487, 2620]
+    }
+  },
+  "limits": [
+    "The initial parallel matrix produced four cold misses and two hits after the first jobs saved the shared exact key.",
+    "The warm attempt restored the exact key for all six jobs.",
+    "Install duration excludes cache restore and save time.",
+    "Composite-action timings use the deterministic echo harness with indexing disabled and are not model-bound latency measurements.",
+    "node_modules was not cached because no recorded comparison proved a net benefit over the bounded pnpm-store design."
+  ]
+}

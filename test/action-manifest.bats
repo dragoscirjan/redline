@@ -8,6 +8,7 @@ setup() {
   WARMUP_WORKFLOW="$ROOT/.github/workflows/code-index-warmup.yml"
   DOCS_WORKFLOW="$ROOT/.github/workflows/docs.publish.yml"
   CI_WORKFLOW="$ROOT/.github/workflows/ci.yml"
+  DEPENDENCY_ACTION="$ROOT/.github/actions/install-dependencies/action.yaml"
 }
 
 @test "action declares the fixed review input surface" {
@@ -247,13 +248,34 @@ PY
   ! grep -Eq 'credential-isolation|container-engine|report-style' "$ACTION"
 }
 
-@test "action checks and executes trusted TypeScript source without emitting JavaScript" {
-  grep -Fq 'pnpm install --frozen-lockfile --ignore-scripts' "$ACTION"
-  grep -Fq 'pnpm run typecheck' "$ACTION"
+@test "review action executes trusted TypeScript source without project dependency installation" {
   grep -Fq 'test -f src/review/cli.ts' "$ACTION"
   grep -Fq 'test -f src/context-bundle.ts' "$ACTION"
+  ! grep -Fq 'corepack' "$ACTION"
+  ! grep -Fq 'pnpm install' "$ACTION"
+  ! grep -Fq 'pnpm run typecheck' "$ACTION"
   ! grep -Fq 'pnpm run build' "$ACTION"
   ! grep -Fq 'dist/src/' "$ACTION"
+}
+
+@test "CI and docs use the bounded versioned pnpm store cache" {
+  [ "$(grep -Fc 'uses: ./.github/actions/install-dependencies' "$CI_WORKFLOW")" -eq 3 ]
+  [ "$(grep -Fc 'uses: ./.github/actions/install-dependencies' "$DOCS_WORKFLOW")" -eq 1 ]
+  ! grep -Fq 'pnpm install' "$CI_WORKFLOW"
+  ! grep -Fq 'pnpm install' "$DOCS_WORKFLOW"
+
+  grep -Fq 'pnpm install --frozen-lockfile --ignore-scripts' "$DEPENDENCY_ACTION"
+  grep -Fq 'actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3' "$DEPENDENCY_ACTION"
+  grep -Fq 'actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3' "$DEPENDENCY_ACTION"
+  grep -Fq 'continue-on-error: true' "$DEPENDENCY_ACTION"
+  grep -Fq 'redline-pnpm-store-v1-${{ runner.os }}-${{ runner.arch }}-node24-pnpm10.33.0-${{ hashFiles('\''pnpm-lock.yaml'\'') }}' "$DEPENDENCY_ACTION"
+  grep -Fq 'PNPM_STORE_PATH: ${{ runner.temp }}/redline-pnpm-store-v1' "$DEPENDENCY_ACTION"
+  grep -Fq "MAX_STORE_BYTES: '536870912'" "$DEPENDENCY_ACTION"
+  grep -Fq 'Cached pnpm store failed installation; retrying from an empty store.' "$DEPENDENCY_ACTION"
+  grep -Fq 'storeSizeBytes' "$DEPENDENCY_ACTION"
+  grep -Fq 'installMs' "$DEPENDENCY_ACTION"
+  ! grep -A3 'uses: actions/cache/restore@' "$DEPENDENCY_ACTION" | grep -Fq 'node_modules'
+  ! grep -A3 'uses: actions/cache/save@' "$DEPENDENCY_ACTION" | grep -Fq 'node_modules'
 }
 
 @test "action validates and forwards the trusted runtime before repository data" {

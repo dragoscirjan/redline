@@ -6,6 +6,7 @@ setup() {
   REUSABLE_WORKFLOW="$ROOT/.github/workflows/code-review.yml"
   DOGFOOD_WORKFLOW="$ROOT/.github/workflows/dogfood-review.yml"
   WARMUP_WORKFLOW="$ROOT/.github/workflows/code-index-warmup.yml"
+  DOCS_WORKFLOW="$ROOT/.github/workflows/docs.publish.yml"
 }
 
 @test "action declares the fixed review input surface" {
@@ -138,6 +139,22 @@ assert warmup['with']['provider'] == '${{ matrix.provider }}'
 assert any(step.get('name') == 'Upload warmup diagnostics' for step in steps)
 assert any(step.get('name') == 'Fail visible warmup errors' for step in steps)
 PY
+}
+
+@test "documentation workflow publishes directly without nested concurrency" {
+  grep -Fq 'group: docs-publish-redline' "$DOCS_WORKFLOW"
+  grep -Fq 'name: Build and publish the site' "$DOCS_WORKFLOW"
+  grep -Fq 'DOCS_BASE=/projects/redline/ pnpm run docs' "$DOCS_WORKFLOW"
+  grep -Fq 'name: docs-site' "$DOCS_WORKFLOW"
+  grep -Fq 'path: docs/.vitepress/dist' "$DOCS_WORKFLOW"
+  grep -Fq 'repository: dragoscirjan/dragoscirjan.github.io' "$DOCS_WORKFLOW"
+  grep -Fq 'token: ${{ secrets.GH_TOKEN }}' "$DOCS_WORKFLOW"
+  grep -Fq 'path: documentation-repository' "$DOCS_WORKFLOW"
+  grep -Fq 'rsync -a --delete' "$DOCS_WORKFLOW"
+  grep -Fq 'documentation-repository/projects/redline/' "$DOCS_WORKFLOW"
+  grep -Fq "commit -m 'docs(redline): update documentation site'" "$DOCS_WORKFLOW"
+  grep -Fq 'push origin main' "$DOCS_WORKFLOW"
+  ! grep -Fq 'uses: dragoscirjan/dragoscirjan.github.io/.github/workflows/docs.yml' "$DOCS_WORKFLOW"
 }
 
 @test "dogfood workflow gates the complete review input set on model credentials" {

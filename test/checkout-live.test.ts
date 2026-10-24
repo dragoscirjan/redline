@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { runCheckoutBenchmarkSample } from '../src/benchmark/checkout-live.ts';
+import { runCheckoutBenchmark, runCheckoutBenchmarkSample } from '../src/benchmark/checkout-live.ts';
 import type {
   CheckoutBenchmarkProfile,
   CheckoutBenchmarkRepository,
@@ -166,5 +166,15 @@ describe('checkout benchmark strategy correctness', () => {
   it('fetches an exact force-pushed head from a fork without branch trust', async () => {
     const parent = await root();
     await assertEquivalent(await createForcePushedFork(parent), parent);
+  }, 120_000);
+
+  it('preserves the primary sample failure while cleaning the workspace', async () => {
+    const parent = await root();
+    const repository = await createMergeRepository(parent);
+    const invalid = { ...repository, head: 'f'.repeat(40) };
+    await expect(runCheckoutBenchmark(profile(invalid), {
+      outputDirectory: join(parent, 'output'),
+      runUrl: 'https://github.com/fixture/repository/actions/runs/1',
+    })).rejects.toThrow(/git exited/u);
   }, 120_000);
 });

@@ -75,4 +75,12 @@ describe('code-index value report', () => {
     expect(() => buildCodeIndexValueReport({ ...value, repositoryClasses: value.repositoryClasses.slice(0, 1) }))
       .toThrow(/2 through 8 repository classes/u);
   });
+
+  it('rejects failed production warmups from successful timing distributions', async () => {
+    const value = structuredClone(await capture()) as {
+      productionWarmups: { cgc: Array<Record<string, unknown>> };
+    };
+    value.productionWarmups.cgc[0]!['result'] = 'failed';
+    expect(() => buildCodeIndexValueReport(value)).toThrow('productionWarmups.cgc[0].result must be saved');
+  });
 });

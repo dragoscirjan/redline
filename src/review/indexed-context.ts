@@ -105,11 +105,12 @@ function artifactStatusReason(status: CodeContextStatus): ReviewCodeContextReaso
 }
 
 function cacheStatus(artifact: CodeContextArtifact): ReviewCodeContextCacheStatus {
+  if (artifact.status === 'unavailable') return 'unavailable';
   const codes = new Set(artifact.diagnostics.map((item) => item.code));
   if (codes.has('cache-base-revision')) return 'restored';
   if (codes.has('cold-index-skipped')) return 'skipped';
+  if (artifact.status === 'unsupported') return 'unavailable';
   if (artifact.timings.indexMs > 0) return 'built';
-  if (artifact.status === 'unsupported' || artifact.status === 'unavailable') return 'unavailable';
   return 'unknown';
 }
 

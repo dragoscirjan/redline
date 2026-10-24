@@ -268,13 +268,15 @@ function parseWarmups(value: unknown, label: string): readonly ProductionWarmup[
   return value.map((item, index) => {
     const sampleLabel = `${label}[${index}]`;
     const input = record(item, sampleLabel);
+    const result = text(input['result'], `${sampleLabel}.result`);
+    if (result !== 'saved') throw new Error(`${sampleLabel}.result must be saved`);
     return {
       source: text(input['source'], `${sampleLabel}.source`),
       revision: text(input['revision'], `${sampleLabel}.revision`),
       indexMs: integer(input['indexMs'], `${sampleLabel}.indexMs`),
       durationMs: integer(input['durationMs'], `${sampleLabel}.durationMs`),
       cacheSizeBytes: integer(input['cacheSizeBytes'], `${sampleLabel}.cacheSizeBytes`),
-      result: text(input['result'], `${sampleLabel}.result`),
+      result,
     };
   });
 }
@@ -523,10 +525,29 @@ function statusText(statuses: ConditionReport['statuses']): string {
 }
 
 export function renderCodeIndexValueMarkdown(report: CodeIndexValueReport): string {
+  const localConditions = report.repositoryClasses.flatMap((item) => item.providers.flatMap((provider) => provider.conditions));
+  const localSampleCounts = [...new Set(localConditions.map((item) => item.samples))].sort((left, right) => left - right);
+  const localSampleText = localSampleCounts.length === 1
+    ? `${localSampleCounts[0] === 3 ? 'three' : localSampleCounts[0]} runs`
+    : `${localSampleCounts.join('/')} runs`;
+  const cgcConditions = report.repositoryClasses.flatMap((item) =>
+    item.providers.filter((provider) => provider.id === 'cgc').flatMap((provider) => provider.conditions));
+  const cgcSamples = cgcConditions.reduce((total, item) => total + item.samples, 0);
+  const cgcPartial = cgcConditions.reduce((total, item) => total + item.statuses.partial, 0);
+  const cgcMaximumSpans = Math.max(...cgcConditions.map((item) => item.relatedSpans.maximum));
+  const cgcDiagnostics = new Map<string, number>();
+  for (const condition of cgcConditions) {
+    for (const [code, count] of Object.entries(condition.diagnostics)) {
+      cgcDiagnostics.set(code, (cgcDiagnostics.get(code) ?? 0) + count);
+    }
+  }
+  const cgcDiagnosticText = [...cgcDiagnostics]
+    .map(([code, count]) => `${code} ${count}`)
+    .join(', ') || 'none';
   const lines = [
     '# Code-index value and provider comparison',
     '',
-    `Captured at ${report.capturedAt}. Percentiles use nearest rank. Each local cold/warm cell contains three runs.`,
+    `Captured at ${report.capturedAt}. Percentiles use nearest rank. Each local cold/warm cell contains ${localSampleText}.`,
     '',
   ];
   for (const repositoryClass of report.repositoryClasses) {
@@ -563,10 +584,10 @@ export function renderCodeIndexValueMarkdown(report: CodeIndexValueReport): stri
     `- Independent verification activation: ${report.recommendation.enableVerification ? 'enabled' : 'disabled'}.`,
     `- ${report.recommendation.reason}`,
     '', '## Limits', '',
-    '- Local provider distributions contain three sequential samples per condition and repository class.',
+    `- In this capture, local provider distributions contain ${localSampleText} per condition and repository class.`,
     '- Production warmups measure exact-base cache creation, not pull-request cache restoration.',
     '- GitNexus is PolyForm Noncommercial 1.0.0 licensed. Users must confirm that their use satisfies the license.',
-    '- CGC returned partial context with zero related spans in all current local cold and warm samples because its incoming query failed.',
+    `- In this capture, CGC local samples were partial in ${cgcPartial}/${cgcSamples} runs, had at most ${cgcMaximumSpans} related spans, and recorded diagnostics: ${cgcDiagnosticText}.`,
     '- No indexed-repository code, build, package installer, or Git hook was executed during these measurements.',
     '');
   return lines.join('\n');

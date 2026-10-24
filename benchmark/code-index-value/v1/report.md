@@ -56,9 +56,9 @@ Warm exact-base restoration removed provider indexing in every valid restored sa
 
 ## Limits
 
-- Local provider distributions contain three sequential samples per condition and repository class.
+- In this capture, local provider distributions contain three runs per condition and repository class.
 - Production warmups measure exact-base cache creation, not pull-request cache restoration.
 - GitNexus is PolyForm Noncommercial 1.0.0 licensed. Users must confirm that their use satisfies the license.
-- CGC returned partial context with zero related spans in all current local cold and warm samples because its incoming query failed.
+- In this capture, CGC local samples were partial in 12/12 runs, had at most 0 related spans, and recorded diagnostics: cgc-incoming-query-failed 12, cgc-query-partial 12, graph-base-revision 12, cache-base-revision 6.
 - No indexed-repository code, build, package installer, or Git hook was executed during these measurements.
 

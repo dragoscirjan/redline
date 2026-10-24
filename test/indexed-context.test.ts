@@ -82,6 +82,28 @@ describe('review indexed context', () => {
     }
   });
 
+  it('does not report a failed indexed artifact as a built cache', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const path = await writeArtifact(fixture.root, artifact({
+        status: 'unavailable',
+        files: [],
+        diagnostics: [{ level: 'error', code: 'code-index-build-failed', message: 'provider index failed' }],
+      }));
+      const bundle = await loadReviewBundle(fixture.review, fixture.source);
+      const loaded = await loadReviewCodeContext(bundle, { path, repository: REPOSITORY });
+
+      expect(loaded.coverage).toMatchObject({
+        status: 'unavailable',
+        cache: 'unavailable',
+        timings: { indexMs: 4 },
+        diagnosticCodes: ['code-index-build-failed'],
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('exposes only source-resolved, action-produced graph facts', async () => {
     const fixture = await createBundleFixture();
     try {

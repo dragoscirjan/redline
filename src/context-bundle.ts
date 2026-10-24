@@ -2,10 +2,10 @@
 /** Builds the deterministic, untrusted-data-only pull request review bundle. */
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createWriteStream } from 'node:fs';
+import { constants, createWriteStream } from 'node:fs';
 import {
-  lstat,
   mkdir,
+  open,
   readFile,
   rm,
   stat,
@@ -290,15 +290,23 @@ interface LoadedEligibilityPolicy {
 }
 
 async function parsePolicyFile(path: string): Promise<{ readonly raw: string; readonly policy: ReviewEligibilityPolicy }> {
-  const info = await lstat(path).catch(() => undefined);
-  if (!info?.isFile() || info.isSymbolicLink()) {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW).catch(() => undefined);
+  if (handle === undefined) {
     throw new Error('trusted review eligibility policy must be a regular file, not a symlink');
   }
-  if (info.size > MAX_REVIEW_ELIGIBILITY_BYTES) {
-    throw new Error('review eligibility policy exceeds its byte limit');
+  try {
+    const info = await handle.stat();
+    if (!info.isFile()) {
+      throw new Error('trusted review eligibility policy must be a regular file, not a symlink');
+    }
+    if (info.size > MAX_REVIEW_ELIGIBILITY_BYTES) {
+      throw new Error('review eligibility policy exceeds its byte limit');
+    }
+    const raw = await handle.readFile({ encoding: 'utf8' });
+    return { raw, policy: parseReviewEligibilityPolicy(raw) };
+  } finally {
+    await handle.close();
   }
-  const raw = await readFile(path, 'utf8');
-  return { raw, policy: parseReviewEligibilityPolicy(raw) };
 }
 
 async function loadEligibilityPolicy(

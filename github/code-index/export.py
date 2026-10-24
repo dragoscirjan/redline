@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Iterable
 
-VERSION = 1
+VERSION = 2
 PROVIDER_VERSIONS = {"cgc": "0.5.7", "gitnexus": "1.6.12"}
 PROVIDER_ID = "cgc"
 PROVIDER_VERSION = PROVIDER_VERSIONS[PROVIDER_ID]
@@ -129,10 +129,17 @@ def add_diagnostic(target: list[dict[str, str]], level: str, code: str, message:
         target.append(diagnostic(level, code, message))
 
 
-def timings(installation_ms: int, restore_ms: int = 0, index_ms: int = 0, query_ms: int = 0) -> dict[str, int | None]:
+def timings(
+    installation_ms: int,
+    restore_ms: int = 0,
+    validation_ms: int = 0,
+    index_ms: int = 0,
+    query_ms: int = 0,
+) -> dict[str, int | None]:
     return {
         "installationMs": max(0, installation_ms),
         "restoreMs": max(0, restore_ms),
+        "validationMs": max(0, validation_ms),
         "indexMs": max(0, index_ms),
         "queryMs": max(0, query_ms),
         "saveMs": None,
@@ -962,7 +969,7 @@ def build_artifact(args: argparse.Namespace) -> bool:
     restored_material = bool(args.cache_matched_key) or database_has_material(database_path)
     cached_state = read_cache_state(state_path)
 
-    query_started = monotonic_ms()
+    validation_started = monotonic_ms()
     cache_valid = (
         restored_material
         and provider_cache_tree_safe(provider, cache_root)
@@ -971,7 +978,7 @@ def build_artifact(args: argparse.Namespace) -> bool:
         and cached_state.get("revision") == base
         and validate_database(provider, executable, runtime_executable, query_adapter, environment, source_root)
     )
-    measured["queryMs"] = monotonic_ms() - query_started
+    measured["validationMs"] = monotonic_ms() - validation_started
     if args.cache_restore_outcome == "failure":
         add_diagnostic(diagnostics, "warning", "cache-restore-failed", "GitHub Actions cache restore failed; indexing continued without the restored database.")
     if restored_material and not cache_valid:
@@ -1019,7 +1026,7 @@ def build_artifact(args: argparse.Namespace) -> bool:
     if not cache_reused:
         validation_started = monotonic_ms()
         database_valid = validate_database(provider, executable, runtime_executable, query_adapter, environment, source_root)
-        measured["queryMs"] = int(measured["queryMs"] or 0) + monotonic_ms() - validation_started
+        measured["validationMs"] = int(measured["validationMs"] or 0) + monotonic_ms() - validation_started
     if not database_valid and not rebuilt:
         add_diagnostic(diagnostics, "warning", f"{provider}-post-index-invalid", f"{provider_name} validation failed after indexing; the database was rebuilt once.")
         clear_database(cache_root)
@@ -1029,7 +1036,7 @@ def build_artifact(args: argparse.Namespace) -> bool:
         rebuilt = True
         validation_started = monotonic_ms()
         database_valid = indexed and validate_database(provider, executable, runtime_executable, query_adapter, environment, source_root)
-        measured["queryMs"] = int(measured["queryMs"] or 0) + monotonic_ms() - validation_started
+        measured["validationMs"] = int(measured["validationMs"] or 0) + monotonic_ms() - validation_started
 
     if not database_valid:
         clear_database(cache_root)

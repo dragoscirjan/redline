@@ -757,6 +757,7 @@ function sumIndexTimings(cases: readonly BenchmarkCaseResult[]): CodeContextTimi
   return {
     installationMs: timings.reduce((total, item) => total + item.installationMs, 0),
     restoreMs: timings.reduce((total, item) => total + item.restoreMs, 0),
+    validationMs: timings.reduce((total, item) => total + (item.validationMs ?? 0), 0),
     indexMs: timings.reduce((total, item) => total + item.indexMs, 0),
     queryMs: timings.reduce((total, item) => total + item.queryMs, 0),
     saveMs: timings.every((item) => item.saveMs !== null)
@@ -880,7 +881,7 @@ export function renderBenchmarkMarkdown(report: BenchmarkReport): string {
       `- Indexed source: ${mode.codeContextSourceBytes} bytes across ${mode.codeContextRelatedSpans} spans in ${mode.codeContextFilesWithContext} reviewed files`,
       ...(mode.indexTimings === null
         ? ['- Recorded index timings: not applicable']
-        : [`- Recorded index timings: install ${mode.indexTimings.installationMs} ms, restore ${mode.indexTimings.restoreMs} ms, index ${mode.indexTimings.indexMs} ms, query ${mode.indexTimings.queryMs} ms, save ${mode.indexTimings.saveMs === null ? 'n/a' : `${mode.indexTimings.saveMs} ms`}`]),
+        : [`- Recorded index timings: install ${mode.indexTimings.installationMs} ms, restore ${mode.indexTimings.restoreMs} ms, validate ${mode.indexTimings.validationMs ?? 0} ms, index ${mode.indexTimings.indexMs} ms, query ${mode.indexTimings.queryMs} ms, save ${mode.indexTimings.saveMs === null ? 'n/a' : `${mode.indexTimings.saveMs} ms`}`]),
       '',
       '| Fixture | Kind | Review coverage | Indexed coverage | Expected | Root matches | Credited | Findings | False positives | Duplicates | Context spans | Context bytes | Prompt bytes | Duration ms |',
       '| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',

@@ -6,6 +6,7 @@ import type {
   CodeContextGraphReference,
   CodeContextProvider,
   CodeContextStatus,
+  CodeContextTimings,
 } from '../code-context/artifact.js';
 
 export type FindingScope = 'defects' | 'defects-and-risks';
@@ -145,8 +146,19 @@ export interface ReviewCodeContextCoverage {
   readonly reason: ReviewCodeContextReason | null;
 }
 
+export type ReviewCodeContextCacheStatus =
+  | 'restored'
+  | 'built'
+  | 'skipped'
+  | 'unavailable'
+  | 'not-applicable'
+  | 'unknown';
+
 export interface ReviewCodeContextRunCoverage extends ReviewCodeContextCoverage {
   readonly filesWithContext: number;
+  readonly cache: ReviewCodeContextCacheStatus;
+  readonly timings: CodeContextTimings | null;
+  readonly diagnosticCodes: readonly string[];
 }
 
 export const FILE_REVIEW_RECORD_VERSION = 4 as const;

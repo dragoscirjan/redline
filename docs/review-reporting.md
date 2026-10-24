@@ -131,7 +131,7 @@ Migration is explicit:
 - Version-2 harness documents remain accepted during migration. Redline maps their validated fields into version 4 records and labels every unavailable rich field as legacy-derived or unresolved; it does not reinterpret missing evidence as completed analysis.
 - Per-file record version 4 adds the rich finding and rejected-candidate contract.
 - PR-level record version 2 adds optional synthesis and publication coverage. The publish-only loader migrates legacy version-1 non-verified records; it rejects a verified version-1 record before migration so the synthesis-plan check cannot be bypassed.
-- Run summary version 3 remains unchanged as a subordinate compatibility artifact; it gains additive reuse telemetry and per-file execution fields.
+- Run summary version 3 remains unchanged as a subordinate compatibility artifact; it gains additive reuse telemetry, per-file execution fields, and indexed-context cache, diagnostic-code, and stage-timing telemetry.
 - Review policy `redline-file-review/v4` lives in `prompts/v7/`. Earlier prompts remain archived for versioned recordings.
 
 Fix execution and learning stages are not implemented. The follow-up worker and synthesis plan are implemented behind the verifier activation gate; they are not production quality claims.

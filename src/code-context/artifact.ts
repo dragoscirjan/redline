@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import { lstat, readFile } from 'node:fs/promises';
 
-export const CODE_CONTEXT_VERSION = 1 as const;
+export const LEGACY_CODE_CONTEXT_VERSION = 1 as const;
+export const CODE_CONTEXT_VERSION = 2 as const;
+export type CodeContextVersion = typeof LEGACY_CODE_CONTEXT_VERSION | typeof CODE_CONTEXT_VERSION;
 export const MAX_CODE_CONTEXT_ARTIFACT_BYTES = 128 * 1024;
 
 const MAX_FILES = 256;
@@ -59,13 +61,15 @@ export interface CodeContextDiagnostic {
 export interface CodeContextTimings {
   installationMs: number;
   restoreMs: number;
+  /** Separate bounded database validation time. Legacy v1 artifacts omit it. */
+  validationMs?: number | undefined;
   indexMs: number;
   queryMs: number;
   saveMs: number | null;
 }
 
 export interface CodeContextArtifact {
-  version: typeof CODE_CONTEXT_VERSION;
+  version: CodeContextVersion;
   provider: CodeContextProvider;
   repository: string;
   revision: string;
@@ -269,13 +273,26 @@ function parseDiagnostic(value: unknown, label: string): CodeContextDiagnostic {
   };
 }
 
-function parseTimings(value: unknown): CodeContextTimings {
+function parseTimings(value: unknown, version: CodeContextVersion): CodeContextTimings {
   const input = record(value, 'code-context.timings');
-  onlyKeys(input, ['installationMs', 'restoreMs', 'indexMs', 'queryMs', 'saveMs'], 'code-context.timings');
+  onlyKeys(
+    input,
+    version === LEGACY_CODE_CONTEXT_VERSION
+      ? ['installationMs', 'restoreMs', 'indexMs', 'queryMs', 'saveMs']
+      : ['installationMs', 'restoreMs', 'validationMs', 'indexMs', 'queryMs', 'saveMs'],
+    'code-context.timings',
+  );
+  const validationMs = input['validationMs'];
+  if (version === CODE_CONTEXT_VERSION && validationMs === undefined) {
+    throw new Error('code-context.timings.validationMs is required in version 2');
+  }
   const saveMs = input['saveMs'];
   return {
     installationMs: nonNegativeInteger(input['installationMs'], 'code-context.timings.installationMs'),
     restoreMs: nonNegativeInteger(input['restoreMs'], 'code-context.timings.restoreMs'),
+    ...(validationMs === undefined ? {} : {
+      validationMs: nonNegativeInteger(validationMs, 'code-context.timings.validationMs'),
+    }),
     indexMs: nonNegativeInteger(input['indexMs'], 'code-context.timings.indexMs'),
     queryMs: nonNegativeInteger(input['queryMs'], 'code-context.timings.queryMs'),
     saveMs: saveMs === null ? null : nonNegativeInteger(saveMs, 'code-context.timings.saveMs'),
@@ -294,7 +311,10 @@ function expectedAggregateStatus(files: readonly ChangedFileCodeContext[]): Code
 export function parseCodeContextArtifact(value: unknown): CodeContextArtifact {
   const input = record(value, 'code-context');
   onlyKeys(input, ['version', 'provider', 'repository', 'revision', 'baseRevision', 'status', 'files', 'diagnostics', 'timings'], 'code-context');
-  if (input['version'] !== CODE_CONTEXT_VERSION) throw new Error(`code-context.version must be ${CODE_CONTEXT_VERSION}`);
+  const version = input['version'];
+  if (version !== LEGACY_CODE_CONTEXT_VERSION && version !== CODE_CONTEXT_VERSION) {
+    throw new Error(`code-context.version must be ${LEGACY_CODE_CONTEXT_VERSION} or ${CODE_CONTEXT_VERSION}`);
+  }
 
   const provider = record(input['provider'], 'code-context.provider');
   onlyKeys(provider, ['id', 'version'], 'code-context.provider');
@@ -345,7 +365,7 @@ export function parseCodeContextArtifact(value: unknown): CodeContextArtifact {
   }
 
   return {
-    version: CODE_CONTEXT_VERSION,
+    version,
     provider: { id: providerId, version: providerVersion },
     repository,
     revision,
@@ -353,7 +373,7 @@ export function parseCodeContextArtifact(value: unknown): CodeContextArtifact {
     status: artifactStatus,
     files,
     diagnostics,
-    timings: parseTimings(input['timings']),
+    timings: parseTimings(input['timings'], version),
   };
 }
 

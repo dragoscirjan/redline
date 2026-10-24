@@ -1,0 +1,803 @@
+{
+  "version": 1,
+  "capturedAt": "2026-10-24T17:27:38Z",
+  "environment": {
+    "os": "Linux",
+    "architecture": "x86_64",
+    "node": "24",
+    "python": "3.12",
+    "actionPath": "github/code-index"
+  },
+  "repositoryClasses": [
+    {
+      "id": "two-file-typescript",
+      "kind": "synthetic",
+      "description": "Changed TypeScript cache-key function with one source-confirmed caller.",
+      "base": "8b00713382196ce452053751e4a23700227b02bf",
+      "head": "f324ecd284df4d88509e04387bb2835445d335ad",
+      "changedPaths": [
+        "src/cache.ts"
+      ],
+      "samples": {
+        "cgc": {
+          "version": "0.5.7",
+          "license": {
+            "id": "MIT",
+            "commercialUse": "allowed",
+            "url": "https://opensource.org/license/mit"
+          },
+          "distribution": "digest-pinned standalone Linux x64 binary",
+          "observations": [
+            {
+              "condition": "cold",
+              "sample": 1,
+              "status": "partial",
+              "files": 1,
+              "filesWithRelatedSpans": 0,
+              "relatedSpans": 0,
+              "timings": {
+                "installationMs": 2444,
+                "restoreMs": 57,
+                "validationMs": 5959,
+                "indexMs": 7674,
+                "queryMs": 11934,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cgc-incoming-query-failed",
+                "cgc-query-partial"
+              ],
+              "wallMs": 25635,
+              "cacheSizeBytes": 16621884,
+              "supportedFiles": 1,
+              "sourceBytes": 0
+            },
+            {
+              "condition": "warm",
+              "sample": 1,
+              "status": "partial",
+              "files": 1,
+              "filesWithRelatedSpans": 0,
+              "relatedSpans": 0,
+              "timings": {
+                "installationMs": 2005,
+                "restoreMs": 60,
+                "validationMs": 5998,
+                "indexMs": 0,
+                "queryMs": 11927,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cache-base-revision",
+                "cgc-incoming-query-failed",
+                "cgc-query-partial"
+              ],
+              "wallMs": 17992,
+              "cacheSizeBytes": 16621884,
+              "supportedFiles": 1,
+              "sourceBytes": 0
+            },
+            {
+              "condition": "cold",
+              "sample": 2,
+              "status": "partial",
+              "files": 1,
+              "filesWithRelatedSpans": 0,
+              "relatedSpans": 0,
+              "timings": {
+                "installationMs": 2009,
+                "restoreMs": 42,
+                "validationMs": 5990,
+                "indexMs": 7875,
+                "queryMs": 11937,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cgc-incoming-query-failed",
+                "cgc-query-partial"
+              ],
+              "wallMs": 25867,
+              "cacheSizeBytes": 16621884,
+              "supportedFiles": 1,
+              "sourceBytes": 0
+            },
+            {
+              "condition": "warm",
+              "sample": 2,
+              "status": "partial",
+              "files": 1,
+              "filesWithRelatedSpans": 0,
+              "relatedSpans": 0,
+              "timings": {
+                "installationMs": 2282,
+                "restoreMs": 61,
+                "validationMs": 6104,
+                "indexMs": 0,
+                "queryMs": 11939,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cache-base-revision",
+                "cgc-incoming-query-failed",
+                "cgc-query-partial"
+              ],
+              "wallMs": 18110,
+              "cacheSizeBytes": 16621884,
+              "supportedFiles": 1,
+              "sourceBytes": 0
+            },
+            {
+              "condition": "cold",
+              "sample": 3,
+              "status": "partial",
+              "files": 1,
+              "filesWithRelatedSpans": 0,
+              "relatedSpans": 0,
+              "timings": {
+                "installationMs": 1946,
+                "restoreMs": 59,
+                "validationMs": 5993,
+                "indexMs": 7524,
+                "queryMs": 11964,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cgc-incoming-query-failed",
+                "cgc-query-partial"
+              ],
+              "wallMs": 25549,
+              "cacheSizeBytes": 16621884,
+              "supportedFiles": 1,
+              "sourceBytes": 0
+            },
+            {
+              "condition": "warm",
+              "sample": 3,
+              "status": "partial",
+              "files": 1,
+              "filesWithRelatedSpans": 0,
+              "relatedSpans": 0,
+              "timings": {
+                "installationMs": 1904,
+                "restoreMs": 60,
+                "validationMs": 5982,
+                "indexMs": 0,
+                "queryMs": 11940,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cache-base-revision",
+                "cgc-incoming-query-failed",
+                "cgc-query-partial"
+              ],
+              "wallMs": 17992,
+              "cacheSizeBytes": 16621884,
+              "supportedFiles": 1,
+              "sourceBytes": 0
+            }
+          ]
+        },
+        "gitnexus": {
+          "version": "1.6.12",
+          "license": {
+            "id": "PolyForm-Noncommercial-1.0.0",
+            "commercialUse": "conditional",
+            "url": "https://polyformproject.org/licenses/noncommercial/1.0.0/"
+          },
+          "distribution": "digest-pinned npm archive and lockfile; lifecycle scripts and embeddings disabled",
+          "observations": [
+            {
+              "condition": "cold",
+              "sample": 1,
+              "status": "complete",
+              "files": 1,
+              "filesWithRelatedSpans": 1,
+              "relatedSpans": 1,
+              "timings": {
+                "installationMs": 5536,
+                "restoreMs": 48,
+                "validationMs": 139,
+                "indexMs": 2867,
+                "queryMs": 296,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision"
+              ],
+              "wallMs": 3380,
+              "cacheSizeBytes": 2855921,
+              "supportedFiles": 1,
+              "sourceBytes": 113
+            },
+            {
+              "condition": "warm",
+              "sample": 1,
+              "status": "complete",
+              "files": 1,
+              "filesWithRelatedSpans": 1,
+              "relatedSpans": 1,
+              "timings": {
+                "installationMs": 5602,
+                "restoreMs": 67,
+                "validationMs": 142,
+                "indexMs": 0,
+                "queryMs": 304,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cache-base-revision"
+              ],
+              "wallMs": 511,
+              "cacheSizeBytes": 2855921,
+              "supportedFiles": 1,
+              "sourceBytes": 113
+            },
+            {
+              "condition": "cold",
+              "sample": 2,
+              "status": "complete",
+              "files": 1,
+              "filesWithRelatedSpans": 1,
+              "relatedSpans": 1,
+              "timings": {
+                "installationMs": 5409,
+                "restoreMs": 59,
+                "validationMs": 132,
+                "indexMs": 2718,
+                "queryMs": 293,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision"
+              ],
+              "wallMs": 3205,
+              "cacheSizeBytes": 2855921,
+              "supportedFiles": 1,
+              "sourceBytes": 113
+            },
+            {
+              "condition": "warm",
+              "sample": 2,
+              "status": "complete",
+              "files": 1,
+              "filesWithRelatedSpans": 1,
+              "relatedSpans": 1,
+              "timings": {
+                "installationMs": 5657,
+                "restoreMs": 61,
+                "validationMs": 136,
+                "indexMs": 0,
+                "queryMs": 294,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cache-base-revision"
+              ],
+              "wallMs": 506,
+              "cacheSizeBytes": 2855921,
+              "supportedFiles": 1,
+              "sourceBytes": 113
+            },
+            {
+              "condition": "cold",
+              "sample": 3,
+              "status": "complete",
+              "files": 1,
+              "filesWithRelatedSpans": 1,
+              "relatedSpans": 1,
+              "timings": {
+                "installationMs": 5435,
+                "restoreMs": 60,
+                "validationMs": 143,
+                "indexMs": 2818,
+                "queryMs": 287,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision"
+              ],
+              "wallMs": 3311,
+              "cacheSizeBytes": 2855921,
+              "supportedFiles": 1,
+              "sourceBytes": 113
+            },
+            {
+              "condition": "warm",
+              "sample": 3,
+              "status": "complete",
+              "files": 1,
+              "filesWithRelatedSpans": 1,
+              "relatedSpans": 1,
+              "timings": {
+                "installationMs": 5532,
+                "restoreMs": 61,
+                "validationMs": 137,
+                "indexMs": 0,
+                "queryMs": 292,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cache-base-revision"
+              ],
+              "wallMs": 509,
+              "cacheSizeBytes": 2855921,
+              "supportedFiles": 1,
+              "sourceBytes": 113
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "redline-typescript",
+      "kind": "real",
+      "description": "Redline repository with one trusted benchmark-only change to src/review/indexed-context.ts; repository code was not executed.",
+      "base": "2b7cac37cf1a317ec6dbf0ca7744aa2a8effad06",
+      "head": "70c6bcbf5019eded8c94c09f7d9be86a80602916",
+      "changedPaths": [
+        "src/review/indexed-context.ts"
+      ],
+      "samples": {
+        "cgc": {
+          "version": "0.5.7",
+          "license": {
+            "id": "MIT",
+            "commercialUse": "allowed",
+            "url": "https://opensource.org/license/mit"
+          },
+          "distribution": "digest-pinned standalone Linux x64 binary",
+          "observations": [
+            {
+              "condition": "cold",
+              "sample": 1,
+              "status": "partial",
+              "files": 1,
+              "filesWithRelatedSpans": 0,
+              "relatedSpans": 0,
+              "timings": {
+                "installationMs": 2046,
+                "restoreMs": 59,
+                "validationMs": 5963,
+                "indexMs": 67716,
+                "queryMs": 12054,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cgc-incoming-query-failed",
+                "cgc-query-partial"
+              ],
+              "wallMs": 85818,
+              "cacheSizeBytes": 92967228,
+              "supportedFiles": 1,
+              "sourceBytes": 0
+            },
+            {
+              "condition": "warm",
+              "sample": 1,
+              "status": "partial",
+              "files": 1,
+              "filesWithRelatedSpans": 0,
+              "relatedSpans": 0,
+              "timings": {
+                "installationMs": 2119,
+                "restoreMs": 54,
+                "validationMs": 5983,
+                "indexMs": 0,
+                "queryMs": 11951,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cache-base-revision",
+                "cgc-incoming-query-failed",
+                "cgc-query-partial"
+              ],
+              "wallMs": 18019,
+              "cacheSizeBytes": 92967228,
+              "supportedFiles": 1,
+              "sourceBytes": 0
+            },
+            {
+              "condition": "cold",
+              "sample": 2,
+              "status": "partial",
+              "files": 1,
+              "filesWithRelatedSpans": 0,
+              "relatedSpans": 0,
+              "timings": {
+                "installationMs": 1985,
+                "restoreMs": 60,
+                "validationMs": 6082,
+                "indexMs": 67766,
+                "queryMs": 11960,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cgc-incoming-query-failed",
+                "cgc-query-partial"
+              ],
+              "wallMs": 85893,
+              "cacheSizeBytes": 92799292,
+              "supportedFiles": 1,
+              "sourceBytes": 0
+            },
+            {
+              "condition": "warm",
+              "sample": 2,
+              "status": "partial",
+              "files": 1,
+              "filesWithRelatedSpans": 0,
+              "relatedSpans": 0,
+              "timings": {
+                "installationMs": 2099,
+                "restoreMs": 69,
+                "validationMs": 6086,
+                "indexMs": 0,
+                "queryMs": 11935,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cache-base-revision",
+                "cgc-incoming-query-failed",
+                "cgc-query-partial"
+              ],
+              "wallMs": 18103,
+              "cacheSizeBytes": 92799292,
+              "supportedFiles": 1,
+              "sourceBytes": 0
+            },
+            {
+              "condition": "cold",
+              "sample": 3,
+              "status": "partial",
+              "files": 1,
+              "filesWithRelatedSpans": 0,
+              "relatedSpans": 0,
+              "timings": {
+                "installationMs": 2054,
+                "restoreMs": 43,
+                "validationMs": 6089,
+                "indexMs": 67216,
+                "queryMs": 11938,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cgc-incoming-query-failed",
+                "cgc-query-partial"
+              ],
+              "wallMs": 85326,
+              "cacheSizeBytes": 93069628,
+              "supportedFiles": 1,
+              "sourceBytes": 0
+            },
+            {
+              "condition": "warm",
+              "sample": 3,
+              "status": "partial",
+              "files": 1,
+              "filesWithRelatedSpans": 0,
+              "relatedSpans": 0,
+              "timings": {
+                "installationMs": 2155,
+                "restoreMs": 69,
+                "validationMs": 6006,
+                "indexMs": 0,
+                "queryMs": 12033,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cache-base-revision",
+                "cgc-incoming-query-failed",
+                "cgc-query-partial"
+              ],
+              "wallMs": 18123,
+              "cacheSizeBytes": 93069628,
+              "supportedFiles": 1,
+              "sourceBytes": 0
+            }
+          ]
+        },
+        "gitnexus": {
+          "version": "1.6.12",
+          "license": {
+            "id": "PolyForm-Noncommercial-1.0.0",
+            "commercialUse": "conditional",
+            "url": "https://polyformproject.org/licenses/noncommercial/1.0.0/"
+          },
+          "distribution": "digest-pinned npm archive and lockfile; lifecycle scripts and embeddings disabled",
+          "observations": [
+            {
+              "condition": "cold",
+              "sample": 1,
+              "status": "complete",
+              "files": 1,
+              "filesWithRelatedSpans": 1,
+              "relatedSpans": 7,
+              "timings": {
+                "installationMs": 6500,
+                "restoreMs": 60,
+                "validationMs": 137,
+                "indexMs": 7078,
+                "queryMs": 309,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision"
+              ],
+              "wallMs": 7615,
+              "cacheSizeBytes": 63673133,
+              "supportedFiles": 1,
+              "sourceBytes": 12950
+            },
+            {
+              "condition": "warm",
+              "sample": 1,
+              "status": "complete",
+              "files": 1,
+              "filesWithRelatedSpans": 1,
+              "relatedSpans": 7,
+              "timings": {
+                "installationMs": 5611,
+                "restoreMs": 59,
+                "validationMs": 147,
+                "indexMs": 0,
+                "queryMs": 308,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cache-base-revision"
+              ],
+              "wallMs": 537,
+              "cacheSizeBytes": 63673133,
+              "supportedFiles": 1,
+              "sourceBytes": 12950
+            },
+            {
+              "condition": "cold",
+              "sample": 2,
+              "status": "complete",
+              "files": 1,
+              "filesWithRelatedSpans": 1,
+              "relatedSpans": 7,
+              "timings": {
+                "installationMs": 5369,
+                "restoreMs": 60,
+                "validationMs": 142,
+                "indexMs": 7225,
+                "queryMs": 300,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision"
+              ],
+              "wallMs": 7764,
+              "cacheSizeBytes": 63673133,
+              "supportedFiles": 1,
+              "sourceBytes": 12950
+            },
+            {
+              "condition": "warm",
+              "sample": 2,
+              "status": "complete",
+              "files": 1,
+              "filesWithRelatedSpans": 1,
+              "relatedSpans": 7,
+              "timings": {
+                "installationMs": 6047,
+                "restoreMs": 71,
+                "validationMs": 146,
+                "indexMs": 0,
+                "queryMs": 310,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cache-base-revision"
+              ],
+              "wallMs": 561,
+              "cacheSizeBytes": 63673133,
+              "supportedFiles": 1,
+              "sourceBytes": 12950
+            },
+            {
+              "condition": "cold",
+              "sample": 3,
+              "status": "complete",
+              "files": 1,
+              "filesWithRelatedSpans": 1,
+              "relatedSpans": 7,
+              "timings": {
+                "installationMs": 5383,
+                "restoreMs": 45,
+                "validationMs": 144,
+                "indexMs": 7029,
+                "queryMs": 314,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision"
+              ],
+              "wallMs": 7570,
+              "cacheSizeBytes": 63673133,
+              "supportedFiles": 1,
+              "sourceBytes": 12950
+            },
+            {
+              "condition": "warm",
+              "sample": 3,
+              "status": "complete",
+              "files": 1,
+              "filesWithRelatedSpans": 1,
+              "relatedSpans": 7,
+              "timings": {
+                "installationMs": 5422,
+                "restoreMs": 60,
+                "validationMs": 152,
+                "indexMs": 0,
+                "queryMs": 310,
+                "saveMs": null
+              },
+              "diagnostics": [
+                "graph-base-revision",
+                "cache-base-revision"
+              ],
+              "wallMs": 559,
+              "cacheSizeBytes": 63673133,
+              "supportedFiles": 1,
+              "sourceBytes": 12950
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "productionWarmups": {
+    "cgc": [
+      {
+        "source": "https://github.com/dragoscirjan/redline/actions/runs/40095207134",
+        "revision": "6cbe668dc5658a148a3870d047133c709704ccee",
+        "indexMs": 102369,
+        "durationMs": 112698,
+        "cacheSizeBytes": 92233999,
+        "result": "saved"
+      },
+      {
+        "source": "https://github.com/dragoscirjan/redline/actions/runs/40111198078",
+        "revision": "fc90d0fbf51cd324df0a92a0e5b6141b7add13cc",
+        "indexMs": 79023,
+        "durationMs": 89387,
+        "cacheSizeBytes": 92233999,
+        "result": "saved"
+      },
+      {
+        "source": "https://github.com/dragoscirjan/redline/actions/runs/40113723863",
+        "revision": "2b7cac37cf1a317ec6dbf0ca7744aa2a8effad06",
+        "indexMs": 92232,
+        "durationMs": 102108,
+        "cacheSizeBytes": 92233999,
+        "result": "saved"
+      }
+    ],
+    "gitnexus": [
+      {
+        "source": "https://github.com/dragoscirjan/redline/actions/runs/40095207134",
+        "revision": "6cbe668dc5658a148a3870d047133c709704ccee",
+        "indexMs": 17429,
+        "durationMs": 36278,
+        "cacheSizeBytes": 63672515,
+        "result": "saved"
+      },
+      {
+        "source": "https://github.com/dragoscirjan/redline/actions/runs/40111198078",
+        "revision": "fc90d0fbf51cd324df0a92a0e5b6141b7add13cc",
+        "indexMs": 18144,
+        "durationMs": 40569,
+        "cacheSizeBytes": 63672515,
+        "result": "saved"
+      },
+      {
+        "source": "https://github.com/dragoscirjan/redline/actions/runs/40113723863",
+        "revision": "2b7cac37cf1a317ec6dbf0ca7744aa2a8effad06",
+        "indexMs": 15416,
+        "durationMs": 35795,
+        "cacheSizeBytes": 63672515,
+        "result": "saved"
+      }
+    ]
+  },
+  "followUp": {
+    "fixture": "two-file-typescript",
+    "capability": "related-spans",
+    "direction": "incoming",
+    "providers": {
+      "cgc": {
+        "samplesMs": [
+          5963,
+          5972,
+          5976,
+          5988,
+          6083
+        ],
+        "source": "benchmark/review-quality/follow-up-v1/live-providers/report.json",
+        "status": "complete",
+        "sourceConfirmedSpans": 1
+      },
+      "gitnexus": {
+        "samplesMs": [
+          141,
+          143,
+          144,
+          148,
+          153
+        ],
+        "source": "benchmark/review-quality/follow-up-v1/live-providers/report.json",
+        "status": "complete",
+        "sourceConfirmedSpans": 1
+      }
+    }
+  },
+  "quality": {
+    "recordedComparison": {
+      "source": "benchmark/review-quality/v2/comparison/report.json",
+      "expectedIssues": 2,
+      "fileOnlyCreditedIssues": 1,
+      "indexedCreditedIssues": 2,
+      "fileOnlyFalsePositives": 1,
+      "indexedFalsePositives": 0,
+      "promptBytesAdded": 1039,
+      "sourceBytesAdded": 216,
+      "interpretation": "Scripted provider-neutral recordings show possible review value, not live provider reliability."
+    },
+    "liveModel": {
+      "source": "benchmark/review-quality/v2/live-model/report.json",
+      "expectedIssues": 2,
+      "fileOnlyCreditedIssues": 2,
+      "indexedCreditedIssues": 2,
+      "fileOnlyFalsePositives": 0,
+      "indexedFalsePositives": 0,
+      "promptBytesAdded": 1039,
+      "sourceBytesAdded": 216,
+      "interpretation": "The historical live model run showed no review-quality gain from indexed context."
+    }
+  },
+  "coldSkip": {
+    "unsupportedOnly": {
+      "coveredBy": "test/code-index-action.bats",
+      "diagnostics": [
+        "no-supported-changed-files",
+        "cold-index-skipped"
+      ],
+      "indexMs": 0
+    },
+    "allHeadNewSupported": {
+      "coveredBy": "test/code-index-action.bats",
+      "diagnostics": [
+        "changed-file-absent-from-base",
+        "no-base-query-anchors",
+        "cold-index-skipped"
+      ],
+      "indexMs": 0
+    }
+  },
+  "recommendation": {
+    "defaultProvider": "cgc",
+    "changeDefault": false,
+    "enableVerification": false,
+    "reason": "GitNexus was faster and returned complete related spans in these captures, but its PolyForm Noncommercial license is not suitable as an unconditional default. CGC remained partial with zero related spans in every current cold and warm fixture sample. Existing review-quality evidence does not justify a default-provider change or verification activation."
+  }
+}

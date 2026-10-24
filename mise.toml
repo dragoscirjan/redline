@@ -26,6 +26,10 @@ run = "pnpm run benchmark:performance"
 description = "Run the opt-in live 20-file performance capture"
 run = "pnpm run benchmark:performance:live"
 
+[tasks."benchmark:code-index-value"]
+description = "Regenerate the checked-in code-index provider value report"
+run = "pnpm run benchmark:code-index-value"
+
 [tasks."benchmark:live-verification"]
 description = "Opt-in independent live discovery-to-verifier capture; never runs in CI"
 run = "pnpm run benchmark:live-verification"

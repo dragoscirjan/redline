@@ -35,7 +35,7 @@
 - Recorded review duration: 39 ms
 - Indexed coverage: disabled 0, complete 4, partial 0, unsupported 0, unavailable 0
 - Indexed source: 216 bytes across 2 spans in 2 reviewed files
-- Recorded index timings: install 0 ms, restore 0 ms, index 0 ms, query 0 ms, save n/a
+- Recorded index timings: install 0 ms, restore 0 ms, validate 0 ms, index 0 ms, query 0 ms, save n/a
 
 | Fixture | Kind | Review coverage | Indexed coverage | Expected | Root matches | Credited | Findings | False positives | Duplicates | Context spans | Context bytes | Prompt bytes | Duration ms |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

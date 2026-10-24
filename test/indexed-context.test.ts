@@ -15,7 +15,7 @@ const REPOSITORY = 'owner/repository';
 
 function artifact(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    version: 1,
+    version: 2,
     provider: { id: 'cgc', version: '0.5.7' },
     repository: REPOSITORY,
     revision: HEAD_SHA,
@@ -35,7 +35,7 @@ function artifact(overrides: Record<string, unknown> = {}): Record<string, unkno
       },
     ],
     diagnostics: [],
-    timings: { installationMs: 1, restoreMs: 2, indexMs: 3, queryMs: 4, saveMs: null },
+    timings: { installationMs: 1, restoreMs: 2, validationMs: 3, indexMs: 4, queryMs: 5, saveMs: null },
     ...overrides,
   };
 }
@@ -60,6 +60,9 @@ describe('review indexed context', () => {
         status: 'complete',
         filesWithContext: 1,
         relatedSpans: 1,
+        cache: 'built',
+        timings: { validationMs: 3, indexMs: 4, queryMs: 5 },
+        diagnosticCodes: [],
       });
       expect(selected.coverage).toMatchObject({ status: 'complete', relatedSpans: 1 });
       expect(selected.prompt?.related).toEqual([

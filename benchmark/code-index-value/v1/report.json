@@ -1,0 +1,982 @@
+{
+  "version": 1,
+  "captureVersion": 1,
+  "capturedAt": "2026-10-24T17:27:38Z",
+  "environment": {
+    "os": "Linux",
+    "architecture": "x86_64",
+    "node": "24",
+    "python": "3.12",
+    "actionPath": "github/code-index"
+  },
+  "repositoryClasses": [
+    {
+      "id": "two-file-typescript",
+      "kind": "synthetic",
+      "description": "Changed TypeScript cache-key function with one source-confirmed caller.",
+      "changedPaths": [
+        "src/cache.ts"
+      ],
+      "providers": [
+        {
+          "id": "cgc",
+          "version": "0.5.7",
+          "license": {
+            "id": "MIT",
+            "commercialUse": "allowed",
+            "url": "https://opensource.org/license/mit"
+          },
+          "distribution": "digest-pinned standalone Linux x64 binary",
+          "conditions": [
+            {
+              "condition": "cold",
+              "samples": 3,
+              "statuses": {
+                "complete": 0,
+                "partial": 3,
+                "unsupported": 0,
+                "unavailable": 0
+              },
+              "cacheHits": 0,
+              "cacheHitRate": 0,
+              "supportedFiles": {
+                "samples": 3,
+                "minimum": 1,
+                "p50NearestRank": 1,
+                "p95NearestRank": 1,
+                "maximum": 1
+              },
+              "filesWithRelatedSpans": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "relatedSpans": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "sourceBytes": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "installationMs": {
+                "samples": 3,
+                "minimum": 1946,
+                "p50NearestRank": 2009,
+                "p95NearestRank": 2444,
+                "maximum": 2444
+              },
+              "restoreMs": {
+                "samples": 3,
+                "minimum": 42,
+                "p50NearestRank": 57,
+                "p95NearestRank": 59,
+                "maximum": 59
+              },
+              "validationMs": {
+                "samples": 3,
+                "minimum": 5959,
+                "p50NearestRank": 5990,
+                "p95NearestRank": 5993,
+                "maximum": 5993
+              },
+              "indexMs": {
+                "samples": 3,
+                "minimum": 7524,
+                "p50NearestRank": 7674,
+                "p95NearestRank": 7875,
+                "maximum": 7875
+              },
+              "queryMs": {
+                "samples": 3,
+                "minimum": 11934,
+                "p50NearestRank": 11937,
+                "p95NearestRank": 11964,
+                "maximum": 11964
+              },
+              "wallMs": {
+                "samples": 3,
+                "minimum": 25549,
+                "p50NearestRank": 25635,
+                "p95NearestRank": 25867,
+                "maximum": 25867
+              },
+              "cacheSizeBytes": {
+                "samples": 3,
+                "minimum": 16621884,
+                "p50NearestRank": 16621884,
+                "p95NearestRank": 16621884,
+                "maximum": 16621884
+              },
+              "diagnostics": {
+                "cgc-incoming-query-failed": 3,
+                "cgc-query-partial": 3,
+                "graph-base-revision": 3
+              }
+            },
+            {
+              "condition": "warm",
+              "samples": 3,
+              "statuses": {
+                "complete": 0,
+                "partial": 3,
+                "unsupported": 0,
+                "unavailable": 0
+              },
+              "cacheHits": 3,
+              "cacheHitRate": 1,
+              "supportedFiles": {
+                "samples": 3,
+                "minimum": 1,
+                "p50NearestRank": 1,
+                "p95NearestRank": 1,
+                "maximum": 1
+              },
+              "filesWithRelatedSpans": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "relatedSpans": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "sourceBytes": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "installationMs": {
+                "samples": 3,
+                "minimum": 1904,
+                "p50NearestRank": 2005,
+                "p95NearestRank": 2282,
+                "maximum": 2282
+              },
+              "restoreMs": {
+                "samples": 3,
+                "minimum": 60,
+                "p50NearestRank": 60,
+                "p95NearestRank": 61,
+                "maximum": 61
+              },
+              "validationMs": {
+                "samples": 3,
+                "minimum": 5982,
+                "p50NearestRank": 5998,
+                "p95NearestRank": 6104,
+                "maximum": 6104
+              },
+              "indexMs": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "queryMs": {
+                "samples": 3,
+                "minimum": 11927,
+                "p50NearestRank": 11939,
+                "p95NearestRank": 11940,
+                "maximum": 11940
+              },
+              "wallMs": {
+                "samples": 3,
+                "minimum": 17992,
+                "p50NearestRank": 17992,
+                "p95NearestRank": 18110,
+                "maximum": 18110
+              },
+              "cacheSizeBytes": {
+                "samples": 3,
+                "minimum": 16621884,
+                "p50NearestRank": 16621884,
+                "p95NearestRank": 16621884,
+                "maximum": 16621884
+              },
+              "diagnostics": {
+                "cache-base-revision": 3,
+                "cgc-incoming-query-failed": 3,
+                "cgc-query-partial": 3,
+                "graph-base-revision": 3
+              }
+            }
+          ],
+          "warmIndexP95SavedMs": 7875,
+          "warmWallP95SavedMs": 7757
+        },
+        {
+          "id": "gitnexus",
+          "version": "1.6.12",
+          "license": {
+            "id": "PolyForm-Noncommercial-1.0.0",
+            "commercialUse": "conditional",
+            "url": "https://polyformproject.org/licenses/noncommercial/1.0.0/"
+          },
+          "distribution": "digest-pinned npm archive and lockfile; lifecycle scripts and embeddings disabled",
+          "conditions": [
+            {
+              "condition": "cold",
+              "samples": 3,
+              "statuses": {
+                "complete": 3,
+                "partial": 0,
+                "unsupported": 0,
+                "unavailable": 0
+              },
+              "cacheHits": 0,
+              "cacheHitRate": 0,
+              "supportedFiles": {
+                "samples": 3,
+                "minimum": 1,
+                "p50NearestRank": 1,
+                "p95NearestRank": 1,
+                "maximum": 1
+              },
+              "filesWithRelatedSpans": {
+                "samples": 3,
+                "minimum": 1,
+                "p50NearestRank": 1,
+                "p95NearestRank": 1,
+                "maximum": 1
+              },
+              "relatedSpans": {
+                "samples": 3,
+                "minimum": 1,
+                "p50NearestRank": 1,
+                "p95NearestRank": 1,
+                "maximum": 1
+              },
+              "sourceBytes": {
+                "samples": 3,
+                "minimum": 113,
+                "p50NearestRank": 113,
+                "p95NearestRank": 113,
+                "maximum": 113
+              },
+              "installationMs": {
+                "samples": 3,
+                "minimum": 5409,
+                "p50NearestRank": 5435,
+                "p95NearestRank": 5536,
+                "maximum": 5536
+              },
+              "restoreMs": {
+                "samples": 3,
+                "minimum": 48,
+                "p50NearestRank": 59,
+                "p95NearestRank": 60,
+                "maximum": 60
+              },
+              "validationMs": {
+                "samples": 3,
+                "minimum": 132,
+                "p50NearestRank": 139,
+                "p95NearestRank": 143,
+                "maximum": 143
+              },
+              "indexMs": {
+                "samples": 3,
+                "minimum": 2718,
+                "p50NearestRank": 2818,
+                "p95NearestRank": 2867,
+                "maximum": 2867
+              },
+              "queryMs": {
+                "samples": 3,
+                "minimum": 287,
+                "p50NearestRank": 293,
+                "p95NearestRank": 296,
+                "maximum": 296
+              },
+              "wallMs": {
+                "samples": 3,
+                "minimum": 3205,
+                "p50NearestRank": 3311,
+                "p95NearestRank": 3380,
+                "maximum": 3380
+              },
+              "cacheSizeBytes": {
+                "samples": 3,
+                "minimum": 2855921,
+                "p50NearestRank": 2855921,
+                "p95NearestRank": 2855921,
+                "maximum": 2855921
+              },
+              "diagnostics": {
+                "graph-base-revision": 3
+              }
+            },
+            {
+              "condition": "warm",
+              "samples": 3,
+              "statuses": {
+                "complete": 3,
+                "partial": 0,
+                "unsupported": 0,
+                "unavailable": 0
+              },
+              "cacheHits": 3,
+              "cacheHitRate": 1,
+              "supportedFiles": {
+                "samples": 3,
+                "minimum": 1,
+                "p50NearestRank": 1,
+                "p95NearestRank": 1,
+                "maximum": 1
+              },
+              "filesWithRelatedSpans": {
+                "samples": 3,
+                "minimum": 1,
+                "p50NearestRank": 1,
+                "p95NearestRank": 1,
+                "maximum": 1
+              },
+              "relatedSpans": {
+                "samples": 3,
+                "minimum": 1,
+                "p50NearestRank": 1,
+                "p95NearestRank": 1,
+                "maximum": 1
+              },
+              "sourceBytes": {
+                "samples": 3,
+                "minimum": 113,
+                "p50NearestRank": 113,
+                "p95NearestRank": 113,
+                "maximum": 113
+              },
+              "installationMs": {
+                "samples": 3,
+                "minimum": 5532,
+                "p50NearestRank": 5602,
+                "p95NearestRank": 5657,
+                "maximum": 5657
+              },
+              "restoreMs": {
+                "samples": 3,
+                "minimum": 61,
+                "p50NearestRank": 61,
+                "p95NearestRank": 67,
+                "maximum": 67
+              },
+              "validationMs": {
+                "samples": 3,
+                "minimum": 136,
+                "p50NearestRank": 137,
+                "p95NearestRank": 142,
+                "maximum": 142
+              },
+              "indexMs": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "queryMs": {
+                "samples": 3,
+                "minimum": 292,
+                "p50NearestRank": 294,
+                "p95NearestRank": 304,
+                "maximum": 304
+              },
+              "wallMs": {
+                "samples": 3,
+                "minimum": 506,
+                "p50NearestRank": 509,
+                "p95NearestRank": 511,
+                "maximum": 511
+              },
+              "cacheSizeBytes": {
+                "samples": 3,
+                "minimum": 2855921,
+                "p50NearestRank": 2855921,
+                "p95NearestRank": 2855921,
+                "maximum": 2855921
+              },
+              "diagnostics": {
+                "cache-base-revision": 3,
+                "graph-base-revision": 3
+              }
+            }
+          ],
+          "warmIndexP95SavedMs": 2867,
+          "warmWallP95SavedMs": 2869
+        }
+      ]
+    },
+    {
+      "id": "redline-typescript",
+      "kind": "real",
+      "description": "Redline repository with one trusted benchmark-only change to src/review/indexed-context.ts; repository code was not executed.",
+      "changedPaths": [
+        "src/review/indexed-context.ts"
+      ],
+      "providers": [
+        {
+          "id": "cgc",
+          "version": "0.5.7",
+          "license": {
+            "id": "MIT",
+            "commercialUse": "allowed",
+            "url": "https://opensource.org/license/mit"
+          },
+          "distribution": "digest-pinned standalone Linux x64 binary",
+          "conditions": [
+            {
+              "condition": "cold",
+              "samples": 3,
+              "statuses": {
+                "complete": 0,
+                "partial": 3,
+                "unsupported": 0,
+                "unavailable": 0
+              },
+              "cacheHits": 0,
+              "cacheHitRate": 0,
+              "supportedFiles": {
+                "samples": 3,
+                "minimum": 1,
+                "p50NearestRank": 1,
+                "p95NearestRank": 1,
+                "maximum": 1
+              },
+              "filesWithRelatedSpans": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "relatedSpans": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "sourceBytes": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "installationMs": {
+                "samples": 3,
+                "minimum": 1985,
+                "p50NearestRank": 2046,
+                "p95NearestRank": 2054,
+                "maximum": 2054
+              },
+              "restoreMs": {
+                "samples": 3,
+                "minimum": 43,
+                "p50NearestRank": 59,
+                "p95NearestRank": 60,
+                "maximum": 60
+              },
+              "validationMs": {
+                "samples": 3,
+                "minimum": 5963,
+                "p50NearestRank": 6082,
+                "p95NearestRank": 6089,
+                "maximum": 6089
+              },
+              "indexMs": {
+                "samples": 3,
+                "minimum": 67216,
+                "p50NearestRank": 67716,
+                "p95NearestRank": 67766,
+                "maximum": 67766
+              },
+              "queryMs": {
+                "samples": 3,
+                "minimum": 11938,
+                "p50NearestRank": 11960,
+                "p95NearestRank": 12054,
+                "maximum": 12054
+              },
+              "wallMs": {
+                "samples": 3,
+                "minimum": 85326,
+                "p50NearestRank": 85818,
+                "p95NearestRank": 85893,
+                "maximum": 85893
+              },
+              "cacheSizeBytes": {
+                "samples": 3,
+                "minimum": 92799292,
+                "p50NearestRank": 92967228,
+                "p95NearestRank": 93069628,
+                "maximum": 93069628
+              },
+              "diagnostics": {
+                "cgc-incoming-query-failed": 3,
+                "cgc-query-partial": 3,
+                "graph-base-revision": 3
+              }
+            },
+            {
+              "condition": "warm",
+              "samples": 3,
+              "statuses": {
+                "complete": 0,
+                "partial": 3,
+                "unsupported": 0,
+                "unavailable": 0
+              },
+              "cacheHits": 3,
+              "cacheHitRate": 1,
+              "supportedFiles": {
+                "samples": 3,
+                "minimum": 1,
+                "p50NearestRank": 1,
+                "p95NearestRank": 1,
+                "maximum": 1
+              },
+              "filesWithRelatedSpans": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "relatedSpans": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "sourceBytes": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "installationMs": {
+                "samples": 3,
+                "minimum": 2099,
+                "p50NearestRank": 2119,
+                "p95NearestRank": 2155,
+                "maximum": 2155
+              },
+              "restoreMs": {
+                "samples": 3,
+                "minimum": 54,
+                "p50NearestRank": 69,
+                "p95NearestRank": 69,
+                "maximum": 69
+              },
+              "validationMs": {
+                "samples": 3,
+                "minimum": 5983,
+                "p50NearestRank": 6006,
+                "p95NearestRank": 6086,
+                "maximum": 6086
+              },
+              "indexMs": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "queryMs": {
+                "samples": 3,
+                "minimum": 11935,
+                "p50NearestRank": 11951,
+                "p95NearestRank": 12033,
+                "maximum": 12033
+              },
+              "wallMs": {
+                "samples": 3,
+                "minimum": 18019,
+                "p50NearestRank": 18103,
+                "p95NearestRank": 18123,
+                "maximum": 18123
+              },
+              "cacheSizeBytes": {
+                "samples": 3,
+                "minimum": 92799292,
+                "p50NearestRank": 92967228,
+                "p95NearestRank": 93069628,
+                "maximum": 93069628
+              },
+              "diagnostics": {
+                "cache-base-revision": 3,
+                "cgc-incoming-query-failed": 3,
+                "cgc-query-partial": 3,
+                "graph-base-revision": 3
+              }
+            }
+          ],
+          "warmIndexP95SavedMs": 67766,
+          "warmWallP95SavedMs": 67770
+        },
+        {
+          "id": "gitnexus",
+          "version": "1.6.12",
+          "license": {
+            "id": "PolyForm-Noncommercial-1.0.0",
+            "commercialUse": "conditional",
+            "url": "https://polyformproject.org/licenses/noncommercial/1.0.0/"
+          },
+          "distribution": "digest-pinned npm archive and lockfile; lifecycle scripts and embeddings disabled",
+          "conditions": [
+            {
+              "condition": "cold",
+              "samples": 3,
+              "statuses": {
+                "complete": 3,
+                "partial": 0,
+                "unsupported": 0,
+                "unavailable": 0
+              },
+              "cacheHits": 0,
+              "cacheHitRate": 0,
+              "supportedFiles": {
+                "samples": 3,
+                "minimum": 1,
+                "p50NearestRank": 1,
+                "p95NearestRank": 1,
+                "maximum": 1
+              },
+              "filesWithRelatedSpans": {
+                "samples": 3,
+                "minimum": 1,
+                "p50NearestRank": 1,
+                "p95NearestRank": 1,
+                "maximum": 1
+              },
+              "relatedSpans": {
+                "samples": 3,
+                "minimum": 7,
+                "p50NearestRank": 7,
+                "p95NearestRank": 7,
+                "maximum": 7
+              },
+              "sourceBytes": {
+                "samples": 3,
+                "minimum": 12950,
+                "p50NearestRank": 12950,
+                "p95NearestRank": 12950,
+                "maximum": 12950
+              },
+              "installationMs": {
+                "samples": 3,
+                "minimum": 5369,
+                "p50NearestRank": 5383,
+                "p95NearestRank": 6500,
+                "maximum": 6500
+              },
+              "restoreMs": {
+                "samples": 3,
+                "minimum": 45,
+                "p50NearestRank": 60,
+                "p95NearestRank": 60,
+                "maximum": 60
+              },
+              "validationMs": {
+                "samples": 3,
+                "minimum": 137,
+                "p50NearestRank": 142,
+                "p95NearestRank": 144,
+                "maximum": 144
+              },
+              "indexMs": {
+                "samples": 3,
+                "minimum": 7029,
+                "p50NearestRank": 7078,
+                "p95NearestRank": 7225,
+                "maximum": 7225
+              },
+              "queryMs": {
+                "samples": 3,
+                "minimum": 300,
+                "p50NearestRank": 309,
+                "p95NearestRank": 314,
+                "maximum": 314
+              },
+              "wallMs": {
+                "samples": 3,
+                "minimum": 7570,
+                "p50NearestRank": 7615,
+                "p95NearestRank": 7764,
+                "maximum": 7764
+              },
+              "cacheSizeBytes": {
+                "samples": 3,
+                "minimum": 63673133,
+                "p50NearestRank": 63673133,
+                "p95NearestRank": 63673133,
+                "maximum": 63673133
+              },
+              "diagnostics": {
+                "graph-base-revision": 3
+              }
+            },
+            {
+              "condition": "warm",
+              "samples": 3,
+              "statuses": {
+                "complete": 3,
+                "partial": 0,
+                "unsupported": 0,
+                "unavailable": 0
+              },
+              "cacheHits": 3,
+              "cacheHitRate": 1,
+              "supportedFiles": {
+                "samples": 3,
+                "minimum": 1,
+                "p50NearestRank": 1,
+                "p95NearestRank": 1,
+                "maximum": 1
+              },
+              "filesWithRelatedSpans": {
+                "samples": 3,
+                "minimum": 1,
+                "p50NearestRank": 1,
+                "p95NearestRank": 1,
+                "maximum": 1
+              },
+              "relatedSpans": {
+                "samples": 3,
+                "minimum": 7,
+                "p50NearestRank": 7,
+                "p95NearestRank": 7,
+                "maximum": 7
+              },
+              "sourceBytes": {
+                "samples": 3,
+                "minimum": 12950,
+                "p50NearestRank": 12950,
+                "p95NearestRank": 12950,
+                "maximum": 12950
+              },
+              "installationMs": {
+                "samples": 3,
+                "minimum": 5422,
+                "p50NearestRank": 5611,
+                "p95NearestRank": 6047,
+                "maximum": 6047
+              },
+              "restoreMs": {
+                "samples": 3,
+                "minimum": 59,
+                "p50NearestRank": 60,
+                "p95NearestRank": 71,
+                "maximum": 71
+              },
+              "validationMs": {
+                "samples": 3,
+                "minimum": 146,
+                "p50NearestRank": 147,
+                "p95NearestRank": 152,
+                "maximum": 152
+              },
+              "indexMs": {
+                "samples": 3,
+                "minimum": 0,
+                "p50NearestRank": 0,
+                "p95NearestRank": 0,
+                "maximum": 0
+              },
+              "queryMs": {
+                "samples": 3,
+                "minimum": 308,
+                "p50NearestRank": 310,
+                "p95NearestRank": 310,
+                "maximum": 310
+              },
+              "wallMs": {
+                "samples": 3,
+                "minimum": 537,
+                "p50NearestRank": 559,
+                "p95NearestRank": 561,
+                "maximum": 561
+              },
+              "cacheSizeBytes": {
+                "samples": 3,
+                "minimum": 63673133,
+                "p50NearestRank": 63673133,
+                "p95NearestRank": 63673133,
+                "maximum": 63673133
+              },
+              "diagnostics": {
+                "cache-base-revision": 3,
+                "graph-base-revision": 3
+              }
+            }
+          ],
+          "warmIndexP95SavedMs": 7225,
+          "warmWallP95SavedMs": 7203
+        }
+      ]
+    }
+  ],
+  "productionWarmups": [
+    {
+      "id": "cgc",
+      "samples": 3,
+      "indexMs": {
+        "samples": 3,
+        "minimum": 79023,
+        "p50NearestRank": 92232,
+        "p95NearestRank": 102369,
+        "maximum": 102369
+      },
+      "durationMs": {
+        "samples": 3,
+        "minimum": 89387,
+        "p50NearestRank": 102108,
+        "p95NearestRank": 112698,
+        "maximum": 112698
+      },
+      "cacheSizeBytes": {
+        "samples": 3,
+        "minimum": 92233999,
+        "p50NearestRank": 92233999,
+        "p95NearestRank": 92233999,
+        "maximum": 92233999
+      },
+      "sources": [
+        "https://github.com/dragoscirjan/redline/actions/runs/40095207134",
+        "https://github.com/dragoscirjan/redline/actions/runs/40111198078",
+        "https://github.com/dragoscirjan/redline/actions/runs/40113723863"
+      ]
+    },
+    {
+      "id": "gitnexus",
+      "samples": 3,
+      "indexMs": {
+        "samples": 3,
+        "minimum": 15416,
+        "p50NearestRank": 17429,
+        "p95NearestRank": 18144,
+        "maximum": 18144
+      },
+      "durationMs": {
+        "samples": 3,
+        "minimum": 35795,
+        "p50NearestRank": 36278,
+        "p95NearestRank": 40569,
+        "maximum": 40569
+      },
+      "cacheSizeBytes": {
+        "samples": 3,
+        "minimum": 63672515,
+        "p50NearestRank": 63672515,
+        "p95NearestRank": 63672515,
+        "maximum": 63672515
+      },
+      "sources": [
+        "https://github.com/dragoscirjan/redline/actions/runs/40095207134",
+        "https://github.com/dragoscirjan/redline/actions/runs/40111198078",
+        "https://github.com/dragoscirjan/redline/actions/runs/40113723863"
+      ]
+    }
+  ],
+  "followUp": {
+    "fixture": "two-file-typescript",
+    "capability": "related-spans",
+    "direction": "incoming",
+    "providers": [
+      {
+        "id": "cgc",
+        "status": "complete",
+        "sourceConfirmedSpans": 1,
+        "latencyMs": {
+          "samples": 5,
+          "minimum": 5963,
+          "p50NearestRank": 5976,
+          "p95NearestRank": 6083,
+          "maximum": 6083
+        },
+        "source": "benchmark/review-quality/follow-up-v1/live-providers/report.json"
+      },
+      {
+        "id": "gitnexus",
+        "status": "complete",
+        "sourceConfirmedSpans": 1,
+        "latencyMs": {
+          "samples": 5,
+          "minimum": 141,
+          "p50NearestRank": 144,
+          "p95NearestRank": 153,
+          "maximum": 153
+        },
+        "source": "benchmark/review-quality/follow-up-v1/live-providers/report.json"
+      }
+    ]
+  },
+  "quality": {
+    "recordedComparison": {
+      "source": "benchmark/review-quality/v2/comparison/report.json",
+      "expectedIssues": 2,
+      "fileOnlyCreditedIssues": 1,
+      "indexedCreditedIssues": 2,
+      "fileOnlyFalsePositives": 1,
+      "indexedFalsePositives": 0,
+      "promptBytesAdded": 1039,
+      "sourceBytesAdded": 216,
+      "interpretation": "Scripted provider-neutral recordings show possible review value, not live provider reliability."
+    },
+    "liveModel": {
+      "source": "benchmark/review-quality/v2/live-model/report.json",
+      "expectedIssues": 2,
+      "fileOnlyCreditedIssues": 2,
+      "indexedCreditedIssues": 2,
+      "fileOnlyFalsePositives": 0,
+      "indexedFalsePositives": 0,
+      "promptBytesAdded": 1039,
+      "sourceBytesAdded": 216,
+      "interpretation": "The historical live model run showed no review-quality gain from indexed context."
+    }
+  },
+  "coldSkip": {
+    "unsupportedOnly": {
+      "coveredBy": "test/code-index-action.bats",
+      "diagnostics": [
+        "no-supported-changed-files",
+        "cold-index-skipped"
+      ],
+      "indexMs": 0
+    },
+    "allHeadNewSupported": {
+      "coveredBy": "test/code-index-action.bats",
+      "diagnostics": [
+        "changed-file-absent-from-base",
+        "no-base-query-anchors",
+        "cold-index-skipped"
+      ],
+      "indexMs": 0
+    }
+  },
+  "recommendation": {
+    "defaultProvider": "cgc",
+    "changeDefault": false,
+    "enableVerification": false,
+    "reason": "GitNexus was faster and returned complete related spans in these captures, but its PolyForm Noncommercial license is not suitable as an unconditional default. CGC remained partial with zero related spans in every current cold and warm fixture sample. Existing review-quality evidence does not justify a default-provider change or verification activation."
+  }
+}

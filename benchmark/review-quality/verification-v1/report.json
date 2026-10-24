@@ -19,7 +19,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -47,7 +49,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -75,7 +79,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -123,13 +129,17 @@
           "sourceBytes": 103,
           "reason": null,
           "filesWithContext": 1,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": [
+            "recorded-benchmark"
+          ]
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -160,13 +170,17 @@
           "sourceBytes": 103,
           "reason": null,
           "filesWithContext": 1,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": [
+            "recorded-benchmark"
+          ]
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -197,13 +211,17 @@
           "sourceBytes": 103,
           "reason": null,
           "filesWithContext": 1,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": [
+            "recorded-benchmark"
+          ]
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -248,7 +266,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -276,7 +296,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -304,7 +326,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -352,13 +376,17 @@
           "sourceBytes": 0,
           "reason": null,
           "filesWithContext": 0,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": [
+            "recorded-benchmark"
+          ]
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -389,13 +417,17 @@
           "sourceBytes": 0,
           "reason": null,
           "filesWithContext": 0,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": [
+            "recorded-benchmark"
+          ]
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -426,13 +458,17 @@
           "sourceBytes": 0,
           "reason": null,
           "filesWithContext": 0,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": [
+            "recorded-benchmark"
+          ]
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -477,7 +513,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 1,
         "rootCauseMatches": 0,
@@ -509,7 +547,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 1,
         "rootCauseMatches": 0,
@@ -541,7 +581,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 1,
         "rootCauseMatches": 0,
@@ -593,13 +635,17 @@
           "sourceBytes": 113,
           "reason": null,
           "filesWithContext": 1,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": [
+            "recorded-benchmark"
+          ]
         },
         "expectedIssues": 1,
         "rootCauseMatches": 1,
@@ -630,13 +676,17 @@
           "sourceBytes": 113,
           "reason": null,
           "filesWithContext": 1,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": [
+            "recorded-benchmark"
+          ]
         },
         "expectedIssues": 1,
         "rootCauseMatches": 1,
@@ -667,13 +717,17 @@
           "sourceBytes": 113,
           "reason": null,
           "filesWithContext": 1,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": [
+            "recorded-benchmark"
+          ]
         },
         "expectedIssues": 1,
         "rootCauseMatches": 1,
@@ -718,7 +772,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 1,
         "rootCauseMatches": 1,
@@ -746,7 +802,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 1,
         "rootCauseMatches": 1,
@@ -774,7 +832,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 1,
         "rootCauseMatches": 1,
@@ -822,13 +882,17 @@
           "sourceBytes": 0,
           "reason": null,
           "filesWithContext": 0,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": [
+            "recorded-benchmark"
+          ]
         },
         "expectedIssues": 1,
         "rootCauseMatches": 1,
@@ -859,13 +923,17 @@
           "sourceBytes": 0,
           "reason": null,
           "filesWithContext": 0,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": [
+            "recorded-benchmark"
+          ]
         },
         "expectedIssues": 1,
         "rootCauseMatches": 1,
@@ -896,13 +964,17 @@
           "sourceBytes": 0,
           "reason": null,
           "filesWithContext": 0,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": [
+            "recorded-benchmark"
+          ]
         },
         "expectedIssues": 1,
         "rootCauseMatches": 1,
@@ -947,7 +1019,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -975,7 +1049,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -1003,7 +1079,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -1051,13 +1129,15 @@
           "sourceBytes": 66,
           "reason": null,
           "filesWithContext": 1,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": []
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -1088,13 +1168,15 @@
           "sourceBytes": 66,
           "reason": null,
           "filesWithContext": 1,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": []
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -1125,13 +1207,15 @@
           "sourceBytes": 66,
           "reason": null,
           "filesWithContext": 1,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": []
         },
         "expectedIssues": 0,
         "rootCauseMatches": 0,
@@ -1176,7 +1260,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 1,
         "rootCauseMatches": 0,
@@ -1208,7 +1294,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 1,
         "rootCauseMatches": 0,
@@ -1240,7 +1328,9 @@
           "sourceBytes": 0,
           "reason": "not-configured",
           "filesWithContext": 0,
-          "timings": null
+          "cache": "not-applicable",
+          "timings": null,
+          "diagnosticCodes": []
         },
         "expectedIssues": 1,
         "rootCauseMatches": 0,
@@ -1292,13 +1382,15 @@
           "sourceBytes": 103,
           "reason": null,
           "filesWithContext": 1,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": []
         },
         "expectedIssues": 1,
         "rootCauseMatches": 1,
@@ -1329,13 +1421,15 @@
           "sourceBytes": 103,
           "reason": null,
           "filesWithContext": 1,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": []
         },
         "expectedIssues": 1,
         "rootCauseMatches": 1,
@@ -1366,13 +1460,15 @@
           "sourceBytes": 103,
           "reason": null,
           "filesWithContext": 1,
+          "cache": "unknown",
           "timings": {
             "installationMs": 0,
             "restoreMs": 0,
             "indexMs": 0,
             "queryMs": 0,
             "saveMs": null
-          }
+          },
+          "diagnosticCodes": []
         },
         "expectedIssues": 1,
         "rootCauseMatches": 1,

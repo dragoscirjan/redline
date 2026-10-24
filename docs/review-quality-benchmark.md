@@ -113,6 +113,18 @@ This exercises the production `github/code-index` path against the cross-file ca
 
 The checked-in live result is under `benchmark/review-quality/v2/live-indexer/`. In the measured cold run, CGC 0.5.7 returned complete coverage and the expected source-confirmed caller. Installation took 1,837 ms, restore bookkeeping 40 ms, indexing 7,825 ms, and bounded queries 18,048 ms. The prior partial result was a Redline host defect: its stdout limit also restricted CGC's embedded database writes.
 
+## Code-index provider value comparison
+
+Run the deterministic report generator with:
+
+```bash
+mise run benchmark:code-index-value
+```
+
+The checked-in capture and generated reports are under `benchmark/code-index-value/v1/`. They compare cold and validated exact-base warm paths for CGC 0.5.7 and GitNexus 1.6.12 on the two-file TypeScript fixture and the Redline repository. The report keeps p50 and nearest-rank p95 installation, restore, validation, index, relationship-query, wall-time, and cache-size measurements. It also includes three GitHub-hosted default-branch warmups per provider, bounded follow-up latency, provider failures, prompt and source-byte cost, review-quality evidence, and licensing.
+
+Current measurements do not justify a default-provider change. GitNexus was faster and returned complete related spans, but its PolyForm Noncommercial 1.0.0 license is not suitable as an unconditional default. CGC remained partial with zero spans in the current local captures. The historical live-model comparison showed no review-quality gain, so provider speed does not enable verification or follow-up publication.
+
 ## Evidence and subsequent enablement
 
 The live production indexer now supplies the expected related caller, so provider capability is demonstrated for this fixture. The comparison still does not show a review-quality gain: the live model found every expected defect without the related source, and the indexed recording did not improve measured recall or precision. The measured path adds installation, indexing, query, prompt-size, and cache complexity.

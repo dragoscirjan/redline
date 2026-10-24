@@ -82,6 +82,7 @@ export {
   type PullRequestReviewRecord,
   type PullRequestVerdict,
   type RejectedCandidate,
+  type ReviewCodeContextCacheStatus,
   type ReviewCodeContextCoverage,
   type ReviewCodeContextReason,
   type ReviewCodeContextRunCoverage,

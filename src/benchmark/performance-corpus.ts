@@ -217,7 +217,7 @@ function parseCorpus(value: unknown): PerformanceCorpus {
         responses,
         judgments: [],
         codeContext: {
-          version: 1,
+          version: 2,
           provider: { id: 'cgc', version: '0.5.7' },
           repository: 'benchmark/redline',
           revision: headRevision,
@@ -230,7 +230,7 @@ function parseCorpus(value: unknown): PerformanceCorpus {
             code: 'performance-corpus',
             message: 'Fixed provider-neutral context for the deterministic performance corpus.',
           }],
-          timings: { installationMs: 0, restoreMs: 0, indexMs: 0, queryMs: 0, saveMs: null },
+          timings: { installationMs: 0, restoreMs: 0, validationMs: 0, indexMs: 0, queryMs: 0, saveMs: null },
         },
       },
     ],

@@ -114,7 +114,7 @@ describe('review-quality benchmark', () => {
   it('compares checked-in file-only and indexed-context recordings', async () => {
     const report = await runRecordedBenchmark(CORPUS);
 
-    expect(report.version).toBe(2);
+    expect(report.version).toBe(3);
     expect(report.modes).toHaveLength(2);
     const fileOnly = report.modes[0]!;
     expect(fileOnly.mode).toBe('file-only');
@@ -136,6 +136,12 @@ describe('review-quality benchmark', () => {
       indexTimings: null,
     });
     expect(fileOnly.promptBytes).toBeGreaterThan(0);
+    expect(fileOnly.promptVolume).toMatchObject({
+      baselineStrategy: 'full-files-v1',
+      candidateStrategy: 'focused-v1',
+      qualityMaintained: true,
+    });
+    expect(fileOnly.cases.every((item) => item.promptVolume?.qualityMaintained === true)).toBe(true);
 
     const historical = JSON.parse(await readFile(HISTORICAL_BASELINE, 'utf8')) as {
       modes: Array<Record<string, unknown>>;
@@ -172,6 +178,7 @@ describe('review-quality benchmark', () => {
     });
     expect(indexed.codeContextSourceBytes).toBeGreaterThan(0);
     expect(indexed.promptBytes).toBeGreaterThan(fileOnly.promptBytes);
+    expect(indexed.promptVolume.qualityMaintained).toBe(true);
     expect(report.comparison).toMatchObject({
       rootCauseMatchesDelta: 1,
       creditedIssuesDelta: 1,
@@ -202,13 +209,14 @@ describe('review-quality benchmark', () => {
     await writeBenchmarkReport(report, output);
 
     const json = JSON.parse(await readFile(join(output, 'report.json'), 'utf8')) as { version: number };
-    expect(json.version).toBe(2);
+    expect(json.version).toBe(3);
     const markdown = await readFile(join(output, 'report.md'), 'utf8');
     expect(markdown).toBe(renderBenchmarkMarkdown(report));
     expect(markdown).toContain('Root-cause recall: 1/2 (50.0%)');
     expect(markdown).toContain('Root-cause recall: 2/2 (100.0%)');
     expect(markdown).toContain('## Comparison');
-    expect(markdown).toContain('This report evaluates checked-in responses and human judgments.');
+    expect(markdown).toContain('same checked-in responses and human judgments');
+    expect(markdown).toContain('Est. tokens full');
   });
 
   it.each([

@@ -28,7 +28,20 @@ export {
   type ResolvedRelatedCodeSpan,
   type ReviewCodeContextInput,
 } from './indexed-context.ts';
-export { FILE_REVIEW_PROMPT_ID, FILE_REVIEW_PROMPT_VERSION, buildFileReviewPrompt, loadReviewPolicy } from './prompt.ts';
+export {
+  FILE_REVIEW_PROMPT_ID,
+  FILE_REVIEW_PROMPT_VERSION,
+  SOURCE_CONTEXT_STRATEGIES,
+  buildFileReviewPrompt,
+  loadReviewPolicy,
+  type SourceContextStrategy,
+} from './prompt.ts';
+export {
+  MAX_SOURCE_CONTEXT_BYTES_PER_SIDE,
+  MAX_SOURCE_CONTEXT_FILE_BYTES,
+  type FocusedSourceContext,
+  type SourceContextExcerpt,
+} from './source-context.ts';
 export {
   FILE_REVIEW_DOCUMENT_VERSION,
   MAX_FILE_FINDINGS,

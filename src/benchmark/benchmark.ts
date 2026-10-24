@@ -17,6 +17,7 @@ import {
 import { parseDuration } from '../duration.ts';
 import type { ReviewEnvironment } from '../review/environment.ts';
 import { parseChangedLines, type ChangedLines } from '../review/report.ts';
+import type { SourceContextStrategy } from '../review/prompt.ts';
 import { runFileReviews } from '../review/runner.ts';
 import type {
   FileReviewRecord,
@@ -25,7 +26,8 @@ import type {
   ReviewCodeContextRunCoverage,
 } from '../review/types.ts';
 
-const BENCHMARK_VERSION = 2 as const;
+const BENCHMARK_CORPUS_VERSION = 2 as const;
+const BENCHMARK_REPORT_VERSION = 3 as const;
 const FIXTURE_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const FILE_ID = /^\d{6}$/u;
 const REVISION = /^[0-9a-f]{40}$/u;
@@ -85,7 +87,7 @@ interface IndexedContextRecording {
 export type FixtureRecording = FileOnlyRecording | IndexedContextRecording;
 
 export interface BenchmarkFixture {
-  readonly version: typeof BENCHMARK_VERSION;
+  readonly version: typeof BENCHMARK_CORPUS_VERSION;
   readonly id: string;
   readonly title: string;
   readonly kind: FixtureKind;
@@ -98,7 +100,7 @@ export interface BenchmarkFixture {
 }
 
 interface CorpusManifest {
-  readonly version: typeof BENCHMARK_VERSION;
+  readonly version: typeof BENCHMARK_CORPUS_VERSION;
   readonly fixtures: readonly string[];
 }
 
@@ -111,6 +113,19 @@ export interface BenchmarkCodeContextResult {
   readonly sourceBytes: number;
   readonly reason: ReviewCodeContextReason | null;
   readonly timings: CodeContextTimings | null;
+}
+
+export interface BenchmarkPromptVolumeResult {
+  readonly baselineStrategy: 'full-files-v1';
+  readonly candidateStrategy: 'focused-v1';
+  readonly baselineBytes: number;
+  readonly candidateBytes: number;
+  readonly reductionBytes: number;
+  readonly reductionPercent: number;
+  readonly baselineEstimatedInputTokens: number;
+  readonly candidateEstimatedInputTokens: number;
+  readonly estimatedInputTokenReduction: number;
+  readonly qualityMaintained: boolean;
 }
 
 export interface BenchmarkCaseResult {
@@ -130,6 +145,8 @@ export interface BenchmarkCaseResult {
   readonly claimedMatches: number;
   readonly validEvidenceMatches: number;
   readonly promptBytes: number;
+  /** Present when the case was replayed through both prompt-source strategies. */
+  readonly promptVolume?: BenchmarkPromptVolumeResult | undefined;
   readonly reviewDurationMs: number;
 }
 
@@ -155,6 +172,9 @@ export interface BenchmarkModeResult {
   readonly claimedMatches: number;
   readonly validEvidenceMatches: number;
   readonly promptBytes: number;
+  readonly promptVolume: BenchmarkPromptVolumeResult;
+  readonly medianPromptReductionBytes: number;
+  readonly medianPromptReductionPercent: number;
   readonly reviewDurationMs: number;
   readonly codeContextCoverage: BenchmarkCodeContextCoverageCounts;
   readonly codeContextFilesWithContext: number;
@@ -177,8 +197,8 @@ export interface BenchmarkComparison {
 }
 
 export interface BenchmarkReport {
-  readonly version: typeof BENCHMARK_VERSION;
-  readonly corpusVersion: typeof BENCHMARK_VERSION;
+  readonly version: typeof BENCHMARK_REPORT_VERSION;
+  readonly corpusVersion: typeof BENCHMARK_CORPUS_VERSION;
   readonly modes: readonly BenchmarkModeResult[];
   readonly comparison: BenchmarkComparison;
 }
@@ -329,7 +349,9 @@ export function parseBenchmarkFixture(value: unknown): BenchmarkFixture {
     'expectedIssues',
     'recordings',
   ], 'benchmark fixture');
-  if (input['version'] !== BENCHMARK_VERSION) throw new Error(`benchmark fixture.version must be ${BENCHMARK_VERSION}`);
+  if (input['version'] !== BENCHMARK_CORPUS_VERSION) {
+    throw new Error(`benchmark fixture.version must be ${BENCHMARK_CORPUS_VERSION}`);
+  }
   const id = string(input['id'], 'benchmark fixture.id');
   if (!FIXTURE_ID.test(id)) throw new Error('benchmark fixture.id must be a lowercase slug');
   const kind = input['kind'];
@@ -429,7 +451,7 @@ export function parseBenchmarkFixture(value: unknown): BenchmarkFixture {
     }
   }
   return {
-    version: BENCHMARK_VERSION,
+    version: BENCHMARK_CORPUS_VERSION,
     id,
     title: string(input['title'], 'benchmark fixture.title'),
     kind,
@@ -445,12 +467,14 @@ export function parseBenchmarkFixture(value: unknown): BenchmarkFixture {
 function parseCorpus(value: unknown): CorpusManifest {
   const input = record(value, 'benchmark corpus');
   exactKeys(input, ['version', 'fixtures'], 'benchmark corpus');
-  if (input['version'] !== BENCHMARK_VERSION) throw new Error(`benchmark corpus.version must be ${BENCHMARK_VERSION}`);
+  if (input['version'] !== BENCHMARK_CORPUS_VERSION) {
+    throw new Error(`benchmark corpus.version must be ${BENCHMARK_CORPUS_VERSION}`);
+  }
   const fixtures = array(input['fixtures'], 'benchmark corpus.fixtures').map((item, index) =>
     repositoryPath(item, `benchmark corpus.fixtures[${index}]`));
   if (fixtures.length === 0) throw new Error('benchmark corpus.fixtures must not be empty');
   if (new Set(fixtures).size !== fixtures.length) throw new Error('benchmark corpus fixture paths must be unique');
-  return { version: BENCHMARK_VERSION, fixtures };
+  return { version: BENCHMARK_CORPUS_VERSION, fixtures };
 }
 
 function sourceLines(content: string): { readonly lines: readonly string[]; readonly finalNewline: boolean } {
@@ -631,6 +655,30 @@ function locationMatches(record: FileReviewRecord, findingIndex: number, issue: 
     && finding.endLine <= location.endLine);
 }
 
+function estimatedInputTokens(promptBytes: number): number {
+  return Math.ceil(promptBytes / 4);
+}
+
+function promptVolumeResult(
+  baselineBytes: number,
+  candidateBytes: number,
+  qualityMaintained: boolean,
+): BenchmarkPromptVolumeResult {
+  const reductionBytes = baselineBytes - candidateBytes;
+  return {
+    baselineStrategy: 'full-files-v1',
+    candidateStrategy: 'focused-v1',
+    baselineBytes,
+    candidateBytes,
+    reductionBytes,
+    reductionPercent: baselineBytes === 0 ? 0 : Number(((reductionBytes / baselineBytes) * 100).toFixed(2)),
+    baselineEstimatedInputTokens: estimatedInputTokens(baselineBytes),
+    candidateEstimatedInputTokens: estimatedInputTokens(candidateBytes),
+    estimatedInputTokenReduction: estimatedInputTokens(baselineBytes) - estimatedInputTokens(candidateBytes),
+    qualityMaintained,
+  };
+}
+
 export function scoreBenchmarkCase(
   fixture: BenchmarkFixture,
   recording: FixtureRecording,
@@ -710,7 +758,11 @@ export function scoreBenchmarkCase(
   };
 }
 
-async function runRecording(fixture: BenchmarkFixture, recording: FixtureRecording): Promise<BenchmarkCaseResult> {
+async function runRecording(
+  fixture: BenchmarkFixture,
+  recording: FixtureRecording,
+  sourceContextStrategy: SourceContextStrategy,
+): Promise<BenchmarkCaseResult> {
   const root = await mkdtemp(join(tmpdir(), `redline-benchmark-${fixture.id}-`));
   try {
     const paths = await materializeBenchmarkFixture(fixture, root);
@@ -733,7 +785,7 @@ async function runRecording(fixture: BenchmarkFixture, recording: FixtureRecordi
       timeout: parseDuration('1m'),
       reviewConcurrency: 1,
     };
-    const result = await runFileReviews({ environment, executor });
+    const result = await runFileReviews({ environment, executor, sourceContextStrategy });
     return scoreBenchmarkCase(
       fixture,
       recording,
@@ -747,6 +799,49 @@ async function runRecording(fixture: BenchmarkFixture, recording: FixtureRecordi
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+}
+
+function qualityProjection(result: BenchmarkCaseResult): string {
+  return JSON.stringify({
+    coverage: result.coverage,
+    expectedIssues: result.expectedIssues,
+    rootCauseMatches: result.rootCauseMatches,
+    creditedIssues: result.creditedIssues,
+    unmatchedIssueIds: result.unmatchedIssueIds,
+    uncreditedIssueIds: result.uncreditedIssueIds,
+    findings: result.findings,
+    falsePositives: result.falsePositives,
+    duplicateFindings: result.duplicateFindings,
+    claimedMatches: result.claimedMatches,
+    validEvidenceMatches: result.validEvidenceMatches,
+  });
+}
+
+function comparePromptVariants(
+  baseline: BenchmarkCaseResult,
+  candidate: BenchmarkCaseResult,
+): BenchmarkCaseResult {
+  const qualityMaintained = qualityProjection(baseline) === qualityProjection(candidate);
+  return {
+    ...candidate,
+    promptVolume: promptVolumeResult(baseline.promptBytes, candidate.promptBytes, qualityMaintained),
+  };
+}
+
+function requiredPromptVolume(result: BenchmarkCaseResult): BenchmarkPromptVolumeResult {
+  if (result.promptVolume === undefined) throw new Error('benchmark case is missing prompt-volume comparison');
+  return result.promptVolume;
+}
+
+function aggregatePromptVolume(cases: readonly BenchmarkCaseResult[]): BenchmarkPromptVolumeResult {
+  const volumes = cases.map(requiredPromptVolume);
+  const baselineBytes = volumes.reduce((total, item) => total + item.baselineBytes, 0);
+  const candidateBytes = volumes.reduce((total, item) => total + item.candidateBytes, 0);
+  return promptVolumeResult(
+    baselineBytes,
+    candidateBytes,
+    volumes.every((item) => item.qualityMaintained),
+  );
 }
 
 function sumIndexTimings(cases: readonly BenchmarkCaseResult[]): CodeContextTimings | null {
@@ -766,6 +861,15 @@ function sumIndexTimings(cases: readonly BenchmarkCaseResult[]): CodeContextTimi
   };
 }
 
+function median(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
+    : (sorted[middle] ?? 0);
+}
+
 function aggregateMode(mode: BenchmarkMode, cases: readonly BenchmarkCaseResult[]): BenchmarkModeResult {
   const countStatus = (status: ReviewCodeContextRunCoverage['status']): number =>
     cases.filter((item) => item.codeContext.status === status).length;
@@ -783,6 +887,9 @@ function aggregateMode(mode: BenchmarkMode, cases: readonly BenchmarkCaseResult[
     claimedMatches: cases.reduce((total, item) => total + item.claimedMatches, 0),
     validEvidenceMatches: cases.reduce((total, item) => total + item.validEvidenceMatches, 0),
     promptBytes: cases.reduce((total, item) => total + item.promptBytes, 0),
+    promptVolume: aggregatePromptVolume(cases),
+    medianPromptReductionBytes: median(cases.map((item) => requiredPromptVolume(item).reductionBytes)),
+    medianPromptReductionPercent: median(cases.map((item) => requiredPromptVolume(item).reductionPercent)),
     reviewDurationMs: cases.reduce((total, item) => total + item.reviewDurationMs, 0),
     codeContextCoverage: {
       disabled: countStatus('disabled'),
@@ -800,7 +907,7 @@ function aggregateMode(mode: BenchmarkMode, cases: readonly BenchmarkCaseResult[
 }
 
 export interface LoadedBenchmarkCorpus {
-  readonly version: typeof BENCHMARK_VERSION;
+  readonly version: typeof BENCHMARK_CORPUS_VERSION;
   readonly fixtures: readonly BenchmarkFixture[];
 }
 
@@ -829,7 +936,9 @@ export async function runRecordedBenchmark(corpusDirectory: string): Promise<Ben
   for (const fixture of fixtures) {
     for (const recording of fixture.recordings) {
       const results = casesByMode.get(recording.mode) ?? [];
-      results.push(await runRecording(fixture, recording));
+      const baseline = await runRecording(fixture, recording, 'full-files-v1');
+      const candidate = await runRecording(fixture, recording, 'focused-v1');
+      results.push(comparePromptVariants(baseline, candidate));
       casesByMode.set(recording.mode, results);
     }
   }
@@ -840,7 +949,7 @@ export async function runRecordedBenchmark(corpusDirectory: string): Promise<Ben
     throw new Error('benchmark comparison requires both modes over the same fixture count');
   }
   return {
-    version: BENCHMARK_VERSION,
+    version: BENCHMARK_REPORT_VERSION,
     corpusVersion: corpus.version,
     modes,
     comparison: {
@@ -875,7 +984,11 @@ export function renderBenchmarkMarkdown(report: BenchmarkReport): string {
       `- Duplicate findings: ${mode.duplicateFindings}`,
       `- Clean fixtures with false positives: ${fraction(mode.cleanFixturesWithFalsePositives, mode.cleanFixtures)}`,
       `- Evidence accuracy for claimed matches: ${fraction(mode.validEvidenceMatches, mode.claimedMatches)}`,
-      `- Total prompt: ${mode.promptBytes} bytes`,
+      `- Focused prompt total: ${mode.promptVolume.candidateBytes} bytes (~${mode.promptVolume.candidateEstimatedInputTokens} input tokens)`,
+      `- Full-file baseline total: ${mode.promptVolume.baselineBytes} bytes (~${mode.promptVolume.baselineEstimatedInputTokens} input tokens)`,
+      `- Aggregate prompt reduction: ${mode.promptVolume.reductionBytes} bytes (${mode.promptVolume.reductionPercent.toFixed(2)}%), ~${mode.promptVolume.estimatedInputTokenReduction} input tokens`,
+      `- Median per-file prompt reduction: ${mode.medianPromptReductionBytes} bytes (${mode.medianPromptReductionPercent.toFixed(2)}%)`,
+      `- Recorded quality maintained across prompt variants: ${mode.promptVolume.qualityMaintained ? 'yes' : 'no'}`,
       `- Recorded review duration: ${mode.reviewDurationMs} ms`,
       `- Indexed coverage: disabled ${mode.codeContextCoverage.disabled}, complete ${mode.codeContextCoverage.complete}, partial ${mode.codeContextCoverage.partial}, unsupported ${mode.codeContextCoverage.unsupported}, unavailable ${mode.codeContextCoverage.unavailable}`,
       `- Indexed source: ${mode.codeContextSourceBytes} bytes across ${mode.codeContextRelatedSpans} spans in ${mode.codeContextFilesWithContext} reviewed files`,
@@ -883,11 +996,12 @@ export function renderBenchmarkMarkdown(report: BenchmarkReport): string {
         ? ['- Recorded index timings: not applicable']
         : [`- Recorded index timings: install ${mode.indexTimings.installationMs} ms, restore ${mode.indexTimings.restoreMs} ms, validate ${mode.indexTimings.validationMs ?? 0} ms, index ${mode.indexTimings.indexMs} ms, query ${mode.indexTimings.queryMs} ms, save ${mode.indexTimings.saveMs === null ? 'n/a' : `${mode.indexTimings.saveMs} ms`}`]),
       '',
-      '| Fixture | Kind | Review coverage | Indexed coverage | Expected | Root matches | Credited | Findings | False positives | Duplicates | Context spans | Context bytes | Prompt bytes | Duration ms |',
-      '| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+      '| Fixture | Kind | Review coverage | Indexed coverage | Expected | Root matches | Credited | Findings | False positives | Duplicates | Context spans | Context bytes | Full bytes | Focused bytes | Reduction | Est. tokens full | Est. tokens focused | Quality held | Duration ms |',
+      '| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |',
     );
     for (const item of mode.cases) {
-      lines.push(`| ${item.fixtureId} | ${item.kind} | ${item.coverage} | ${item.codeContext.status} | ${item.expectedIssues} | ${item.rootCauseMatches} | ${item.creditedIssues} | ${item.findings} | ${item.falsePositives} | ${item.duplicateFindings} | ${item.codeContext.relatedSpans} | ${item.codeContext.sourceBytes} | ${item.promptBytes} | ${item.reviewDurationMs} |`);
+      const volume = requiredPromptVolume(item);
+      lines.push(`| ${item.fixtureId} | ${item.kind} | ${item.coverage} | ${item.codeContext.status} | ${item.expectedIssues} | ${item.rootCauseMatches} | ${item.creditedIssues} | ${item.findings} | ${item.falsePositives} | ${item.duplicateFindings} | ${item.codeContext.relatedSpans} | ${item.codeContext.sourceBytes} | ${volume.baselineBytes} | ${volume.candidateBytes} | ${volume.reductionBytes} (${volume.reductionPercent.toFixed(2)}%) | ${volume.baselineEstimatedInputTokens} | ${volume.candidateEstimatedInputTokens} | ${volume.qualityMaintained ? 'yes' : 'no'} | ${item.reviewDurationMs} |`);
     }
     lines.push('');
   }
@@ -904,7 +1018,7 @@ export function renderBenchmarkMarkdown(report: BenchmarkReport): string {
     '',
     '## Interpretation',
     '',
-    'This report evaluates checked-in responses and human judgments. It verifies the fixture, scoring, and reporting contracts without measuring a live model or code indexer.',
+    'This report replays the same checked-in responses and human judgments against both prompt-source strategies. It verifies prompt bytes, stable byte-based input-token estimates, fixture scoring, and reporting contracts without measuring a live model or code indexer.',
   );
   return `${lines.join('\n')}\n`;
 }

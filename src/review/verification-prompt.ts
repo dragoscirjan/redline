@@ -6,7 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { checkedDirectory, readCheckedText, type ReviewBundle, type ReviewManifestFile } from './bundle.ts';
 import type { PromptCodeContext } from './indexed-context.ts';
 import type { ResolvedFollowUp } from './follow-up.ts';
-import { buildFileContextPayload, generatedBoundary, type FileReviewPrompt } from './prompt.ts';
+import {
+  buildFileContextPayload,
+  generatedBoundary,
+  type FileReviewPrompt,
+  type SourceContextStrategy,
+} from './prompt.ts';
 import type { FindingScope, ValidatedFinding } from './types.ts';
 
 export const VERIFICATION_PROMPT_ID = 'redline-verification/v3' as const;
@@ -33,6 +38,7 @@ export interface VerificationPromptOptions {
   readonly harness: string;
   readonly model: string;
   readonly indexedContext?: PromptCodeContext | undefined;
+  readonly sourceContextStrategy?: SourceContextStrategy | undefined;
   readonly followUp?: {
     readonly provider: CodeContextProvider | null;
     readonly snapshot: string | null;
@@ -67,7 +73,12 @@ export async function buildVerificationPrompt(options: VerificationPromptOptions
     model: options.model,
     capabilities: { inspection: 'read-only', tools: [], subagents: false },
   }, null, 2)}\n`;
-  const fileContext = await buildFileContextPayload(options.bundle, options.file, options.indexedContext);
+  const fileContext = await buildFileContextPayload(
+    options.bundle,
+    options.file,
+    options.indexedContext,
+    options.sourceContextStrategy,
+  );
   const payload = JSON.stringify({
     file: JSON.parse(fileContext) as unknown,
     candidates: options.candidates,

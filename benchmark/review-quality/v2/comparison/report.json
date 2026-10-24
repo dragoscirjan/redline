@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "corpusVersion": 2,
   "modes": [
     {
@@ -15,7 +15,21 @@
       "cleanFixturesWithFalsePositives": 1,
       "claimedMatches": 1,
       "validEvidenceMatches": 1,
-      "promptBytes": 47647,
+      "promptBytes": 49337,
+      "promptVolume": {
+        "baselineStrategy": "full-files-v1",
+        "candidateStrategy": "focused-v1",
+        "baselineBytes": 47647,
+        "candidateBytes": 49337,
+        "reductionBytes": -1690,
+        "reductionPercent": -3.55,
+        "baselineEstimatedInputTokens": 11912,
+        "candidateEstimatedInputTokens": 12335,
+        "estimatedInputTokenReduction": -423,
+        "qualityMaintained": true
+      },
+      "medianPromptReductionBytes": -436.5,
+      "medianPromptReductionPercent": -3.69,
       "reviewDurationMs": 39,
       "codeContextCoverage": {
         "disabled": 4,
@@ -56,7 +70,19 @@
           "duplicateFindings": 0,
           "claimedMatches": 0,
           "validEvidenceMatches": 0,
-          "promptBytes": 11898,
+          "promptBytes": 12361,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 11898,
+            "candidateBytes": 12361,
+            "reductionBytes": -463,
+            "reductionPercent": -3.89,
+            "baselineEstimatedInputTokens": 2975,
+            "candidateEstimatedInputTokens": 3091,
+            "estimatedInputTokenReduction": -116,
+            "qualityMaintained": true
+          },
           "reviewDurationMs": 9
         },
         {
@@ -86,7 +112,19 @@
           "duplicateFindings": 0,
           "claimedMatches": 0,
           "validEvidenceMatches": 0,
-          "promptBytes": 11887,
+          "promptBytes": 12315,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 11887,
+            "candidateBytes": 12315,
+            "reductionBytes": -428,
+            "reductionPercent": -3.6,
+            "baselineEstimatedInputTokens": 2972,
+            "candidateEstimatedInputTokens": 3079,
+            "estimatedInputTokenReduction": -107,
+            "qualityMaintained": true
+          },
           "reviewDurationMs": 8
         },
         {
@@ -120,7 +158,19 @@
           "duplicateFindings": 0,
           "claimedMatches": 0,
           "validEvidenceMatches": 0,
-          "promptBytes": 11780,
+          "promptBytes": 12225,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 11780,
+            "candidateBytes": 12225,
+            "reductionBytes": -445,
+            "reductionPercent": -3.78,
+            "baselineEstimatedInputTokens": 2945,
+            "candidateEstimatedInputTokens": 3057,
+            "estimatedInputTokenReduction": -112,
+            "qualityMaintained": true
+          },
           "reviewDurationMs": 10
         },
         {
@@ -150,7 +200,19 @@
           "duplicateFindings": 0,
           "claimedMatches": 1,
           "validEvidenceMatches": 1,
-          "promptBytes": 12082,
+          "promptBytes": 12436,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 12082,
+            "candidateBytes": 12436,
+            "reductionBytes": -354,
+            "reductionPercent": -2.93,
+            "baselineEstimatedInputTokens": 3021,
+            "candidateEstimatedInputTokens": 3109,
+            "estimatedInputTokenReduction": -88,
+            "qualityMaintained": true
+          },
           "reviewDurationMs": 12
         }
       ]
@@ -168,7 +230,21 @@
       "cleanFixturesWithFalsePositives": 0,
       "claimedMatches": 2,
       "validEvidenceMatches": 2,
-      "promptBytes": 48686,
+      "promptBytes": 50374,
+      "promptVolume": {
+        "baselineStrategy": "full-files-v1",
+        "candidateStrategy": "focused-v1",
+        "baselineBytes": 48686,
+        "candidateBytes": 50374,
+        "reductionBytes": -1688,
+        "reductionPercent": -3.47,
+        "baselineEstimatedInputTokens": 12172,
+        "candidateEstimatedInputTokens": 12594,
+        "estimatedInputTokenReduction": -422,
+        "qualityMaintained": true
+      },
+      "medianPromptReductionBytes": -436,
+      "medianPromptReductionPercent": -3.605,
       "reviewDurationMs": 39,
       "codeContextCoverage": {
         "disabled": 0,
@@ -227,7 +303,19 @@
           "duplicateFindings": 0,
           "claimedMatches": 0,
           "validEvidenceMatches": 0,
-          "promptBytes": 12410,
+          "promptBytes": 12872,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 12410,
+            "candidateBytes": 12872,
+            "reductionBytes": -462,
+            "reductionPercent": -3.72,
+            "baselineEstimatedInputTokens": 3103,
+            "candidateEstimatedInputTokens": 3218,
+            "estimatedInputTokenReduction": -115,
+            "qualityMaintained": true
+          },
           "reviewDurationMs": 9
         },
         {
@@ -268,7 +356,19 @@
           "duplicateFindings": 0,
           "claimedMatches": 0,
           "validEvidenceMatches": 0,
-          "promptBytes": 11887,
+          "promptBytes": 12315,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 11887,
+            "candidateBytes": 12315,
+            "reductionBytes": -428,
+            "reductionPercent": -3.6,
+            "baselineEstimatedInputTokens": 2972,
+            "candidateEstimatedInputTokens": 3079,
+            "estimatedInputTokenReduction": -107,
+            "qualityMaintained": true
+          },
           "reviewDurationMs": 8
         },
         {
@@ -309,7 +409,19 @@
           "duplicateFindings": 0,
           "claimedMatches": 1,
           "validEvidenceMatches": 1,
-          "promptBytes": 12307,
+          "promptBytes": 12751,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 12307,
+            "candidateBytes": 12751,
+            "reductionBytes": -444,
+            "reductionPercent": -3.61,
+            "baselineEstimatedInputTokens": 3077,
+            "candidateEstimatedInputTokens": 3188,
+            "estimatedInputTokenReduction": -111,
+            "qualityMaintained": true
+          },
           "reviewDurationMs": 10
         },
         {
@@ -350,7 +462,19 @@
           "duplicateFindings": 0,
           "claimedMatches": 1,
           "validEvidenceMatches": 1,
-          "promptBytes": 12082,
+          "promptBytes": 12436,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 12082,
+            "candidateBytes": 12436,
+            "reductionBytes": -354,
+            "reductionPercent": -2.93,
+            "baselineEstimatedInputTokens": 3021,
+            "candidateEstimatedInputTokens": 3109,
+            "estimatedInputTokenReduction": -88,
+            "qualityMaintained": true
+          },
           "reviewDurationMs": 12
         }
       ]
@@ -363,7 +487,7 @@
     "creditedIssuesDelta": 1,
     "falsePositivesDelta": -1,
     "duplicateFindingsDelta": 0,
-    "promptBytesDelta": 1039,
+    "promptBytesDelta": 1037,
     "reviewDurationMsDelta": 0,
     "codeContextSourceBytesDelta": 216
   }

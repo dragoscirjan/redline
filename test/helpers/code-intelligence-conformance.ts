@@ -7,7 +7,7 @@ import type {
   SnapshotBuildRequest,
   SnapshotOpenRequest,
   SnapshotOperationResult,
-} from '../../src/code-intelligence/types.js';
+} from '../../src/code-intelligence/types.ts';
 
 function identityMatches(
   recording: CodeIntelligenceRecording,

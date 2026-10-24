@@ -14,29 +14,29 @@
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createHarnessExecutor } from '../harness-executor/registry.js';
-import { FollowUpBudget, type FollowUpRequestBatch } from '../code-context/follow-up.js';
-import type { HarnessExecutor, HarnessOutputLine, HarnessStreamMode } from '../harness-executor/types.js';
-import { loadReviewBundle, type ReviewBundle, type ReviewManifestFile } from './bundle.js';
-import type { ReviewEnvironment } from './environment.js';
-import { followUpSourcesByCandidate, resolveFollowUpResults, type ResolvedFollowUp } from './follow-up.js';
+import { createHarnessExecutor } from '../harness-executor/registry.ts';
+import { FollowUpBudget, type FollowUpRequestBatch } from '../code-context/follow-up.ts';
+import type { HarnessExecutor, HarnessOutputLine, HarnessStreamMode } from '../harness-executor/types.ts';
+import { loadReviewBundle, type ReviewBundle, type ReviewManifestFile } from './bundle.ts';
+import type { ReviewEnvironment } from './environment.ts';
+import { followUpSourcesByCandidate, resolveFollowUpResults, type ResolvedFollowUp } from './follow-up.ts';
 import {
   codeContextForFile,
   loadReviewCodeContext,
   type LoadedReviewCodeContext,
-} from './indexed-context.js';
-import { buildFileReviewPrompt, type FileReviewPrompt } from './prompt.js';
-import { buildPullRequestReview, validateFindingReferences } from './pr-contract.js';
-import { FileReviewValidator, parseFileReviewDocument } from './report.js';
-import { buildRemediation, formatSpan } from './remediation.js';
+} from './indexed-context.ts';
+import { buildFileReviewPrompt, type FileReviewPrompt } from './prompt.ts';
+import { buildPullRequestReview, validateFindingReferences } from './pr-contract.ts';
+import { FileReviewValidator, parseFileReviewDocument } from './report.ts';
+import { buildRemediation, formatSpan } from './remediation.ts';
 import {
   buildReviewSemanticFingerprint,
   loadReviewReuseCache,
   restoreReusableFileReview,
   REVIEW_REUSE_TELEMETRY_VERSION,
-} from './reuse.js';
-import { parseVerificationDocument, validateVerificationDocument } from './verification.js';
-import { buildVerificationPrompt } from './verification-prompt.js';
+} from './reuse.ts';
+import { parseVerificationDocument, validateVerificationDocument } from './verification.ts';
+import { buildVerificationPrompt } from './verification-prompt.ts';
 import {
   FILE_REVIEW_RECORD_VERSION,
   MAX_REVIEW_REASON_CHARS,
@@ -50,8 +50,8 @@ import {
   type ReviewRunSummary,
   type ReviewRunSummaryFile,
   type ValidatedFinding,
-} from './types.js';
-import { createReviewWriter, type FollowUpArtifact, type VerificationArtifact } from './writer.js';
+} from './types.ts';
+import { createReviewWriter, type FollowUpArtifact, type VerificationArtifact } from './writer.ts';
 
 export const VERIFICATION_TIMEOUT_MS = 10 * 60 * 1_000;
 

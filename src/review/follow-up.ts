@@ -4,11 +4,11 @@ import {
   type FollowUpRequestBatch,
   type FollowUpResult,
   type FollowUpStatus,
-} from '../code-context/follow-up.js';
-import type { CodeContextProvider } from '../code-context/artifact.js';
-import type { ReviewBundle } from './bundle.js';
-import { SourceMismatchError, validateSourceEvidence } from './source-evidence.js';
-import type { SourceEvidence } from './types.js';
+} from '../code-context/follow-up.ts';
+import type { CodeContextProvider } from '../code-context/artifact.ts';
+import type { ReviewBundle } from './bundle.ts';
+import { SourceMismatchError, validateSourceEvidence } from './source-evidence.ts';
+import type { SourceEvidence } from './types.ts';
 
 export interface ResolvedFollowUp {
   readonly requestId: string;

@@ -2,7 +2,7 @@ import type {
   PublishedFinding,
   PullRequestReviewRecord,
   ReviewFinding,
-} from '../../src/review/types.js';
+} from '../../src/review/types.ts';
 
 export function reviewFinding(overrides: Partial<ReviewFinding> = {}): ReviewFinding {
   return {

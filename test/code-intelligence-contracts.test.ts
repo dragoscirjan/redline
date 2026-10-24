@@ -8,8 +8,8 @@ import {
   parseCodeIntelligenceRecording,
   providerCompatibilityDigest,
   snapshotCompatibilityDigest,
-} from '../src/code-intelligence/contracts.js';
-import type { CodeIntelligenceQuery, CodeIntelligenceRecording } from '../src/code-intelligence/types.js';
+} from '../src/code-intelligence/contracts.ts';
+import type { CodeIntelligenceQuery, CodeIntelligenceRecording } from '../src/code-intelligence/types.ts';
 
 async function loadRecording(): Promise<{ raw: Record<string, unknown>; parsed: CodeIntelligenceRecording }> {
   const text = await readFile(new URL('./fixtures/code-intelligence/cgc.json', import.meta.url), 'utf8');

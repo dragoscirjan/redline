@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { synthesizeReview } from '../src/review/synthesis.js';
-import type { PullRequestFinding } from '../src/review/types.js';
-import { publishedFinding } from './helpers/finding.js';
-import { HEAD_SHA } from './helpers/bundle.js';
+import { synthesizeReview } from '../src/review/synthesis.ts';
+import type { PullRequestFinding } from '../src/review/types.ts';
+import { publishedFinding } from './helpers/finding.ts';
+import { HEAD_SHA } from './helpers/bundle.ts';
 
 const shared = { role: 'contract' as const, revision: HEAD_SHA, path: 'src/contract.ts',
   startLine: 2, endLine: 2, evidence: 'export const contract = true;' };

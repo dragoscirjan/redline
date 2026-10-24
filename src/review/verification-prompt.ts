@@ -1,13 +1,13 @@
 import { createHash } from 'node:crypto';
-import type { CodeContextProvider } from '../code-context/artifact.js';
+import type { CodeContextProvider } from '../code-context/artifact.ts';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkedDirectory, readCheckedText, type ReviewBundle, type ReviewManifestFile } from './bundle.js';
-import type { PromptCodeContext } from './indexed-context.js';
-import type { ResolvedFollowUp } from './follow-up.js';
-import { buildFileContextPayload, generatedBoundary, type FileReviewPrompt } from './prompt.js';
-import type { FindingScope, ValidatedFinding } from './types.js';
+import { checkedDirectory, readCheckedText, type ReviewBundle, type ReviewManifestFile } from './bundle.ts';
+import type { PromptCodeContext } from './indexed-context.ts';
+import type { ResolvedFollowUp } from './follow-up.ts';
+import { buildFileContextPayload, generatedBoundary, type FileReviewPrompt } from './prompt.ts';
+import type { FindingScope, ValidatedFinding } from './types.ts';
 
 export const VERIFICATION_PROMPT_ID = 'redline-verification/v3' as const;
 const MAX_VERIFICATION_CONTEXT_BYTES = 768 * 1024;

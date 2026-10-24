@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TIMEOUT_MINUTES, MAX_TIMEOUT_MINUTES, parseDuration } from '../src/duration.js';
+import { DEFAULT_TIMEOUT_MINUTES, MAX_TIMEOUT_MINUTES, parseDuration } from '../src/duration.ts';
 
 function thrownMessage(callback: () => unknown): string {
   try {

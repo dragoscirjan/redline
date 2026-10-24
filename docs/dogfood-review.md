@@ -35,7 +35,7 @@ The caller maps the repository secret `MODEL_CREDENTIALS` to the reusable workfl
 
 When `MODEL_CREDENTIALS` is absent, all three values are empty. The action builds and uploads the bounded context bundle but does not index source, install a harness, call a model, write review output, or publish review comments. A partial review-input set fails validation instead of silently degrading.
 
-Configured dogfood reviews use `defects-and-risks` scope, action-owned indexing, and four concurrent per-file calls by default. The reusable dogfood input accepts `review-concurrency` from 1 through 8. The action installs the selected fixed harness package as trusted tooling. Pi runs with tools disabled, separate generated configuration and prompt files for every invocation, and only the selected model credential. Artifacts and publication stay in manifest order regardless of completion order.
+Configured dogfood reviews use `defects-and-risks` scope, action-owned indexing, four concurrent per-file calls, and the Node 24 TypeScript source runtime by default. The reusable dogfood inputs accept `review-concurrency` from 1 through 8 and `runtime` as `node` or `bun` (pinned to 1.4.4). The action installs the selected fixed harness package as trusted tooling. Pi runs with tools disabled, separate generated configuration and prompt files for every invocation, and only the selected model credential. Artifacts and publication stay in manifest order regardless of completion order.
 
 ## Publication credentials
 

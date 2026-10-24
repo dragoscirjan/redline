@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadBenchmarkCorpus } from '../src/benchmark/benchmark.js';
-import { runVerificationBenchmark, type RecordedDecision } from '../src/benchmark/verification-benchmark.js';
+import { loadBenchmarkCorpus } from '../src/benchmark/benchmark.ts';
+import { runVerificationBenchmark, type RecordedDecision } from '../src/benchmark/verification-benchmark.ts';
 
 const ORIGINAL = resolve('benchmark/review-quality/v2');
 const EXTENSION = resolve('benchmark/review-quality/verification-v1');

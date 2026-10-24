@@ -1,12 +1,12 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadReviewBundle } from '../src/review/bundle.js';
-import { parseVerificationDocument, validateVerificationDocument } from '../src/review/verification.js';
-import { validateSourceEvidence } from '../src/review/source-evidence.js';
-import type { ValidatedFinding } from '../src/review/types.js';
-import { BASE_SHA, createBundleFixture, HEAD_SHA } from './helpers/bundle.js';
-import { reviewFinding } from './helpers/finding.js';
+import { loadReviewBundle } from '../src/review/bundle.ts';
+import { parseVerificationDocument, validateVerificationDocument } from '../src/review/verification.ts';
+import { validateSourceEvidence } from '../src/review/source-evidence.ts';
+import type { ValidatedFinding } from '../src/review/types.ts';
+import { BASE_SHA, createBundleFixture, HEAD_SHA } from './helpers/bundle.ts';
+import { reviewFinding } from './helpers/finding.ts';
 
 const FIRST = `f-${'1'.repeat(24)}`;
 const SECOND = `f-${'2'.repeat(24)}`;

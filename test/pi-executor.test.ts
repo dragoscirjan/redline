@@ -7,9 +7,9 @@ import {
   extractPiAssistantText,
   inspectPiAssistantOutput,
   PI_CREDENTIAL_ENV_NAME,
-} from '../src/harness-executor/pi-executor.js';
-import { MAX_OUTPUT_BYTES, type ProcessSpawner, type SpawnedProcess } from '../src/harness-executor/process-runner.js';
-import type { HarnessSettings } from '../src/harness-executor/types.js';
+} from '../src/harness-executor/pi-executor.ts';
+import { MAX_OUTPUT_BYTES, type ProcessSpawner, type SpawnedProcess } from '../src/harness-executor/process-runner.ts';
+import type { HarnessSettings } from '../src/harness-executor/types.ts';
 
 /** Settings with a caller-managed scratch directory; `prepare` writes inside it. */
 async function createSettings(

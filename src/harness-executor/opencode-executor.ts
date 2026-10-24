@@ -24,7 +24,7 @@ import {
   runBoundedProcess,
   type BoundedRunResult,
   type ProcessSpawner,
-} from './process-runner.js';
+} from './process-runner.ts';
 import type {
   HarnessExecuteOptions,
   HarnessExecutor,
@@ -33,7 +33,7 @@ import type {
   HarnessRun,
   HarnessSettings,
   PreparedHarness,
-} from './types.js';
+} from './types.ts';
 
 export interface OpenCodeExecutorOptions {
   /** Executable override; defaults to the `opencode` found on PATH. */

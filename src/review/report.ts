@@ -5,9 +5,9 @@
  */
 
 import { createHash } from 'node:crypto';
-import { codeContextGraphFactDigest } from '../code-context/artifact.js';
-import { FOLLOW_UP_LIMITS, type FollowUpDirection } from '../code-context/follow-up.js';
-import { assertOnlyKeys, isRecord, type ReviewManifestFile } from './bundle.js';
+import { codeContextGraphFactDigest } from '../code-context/artifact.ts';
+import { FOLLOW_UP_LIMITS, type FollowUpDirection } from '../code-context/follow-up.ts';
+import { assertOnlyKeys, isRecord, type ReviewManifestFile } from './bundle.ts';
 import type {
   EvidenceRole,
   FindingCategory,
@@ -25,7 +25,7 @@ import type {
   ReviewFinding,
   SourceEvidence,
   ValidatedFinding,
-} from './types.js';
+} from './types.ts';
 
 export const FILE_REVIEW_DOCUMENT_VERSION = 4 as const;
 export const PREVIOUS_FILE_REVIEW_DOCUMENT_VERSION = 3 as const;

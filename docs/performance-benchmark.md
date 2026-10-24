@@ -19,12 +19,23 @@ Every change is intentionally clean. A run fails its quality gate if any file is
 mise run benchmark:performance
 ```
 
-The command rebuilds Redline, runs the fixed corpus through the production bundle loader, prompt builder, harness contract, result validator, output writer, PR-level contract, and publication service, then writes:
+The command executes Redline's TypeScript source directly, runs the fixed corpus through the production bundle loader, prompt builder, harness contract, result validator, output writer, PR-level contract, and publication service, then writes:
 
 - `benchmark/performance/v1/baseline/report.json`
 - `benchmark/performance/v1/baseline/report.md`
 
 Recorded mode performs no network requests. It uses checked-in per-file model durations and bounded timing samples from named production Action runs. The report marks the SLO gate as **not eligible** because recorded data cannot prove current live latency.
+
+## TypeScript source runtime measurement
+
+`mise run benchmark:source-runtime` measures the pinned runtimes against direct TypeScript source. It runs five context-only CLI validation starts and three deterministic echo review pipelines per runtime. The checked-in captures are under `benchmark/source-runtime/v1/`.
+
+| Runtime | CLI startup p50/p95 | Echo review p50/p95 |
+| --- | ---: | ---: |
+| Node 24.21.0 | 64/67 ms | 165/184 ms |
+| Bun 1.4.4 | 13/14 ms | 79/85 ms |
+
+These local process samples exclude dependency installation, harness installation, indexing, model calls, network latency, and publication. On pull requests, the CI source-runtime matrix separately times the root composite action end to end under both selected runtimes and uploads `action.json` with the runtime, outcome, and duration. Bun is faster in this bounded local capture, but model work dominates live reviews, so Node remains the default and this result does not claim an end-to-end model-bound latency improvement.
 
 The baseline uses four workers and largest-diff-first scheduling. It retains 1,208 seconds of total modeled model work and models 340 seconds of review wall time. The previous sequential baseline reported 1,260.8 seconds warm-index p95 and 1,474.3 seconds cold-index p95. The four-worker baseline reports 392.8 seconds warm and 606.3 seconds cold. Both are below the epic targets, but the report remains SLO-ineligible until at least five current live fixed-corpus runs pass the quality gate.
 

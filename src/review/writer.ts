@@ -8,15 +8,15 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { FollowUpRequestBatch } from '../code-context/follow-up.js';
-import type { ResolvedFollowUp } from './follow-up.js';
-import { spanLocation } from './remediation.js';
+import type { FollowUpRequestBatch } from '../code-context/follow-up.ts';
+import type { ResolvedFollowUp } from './follow-up.ts';
+import { spanLocation } from './remediation.ts';
 import type {
   FileReviewRecord,
   PublishedFinding,
   PullRequestReviewRecord,
   ReviewRunSummary,
-} from './types.js';
+} from './types.ts';
 
 export const MAX_RAW_MODEL_OUTPUT_BYTES = 16 * 1024;
 

@@ -15,7 +15,7 @@ import type {
   RevisionSide,
   SnapshotUncertainty,
   SourceSpan,
-} from '../code-intelligence/types.js';
+} from '../code-intelligence/types.ts';
 
 export type {
   CodeIntelligenceSnapshot,
@@ -27,7 +27,7 @@ export type {
   RevisionSide,
   SnapshotUncertainty,
   SourceSpan,
-} from '../code-intelligence/types.js';
+} from '../code-intelligence/types.ts';
 
 export const CHANGE_IMPACT_MAP_VERSION = 1 as const;
 export const CONTEXT_PLAN_VERSION = 1 as const;

@@ -10,7 +10,7 @@ readonly PROVIDER_ID='gitnexus'
 readonly PROVIDER_VERSION='1.6.12'
 readonly CONFIG_ID='ladybug-base-only-v1-coderelation-64x80-49152b'
 readonly GITNEXUS_HOME="$CACHE_ROOT/gitnexus-home"
-readonly INSTALLER="$REPOSITORY_ROOT/dist/src/code-index/install-gitnexus.js"
+readonly INSTALLER="$REPOSITORY_ROOT/src/code-index/install-gitnexus.ts"
 readonly QUERY_ADAPTER="$SCRIPT_DIR/gitnexus-query.mjs"
 
 provider_version() {

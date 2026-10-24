@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises';
 import { delimiter, dirname, isAbsolute } from 'node:path';
-import { installGitNexus } from './gitnexus-installer.js';
+import { installGitNexus } from './gitnexus-installer.ts';
 
 const INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 

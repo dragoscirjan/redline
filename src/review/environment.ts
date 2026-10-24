@@ -8,11 +8,11 @@
  * even in context-only mode so misconfiguration never passes silently.
  */
 
-import { DEFAULT_TIMEOUT_MINUTES, MAX_TIMEOUT_MINUTES, parseDuration, type Duration } from '../duration.js';
-import { isHarnessName } from '../harness-executor/registry.js';
-import type { HarnessName } from '../harness-executor/types.js';
-import type { ReviewCodeContextInput } from './indexed-context.js';
-import { FINDING_SCOPES, type FindingScope } from './types.js';
+import { DEFAULT_TIMEOUT_MINUTES, MAX_TIMEOUT_MINUTES, parseDuration, type Duration } from '../duration.ts';
+import { isHarnessName } from '../harness-executor/registry.ts';
+import type { HarnessName } from '../harness-executor/types.ts';
+import type { ReviewCodeContextInput } from './indexed-context.ts';
+import { FINDING_SCOPES, type FindingScope } from './types.ts';
 
 export const REDLINE_ENV_KEYS = [
   'REDLINE_HARNESS',

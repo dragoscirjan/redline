@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { PublicationService } from '../../src/publish/service.js';
-import { synthesizeReview } from '../../src/review/synthesis.js';
-import type { FileReviewPublication, ReviewPublisher, ReviewScope } from '../../src/publish/types.js';
-import type { FileReviewRecord, PullRequestReviewRecord } from '../../src/review/types.js';
-import { publishedFinding, pullRequestReview } from '../helpers/finding.js';
+import { PublicationService } from '../../src/publish/service.ts';
+import { synthesizeReview } from '../../src/review/synthesis.ts';
+import type { FileReviewPublication, ReviewPublisher, ReviewScope } from '../../src/publish/types.ts';
+import type { FileReviewRecord, PullRequestReviewRecord } from '../../src/review/types.ts';
+import { publishedFinding, pullRequestReview } from '../helpers/finding.ts';
 
 const HEAD = 'b'.repeat(40);
 const SCOPE: ReviewScope = { repository: 'owner/repository', pullRequest: 14, head: HEAD };

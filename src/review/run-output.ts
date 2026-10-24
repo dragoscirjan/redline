@@ -8,7 +8,7 @@
 
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { isRecord } from './bundle.js';
+import { isRecord } from './bundle.ts';
 import {
   FILE_REVIEW_RECORD_VERSION,
   PULL_REQUEST_REVIEW_VERSION,
@@ -16,7 +16,7 @@ import {
   type FileReviewRecord,
   type PullRequestReviewRecord,
   type ReviewRunSummary,
-} from './types.js';
+} from './types.ts';
 
 export interface PublishedRun {
   readonly records: readonly FileReviewRecord[];

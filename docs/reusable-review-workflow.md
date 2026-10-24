@@ -23,6 +23,7 @@ jobs:
       container-engine: docker
       timeout: 30m
       review-concurrency: 4 # default; valid range 1-8
+      runtime: node # default; or bun
     secrets:
       github-token: ${{ secrets.GH_TOKEN }}
       model-auth: ${{ secrets.MODEL_CREDENTIALS }}
@@ -47,6 +48,7 @@ In context-only mode the workflow does not index and uploads only the `<artifact
 | `finding-scope` | `defects`, `defects-and-risks` | Default `defects`. |
 | `timeout` | duration | Default `30m`, capped at `360m`. |
 | `review-concurrency` | 1–8 | Maximum simultaneous per-file model calls. Default `4`. |
+| `runtime` | `node`, `bun` | Trusted TypeScript source runtime. Default `node`; Bun is pinned to `1.4.4`. Harness and index-provider runtimes do not change. |
 | `verbosity` | `silent`, `progress`, `full-output` | Live model stream in the run log. Default `progress` (dots). |
 | `indexing` | `enabled`, `disabled` | Default `enabled`. The published action owns indexing; `disabled` selects file-only review. |
 | `indexing-provider` | `cgc`, `gitnexus` | Default `cgc`. GitNexus is PolyForm Noncommercial 1.0.0 licensed; confirm suitability before selecting it. |

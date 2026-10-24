@@ -6,11 +6,11 @@ import {
   renderFindingComment,
   renderSummaryBody,
   summaryMarker,
-} from '../../src/publish/render.js';
-import type { FileReviewRecord, PublishedFinding } from '../../src/review/types.js';
-import type { ReviewScope } from '../../src/publish/types.js';
-import { publishedFinding, pullRequestReview } from '../helpers/finding.js';
-import { synthesizeReview } from '../../src/review/synthesis.js';
+} from '../../src/publish/render.ts';
+import type { FileReviewRecord, PublishedFinding } from '../../src/review/types.ts';
+import type { ReviewScope } from '../../src/publish/types.ts';
+import { publishedFinding, pullRequestReview } from '../helpers/finding.ts';
+import { synthesizeReview } from '../../src/review/synthesis.ts';
 
 const HEAD = 'b'.repeat(40);
 const SCOPE: ReviewScope = { repository: 'owner/repository', pullRequest: 14, head: HEAD };

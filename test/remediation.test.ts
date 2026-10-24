@@ -1,8 +1,8 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadReviewBundle } from '../src/review/bundle.js';
-import { parseChangedLines } from '../src/review/report.js';
+import { loadReviewBundle } from '../src/review/bundle.ts';
+import { parseChangedLines } from '../src/review/report.ts';
 import {
   buildRemediation,
   formatSpan,
@@ -10,10 +10,10 @@ import {
   renderFixPrompt,
   resolveSpanLines,
   spanLocation,
-} from '../src/review/remediation.js';
-import type { ValidatedFinding } from '../src/review/types.js';
-import { createBundleFixture } from './helpers/bundle.js';
-import { reviewFinding } from './helpers/finding.js';
+} from '../src/review/remediation.ts';
+import type { ValidatedFinding } from '../src/review/types.ts';
+import { createBundleFixture } from './helpers/bundle.ts';
+import { reviewFinding } from './helpers/finding.ts';
 
 const MULTI_LINE_DIFF =
   'diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1,4 +1,4 @@\n context\n-old1\n-old2\n+new1\n+new2\n ctx2\n';

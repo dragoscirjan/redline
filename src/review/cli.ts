@@ -15,23 +15,23 @@ import {
   type PublicationOutcome,
   type RunningSummaryInfo,
   publishRecords,
-} from '../publish/index.js';
-import type { ReviewPublisher } from '../publish/index.js';
-import type { FileReviewRecord } from './types.js';
+} from '../publish/index.ts';
+import type { ReviewPublisher } from '../publish/index.ts';
+import type { FileReviewRecord } from './types.ts';
 import {
   parseAnnounceEnvironment,
   parseFailureReason,
   parsePublishOnlyEnvironment,
   parseReviewEnvironment,
   type ReviewVerbosity,
-} from './environment.js';
-import { loadPublishedRun } from './run-output.js';
+} from './environment.ts';
+import { loadPublishedRun } from './run-output.ts';
 import {
   runFileReviews,
   type FileHarnessOutputEvent,
   type FileReviewIdentity,
   type ReviewRunInput,
-} from './runner.js';
+} from './runner.ts';
 
 const USAGE_ERROR_EXIT = 2;
 const RUN_FAILURE_EXIT = 1;

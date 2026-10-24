@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { TextDecoder } from 'node:util';
-import { checkedFile, type ReviewBundle } from './bundle.js';
-import type { SourceEvidence } from './types.js';
+import { checkedFile, type ReviewBundle } from './bundle.ts';
+import type { SourceEvidence } from './types.ts';
 
 const MAX_EVIDENCE_SOURCE_BYTES = 2 * 1024 * 1024;
 

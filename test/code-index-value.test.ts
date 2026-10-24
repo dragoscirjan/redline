@@ -5,7 +5,7 @@ import {
   buildCodeIndexValueReport,
   distribution,
   renderCodeIndexValueMarkdown,
-} from '../src/benchmark/code-index-value.js';
+} from '../src/benchmark/code-index-value.ts';
 
 const ROOT = resolve('benchmark/code-index-value/v1');
 

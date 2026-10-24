@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { loadReviewBundle } from '../src/review/bundle.js';
-import { buildFileReviewPrompt, loadReviewPolicy } from '../src/review/prompt.js';
-import { createBundleFixture } from './helpers/bundle.js';
+import { loadReviewBundle } from '../src/review/bundle.ts';
+import { buildFileReviewPrompt, loadReviewPolicy } from '../src/review/prompt.ts';
+import { createBundleFixture } from './helpers/bundle.ts';
 
 describe('buildFileReviewPrompt', () => {
   it('embeds the file context inside a generated untrusted boundary', async () => {

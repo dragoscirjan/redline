@@ -58,6 +58,12 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Set up fixed GitNexus Node runtime
+      if: ${{ inputs.provider == 'gitnexus' }}
+      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+      with:
+        node-version: 24
+
     - name: Prepare pinned provider and cache identity
       id: prepare
       shell: bash

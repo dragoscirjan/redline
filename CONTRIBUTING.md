@@ -2,7 +2,7 @@
 
 ## Set up the repository
 
-Mise installs Node.js 24, Python 3.12, and pnpm 10.33.0. Use pnpm for dependency installation. The pinned pnpm version supports the minimum-release-age, overrides, and ignored-esbuild-installer policy in `pnpm-workspace.yaml`. Do not enable esbuild's installer or change that policy to make setup pass.
+Mise installs Node.js 24, Bun 1.4.4, Python 3.12, and pnpm 10.33.0. Use pnpm for dependency installation. The pinned pnpm version supports the minimum-release-age, overrides, and ignored-esbuild-installer policy in `pnpm-workspace.yaml`. Do not enable esbuild's installer or change that policy to make setup pass.
 
 ```bash
 mise trust
@@ -17,7 +17,7 @@ Use GitHub Issues for defects, features, and acceptance criteria. Keep product d
 
 The repository is in a restart phase: the current implementation is the leaner harness-executor design described in `AGENTS.md`. Improvements continue in sequenced milestones — container sandboxing, managed local model runtimes, and Forgejo/Gitea entry points are planned follow-ups, not present behavior. GitHub publication (one review per file plus a managed summary, dogfood auto-review on this repository) is implemented. `src.old/` and `github/action.yaml.old` keep the earlier design as reference material; do not import from them.
 
-The stack is pnpm, TypeScript, Node, vitest, bats, and VitePress. Do not add a second package manager, task runner, formatter, or test framework without an accepted design change. Follow `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `mise.toml`, and the scripts in `package.json`.
+The stack is pnpm, TypeScript, Node, Bun, vitest, bats, and VitePress. Do not add a second package manager, task runner, formatter, or test framework without an accepted design change. Follow `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `mise.toml`, and the scripts in `package.json`.
 
 ## Branches and pull requests
 
@@ -44,7 +44,7 @@ Each pull request adds or updates tests for changed behavior.
 
 - **Unit tests** (vitest, `test/*.test.ts`) cover parsing, validation, prompt assembly, diff-line mapping, finding validation, and output writing.
 - **Integration tests** (vitest) cover the review runner end to end with the echo harness and a scripted executor, plus the CLI entry points.
-- **CLI and manifest tests** (bats, `test/*.bats`) cover the built CLI against real bundle fixtures, the GitHub Action manifest contract, and the validation gate itself.
+- **CLI and manifest tests** (bats, `test/*.bats`) cover the direct TypeScript source CLIs against real bundle fixtures, the Node/Bun runtime contract, the GitHub Action manifest contract, and the validation gate itself.
 - **Harness matrix** (`test/harness-matrix-run.sh`, used by CI) runs echo, pi, and opencode end to end against the local mock model endpoint; CI uploads each harness's review output as a per-harness artifact, with a scripted finding for pi and opencode so the artifacts demonstrate diff-validated findings.
 - **Live-harness tests** are opt-in: `REDLINE_LIVE_HARNESS_TESTS=1` with the harness binaries on PATH.
 - **End-to-end tests** against a real repository are manual and opt-in; never target a production repository.
@@ -60,7 +60,7 @@ mise run validate
 The gate runs these tasks in order and stops on the first failure:
 
 1. `mise run typecheck` checks TypeScript without emitting files.
-2. `mise run test` compiles sources and tests, then runs the vitest and bats suites. The compilation is the gate's build check.
+2. `mise run test` runs the vitest and bats suites against TypeScript source. Node/Bun compatibility is enforced by no-emit type checking and the source-runtime integration matrix.
 3. `mise run docs` builds the VitePress site.
 
 Formatting, linting, duplication analysis, dependency vulnerability audits, recorded review-quality evaluation, and Git hooks are not implemented gates. Do not claim they passed or add no-op replacements. Adding them requires a separate reviewed change.
@@ -75,7 +75,7 @@ Product documentation lives under `docs/` as a VitePress site. Register new page
 
 ## Releasing the action
 
-Published `vMAJOR.MINOR.PATCH` action tags are immutable. Consumers pin the full version; the `vMAJOR` alias moves only through the guarded manual release flow described in the Wiki's Release operations runbook, with repository tag rules requiring the trusted releaser. A release tag must contain the built `dist/` output of the exact reviewed source, because the composite action builds nothing at runtime beyond checking it. Candidate runner images and other container-era machinery from the previous design are not part of the current release; they return with the container-sandbox milestone.
+Published `vMAJOR.MINOR.PATCH` action tags are immutable. Consumers pin the full version; the `vMAJOR` alias moves only through the guarded manual release flow described in the Wiki's Release operations runbook, with repository tag rules requiring the trusted releaser. A release tag must contain the exact reviewed TypeScript source used by the composite action; emitted `dist/**/*.js` files are not part of the runtime contract. Candidate runner images and other container-era machinery from the previous design are not part of the current release; they return with the container-sandbox milestone.
 
 ## Pull request checklist
 

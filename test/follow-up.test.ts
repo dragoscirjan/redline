@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FOLLOW_UP_LIMITS, FollowUpBudget, parseFollowUpResults,
   type FollowUpRequestBatch, type FollowUpResultBatch,
-} from '../src/code-context/follow-up.js';
+} from '../src/code-context/follow-up.ts';
 
 const identity = {
   repository: 'owner/repo',

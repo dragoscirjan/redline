@@ -10,7 +10,7 @@ The historical file-only baseline remains under `benchmark/review-quality/v1/`. 
 mise run benchmark
 ```
 
-The command rebuilds Redline, runs both modes through the production review parser, indexed-context loader, exact-head source resolver, prompt builder, and finding validator, then writes:
+The command executes Redline's TypeScript source directly, runs both modes through the production review parser, indexed-context loader, exact-head source resolver, prompt builder, and finding validator, then writes:
 
 - `benchmark/review-quality/v2/comparison/report.json`
 - `benchmark/review-quality/v2/comparison/report.md`
@@ -62,7 +62,7 @@ It does **not** prove that CGC or a live model produces the checked-in relations
 
 ## Scripted verifier replay (draft #107)
 
-Run `pnpm run benchmark:verification` to replay the four v2 fixtures plus two additional cases: a defaulted-parameter false positive and a cross-file per-user throttle defect. `benchmark/review-quality/verification-v1/dispositions.json` contains **scripted**, manually selected verifier dispositions—not model responses. `report.json` retains the per-fixture discovery and post-verifier findings, credited issues, false positives, prompt bytes (regenerated under the v7 policy), coverage, and recorded durations. Run `node dist/src/benchmark/verification-cli.js --output /tmp/verification-report.json` after a build to regenerate a report without overwriting the checked-in evidence.
+Run `pnpm run benchmark:verification` to replay the four v2 fixtures plus two additional cases: a defaulted-parameter false positive and a cross-file per-user throttle defect. `benchmark/review-quality/verification-v1/dispositions.json` contains **scripted**, manually selected verifier dispositions—not model responses. `report.json` retains the per-fixture discovery and post-verifier findings, credited issues, false positives, prompt bytes (regenerated under the v7 policy), coverage, and recorded durations. Run `node src/benchmark/verification-cli.ts --output /tmp/verification-report.json` to regenerate a report without overwriting the checked-in evidence.
 
 | Recorded mode | Credited issues before → after | False positives before → after | Recorded review duration before → after | Incomplete files |
 | --- | ---: | ---: | ---: | ---: |
@@ -89,7 +89,7 @@ The historical checked-in live result (older discovery policy) is under `benchma
 
 ## Opt-in independent verifier capture (draft #107)
 
-After `pnpm run build`, `node dist/src/benchmark/live-verification-cli.js --output /tmp/redline-live-verification.json` requires `REDLINE_LIVE_BENCHMARK=1`, a Pi/OpenCode harness, and the same `REDLINE_MODEL_CONFIG`/`REDLINE_MODEL_AUTH` credentials as the live-model capture. The two-fixture verification extension and four-fixture v2 corpus are captured separately with `--corpus benchmark/review-quality/v2` for the latter (six fixtures total). Each mode runs discovery once, then **replays exactly that discovery output** to a fresh live verifier invocation for every candidate-bearing file. The private capture retains validated per-file discovery and verified records, source coverage, prompts, calls, verdict, and measured durations, but not raw model text or credentials. A separate human judgment must map findings to the predeclared expected issues and inspect false positives; the capture itself never auto-credits model claims. File-only and indexed modes use recorded context artifacts, not live provider queries. If a model requests action-owned follow-up without a live pinned provider, coverage is incomplete rather than silently assumed complete.
+`node src/benchmark/live-verification-cli.ts --output /tmp/redline-live-verification.json` requires `REDLINE_LIVE_BENCHMARK=1`, a Pi/OpenCode harness, and the same `REDLINE_MODEL_CONFIG`/`REDLINE_MODEL_AUTH` credentials as the live-model capture. The two-fixture verification extension and four-fixture v2 corpus are captured separately with `--corpus benchmark/review-quality/v2` for the latter (six fixtures total). Each mode runs discovery once, then **replays exactly that discovery output** to a fresh live verifier invocation for every candidate-bearing file. The private capture retains validated per-file discovery and verified records, source coverage, prompts, calls, verdict, and measured durations, but not raw model text or credentials. A separate human judgment must map findings to the predeclared expected issues and inspect false positives; the capture itself never auto-credits model claims. File-only and indexed modes use recorded context artifacts, not live provider queries. If a model requests action-owned follow-up without a live pinned provider, coverage is incomplete rather than silently assumed complete.
 
 The activation gate requires no lost credited defects, no added clean-change false positives, adequate valid evidence, complete required coverage, and tolerable measured verifier latency. A single sequential provider run is directional evidence, not a stable latency distribution. The hardcoded Action gate remains off until the measurement and a trusted-base follow-up run pass.
 

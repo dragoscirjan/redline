@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createHarnessExecutor, isHarnessName } from '../src/harness-executor/registry.js';
-import { EchoHarnessExecutor } from '../src/harness-executor/echo-executor.js';
+import { createHarnessExecutor, isHarnessName } from '../src/harness-executor/registry.ts';
+import { EchoHarnessExecutor } from '../src/harness-executor/echo-executor.ts';
 
 describe('createHarnessExecutor', () => {
   it('resolves every registered harness', () => {

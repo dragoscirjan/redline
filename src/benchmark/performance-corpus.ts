@@ -1,6 +1,6 @@
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { parseBenchmarkFixture, type BenchmarkFixture } from './benchmark.js';
+import { parseBenchmarkFixture, type BenchmarkFixture } from './benchmark.ts';
 
 const PERFORMANCE_CORPUS_VERSION = 1 as const;
 const FILE_COUNT = 20;

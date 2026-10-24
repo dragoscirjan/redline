@@ -50,6 +50,11 @@ on:
         required: false
         type: number
         default: 4
+      runtime:
+        description: Trusted TypeScript runtime, node or bun. Default node.
+        required: false
+        type: string
+        default: node
       credential-isolation:
         description: Credential isolation mode. Only direct is supported; required explicitly when review execution is enabled against the previously published action.
         required: false
@@ -138,5 +143,6 @@ jobs:
           indexing-provider: ${{ inputs.indexing-provider }}
           timeout: ${{ inputs.timeout }}
           review-concurrency: ${{ inputs.review-concurrency }}
+          runtime: ${{ inputs.runtime }}
           artifact-name: ${{ inputs.artifact-name }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

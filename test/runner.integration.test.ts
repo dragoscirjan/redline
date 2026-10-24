@@ -1,22 +1,22 @@
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseReviewEnvironment } from '../src/review/environment.js';
-import { runFileReviews } from '../src/review/runner.js';
-import type { HarnessExecuteOptions, HarnessExecutor, HarnessPrompt, HarnessRun, PreparedHarness } from '../src/harness-executor/types.js';
-import { loadReviewBundle } from '../src/review/bundle.js';
-import { FileReviewValidator } from '../src/review/report.js';
-import { loadReviewReuseCache } from '../src/review/reuse.js';
-import { VERIFICATION_TIMEOUT_MS } from '../src/review/runner.js';
-import { MAX_REVIEW_REASON_CHARS } from '../src/review/types.js';
+import { parseReviewEnvironment } from '../src/review/environment.ts';
+import { runFileReviews } from '../src/review/runner.ts';
+import type { HarnessExecuteOptions, HarnessExecutor, HarnessPrompt, HarnessRun, PreparedHarness } from '../src/harness-executor/types.ts';
+import { loadReviewBundle } from '../src/review/bundle.ts';
+import { FileReviewValidator } from '../src/review/report.ts';
+import { loadReviewReuseCache } from '../src/review/reuse.ts';
+import { VERIFICATION_TIMEOUT_MS } from '../src/review/runner.ts';
+import { MAX_REVIEW_REASON_CHARS } from '../src/review/types.ts';
 import {
   cleanReviewEnvironment,
   createBundleFixture,
   BASE_SHA,
   HEAD_SHA,
   type BundleFixture,
-} from './helpers/bundle.js';
-import { reviewFinding } from './helpers/finding.js';
+} from './helpers/bundle.ts';
+import { reviewFinding } from './helpers/finding.ts';
 
 /** Scripted executor double: answers prompts from a queue of runs. */
 class ScriptedExecutor implements HarnessExecutor {

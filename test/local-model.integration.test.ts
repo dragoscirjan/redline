@@ -11,9 +11,9 @@
 
 import { spawn } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { parseReviewEnvironment } from '../src/review/environment.js';
-import { runFileReviews } from '../src/review/runner.js';
-import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.js';
+import { parseReviewEnvironment } from '../src/review/environment.ts';
+import { runFileReviews } from '../src/review/runner.ts';
+import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
 
 const ENABLED = process.env.REDLINE_LOCAL_MODEL_TESTS === '1';
 const MODEL_CONFIG = process.env.REDLINE_LOCAL_MODEL_CONFIG ?? '';

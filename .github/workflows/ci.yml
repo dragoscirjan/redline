@@ -40,7 +40,7 @@ jobs:
           corepack prepare pnpm@10.33.0 --activate
           pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Typecheck, build, and test
+      - name: Typecheck and test
         shell: bash
         run: |
           set -euo pipefail
@@ -111,10 +111,6 @@ jobs:
             *) printf 'unsupported harness: %s\n' "$HARNESS" >&2; exit 2 ;;
           esac
 
-      - name: Build
-        shell: bash
-        run: pnpm run build
-
       # Runs the full review pipeline per harness against the local mock
       # model endpoint and keeps the review output for the artifact below.
       - name: Run harness review end to end
@@ -139,8 +135,114 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  source-runtime:
+    name: Source runtime (${{ matrix.runtime }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [node, bun]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js toolchain
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: 24
+
+      - name: Set up pinned Bun runtime
+        if: ${{ matrix.runtime == 'bun' }}
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Run trusted TypeScript integration tests
+        shell: bash
+        env:
+          SOURCE_RUNTIME: ${{ matrix.runtime }}
+        run: |
+          set -euo pipefail
+          pnpm exec bats \
+            test/source-runtime.bats \
+            test/context-bundle.bats \
+            test/review-cli.bats \
+            test/harness-matrix.bats
+
+      - name: Measure source runtime
+        shell: bash
+        env:
+          SOURCE_RUNTIME: ${{ matrix.runtime }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/source-runtime-benchmark"
+          "$SOURCE_RUNTIME" src/benchmark/source-runtime-cli.ts \
+            --runtime "$SOURCE_RUNTIME" \
+            --json "${RUNNER_TEMP}/source-runtime-benchmark/report.json" \
+            --markdown "${RUNNER_TEMP}/source-runtime-benchmark/report.md"
+          cat "${RUNNER_TEMP}/source-runtime-benchmark/report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Start composite action measurement
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        run: printf '%s\n' "$(( $(date +%s%N) / 1000000 ))" > "${RUNNER_TEMP}/source-runtime-benchmark/action-start-ms"
+
+      - name: Run composite action from TypeScript source
+        id: action-smoke
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: ./github
+        with:
+          runtime: ${{ matrix.runtime }}
+          backend: echo
+          model-config: '{"provider":"mock","endpoint":"http://127.0.0.1:1/v1","model":"test-model"}'
+          model-auth: '{"mock":"test-key"}'
+          indexing: disabled
+          artifact-name: source-runtime-${{ matrix.runtime }}-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          artifact-retention-days: 1
+
+      - name: Record composite action measurement
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        shell: bash
+        env:
+          ACTION_OUTCOME: ${{ steps.action-smoke.outcome }}
+          SOURCE_RUNTIME: ${{ matrix.runtime }}
+        run: |
+          set -euo pipefail
+          started=$(<"${RUNNER_TEMP}/source-runtime-benchmark/action-start-ms")
+          finished=$(( $(date +%s%N) / 1000000 ))
+          duration=$(( finished - started ))
+          printf '{"version":1,"runtime":"%s","outcome":"%s","durationMs":%s}\n' \
+            "$SOURCE_RUNTIME" "$ACTION_OUTCOME" "$duration" \
+            > "${RUNNER_TEMP}/source-runtime-benchmark/action.json"
+          printf '\n- Composite action smoke: %s ms (%s)\n' "$duration" "$ACTION_OUTCOME" \
+            >> "${RUNNER_TEMP}/source-runtime-benchmark/report.md"
+          printf '## Composite action smoke\n\n- Runtime: %s\n- Duration: %s ms\n- Outcome: %s\n' \
+            "$SOURCE_RUNTIME" "$duration" "$ACTION_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload source runtime benchmark
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: source-runtime-${{ matrix.runtime }}-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: ${{ runner.temp }}/source-runtime-benchmark/
+          if-no-files-found: error
+          retention-days: 14
+
   docs:
-    needs: [validate, harness-matrix]
+    needs: [validate, harness-matrix, source-runtime]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read

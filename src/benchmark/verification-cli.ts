@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { runVerificationBenchmark } from './verification-benchmark.js';
+import { runVerificationBenchmark } from './verification-benchmark.ts';
 
 const root = resolve('benchmark/review-quality');
 const extension = resolve(root, 'verification-v1');

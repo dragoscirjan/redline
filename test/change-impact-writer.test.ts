@@ -2,9 +2,9 @@ import { readFile, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { deriveChangeImpact } from '../src/change-impact/planner.js';
-import { createChangeImpactWriter } from '../src/change-impact/writer.js';
-import type { ChangeImpactInput } from '../src/change-impact/types.js';
+import { deriveChangeImpact } from '../src/change-impact/planner.ts';
+import { createChangeImpactWriter } from '../src/change-impact/writer.ts';
+import type { ChangeImpactInput } from '../src/change-impact/types.ts';
 
 const input: ChangeImpactInput = {
   baseRevision: 'a'.repeat(40),

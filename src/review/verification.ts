@@ -1,15 +1,15 @@
 /** Bounded, source-backed dispositions from one fresh verifier invocation per file. */
 
-import type { ReviewBundle, ReviewManifestFile } from './bundle.js';
-import type { PromptCodeContext } from './indexed-context.js';
-import { validateSourceEvidence } from './source-evidence.js';
+import type { ReviewBundle, ReviewManifestFile } from './bundle.ts';
+import type { PromptCodeContext } from './indexed-context.ts';
+import { validateSourceEvidence } from './source-evidence.ts';
 import type {
   FindingClassification,
   FindingScope,
   FindingSeverity,
   SourceEvidence,
   ValidatedFinding,
-} from './types.js';
+} from './types.ts';
 
 export const VERIFICATION_DOCUMENT_VERSION = 1 as const;
 export const MAX_VERIFICATION_DOCUMENT_BYTES = 64 * 1024;

@@ -2,7 +2,7 @@
 
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { runRecordedBenchmark, writeBenchmarkReport } from './benchmark.js';
+import { runRecordedBenchmark, writeBenchmarkReport } from './benchmark.ts';
 
 interface CliOptions {
   readonly corpusDirectory: string;

@@ -2,15 +2,15 @@
 
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { parseDuration } from '../duration.js';
-import { createHarnessExecutor, isHarnessName } from '../harness-executor/registry.js';
-import { parseModelConfig, selectModelCredential } from '../review/environment.js';
+import { parseDuration } from '../duration.ts';
+import { createHarnessExecutor, isHarnessName } from '../harness-executor/registry.ts';
+import { parseModelConfig, selectModelCredential } from '../review/environment.ts';
 import {
   runPerformanceBenchmark,
   writePerformanceReport,
   type LivePerformanceConfiguration,
   type PerformanceSource,
-} from './performance.js';
+} from './performance.ts';
 
 interface CliOptions {
   readonly corpusPath: string;

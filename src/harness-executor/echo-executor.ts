@@ -15,7 +15,7 @@ import type {
   HarnessRun,
   HarnessSettings,
   PreparedHarness,
-} from './types.js';
+} from './types.ts';
 
 const FILE_ID_PATTERN = /"fileId"\s*:\s*"(\d{6})"/u;
 

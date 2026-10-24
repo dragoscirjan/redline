@@ -1,29 +1,29 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, opendir, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { CODE_CONTEXT_VERSION, codeContextGraphFactDigest } from '../code-context/artifact.js';
-import { assertOnlyKeys, isRecord, type ReviewBundle, type ReviewManifestFile } from './bundle.js';
-import type { ReviewEnvironment, ReviewReuseEnvironment } from './environment.js';
+import { CODE_CONTEXT_VERSION, codeContextGraphFactDigest } from '../code-context/artifact.ts';
+import { assertOnlyKeys, isRecord, type ReviewBundle, type ReviewManifestFile } from './bundle.ts';
+import type { ReviewEnvironment, ReviewReuseEnvironment } from './environment.ts';
 import {
   codeContextForFile,
   type FileReviewCodeContext,
   type LoadedReviewCodeContext,
-} from './indexed-context.js';
+} from './indexed-context.ts';
 import {
   buildFileContextPayload,
   buildFileReviewPrompt,
   FILE_REVIEW_PROMPT_ID,
   FILE_REVIEW_PROMPT_VERSION,
-} from './prompt.js';
-import { validateFindingReferences } from './pr-contract.js';
+} from './prompt.ts';
+import { validateFindingReferences } from './pr-contract.ts';
 import {
   type ChangedLines,
   FILE_REVIEW_DOCUMENT_VERSION,
   FileReviewValidator,
   MAX_FILE_FINDINGS,
   parseReusableReviewFinding,
-} from './report.js';
-import { buildRemediation, renderSuggestion, resolveSpanLines } from './remediation.js';
+} from './report.ts';
+import { buildRemediation, renderSuggestion, resolveSpanLines } from './remediation.ts';
 import {
   FILE_REVIEW_RECORD_VERSION,
   MAX_PERSISTED_REVIEW_REASON_CHARS,
@@ -35,12 +35,12 @@ import {
   type RejectedCandidate,
   type ReviewFinding,
   type ValidatedFinding,
-} from './types.js';
-import { VERIFICATION_DOCUMENT_VERSION } from './verification.js';
+} from './types.ts';
+import { VERIFICATION_DOCUMENT_VERSION } from './verification.ts';
 import {
   loadVerificationPolicy,
   VERIFICATION_PROMPT_ID,
-} from './verification-prompt.js';
+} from './verification-prompt.ts';
 
 export const REVIEW_REUSE_CACHE_VERSION = 2 as const;
 export const REVIEW_SEMANTIC_FINGERPRINT_VERSION = 1 as const;

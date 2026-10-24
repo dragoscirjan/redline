@@ -2,8 +2,8 @@
 /** Trusted composite-action entry point. Production verification stays gated
  * until an independently judged live quality and latency run passes. */
 import { pathToFileURL } from 'node:url';
-import { main } from '../review/cli.js';
-import { createActionFollowUpExecutor } from './follow-up.js';
+import { main } from '../review/cli.ts';
+import { createActionFollowUpExecutor } from './follow-up.ts';
 
 export function requireActionFollowUpConfig(env: NodeJS.ProcessEnv): {
   provider: 'cgc' | 'gitnexus'; runnerTemp: string; reviewDirectory: string;

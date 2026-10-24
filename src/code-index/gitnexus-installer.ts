@@ -15,7 +15,7 @@ import {
   nodeProcessSpawner,
   runBoundedProcess,
   type BoundedRunResult,
-} from '../process-runner.js';
+} from '../process-runner.ts';
 
 export const GITNEXUS_VERSION = '1.6.12';
 export const GITNEXUS_ARCHIVE = {

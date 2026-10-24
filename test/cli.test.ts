@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { main, progressCallbacks, type CliDependencies } from '../src/review/cli.js';
-import type { ReviewPublisher } from '../src/publish/index.js';
-import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.js';
+import { main, progressCallbacks, type CliDependencies } from '../src/review/cli.ts';
+import type { ReviewPublisher } from '../src/publish/index.ts';
+import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
 
 describe('redline-review CLI', () => {
   it('attributes concurrent progress and bounds each file live stream', () => {

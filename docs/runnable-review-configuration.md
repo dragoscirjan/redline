@@ -92,8 +92,8 @@ Notes:
 The same contract drives the standalone CLI:
 
 ```bash
-node dist/src/review/cli.js --validate-only   # validate the environment only
-node dist/src/review/cli.js                   # run the review
+node src/review/cli.ts --validate-only   # validate the environment only
+node src/review/cli.ts                   # run the review
 ```
 
 For standalone CLI use, opt into indexed context by setting both variables before running the review:

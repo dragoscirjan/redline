@@ -7,6 +7,7 @@ setup() {
   DOGFOOD_WORKFLOW="$ROOT/.github/workflows/dogfood-review.yml"
   WARMUP_WORKFLOW="$ROOT/.github/workflows/code-index-warmup.yml"
   DOCS_WORKFLOW="$ROOT/.github/workflows/docs.publish.yml"
+  CI_WORKFLOW="$ROOT/.github/workflows/ci.yml"
 }
 
 @test "action declares the fixed review input surface" {
@@ -23,12 +24,13 @@ action = yaml.safe_load(Path(sys.argv[1]).read_text())
 inputs = action['inputs']
 assert set(inputs) == {
     'backend', 'model-config', 'model-auth', 'finding-scope',
-    'timeout', 'review-concurrency', 'verbosity', 'indexing', 'indexing-provider', 'artifact-name', 'artifact-retention-days',
+    'timeout', 'review-concurrency', 'runtime', 'verbosity', 'indexing', 'indexing-provider', 'artifact-name', 'artifact-retention-days',
     'github-token', 'github-app-id', 'github-app-key',
 }, f'unexpected input surface: {sorted(inputs)}'
 assert inputs['finding-scope']['default'] == 'defects'
 assert inputs['timeout']['default'] == '30m'
 assert inputs['review-concurrency']['default'] == '4'
+assert inputs['runtime']['default'] == 'node'
 assert inputs['verbosity']['default'] == 'progress'
 assert inputs['indexing']['default'] == 'enabled'
 assert inputs['indexing-provider']['default'] == 'cgc'
@@ -41,13 +43,15 @@ for expected in [
     'Validate action inputs',
     'Generate Redline App token for review start',
     'Set up pinned Node runtime',
-    'Build trusted TypeScript',
+    'Set up pinned Bun runtime',
+    'Check trusted TypeScript source',
     'Validate action inputs with trusted TypeScript',
     'Restore validated per-file review records',
     'Fetch pull request commits as data',
     'Build bounded code index',
     'Build review context bundle',
     'Upload review context artifact',
+    'Set up fixed harness Node runtime',
     'Ensure harness binary',
     'Announce review start',
     'Run harness review',
@@ -63,13 +67,18 @@ PY
   [ "$status" -eq 0 ]
 }
 
-@test "action pins a GitNexus-compatible Node runtime" {
+@test "action pins the selectable TypeScript runtimes" {
   grep -Fq 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0' "$ACTION"
+  grep -Fq "if: \${{ inputs.runtime == 'node' }}" "$ACTION"
   grep -Fq 'node-version: 24' "$ACTION"
+  grep -Fq 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2' "$ACTION"
+  grep -Fq "if: \${{ inputs.runtime == 'bun' && (inputs.backend == 'pi' || inputs.backend == 'opencode') }}" "$ACTION"
+  grep -Fq "if: \${{ inputs.runtime == 'bun' }}" "$ACTION"
+  grep -Fq 'bun-version: 1.4.4' "$ACTION"
 }
 
 @test "action runs the review CLI through the REDLINE environment contract" {
-  grep -Fq 'dist/src/review/cli.js --validate-only' "$ACTION"
+  grep -Fq '"$TYPESCRIPT_RUNTIME" src/review/cli.ts --validate-only' "$ACTION"
   grep -Fq 'REDLINE_HARNESS: ${{ inputs.backend }}' "$ACTION"
   grep -Fq 'REDLINE_MODEL_CONFIG: ${{ inputs.model-config }}' "$ACTION"
   grep -Fq 'REDLINE_MODEL_AUTH: ${{ inputs.model-auth }}' "$ACTION"
@@ -173,7 +182,7 @@ PY
 }
 
 @test "action keeps the context bundle step and both artifact uploads" {
-  grep -Fq 'dist/src/context-bundle.js' "$ACTION"
+  grep -Fq 'src/context-bundle.ts' "$ACTION"
   grep -Fq 'name: ${{ inputs.artifact-name }}-context' "$ACTION"
   grep -Fq 'name: ${{ inputs.artifact-name }}-reviews' "$ACTION"
   grep -Fq 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1' "$ACTION"
@@ -219,9 +228,9 @@ PY
 }
 
 @test "action runs the review token-free and publishes in its own step" {
-  grep -Fq 'dist/src/review/cli.js" --announce-only' "$ACTION"
-  grep -Fq 'dist/src/review/cli.js" --publish-only' "$ACTION"
-  grep -Fq 'dist/src/review/cli.js" --announce-failure' "$ACTION"
+  grep -Fq 'src/review/cli.ts" --announce-only' "$ACTION"
+  grep -Fq 'src/review/cli.ts" --publish-only' "$ACTION"
+  grep -Fq 'src/review/cli.ts" --announce-failure' "$ACTION"
   grep -Fq 'REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-publish.outputs.token || inputs.github-token }}' "$ACTION"
   count=$(grep -cF 'REDLINE_PUBLISH_TOKEN: ${{ steps.app-token-start.outputs.token || inputs.github-token }}' "$ACTION")
   [ "$count" -eq 2 ]
@@ -238,9 +247,25 @@ PY
   ! grep -Eq 'credential-isolation|container-engine|report-style' "$ACTION"
 }
 
-@test "action builds trusted TypeScript from the action checkout" {
+@test "action checks and executes trusted TypeScript source without emitting JavaScript" {
   grep -Fq 'pnpm install --frozen-lockfile --ignore-scripts' "$ACTION"
-  grep -Fq 'pnpm run build' "$ACTION"
-  grep -Fq 'test -f dist/src/review/cli.js' "$ACTION"
-  grep -Fq 'test -f dist/src/context-bundle.js' "$ACTION"
+  grep -Fq 'pnpm run typecheck' "$ACTION"
+  grep -Fq 'test -f src/review/cli.ts' "$ACTION"
+  grep -Fq 'test -f src/context-bundle.ts' "$ACTION"
+  ! grep -Fq 'pnpm run build' "$ACTION"
+  ! grep -Fq 'dist/src/' "$ACTION"
+}
+
+@test "action validates and forwards the trusted runtime before repository data" {
+  validation_line=$(grep -nF 'name: Validate action inputs' "$ACTION" | head -n1 | cut -d: -f1)
+  fetch_line=$(grep -nF 'name: Fetch pull request commits as data' "$ACTION" | head -n1 | cut -d: -f1)
+  [ "$validation_line" -lt "$fetch_line" ]
+  grep -Fq '[[ "$TYPESCRIPT_RUNTIME" == '\''node'\'' || "$TYPESCRIPT_RUNTIME" == '\''bun'\'' ]]' "$ACTION"
+  grep -Fq 'runtime: ${{ inputs.runtime }}' "$REUSABLE_WORKFLOW"
+  grep -A5 '^      runtime:' "$REUSABLE_WORKFLOW" | grep -Fq 'default: node'
+  grep -Fq 'runtime: ${{ inputs.runtime }}' "$DOGFOOD_WORKFLOW"
+  grep -A5 '^      runtime:' "$DOGFOOD_WORKFLOW" | grep -Fq 'default: node'
+  grep -Fq 'runtime: [node, bun]' "$CI_WORKFLOW"
+  grep -Fq 'action.json' "$CI_WORKFLOW"
+  grep -Fq 'Run composite action from TypeScript source' "$CI_WORKFLOW"
 }

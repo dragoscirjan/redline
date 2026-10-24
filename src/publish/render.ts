@@ -6,9 +6,9 @@
  * it is embedded as quoted review data and never alters the structure.
  */
 
-import { spanLocation } from '../review/remediation.js';
-import type { FileReviewRecord, PublishedFinding, PullRequestReviewRecord } from '../review/types.js';
-import type { ReviewScope } from './types.js';
+import { spanLocation } from '../review/remediation.ts';
+import type { FileReviewRecord, PublishedFinding, PullRequestReviewRecord } from '../review/types.ts';
+import type { ReviewScope } from './types.ts';
 
 export function summaryMarker(scope: ReviewScope): string {
   return `<!-- redline:summary:v2 repository=${encodeURIComponent(scope.repository)} pr=${scope.pullRequest} -->`;

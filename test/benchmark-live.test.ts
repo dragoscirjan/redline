@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { main } from '../src/benchmark/live-cli.js';
+import { main } from '../src/benchmark/live-cli.ts';
 
 const CORPUS = resolve('benchmark/review-quality/v2');
 

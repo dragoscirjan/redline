@@ -6,7 +6,7 @@ import {
   parseJsonLines,
   readBounded,
   runBoundedProcess,
-} from '../src/harness-executor/process-runner.js';
+} from '../src/harness-executor/process-runner.ts';
 
 function textStream(chunks: string[]): AsyncIterable<Uint8Array> {
   const encoder = new TextEncoder();

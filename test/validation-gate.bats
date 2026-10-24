@@ -17,11 +17,9 @@ scripts = json.loads((root / 'package.json').read_text())['scripts']
 assert config['tasks']['validate']['run'] == [
     'mise run typecheck', 'mise run test', 'mise run docs',
 ]
-assert scripts['test'].split('&&')[0].strip() == 'pnpm run build'
-assert 'vitest run' in scripts['test']
-assert 'bats test/*.bats' in scripts['test']
+assert scripts['test'].strip() == 'vitest run && bats test/*.bats'
 assert scripts['typecheck'].strip() == 'tsc --noEmit -p tsconfig.json'
-assert scripts['build'].strip() == 'rm -rf dist && tsc -p tsconfig.json'
+assert 'build' not in scripts
 PY
   printf '%s\n' "$output"
   [ "$status" -eq 0 ]
@@ -69,7 +67,7 @@ PY
   [ "$status" -eq 0 ]
 }
 
-@test "Mise pins pnpm 10 consistently with its tool lock" {
+@test "Mise pins pnpm and Bun consistently with its tool lock" {
   run python3 - "$ROOT" <<'PY'
 from pathlib import Path
 import re
@@ -77,12 +75,20 @@ import sys
 import tomllib
 
 root = Path(sys.argv[1])
-version = tomllib.loads((root / 'mise.toml').read_text())['tools']['pnpm']
-assert re.fullmatch(r'10\.\d+\.\d+', version), 'pnpm must have an exact supported version'
-locked = tomllib.loads((root / 'mise.lock').read_text())['tools']['pnpm']
-assert len(locked) == 1 and locked[0]['version'] == version
-assert 'platforms.linux-x64' in locked[0]
-assert 'platforms.linux-arm64' in locked[0]
+tools = tomllib.loads((root / 'mise.toml').read_text())['tools']
+pnpm_version = tools['pnpm']
+assert re.fullmatch(r'10\.\d+\.\d+', pnpm_version), 'pnpm must have an exact supported version'
+assert tools['node'] == '24'
+assert tools['bun'] == '1.4.4'
+lock = tomllib.loads((root / 'mise.lock').read_text())['tools']
+locked_pnpm = lock['pnpm']
+assert len(locked_pnpm) == 1 and locked_pnpm[0]['version'] == pnpm_version
+assert 'platforms.linux-x64' in locked_pnpm[0]
+assert 'platforms.linux-arm64' in locked_pnpm[0]
+locked_bun = lock['bun']
+assert len(locked_bun) == 1 and locked_bun[0]['version'] == tools['bun']
+assert 'platforms.linux-x64' in locked_bun[0]
+assert 'platforms.linux-arm64' in locked_bun[0]
 PY
   printf '%s\n' "$output"
   [ "$status" -eq 0 ]
@@ -100,7 +106,10 @@ assert package['devDependencies']['vitest'].startswith('^'), 'vitest must be a p
 assert package['devDependencies']['bats'].startswith('^'), 'bats must be a pinned dev dependency'
 tsconfig = json.loads((root / 'tsconfig.json').read_text())
 assert tsconfig['include'] == ['src/**/*.ts', 'test/**/*.ts'], \
-    'compiled sources and tests must stay inside src/ and test/'
+    'maintained sources and tests must stay inside src/ and test/'
+assert tsconfig['compilerOptions']['noEmit'] is True
+assert tsconfig['compilerOptions']['erasableSyntaxOnly'] is True
+assert tsconfig['compilerOptions']['allowImportingTsExtensions'] is True
 vitest = (root / 'vitest.config.ts').read_text()
 assert "include: ['test/**/*.test.ts']" in vitest, \
     'vitest must only collect test/**/*.test.ts so src.old stays inert'
@@ -112,13 +121,15 @@ PY
 @test "the review CLI is the published bin entry" {
   run python3 - "$ROOT" <<'PY'
 import json
+import os
 from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
 package = json.loads((root / 'package.json').read_text())
-assert package['bin'] == {'redline-review': 'dist/src/review/cli.js'}
+assert package['bin'] == {'redline-review': 'src/review/cli.ts'}
 assert (root / 'src' / 'review' / 'cli.ts').is_file()
+assert os.access(root / 'src' / 'review' / 'cli.ts', os.X_OK)
 assert (root / 'src' / 'context-bundle.ts').is_file()
 PY
   printf '%s\n' "$output"

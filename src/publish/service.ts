@@ -9,10 +9,10 @@
  * to fail loudly.
  */
 
-import type { PublicationEnvironment } from '../review/environment.js';
-import type { FileReviewRecord, PullRequestReviewRecord } from '../review/types.js';
-import { MAX_PUBLISHED_FILE_REVIEWS, MAX_PUBLISHED_INLINE_COMMENTS } from '../review/publication-limits.js';
-import { GitHubReviewPublisher } from './github-publisher.js';
+import type { PublicationEnvironment } from '../review/environment.ts';
+import type { FileReviewRecord, PullRequestReviewRecord } from '../review/types.ts';
+import { MAX_PUBLISHED_FILE_REVIEWS, MAX_PUBLISHED_INLINE_COMMENTS } from '../review/publication-limits.ts';
+import { GitHubReviewPublisher } from './github-publisher.ts';
 import {
   fileReviewMarker,
   renderFileReviewBody,
@@ -22,10 +22,10 @@ import {
   renderSummaryBody,
   type RunningSummaryInfo,
   summaryMarker,
-} from './render.js';
-import type { FileReviewPublication, ReviewPublisher, ReviewScope } from './types.js';
+} from './render.ts';
+import type { FileReviewPublication, ReviewPublisher, ReviewScope } from './types.ts';
 
-export { MAX_PUBLISHED_FILE_REVIEWS, MAX_PUBLISHED_INLINE_COMMENTS } from '../review/publication-limits.js';
+export { MAX_PUBLISHED_FILE_REVIEWS, MAX_PUBLISHED_INLINE_COMMENTS } from '../review/publication-limits.ts';
 
 export interface PublicationFileResult {
   readonly fileId: string;

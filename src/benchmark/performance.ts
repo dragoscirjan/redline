@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import type { CodeContextTimings } from '../code-context/artifact.js';
-import { parseDuration, type Duration } from '../duration.js';
+import type { CodeContextTimings } from '../code-context/artifact.ts';
+import { parseDuration, type Duration } from '../duration.ts';
 import type {
   HarnessCredential,
   HarnessExecuteOptions,
@@ -13,20 +13,20 @@ import type {
   HarnessRun,
   HarnessSettings,
   PreparedHarness,
-} from '../harness-executor/types.js';
-import { publishRecords } from '../publish/service.js';
-import type { FileReviewPublication, ReviewPublisher, ReviewScope } from '../publish/types.js';
-import type { ReviewEnvironment } from '../review/environment.js';
-import { loadPublishedRun } from '../review/run-output.js';
-import { runFileReviews } from '../review/runner.js';
-import type { FileReviewRecord } from '../review/types.js';
-import { materializeBenchmarkFixture, type FixtureRecording } from './benchmark.js';
+} from '../harness-executor/types.ts';
+import { publishRecords } from '../publish/service.ts';
+import type { FileReviewPublication, ReviewPublisher, ReviewScope } from '../publish/types.ts';
+import type { ReviewEnvironment } from '../review/environment.ts';
+import { loadPublishedRun } from '../review/run-output.ts';
+import { runFileReviews } from '../review/runner.ts';
+import type { FileReviewRecord } from '../review/types.ts';
+import { materializeBenchmarkFixture, type FixtureRecording } from './benchmark.ts';
 import {
   loadPerformanceCorpus,
   type PerformanceCorpus,
   type PerformanceCorpusFile,
   type PerformanceFileCategory,
-} from './performance-corpus.js';
+} from './performance-corpus.ts';
 
 const PERFORMANCE_PROFILE_VERSION = 1 as const;
 const PERFORMANCE_REPORT_VERSION = 1 as const;
@@ -466,13 +466,17 @@ class MeasuringPerformanceExecutor implements HarnessExecutor {
   prepareFinishedAt: number | null = null;
   maximumActiveCalls = 0;
   #activeCalls = 0;
+  readonly #delegate: HarnessExecutor;
   readonly #files: ReadonlyMap<string, PerformanceCorpusFile>;
+  readonly #source: PerformanceSource;
 
   constructor(
-    private readonly delegate: HarnessExecutor,
+    delegate: HarnessExecutor,
     files: readonly PerformanceCorpusFile[],
-    private readonly source: PerformanceSource,
+    source: PerformanceSource,
   ) {
+    this.#delegate = delegate;
+    this.#source = source;
     this.harness = delegate.harness;
     this.#files = new Map(files.map((file) => [file.id, file]));
   }
@@ -480,7 +484,7 @@ class MeasuringPerformanceExecutor implements HarnessExecutor {
   async prepare(settings: HarnessSettings): Promise<PreparedHarness> {
     this.prepareStartedAt = Date.now();
     try {
-      return await this.delegate.prepare(settings);
+      return await this.#delegate.prepare(settings);
     } finally {
       this.prepareFinishedAt = Date.now();
     }
@@ -494,13 +498,13 @@ class MeasuringPerformanceExecutor implements HarnessExecutor {
     const fileId = options?.invocation?.fileId;
     const file = fileId === undefined ? undefined : this.#files.get(fileId);
     if (file === undefined) throw new Error('performance executor received an invocation without a corpus file');
-    const queueWaitMs = this.source === 'recorded' ? 0 : Math.max(0, Date.now() - this.#startedAt);
+    const queueWaitMs = this.#source === 'recorded' ? 0 : Math.max(0, Date.now() - this.#startedAt);
     const promptBytes = Buffer.byteLength(prompt.system, 'utf8') + Buffer.byteLength(prompt.user, 'utf8');
     const wallStartedAt = Date.now();
     this.#activeCalls += 1;
     this.maximumActiveCalls = Math.max(this.maximumActiveCalls, this.#activeCalls);
     try {
-      const run = await this.delegate.execute(prepared, prompt, options);
+      const run = await this.#delegate.execute(prepared, prompt, options);
       const wallFinishedAt = Date.now();
       const telemetry = run.telemetry;
       this.measurements.push({

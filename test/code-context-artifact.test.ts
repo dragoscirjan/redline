@@ -8,7 +8,7 @@ import {
   codeContextGraphFactDigest,
   loadCodeContextArtifact,
   parseCodeContextArtifact,
-} from '../src/code-context/artifact.js';
+} from '../src/code-context/artifact.ts';
 
 function validArtifact(): Record<string, unknown> {
   const graphFact = {

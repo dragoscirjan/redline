@@ -1,6 +1,6 @@
 /** Provider-neutral follow-up exchange. Only trusted action code may execute requests. */
 import { createHash } from 'node:crypto';
-import type { CodeContextProvider } from './artifact.js';
+import type { CodeContextProvider } from './artifact.ts';
 
 export const FOLLOW_UP_VERSION = 1 as const;
 export const FOLLOW_UP_LIMITS = Object.freeze({

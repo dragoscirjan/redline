@@ -4,8 +4,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { loadBenchmarkCorpus, type BenchmarkFixture } from './benchmark.js';
-import type { FileReviewRecord, ReviewSynthesis } from '../review/types.js';
+import { loadBenchmarkCorpus, type BenchmarkFixture } from './benchmark.ts';
+import type { FileReviewRecord, ReviewSynthesis } from '../review/types.ts';
 
 export interface LiveJudgment {
   readonly fixtureId: string;

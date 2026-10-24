@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { loadReviewBundle } from '../src/review/bundle.js';
-import { buildVerificationPrompt, VERIFICATION_PROMPT_ID } from '../src/review/verification-prompt.js';
-import { createBundleFixture } from './helpers/bundle.js';
-import { reviewFinding } from './helpers/finding.js';
+import { loadReviewBundle } from '../src/review/bundle.ts';
+import { buildVerificationPrompt, VERIFICATION_PROMPT_ID } from '../src/review/verification-prompt.ts';
+import { createBundleFixture } from './helpers/bundle.ts';
+import { reviewFinding } from './helpers/finding.ts';
 
 it('uses a fixed verifier policy, fresh untrusted context, and deterministic bounded candidates', async () => {
   const fixture = await createBundleFixture();

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import {
-  lstat, mkdir, mkdtemp, readdir, readFile, rm, stat, unlink, writeFile,
+  lstat, mkdir, mkdtemp, readdir, readFile, readlink, rm, stat, unlink, writeFile,
 } from 'node:fs/promises';
 import { arch, tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
@@ -182,7 +182,7 @@ async function digestFile(path: string): Promise<string> {
   return hash.digest('hex');
 }
 
-export async function digestDirectory(root: string): Promise<string> {
+export async function digestDirectory(root: string, allowSymbolicLinks = false): Promise<string> {
   const hash = createHash('sha256');
   let entries = 0;
   const visit = async (directory: string): Promise<void> => {
@@ -194,8 +194,10 @@ export async function digestDirectory(root: string): Promise<string> {
       const childPath = join(directory, child.name);
       const path = relative(root, childPath).split('\\').join('/');
       const metadata = await lstat(childPath);
-      if (metadata.isSymbolicLink()) throw new Error(`benchmark tree retained a symbolic link: ${path}`);
-      if (metadata.isDirectory()) {
+      if (metadata.isSymbolicLink()) {
+        if (!allowSymbolicLinks) throw new Error(`benchmark tree retained a symbolic link: ${path}`);
+        hash.update(`symlink\0${path}\0${await readlink(childPath)}\0`);
+      } else if (metadata.isDirectory()) {
         hash.update(`directory\0${path}\0`);
         await visit(childPath);
       } else if (metadata.isFile()) {
@@ -489,14 +491,14 @@ export async function runCheckoutBenchmarkSample(
   ));
   const afterBundle = await objectBytes(join(repositoryPath, '.git/objects'));
   const coldBundleDigest = await digestDirectory(coldBundle);
-  const reviewSourceDigest = await digestDirectory(coldReviewSource);
+  const reviewSourceDigest = await digestDirectory(coldReviewSource, true);
   await removeTree(coldBundle);
   await removeTree(coldReviewSource);
   const bundleWarmMs = await elapsed(async () => buildBundle(
     repositoryPath, candidate.base, candidate.head, warmBundle, warmReviewSource, environment, profile.commandTimeoutMs,
   ));
   if (coldBundleDigest !== await digestDirectory(warmBundle)
-    || reviewSourceDigest !== await digestDirectory(warmReviewSource)) {
+    || reviewSourceDigest !== await digestDirectory(warmReviewSource, true)) {
     throw new Error('cold and warm context bundles differ');
   }
   await removeTree(warmBundle);

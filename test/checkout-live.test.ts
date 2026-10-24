@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -49,6 +49,7 @@ async function createMergeRepository(parent: string): Promise<CheckoutBenchmarkR
   await mkdir(work);
   git(work, 'init', '--quiet', '--initial-branch=main');
   await writeFile(join(work, 'shared.txt'), 'base\n');
+  await symlink('shared.txt', join(work, 'shared-link.txt'));
   git(work, 'add', '.');
   git(work, 'commit', '--quiet', '-m', 'base');
   const base = git(work, 'rev-parse', 'HEAD');

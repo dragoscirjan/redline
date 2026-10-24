@@ -1,0 +1,102 @@
+name: Warm exact-base code indexes
+
+on:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+concurrency:
+  group: redline-code-index-warmup-${{ github.repository_id }}
+  cancel-in-progress: true
+
+jobs:
+  warmup:
+    name: Warm ${{ matrix.provider }} index
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        provider:
+          - cgc
+          - gitnexus
+    steps:
+      - name: Check out trusted default-branch revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up pinned Node runtime
+        if: ${{ matrix.provider == 'gitnexus' }}
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: 24
+
+      - name: Build trusted GitNexus installer
+        if: ${{ matrix.provider == 'gitnexus' }}
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm run build
+          test -f dist/src/code-index/install-gitnexus.js
+
+      - name: Warm exact-base provider cache
+        id: warmup
+        uses: ./github/code-index
+        with:
+          provider: ${{ matrix.provider }}
+          mode: warmup
+          base: ${{ github.sha }}
+          head: ${{ github.sha }}
+          repository: ${{ github.repository }}
+          output-directory: ${{ github.workspace }}/code-index-warmup-${{ matrix.provider }}
+
+      - name: Record warmup diagnostics
+        if: ${{ always() }}
+        env:
+          PROVIDER: ${{ matrix.provider }}
+          RESULT: ${{ steps.warmup.outputs.warmup-result }}
+          CACHE_HIT: ${{ steps.warmup.outputs.cache-hit }}
+          CACHE_IDENTITY: ${{ steps.warmup.outputs.cache-identity }}
+          CACHE_SAVE_OUTCOME: ${{ steps.warmup.outputs.cache-save-outcome }}
+          CACHE_SIZE_BYTES: ${{ steps.warmup.outputs.cache-size-bytes }}
+          DURATION_MS: ${{ steps.warmup.outputs.duration-ms }}
+          INDEX_MS: ${{ steps.warmup.outputs.index-ms }}
+        run: |
+          {
+            printf '## %s exact-base warmup\n\n' "$PROVIDER"
+            printf -- '- Result: `%s`\n' "${RESULT:-failed}"
+            printf -- '- Cache hit: `%s`\n' "${CACHE_HIT:-false}"
+            printf -- '- Cache identity: `%s`\n' "${CACHE_IDENTITY:-unavailable}"
+            printf -- '- Cache save: `%s`\n' "${CACHE_SAVE_OUTCOME:-skipped}"
+            printf -- '- Cache size: `%s` bytes\n' "${CACHE_SIZE_BYTES:-0}"
+            printf -- '- Index duration: `%s` ms\n' "${INDEX_MS:-0}"
+            printf -- '- Total measured duration: `%s` ms\n' "${DURATION_MS:-0}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload warmup diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: code-index-warmup-${{ matrix.provider }}-${{ github.sha }}
+          path: code-index-warmup-${{ matrix.provider }}/code-context.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Fail visible warmup errors
+        if: ${{ always() }}
+        env:
+          RESULT: ${{ steps.warmup.outputs.warmup-result }}
+        run: |
+          if [[ "$RESULT" != 'saved' && "$RESULT" != 'hit' ]]; then
+            printf 'Exact-base warmup did not produce a reusable cache: %s\n' "${RESULT:-failed}" >&2
+            exit 1
+          fi

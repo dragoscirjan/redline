@@ -9,6 +9,10 @@ inputs:
     description: Code-index provider, cgc or gitnexus.
     required: false
     default: cgc
+  mode:
+    description: Execution mode, review or warmup.
+    required: false
+    default: review
   base:
     description: Exact pull request base commit (full SHA-1 or SHA-256 identifier).
     required: true
@@ -30,8 +34,26 @@ outputs:
     description: "Context coverage status: complete, partial, unsupported, or unavailable."
     value: ${{ steps.finalize.outputs.status }}
   cache-hit:
-    description: Whether actions/cache restored the exact pull request base-revision database.
+    description: Whether a validated exact-base database was restored and reused.
     value: ${{ steps.finalize.outputs.cache-hit }}
+  cache-identity:
+    description: Provider, platform, repository, configuration, and exact-revision cache identity.
+    value: ${{ steps.finalize.outputs.cache-identity }}
+  cache-save-outcome:
+    description: Cache save step outcome, success, failure, or skipped.
+    value: ${{ steps.finalize.outputs.cache-save-outcome }}
+  cache-size-bytes:
+    description: Bounded size of the validated provider cache tree.
+    value: ${{ steps.finalize.outputs.cache-size-bytes }}
+  duration-ms:
+    description: Total measured provider preparation, restore, index, query, and save duration.
+    value: ${{ steps.finalize.outputs.duration-ms }}
+  index-ms:
+    description: Provider indexing duration; zero on a validated exact-base cache hit.
+    value: ${{ steps.finalize.outputs.index-ms }}
+  warmup-result:
+    description: Warmup result, hit, saved, save-failed, failed, or not-requested.
+    value: ${{ steps.finalize.outputs.warmup-result }}
 
 runs:
   using: composite
@@ -41,6 +63,7 @@ runs:
       shell: bash
       env:
         REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
+        REDLINE_CODE_INDEX_MODE: ${{ inputs.mode }}
         REDLINE_CODE_INDEX_BASE: ${{ inputs.base }}
         REDLINE_CODE_INDEX_HEAD: ${{ inputs.head }}
         REDLINE_CODE_INDEX_REPOSITORY: ${{ inputs.repository }}
@@ -64,6 +87,7 @@ runs:
       shell: bash
       env:
         REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
+        REDLINE_CODE_INDEX_MODE: ${{ inputs.mode }}
         REDLINE_CODE_INDEX_BASE: ${{ inputs.base }}
         REDLINE_CODE_INDEX_HEAD: ${{ inputs.head }}
         REDLINE_CODE_INDEX_REPOSITORY: ${{ inputs.repository }}
@@ -77,6 +101,7 @@ runs:
       shell: bash
       env:
         REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
+        REDLINE_CODE_INDEX_MODE: ${{ inputs.mode }}
       run: bash "${{ github.action_path }}/run.sh" save-start
 
     - name: Save validated provider database
@@ -94,7 +119,9 @@ runs:
       shell: bash
       env:
         REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
+        REDLINE_CODE_INDEX_MODE: ${{ inputs.mode }}
         REDLINE_CODE_INDEX_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
-        REDLINE_CODE_INDEX_CACHE_MATCHED_KEY: ${{ steps.cache-restore.outputs.cache-matched-key }}
+        REDLINE_CODE_INDEX_CACHE_IDENTITY: ${{ steps.prepare.outputs.cache-identity }}
+        REDLINE_CODE_INDEX_CACHE_READY: ${{ steps.build.outputs.cache-ready }}
         REDLINE_CODE_INDEX_CACHE_SAVE_OUTCOME: ${{ steps.cache-save.outcome }}
       run: bash "${{ github.action_path }}/run.sh" finalize

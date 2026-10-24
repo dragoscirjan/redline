@@ -5,6 +5,7 @@ setup() {
   ACTION="$ROOT/github/action.yaml"
   REUSABLE_WORKFLOW="$ROOT/.github/workflows/code-review.yml"
   DOGFOOD_WORKFLOW="$ROOT/.github/workflows/dogfood-review.yml"
+  WARMUP_WORKFLOW="$ROOT/.github/workflows/code-index-warmup.yml"
 }
 
 @test "action declares the fixed review input surface" {
@@ -101,6 +102,42 @@ PY
   ! grep -Fq 'report-style: ${{ inputs.report-style }}' "$REUSABLE_WORKFLOW"
   ! grep -Fq 'credential-isolation: ${{ inputs.credential-isolation }}' "$REUSABLE_WORKFLOW"
   ! grep -Fq 'container-engine: ${{ inputs.container-engine }}' "$REUSABLE_WORKFLOW"
+}
+
+@test "default-branch warmup prepares both pinned provider caches with bounded concurrency" {
+  if ! python3 -c 'import yaml' 2>/dev/null; then
+    skip 'PyYAML is required to validate workflow YAML'
+  fi
+  python3 - "$WARMUP_WORKFLOW" <<'PY'
+import sys
+from pathlib import Path
+import yaml
+
+workflow = yaml.safe_load(Path(sys.argv[1]).read_text())
+assert workflow[True] == {'push': {'branches': ['main']}}
+assert workflow['permissions'] == {}
+assert workflow['concurrency'] == {
+    'group': 'redline-code-index-warmup-${{ github.repository_id }}',
+    'cancel-in-progress': True,
+}
+job = workflow['jobs']['warmup']
+assert job['permissions'] == {'contents': 'read'}
+assert job['strategy']['fail-fast'] is False
+assert job['strategy']['max-parallel'] == 2
+assert job['strategy']['matrix']['provider'] == ['cgc', 'gitnexus']
+steps = job['steps']
+checkout = next(step for step in steps if step.get('name') == 'Check out trusted default-branch revision')
+assert checkout['with']['ref'] == '${{ github.sha }}'
+assert checkout['with']['persist-credentials'] is False
+assert checkout['with']['fetch-depth'] == 0
+warmup = next(step for step in steps if step.get('id') == 'warmup')
+assert warmup['uses'] == './github/code-index'
+assert warmup['with']['mode'] == 'warmup'
+assert warmup['with']['base'] == warmup['with']['head'] == '${{ github.sha }}'
+assert warmup['with']['provider'] == '${{ matrix.provider }}'
+assert any(step.get('name') == 'Upload warmup diagnostics' for step in steps)
+assert any(step.get('name') == 'Fail visible warmup errors' for step in steps)
+PY
 }
 
 @test "dogfood workflow gates the complete review input set on model credentials" {

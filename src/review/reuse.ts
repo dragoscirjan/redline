@@ -17,20 +17,24 @@ import {
 } from './prompt.js';
 import { validateFindingReferences } from './pr-contract.js';
 import {
+  type ChangedLines,
   FILE_REVIEW_DOCUMENT_VERSION,
   FileReviewValidator,
   MAX_FILE_FINDINGS,
   parseReusableReviewFinding,
 } from './report.js';
-import { buildRemediation } from './remediation.js';
+import { buildRemediation, renderSuggestion, resolveSpanLines } from './remediation.js';
 import {
   FILE_REVIEW_RECORD_VERSION,
+  MAX_PERSISTED_REVIEW_REASON_CHARS,
+  MAX_REVIEW_REASON_CHARS,
   type FileFollowUpCoverage,
   type FileReviewRecord,
   type FileVerificationCoverage,
   type PublishedFinding,
   type RejectedCandidate,
   type ReviewFinding,
+  type ValidatedFinding,
 } from './types.js';
 import { VERIFICATION_DOCUMENT_VERSION } from './verification.js';
 import {
@@ -38,7 +42,7 @@ import {
   VERIFICATION_PROMPT_ID,
 } from './verification-prompt.js';
 
-export const REVIEW_REUSE_CACHE_VERSION = 1 as const;
+export const REVIEW_REUSE_CACHE_VERSION = 2 as const;
 export const REVIEW_SEMANTIC_FINGERPRINT_VERSION = 1 as const;
 export const REVIEW_REUSE_TELEMETRY_VERSION = 1 as const;
 
@@ -47,14 +51,21 @@ const MAX_REUSE_ENTRY_BYTES = 512 * 1024;
 const MAX_REUSE_TOTAL_BYTES = 32 * 1024 * 1024;
 const MAX_REUSE_DURATION_MS = 24 * 60 * 60 * 1_000;
 const MAX_REJECTED_CANDIDATES = 32;
+/** Rendered diff suggestions include bounded current and proposed lines. */
+const MAX_CACHED_SUGGESTION_CHARS = 32 * 1024;
 const COMMIT_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const SHA256_PATTERN = /^sha256:[0-9a-f]{64}$/u;
 const CACHE_FILE_PATTERN = /^[0-9a-f]{64}\.json$/u;
 
+interface CachedReviewFinding {
+  readonly finding: ReviewFinding;
+  readonly suggestion: string | null;
+}
+
 interface CachedReviewResult {
   readonly outcome: 'clean' | 'findings';
   readonly reason?: string | undefined;
-  readonly findings: readonly ReviewFinding[];
+  readonly findings: readonly CachedReviewFinding[];
   readonly rejectedCandidates: readonly RejectedCandidate[];
   readonly verification?: FileVerificationCoverage | undefined;
   readonly followUp?: FileFollowUpCoverage | undefined;
@@ -249,7 +260,7 @@ function nonNegativeInteger(value: unknown, maximum: number, label: string): num
 }
 
 function optionalReason(value: unknown, label: string): string | undefined {
-  return value === undefined ? undefined : boundedString(value, 500, label);
+  return value === undefined ? undefined : boundedString(value, MAX_REVIEW_REASON_CHARS, label);
 }
 
 function parseVerification(value: unknown): FileVerificationCoverage | undefined {
@@ -318,7 +329,11 @@ function parseRejectedCandidates(value: unknown): readonly RejectedCandidate[] {
       index: nonNegativeInteger(item['index'], MAX_FILE_FINDINGS - 1, `reuse rejected candidate ${position} index`),
       stage: item['stage'] as RejectedCandidate['stage'],
       code: boundedString(item['code'], 128, `reuse rejected candidate ${position} code`),
-      reason: boundedString(item['reason'], 500, `reuse rejected candidate ${position} reason`),
+      reason: boundedString(
+        item['reason'],
+        MAX_PERSISTED_REVIEW_REASON_CHARS,
+        `reuse rejected candidate ${position} reason`,
+      ),
     };
   });
 }
@@ -343,11 +358,16 @@ function parseCachedResult(value: unknown): CachedReviewResult {
   if (value['outcome'] === 'findings' && value['findings'].length === 0) {
     throw new Error('findings reuse result contains no findings');
   }
-  const findings = value['findings'].map((item, index) => {
-    if (isRecord(item) && Object.hasOwn(item, 'suggestedChange')) {
+  const findings = value['findings'].map((item, index): CachedReviewFinding => {
+    if (!isRecord(item)) throw new Error(`reuse finding ${index} must be an object`);
+    exactKeys(item, ['finding', 'suggestion'], ['finding', 'suggestion'], `reuse finding ${index}`);
+    if (isRecord(item['finding']) && Object.hasOwn(item['finding'], 'suggestedChange')) {
       throw new Error(`reuse finding ${index} contains a discarded model suggestion`);
     }
-    return parseReusableReviewFinding(item);
+    const suggestion = item['suggestion'] === null
+      ? null
+      : boundedString(item['suggestion'], MAX_CACHED_SUGGESTION_CHARS, `reuse finding ${index} suggestion`);
+    return { finding: parseReusableReviewFinding(item['finding']), suggestion };
   });
   return {
     outcome: value['outcome'],
@@ -407,9 +427,9 @@ function parseStoredEntry(value: unknown, namespace: string, fileName: string): 
 }
 
 function cacheResult(record: FileReviewRecord, executionDurationMs: number): CachedReviewResult {
-  const findings = record.findings.map((finding): ReviewFinding => {
-    const { id: _id, suggestion: _suggestion, fixPrompt: _fixPrompt, ...reviewFinding } = finding;
-    return reviewFinding;
+  const findings = record.findings.map((finding): CachedReviewFinding => {
+    const { id: _id, suggestion, fixPrompt: _fixPrompt, ...reviewFinding } = finding;
+    return { finding: reviewFinding, suggestion: suggestion ?? null };
   });
   return {
     outcome: record.outcome as 'clean' | 'findings',
@@ -429,12 +449,12 @@ function reusableResult(result: CachedReviewResult, verifyCandidates: boolean): 
     if (result.verification === undefined || (result.followUp?.requested ?? 0) > 0) return false;
     if (result.outcome === 'findings') {
       return result.verification.status === 'completed'
-        && result.findings.every((finding) => finding.verification.status === 'confirmed');
+        && result.findings.every((item) => item.finding.verification.status === 'confirmed');
     }
     return result.verification.status === 'not-applicable' || result.verification.status === 'completed';
   }
   return result.verification === undefined
-    && result.findings.every((finding) => finding.verification.status === 'unverified');
+    && result.findings.every((item) => item.finding.verification.status === 'unverified');
 }
 
 async function safeCacheDirectory(configuration: ReviewReuseEnvironment): Promise<string | undefined> {
@@ -564,6 +584,36 @@ function remapFindingRevisions(
   return { ...finding, supportingEvidence, graphReferences };
 }
 
+async function revalidateCachedSuggestion(
+  suggestion: string | null,
+  bundle: ReviewBundle,
+  file: ReviewManifestFile,
+  finding: ValidatedFinding,
+  changed: ChangedLines,
+): Promise<string | undefined> {
+  if (suggestion === null) return undefined;
+  const spanLines = await resolveSpanLines(
+    bundle,
+    file,
+    finding.side,
+    finding.startLine,
+    finding.endLine,
+    changed,
+  );
+  if (spanLines === undefined) throw new Error('cached suggestion span is not resolvable');
+  const lines = suggestion.split('\n');
+  const currentLines = spanLines.map((line) => `-${line}`);
+  if (lines.length <= currentLines.length
+    || currentLines.some((line, index) => lines[index] !== line)) {
+    throw new Error('cached suggestion does not match the authoritative span');
+  }
+  const proposedLines = lines.slice(currentLines.length);
+  if (proposedLines.some((line) => !line.startsWith('+'))) {
+    throw new Error('cached suggestion replacement is malformed');
+  }
+  return renderSuggestion(spanLines, proposedLines.map((line) => line.slice(1)));
+}
+
 /** Revalidates a fingerprint-matched cached result against current authoritative evidence. */
 export async function restoreReusableFileReview(options: {
   readonly candidate: ReviewReuseCandidate;
@@ -583,14 +633,22 @@ export async function restoreReusableFileReview(options: {
   const validator = new FileReviewValidator(file, diff, environment.findingScope);
   const published: PublishedFinding[] = [];
   for (const cachedFinding of candidate.result.findings) {
-    const remapped = remapFindingRevisions(cachedFinding, candidate, bundle);
+    const remapped = remapFindingRevisions(cachedFinding.finding, candidate, bundle);
     const validated = validator.validateFinding(remapped);
     await validateFindingReferences(bundle, validated, indexedContext);
     const remediation = await buildRemediation(bundle, file, validated, validator.changed);
+    const cachedSuggestion = await revalidateCachedSuggestion(
+      cachedFinding.suggestion,
+      bundle,
+      file,
+      validated,
+      validator.changed,
+    );
     const { suggestedChange: _discarded, ...core } = validated;
+    const suggestion = remediation.suggestion ?? cachedSuggestion;
     published.push({
       ...core,
-      ...(remediation.suggestion === undefined ? {} : { suggestion: remediation.suggestion }),
+      ...(suggestion === undefined ? {} : { suggestion }),
       fixPrompt: remediation.fixPrompt,
     });
   }

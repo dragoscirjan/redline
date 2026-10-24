@@ -179,9 +179,9 @@ runs:
       uses: actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
       with:
         path: ${{ runner.temp }}/redline-review-cache
-        key: redline-review-v1-${{ github.repository_id }}-pr-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ github.run_attempt }}
+        key: redline-review-v2-${{ github.repository_id }}-pr-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ github.run_attempt }}
         restore-keys: |
-          redline-review-v1-${{ github.repository_id }}-pr-${{ github.event.pull_request.number }}-
+          redline-review-v2-${{ github.repository_id }}-pr-${{ github.event.pull_request.number }}-
 
     - name: Fetch pull request commits as data
       shell: bash
@@ -319,7 +319,7 @@ runs:
       uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
       with:
         path: ${{ runner.temp }}/redline-review-cache
-        key: redline-review-v1-${{ github.repository_id }}-pr-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ github.run_attempt }}
+        key: redline-review-v2-${{ github.repository_id }}-pr-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ github.run_attempt }}
 
     - name: Generate Redline App token for publication
       id: app-token-publish

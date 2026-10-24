@@ -136,7 +136,7 @@ PY
 @test "action restores and saves PR-scoped validated review records" {
   grep -Fq 'actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3' "$ACTION"
   grep -Fq 'actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3' "$ACTION"
-  grep -Fq 'redline-review-v1-${{ github.repository_id }}-pr-${{ github.event.pull_request.number }}-' "$ACTION"
+  grep -Fq 'redline-review-v2-${{ github.repository_id }}-pr-${{ github.event.pull_request.number }}-' "$ACTION"
   count=$(grep -cF 'REDLINE_REUSE_DIR:' "$ACTION")
   [ "$count" -eq 2 ]
   count=$(grep -cF 'REDLINE_REUSE_NAMESPACE:' "$ACTION")

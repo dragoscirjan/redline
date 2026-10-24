@@ -6,7 +6,9 @@ import { runFileReviews } from '../src/review/runner.js';
 import type { HarnessExecuteOptions, HarnessExecutor, HarnessPrompt, HarnessRun, PreparedHarness } from '../src/harness-executor/types.js';
 import { loadReviewBundle } from '../src/review/bundle.js';
 import { FileReviewValidator } from '../src/review/report.js';
+import { loadReviewReuseCache } from '../src/review/reuse.js';
 import { VERIFICATION_TIMEOUT_MS } from '../src/review/runner.js';
+import { MAX_REVIEW_REASON_CHARS } from '../src/review/types.js';
 import {
   cleanReviewEnvironment,
   createBundleFixture,
@@ -1224,6 +1226,8 @@ describe('runFileReviews', () => {
       await writeFile(join(fixture.source, 'src/related.ts'), 'stable contract\n');
       const candidate = reviewFinding({
         evidence: 'new',
+        suggestedChange: 'fixed',
+        remediationStatus: 'proposed',
         supportingEvidence: [{
           role: 'contract',
           revision: HEAD_SHA,
@@ -1247,6 +1251,8 @@ describe('runFileReviews', () => {
       }]);
       const first = await runFileReviews({ environment: firstEnvironment.review!, executor: firstExecutor });
       const firstFindingId = first.records[0]?.findings[0]?.id;
+      const firstSuggestion = first.records[0]?.findings[0]?.suggestion;
+      expect(firstSuggestion).toBe('-new\n+fixed');
 
       const nextHead = 'c'.repeat(40);
       const manifest = JSON.parse(await readFile(join(fixture.review, 'manifest.json'), 'utf8')) as {
@@ -1267,7 +1273,45 @@ describe('runFileReviews', () => {
       expect(second.records[0]).toMatchObject({ outcome: 'findings', execution: 'reused', savedDurationMs: 444 });
       expect(restoredFinding?.supportingEvidence[0]?.revision).toBe(nextHead);
       expect(restoredFinding?.id).not.toBe(firstFindingId);
+      expect(restoredFinding?.suggestion).toBe(firstSuggestion);
+      expect(restoredFinding?.remediationStatus).toBe('proposed');
       expect(restoredFinding?.fixPrompt).toContain('src/example.ts:1');
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('restores cached rejected-candidate reasons that include the truncation ellipsis', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(reuseReviewEnvironment(fixture));
+      const executor = new ScriptedExecutor();
+      executor.script([{ text: reviewDocument({
+        version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [],
+      }) }]);
+      const first = await runFileReviews({ environment: environment.review!, executor });
+      const record = first.records[0];
+      expect(record).toBeDefined();
+
+      const fingerprint = `sha256:${'a'.repeat(64)}`;
+      const reason = `${'x'.repeat(MAX_REVIEW_REASON_CHARS)}…`;
+      const cache = await loadReviewReuseCache(environment.review!.reuse!);
+      await cache.write(
+        'src/example.ts',
+        fingerprint,
+        BASE_SHA,
+        HEAD_SHA,
+        {
+          ...record!,
+          rejectedCandidates: [{ index: 0, stage: 'verification', code: 'bounded-reason', reason }],
+        },
+        10,
+        false,
+      );
+
+      const restored = await loadReviewReuseCache(environment.review!.reuse!);
+      expect(restored.stats).toEqual({ restoredEntries: 1, invalidEntries: 0 });
+      expect(restored.match('src/example.ts', fingerprint)?.result.rejectedCandidates[0]?.reason).toBe(reason);
     } finally {
       await fixture.cleanup();
     }

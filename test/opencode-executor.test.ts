@@ -119,7 +119,8 @@ describe('createOpenCodeExecutor', () => {
         executor.execute(prepared, { system: 'SYSTEM-B', user: 'USER-B' }),
       ]);
 
-      const [first, second] = spawner.requests;
+      const first = spawner.requests.find((request) => request.stdin === 'USER-A');
+      const second = spawner.requests.find((request) => request.stdin === 'USER-B');
       expect(first?.env?.OPENCODE_CONFIG).toBeDefined();
       expect(second?.env?.OPENCODE_CONFIG).toBeDefined();
       expect(first?.env?.OPENCODE_CONFIG).not.toBe(second?.env?.OPENCODE_CONFIG);
@@ -128,8 +129,6 @@ describe('createOpenCodeExecutor', () => {
       const secondConfig = JSON.parse(await readFile(second!.env!.OPENCODE_CONFIG!, 'utf8'));
       expect(firstConfig.agent[OPENCODE_REVIEW_AGENT].prompt).toBe('SYSTEM-A');
       expect(secondConfig.agent[OPENCODE_REVIEW_AGENT].prompt).toBe('SYSTEM-B');
-      expect(first?.stdin).toBe('USER-A');
-      expect(second?.stdin).toBe('USER-B');
     } finally {
       await rm(workDirectory, { recursive: true, force: true });
     }

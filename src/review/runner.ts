@@ -39,6 +39,7 @@ import { parseVerificationDocument, validateVerificationDocument } from './verif
 import { buildVerificationPrompt } from './verification-prompt.js';
 import {
   FILE_REVIEW_RECORD_VERSION,
+  MAX_REVIEW_REASON_CHARS,
   REVIEW_RUN_SUMMARY_VERSION,
   type FileReviewRecord,
   type FileFollowUpCoverage,
@@ -52,7 +53,6 @@ import {
 } from './types.js';
 import { createReviewWriter, type FollowUpArtifact, type VerificationArtifact } from './writer.js';
 
-const MAX_REASON_CHARS = 500;
 export const VERIFICATION_TIMEOUT_MS = 10 * 60 * 1_000;
 
 export interface FileReviewIdentity {
@@ -115,7 +115,9 @@ export interface ReviewRunResult {
 
 function boundedReason(value: string): string {
   const normalized = value.replaceAll('\n', ' ').trim();
-  return normalized.length > MAX_REASON_CHARS ? `${normalized.slice(0, MAX_REASON_CHARS)}…` : normalized;
+  return normalized.length > MAX_REVIEW_REASON_CHARS
+    ? `${normalized.slice(0, MAX_REVIEW_REASON_CHARS)}…`
+    : normalized;
 }
 
 /**

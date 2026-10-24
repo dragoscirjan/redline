@@ -112,6 +112,10 @@ export interface RejectedCandidate {
   readonly reason: string;
 }
 
+export const MAX_REVIEW_REASON_CHARS = 500;
+/** A truncated persisted reason includes one trailing ellipsis. */
+export const MAX_PERSISTED_REVIEW_REASON_CHARS = MAX_REVIEW_REASON_CHARS + 1;
+
 export type FileReviewOutcome = 'clean' | 'findings' | 'omitted';
 export type FileReviewExecution = 'executed' | 'reused';
 export type FileReviewErrorKind =

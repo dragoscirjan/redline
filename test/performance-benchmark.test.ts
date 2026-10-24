@@ -23,7 +23,7 @@ afterEach(async () => {
 });
 
 describe('review performance benchmark', () => {
-  it('runs the fixed 20-file sequential baseline with bounded telemetry', async () => {
+  it('runs the fixed 20-file four-worker baseline with bounded telemetry', async () => {
     const report = await runPerformanceBenchmark({
       corpusPath: CORPUS,
       profilePath: PROFILE,
@@ -54,7 +54,8 @@ describe('review performance benchmark', () => {
         model: 'z-ai/glm-5.3-flash',
         indexProvider: 'cgc',
         indexProviderVersion: '0.5.7',
-        execution: 'sequential',
+        execution: 'bounded-parallel',
+        reviewConcurrency: 4,
       },
       quality: {
         passed: true,
@@ -71,7 +72,9 @@ describe('review performance benchmark', () => {
     expect(report.runs).toHaveLength(1);
     const run = report.runs[0]!;
     expect(run.modeledReviewMs).toBe(1_208_000);
-    expect(run.reviewWallMs).toBe(run.modeledReviewMs);
+    expect(run.totalModelWorkMs).toBe(1_208_000);
+    expect(run.reviewWallMs).toBe(340_000);
+    expect(run.maximumActiveModelCalls).toBe(4);
     expect(run.publicationMs).toBe(0);
     expect(run.stages).toMatchObject({
       checkoutFetchMs: null,
@@ -94,7 +97,7 @@ describe('review performance benchmark', () => {
     expect(run.files[0]).toMatchObject({
       fileId: '000001',
       path: 'src/cache.ts',
-      queueWaitMs: 0,
+      queueWaitMs: 150_000,
       modelDurationMs: 55_000,
       processStartupMs: 0,
       timeToFirstTextMs: 0,
@@ -102,13 +105,13 @@ describe('review performance benchmark', () => {
       stderrTruncated: false,
       outcome: 'clean',
     });
-    expect(run.files[1]?.queueWaitMs).toBe(55_000);
-    expect(run.files.at(-1)?.queueWaitMs).toBe(1_133_000);
+    expect(run.files.filter((file) => file.queueWaitMs === 0)).toHaveLength(4);
+    expect(Math.max(...run.files.map((file) => file.queueWaitMs))).toBe(278_000);
 
     expect(report.conditions.map((condition) => condition.id)).toEqual(['warm-index', 'cold-index']);
     for (const condition of report.conditions) {
-      expect(condition.p95Ms).toBeGreaterThan(condition.targetMs);
-      expect(condition.withinTarget).toBe(false);
+      expect(condition.p95Ms).toBeLessThanOrEqual(condition.targetMs);
+      expect(condition.withinTarget).toBe(true);
       expect(condition.sloEligible).toBe(false);
       expect(condition.sloPassed).toBeNull();
       expect(condition.stageP50Ms.checkoutFetch).toBeGreaterThanOrEqual(0);

@@ -11,7 +11,7 @@
  * cannot be loaded.
  */
 
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHarnessExecutor } from '../harness-executor/registry.js';
@@ -49,14 +49,19 @@ import { createReviewWriter, type FollowUpArtifact, type VerificationArtifact } 
 const MAX_REASON_CHARS = 500;
 export const VERIFICATION_TIMEOUT_MS = 10 * 60 * 1_000;
 
-export interface FileReviewValidationEvent {
+export interface FileReviewIdentity {
   readonly fileId: string;
   readonly path: string;
+}
+
+export interface FileReviewValidationEvent extends FileReviewIdentity {
   readonly outcome: FileReviewRecord['outcome'];
   readonly durationMs: number;
   readonly findingCount: number;
   readonly rejectedCandidateCount: number;
 }
+
+export interface FileHarnessOutputEvent extends HarnessOutputLine, FileReviewIdentity {}
 
 export interface ReviewRunInput {
   readonly environment: ReviewEnvironment;
@@ -68,7 +73,7 @@ export interface ReviewRunInput {
   readonly followUpExecutor?: ((requests: FollowUpRequestBatch, remainingMs: number) => Promise<string>) | undefined;
   /**
    * Called after each reviewed file completes, for live progress in the
-   * run log — a long sequential run must stay distinguishable from a
+   * run log — a bounded parallel run must stay distinguishable from a
    * hang. Absent in tests unless they assert progress.
    */
   readonly onFileDone?: ((record: FileReviewRecord) => void) | undefined;
@@ -76,7 +81,7 @@ export interface ReviewRunInput {
    * Called before a file's prompt runs; pairs with `onFileDone` for the
    * per-file progress narrative in the run log.
    */
-  readonly onFileStart?: ((record: { readonly path: string }) => void) | undefined;
+  readonly onFileStart?: ((record: FileReviewIdentity) => void) | undefined;
   /**
    * Called after model output and review validation complete, immediately
    * before the per-file record is written. The bounded projection excludes
@@ -88,7 +93,7 @@ export interface ReviewRunInput {
    * bounded heartbeat lines and readable text fragments (redacted and
    * capped), never unbounded raw output.
    */
-  readonly onHarnessOutput?: ((output: HarnessOutputLine) => void) | undefined;
+  readonly onHarnessOutput?: ((output: FileHarnessOutputEvent) => void) | undefined;
   /** Stream presentation for the tap; defaults to the harness's own. */
   readonly harnessStreamMode?: HarnessStreamMode | undefined;
 }
@@ -193,16 +198,11 @@ async function reviewOneFile(
     };
   }
 
-  const run = await executor.execute(
-    prepared,
-    prompt,
-    onHarnessOutput === undefined
-      ? undefined
-      : {
-          onOutputLine: onHarnessOutput,
-          ...(harnessStreamMode !== undefined ? { streamMode: harnessStreamMode } : {}),
-        },
-  );
+  const run = await executor.execute(prepared, prompt, {
+    invocation: { fileId: file.id, path: fileReviewPath(file) },
+    ...(onHarnessOutput === undefined ? {} : { onOutputLine: onHarnessOutput }),
+    ...(harnessStreamMode === undefined ? {} : { streamMode: harnessStreamMode }),
+  });
 
   if (run.status !== 'succeeded') {
     return {
@@ -415,6 +415,7 @@ async function reviewOneFile(
         } }),
       });
       const verifiedRun = await executor.execute(prepared, verifierPrompt, {
+        invocation: { fileId: file.id, path: fileReviewPath(file) },
         timeoutMs: VERIFICATION_TIMEOUT_MS,
         ...(onHarnessOutput === undefined ? {} : { onOutputLine: onHarnessOutput }),
         ...(harnessStreamMode === undefined ? {} : { streamMode: harnessStreamMode }),
@@ -559,6 +560,63 @@ async function reviewOneFile(
   };
 }
 
+type WritableFileReviewRecord = FileReviewRecord & {
+  rawModelOutput?: string | undefined;
+  verificationArtifact?: VerificationArtifact | undefined;
+  followUpArtifact?: FollowUpArtifact | undefined;
+};
+
+interface ReviewTask {
+  readonly file: ReviewManifestFile;
+  readonly manifestIndex: number;
+  readonly estimatedPromptBytes: number;
+}
+
+async function reviewTasks(bundle: ReviewBundle, concurrency: number): Promise<readonly ReviewTask[]> {
+  const tasks = await Promise.all(bundle.manifest.files.flatMap((file, manifestIndex) =>
+    file.reviewed
+      ? [stat(join(bundle.root, file.diffFile)).then(
+          (value): ReviewTask => ({ file, manifestIndex, estimatedPromptBytes: value.size }),
+          (): ReviewTask => ({
+            file,
+            manifestIndex,
+            estimatedPromptBytes: (file.additions ?? 0) + (file.deletions ?? 0),
+          }),
+        )]
+      : []));
+  if (concurrency === 1) return tasks;
+  return tasks.sort((left, right) =>
+    right.estimatedPromptBytes - left.estimatedPromptBytes || left.manifestIndex - right.manifestIndex);
+}
+
+async function runBoundedWorkerPool<T>(
+  values: readonly T[],
+  concurrency: number,
+  worker: (value: T) => Promise<void>,
+): Promise<void> {
+  let cursor = 0;
+  let stopped = false;
+  const failures: Array<{ readonly index: number; readonly error: unknown }> = [];
+  const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (!stopped) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= values.length) return;
+      try {
+        await worker(values[index] as T);
+      } catch (error) {
+        failures.push({ index, error });
+        stopped = true;
+      }
+    }
+  });
+  await Promise.all(workers);
+  if (failures.length > 0) {
+    failures.sort((left, right) => left.index - right.index);
+    throw failures[0]!.error;
+  }
+}
+
 /**
  * Runs per-file reviews for the whole bundle and writes all outputs.
  */
@@ -568,6 +626,11 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
   const indexedContext = await loadReviewCodeContext(bundle, environment.codeContext);
   const writer = createReviewWriter(environment.outputDirectory);
   const executor = input.executor ?? createHarnessExecutor(environment.harness);
+  // Independent verification is not active in production. Keep its shared
+  // follow-up budgets manifest-ordered until the activation gate permits a
+  // separately measured parallel verifier path.
+  const concurrency = input.verifyCandidates === true ? 1 : environment.reviewConcurrency;
+  const tasks = await reviewTasks(bundle, concurrency);
 
   const workDirectory = await mkdtemp(join(tmpdir(), 'redline-review-'));
   try {
@@ -578,16 +641,12 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       workDirectory,
     });
 
-    const records: (FileReviewRecord & {
-      rawModelOutput?: string | undefined;
-      verificationArtifact?: VerificationArtifact | undefined;
-      followUpArtifact?: FollowUpArtifact | undefined;
-    })[] = [];
+    const recordsByManifestIndex = new Map<number, WritableFileReviewRecord>();
     const followUpBudget = new FollowUpBudget();
-    for (const file of bundle.manifest.files) {
-      if (!file.reviewed) continue;
+    await runBoundedWorkerPool(tasks, concurrency, async ({ file, manifestIndex }) => {
+      let record: WritableFileReviewRecord;
       if (file.binary) {
-        const binaryRecord: FileReviewRecord & { rawModelOutput?: string | undefined } = {
+        record = {
           version: FILE_REVIEW_RECORD_VERSION,
           fileId: file.id,
           path: fileReviewPath(file),
@@ -601,38 +660,45 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           rejectedCandidates: [],
           durationMs: 0,
         };
-        records.push(binaryRecord);
-        await writer.writeFileReview(binaryRecord);
-        input.onFileDone?.(binaryRecord);
-        continue;
+      } else {
+        const identity = { fileId: file.id, path: fileReviewPath(file) };
+        input.onFileStart?.(identity);
+        const onHarnessOutput = input.onHarnessOutput === undefined
+          ? undefined
+          : (output: HarnessOutputLine): void => input.onHarnessOutput?.({ ...identity, ...output });
+        record = await reviewOneFile(
+          executor,
+          prepared,
+          environment,
+          bundle,
+          indexedContext,
+          file,
+          followUpBudget,
+          input.followUpExecutor,
+          onHarnessOutput,
+          input.harnessStreamMode,
+          input.verifyCandidates,
+        );
+        input.onFileValidated?.({
+          ...identity,
+          outcome: record.outcome,
+          durationMs: record.durationMs,
+          findingCount: record.findings.length,
+          rejectedCandidateCount: record.rejectedCandidates.length,
+        });
       }
-      input.onFileStart?.({ path: fileReviewPath(file) });
-      const record = await reviewOneFile(
-        executor,
-        prepared,
-        environment,
-        bundle,
-        indexedContext,
-        file,
-        followUpBudget,
-        input.followUpExecutor,
-        input.onHarnessOutput,
-        input.harnessStreamMode,
-        input.verifyCandidates,
-      );
-      input.onFileValidated?.({
-        fileId: record.fileId,
-        path: record.path,
-        outcome: record.outcome,
-        durationMs: record.durationMs,
-        findingCount: record.findings.length,
-        rejectedCandidateCount: record.rejectedCandidates.length,
-      });
-      records.push(record);
       await writer.writeFileReview(record);
+      recordsByManifestIndex.set(manifestIndex, record);
       input.onFileDone?.(record);
-    }
+    });
 
+    const records = tasks
+      .map((task) => ({ task, record: recordsByManifestIndex.get(task.manifestIndex) }))
+      .sort((left, right) => left.task.manifestIndex - right.task.manifestIndex)
+      .map(({ record }) => {
+        if (record === undefined) throw new Error('bounded review worker did not produce a file record');
+        return record;
+      });
     const summary: ReviewRunSummary = {
       version: REVIEW_RUN_SUMMARY_VERSION,
       harness: environment.harness,

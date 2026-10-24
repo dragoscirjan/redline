@@ -45,6 +45,11 @@ on:
         required: false
         type: string
         default: 30m
+      review-concurrency:
+        description: Maximum simultaneous per-file model calls, from 1 through 8.
+        required: false
+        type: number
+        default: 4
       credential-isolation:
         description: Credential isolation mode. Only direct is supported; required explicitly when review execution is enabled against the previously published action.
         required: false
@@ -132,5 +137,6 @@ jobs:
           indexing: ${{ inputs.indexing }}
           indexing-provider: ${{ inputs.indexing-provider }}
           timeout: ${{ inputs.timeout }}
+          review-concurrency: ${{ inputs.review-concurrency }}
           artifact-name: ${{ inputs.artifact-name }}
           artifact-retention-days: ${{ inputs.artifact-retention-days }}

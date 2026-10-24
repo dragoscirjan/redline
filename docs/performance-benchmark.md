@@ -1,6 +1,6 @@
 # Review performance benchmark
 
-Redline has a fixed 20-file performance corpus under `benchmark/performance/v1/`. It measures the current one-file-at-a-time review path before the performance epic changes scheduling, caching, indexing, prompts, or model execution.
+Redline has a fixed 20-file performance corpus under `benchmark/performance/v1/`. It measures the bounded per-file review scheduler before later performance-epic changes to caching, indexing, prompts, or model execution.
 
 The corpus contains:
 
@@ -26,7 +26,7 @@ The command rebuilds Redline, runs the fixed corpus through the production bundl
 
 Recorded mode performs no network requests. It uses checked-in per-file model durations and bounded timing samples from named production Action runs. The report marks the SLO gate as **not eligible** because recorded data cannot prove current live latency.
 
-The baseline is sequential. It records 1,208 seconds of modeled review time before index and orchestration cost. Its recorded warm-index and cold-index p95 values exceed the epic targets.
+The baseline uses four workers and largest-diff-first scheduling. It retains 1,208 seconds of total modeled model work and models 340 seconds of review wall time. The previous sequential baseline reported 1,260.8 seconds warm-index p95 and 1,474.3 seconds cold-index p95. The four-worker baseline reports 392.8 seconds warm and 606.3 seconds cold. Both are below the epic targets, but the report remains SLO-ineligible until at least five current live fixed-corpus runs pass the quality gate.
 
 ## Run an opt-in live capture
 
@@ -36,7 +36,7 @@ A live capture uses the pinned profile:
 - OpenRouter's OpenAI-compatible endpoint;
 - `z-ai/glm-5.3-flash`;
 - CGC 0.5.7 context;
-- sequential execution.
+- bounded parallel execution with four workers.
 
 Run at least five fixed-corpus repetitions to make the SLO gate eligible. This minimum applies to benchmark executions, not to the number of historical workflow-stage samples in each cache condition:
 
@@ -58,7 +58,7 @@ The warm-index target is p95 at or below 10 minutes. The cold-index target is p9
 
 Each report contains:
 
-- review wall time and summed model duration;
+- review wall time, total model work, configured concurrency, and maximum active model calls;
 - publication duration;
 - per-file queue wait and model duration;
 - process startup and time to first streamed model text when available;

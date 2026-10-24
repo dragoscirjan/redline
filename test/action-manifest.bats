@@ -21,11 +21,12 @@ action = yaml.safe_load(Path(sys.argv[1]).read_text())
 inputs = action['inputs']
 assert set(inputs) == {
     'backend', 'model-config', 'model-auth', 'finding-scope',
-    'timeout', 'verbosity', 'indexing', 'indexing-provider', 'artifact-name', 'artifact-retention-days',
+    'timeout', 'review-concurrency', 'verbosity', 'indexing', 'indexing-provider', 'artifact-name', 'artifact-retention-days',
     'github-token', 'github-app-id', 'github-app-key',
 }, f'unexpected input surface: {sorted(inputs)}'
 assert inputs['finding-scope']['default'] == 'defects'
 assert inputs['timeout']['default'] == '30m'
+assert inputs['review-concurrency']['default'] == '4'
 assert inputs['verbosity']['default'] == 'progress'
 assert inputs['indexing']['default'] == 'enabled'
 assert inputs['indexing-provider']['default'] == 'cgc'
@@ -118,6 +119,16 @@ PY
 
 @test "action gates review execution on the full review input set" {
   grep -Fq "if: \${{ inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}" "$ACTION"
+}
+
+@test "action maps bounded review concurrency through every public surface" {
+  count=$(grep -cF 'REDLINE_REVIEW_CONCURRENCY: ${{ inputs.review-concurrency }}' "$ACTION")
+  [ "$count" -eq 2 ]
+  grep -Fq '[[ "$REVIEW_CONCURRENCY" =~ ^[1-8]$ ]]' "$ACTION"
+  grep -Fq 'review-concurrency: ${{ inputs.review-concurrency }}' "$REUSABLE_WORKFLOW"
+  grep -A5 '^      review-concurrency:' "$REUSABLE_WORKFLOW" | grep -Fq 'default: 4'
+  grep -Fq 'review-concurrency: ${{ inputs.review-concurrency }}' "$DOGFOOD_WORKFLOW"
+  grep -A5 '^      review-concurrency:' "$DOGFOOD_WORKFLOW" | grep -Fq 'default: 4'
 }
 
 @test "action maps the verbosity to the environment contract" {

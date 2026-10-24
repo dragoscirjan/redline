@@ -16,7 +16,7 @@
  * work directory when the review run ends.
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   isRecord,
@@ -70,9 +70,9 @@ export interface PreparedOpenCode extends PreparedHarness {
   readonly command: string;
   readonly args: readonly string[];
   readonly cwd: string;
+  readonly rootDirectory: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs: number;
-  readonly configFile: string;
   readonly modelConfig: {
     readonly provider: string;
     readonly model: string;
@@ -183,14 +183,8 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
   return {
     harness: 'opencode',
     async prepare(settings: HarnessSettings): Promise<PreparedOpenCode> {
-      const root = join(settings.workDirectory, 'opencode');
-      const configDirectory = join(root, 'config');
-      const dataDirectory = join(root, 'data');
-      const stateDirectory = join(root, 'state');
-      const homeDirectory = join(root, 'home');
-      for (const directory of [configDirectory, dataDirectory, stateDirectory, homeDirectory]) {
-        await mkdir(directory, { recursive: true });
-      }
+      const rootDirectory = join(settings.workDirectory, 'opencode');
+      await mkdir(rootDirectory, { recursive: true });
       const modelOptions: Record<string, string> = { baseURL: settings.model.endpoint };
       if (settings.credential !== undefined) modelOptions['apiKey'] = settings.credential.value;
       const modelConfig = {
@@ -198,7 +192,6 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
         model: settings.model.model,
         options: modelOptions,
       };
-      const configFile = join(configDirectory, 'opencode.json');
       const args = [
         'run',
         '--pure',
@@ -214,22 +207,17 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
       const env: Record<string, string | undefined> = {
         PATH: process.env.PATH,
         LANG: process.env.LANG,
-        HOME: homeDirectory,
-        XDG_CONFIG_HOME: configDirectory,
-        XDG_DATA_HOME: dataDirectory,
-        XDG_STATE_HOME: stateDirectory,
-        OPENCODE_CONFIG: configFile,
       };
       return Object.freeze({
         harness: 'opencode',
         model: settings.model,
-        description: `opencode with generated config ${configFile} and isolated XDG/HOME directories`,
+        description: `opencode with isolated per-invocation config and XDG/HOME directories under ${rootDirectory}`,
         command,
         args,
         cwd: settings.workDirectory,
+        rootDirectory,
         env,
         timeoutMs: settings.timeoutMs,
-        configFile,
         modelConfig,
       });
     },
@@ -239,16 +227,31 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
       options?: HarnessExecuteOptions,
     ): Promise<HarnessRun> {
       const state = prepared as PreparedOpenCode;
-      // Every `opencode run` is a fresh process, so the agent system prompt
-      // (the fixed review policy) is rewritten before each invocation.
-      await writeFile(state.configFile, buildConfig(state.modelConfig, prompt.system), { mode: 0o600 });
+      const invocationRoot = await mkdtemp(join(state.rootDirectory, 'invocation-'));
+      const configDirectory = join(invocationRoot, 'config');
+      const dataDirectory = join(invocationRoot, 'data');
+      const stateDirectory = join(invocationRoot, 'state');
+      const homeDirectory = join(invocationRoot, 'home');
+      await Promise.all([configDirectory, dataDirectory, stateDirectory, homeDirectory].map(
+        (directory) => mkdir(directory, { recursive: true }),
+      ));
+      const configFile = join(configDirectory, 'opencode.json');
+      await writeFile(configFile, buildConfig(state.modelConfig, prompt.system), { mode: 0o600 });
+      const env = {
+        ...state.env,
+        HOME: homeDirectory,
+        XDG_CONFIG_HOME: configDirectory,
+        XDG_DATA_HOME: dataDirectory,
+        XDG_STATE_HOME: stateDirectory,
+        OPENCODE_CONFIG: configFile,
+      };
       const invocationStartedAt = Date.now();
       let timeToFirstTextMs: number | null = null;
       const result = await runBoundedProcess(spawner, {
         command: state.command,
         args: state.args,
         cwd: state.cwd,
-        env: state.env,
+        env,
         stdin: prompt.user,
         timeoutMs: options?.timeoutMs ?? state.timeoutMs,
         // `opencode run --format json` emits model text at the end. Capture

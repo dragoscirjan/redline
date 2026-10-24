@@ -231,12 +231,10 @@ export interface ReviewWriter {
  */
 export function createReviewWriter(outputDirectory: string): ReviewWriter {
   const reviewsDirectory = join(outputDirectory, 'reviews');
-  let prepared = false;
+  let preparation: Promise<void> | undefined;
   const prepare = async (): Promise<void> => {
-    if (!prepared) {
-      await mkdir(reviewsDirectory, { recursive: true });
-      prepared = true;
-    }
+    preparation ??= mkdir(reviewsDirectory, { recursive: true }).then(() => undefined);
+    await preparation;
   };
   return {
     async writeFileReview(record: FileReviewRecordWithRaw): Promise<void> {

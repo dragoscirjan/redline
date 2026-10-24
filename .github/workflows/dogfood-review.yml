@@ -12,6 +12,11 @@ on:
         required: false
         type: string
         default: progress
+      review-concurrency:
+        description: Maximum simultaneous per-file model calls, from 1 through 8.
+        required: false
+        type: number
+        default: 4
       artifact-retention-days:
         description: Number of days to retain the review artifacts
         required: false
@@ -85,6 +90,7 @@ jobs:
           # workflow-heavy diffs like this repository's own.
           finding-scope: defects-and-risks
           verbosity: ${{ inputs.verbosity }}
+          review-concurrency: ${{ inputs.review-concurrency }}
           github-token: ${{ secrets.github-token }}
           github-app-id: ${{ secrets.redline-review-app-id }}
           github-app-key: ${{ secrets.redline-review-private-key }}

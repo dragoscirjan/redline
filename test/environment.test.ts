@@ -136,6 +136,7 @@ describe('parseReviewEnvironment', () => {
       expect(parsed.review?.credential).toEqual({ provider: 'mock', value: 'test-key' });
       expect(parsed.review?.findingScope).toBe('defects');
       expect(parsed.review?.timeout.minutes).toBe(30);
+      expect(parsed.review?.reviewConcurrency).toBe(4);
       expect(parsed.review?.codeContext).toBeUndefined();
     } finally {
       await fixture.cleanup();
@@ -181,6 +182,26 @@ describe('parseReviewEnvironment', () => {
       REDLINE_CODE_CONTEXT: '/tmp/context.json',
       REDLINE_CODE_CONTEXT_REPOSITORY: 'owner/repository',
     })).toThrow(/requires review execution/u);
+  });
+
+  it('accepts review concurrency from 1 through 8 and rejects every other shape', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const base = cleanReviewEnvironment(fixture, 'echo');
+      expect(parseReviewEnvironment({ ...base, REDLINE_REVIEW_CONCURRENCY: '1' }).review?.reviewConcurrency).toBe(1);
+      expect(parseReviewEnvironment({ ...base, REDLINE_REVIEW_CONCURRENCY: '8' }).review?.reviewConcurrency).toBe(8);
+      expect(parseReviewEnvironment({ ...base, REDLINE_REVIEW_CONCURRENCY: '' }).review?.reviewConcurrency).toBe(4);
+      for (const value of ['0', '9', '1.5', '+4', '04', 'four']) {
+        expect(() => parseReviewEnvironment({ ...base, REDLINE_REVIEW_CONCURRENCY: value })).toThrow(
+          /integer from 1 through 8/u,
+        );
+      }
+      expect(() => parseReviewEnvironment({ REDLINE_REVIEW_CONCURRENCY: '9' })).toThrow(
+        /integer from 1 through 8/u,
+      );
+    } finally {
+      await fixture.cleanup();
+    }
   });
 
   it('accepts defects-and-risks and a custom timeout', () => {

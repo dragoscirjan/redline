@@ -25,6 +25,7 @@ export const REDLINE_ENV_KEYS = [
   'REDLINE_MODEL_AUTH',
   'REDLINE_FINDING_SCOPE',
   'REDLINE_TIMEOUT',
+  'REDLINE_REVIEW_CONCURRENCY',
   'REDLINE_PUBLISH_TOKEN',
   'REDLINE_REPOSITORY',
   'REDLINE_PULL_REQUEST',
@@ -40,6 +41,9 @@ export type ReviewVerbosity = (typeof VERBOSITIES)[number];
 export const DEFAULT_VERBOSITY: ReviewVerbosity = 'progress';
 
 export const DEFAULT_TIMEOUT_INPUT = `${DEFAULT_TIMEOUT_MINUTES}m`;
+export const DEFAULT_REVIEW_CONCURRENCY = 4;
+export const MIN_REVIEW_CONCURRENCY = 1;
+export const MAX_REVIEW_CONCURRENCY = 8;
 
 const MAX_MODEL_CONFIG_BYTES = 16 * 1024;
 const MAX_MODEL_CREDENTIALS_BYTES = 64 * 1024;
@@ -99,6 +103,8 @@ export interface ReviewEnvironment {
   readonly credential: SelectedModelCredential | undefined;
   readonly findingScope: FindingScope;
   readonly timeout: Duration;
+  /** Trusted maximum number of simultaneous per-file harness calls. */
+  readonly reviewConcurrency: number;
 }
 
 /**
@@ -238,6 +244,14 @@ function optionalVerbosity(raw: string | undefined): ReviewVerbosity {
   return selected as ReviewVerbosity;
 }
 
+function optionalReviewConcurrency(raw: string | undefined): number {
+  const selected = raw === undefined || raw.length === 0 ? `${DEFAULT_REVIEW_CONCURRENCY}` : raw;
+  if (!/^[1-8]$/u.test(selected)) {
+    throw new Error('REDLINE_REVIEW_CONCURRENCY must be an integer from 1 through 8');
+  }
+  return Number.parseInt(selected, 10);
+}
+
 const REVIEW_REQUIRED_KEYS = [
   'REDLINE_HARNESS',
   'REDLINE_REVIEW_DIR',
@@ -359,6 +373,7 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
   const findingScope = optionalFindingScope(environment.REDLINE_FINDING_SCOPE);
   const verbosity = optionalVerbosity(environment.REDLINE_VERBOSITY);
   const timeout = optionalTimeout(environment.REDLINE_TIMEOUT);
+  const reviewConcurrency = optionalReviewConcurrency(environment.REDLINE_REVIEW_CONCURRENCY);
   const publication = optionalPublication(environment);
   const codeContext = optionalCodeContext(environment);
 
@@ -404,6 +419,7 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
     credential,
     findingScope,
     timeout,
+    reviewConcurrency,
   });
   return Object.freeze({ mode: 'review', timeout, verbosity, review, publication });
 }

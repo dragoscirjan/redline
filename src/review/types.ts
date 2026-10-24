@@ -113,6 +113,7 @@ export interface RejectedCandidate {
 }
 
 export type FileReviewOutcome = 'clean' | 'findings' | 'omitted';
+export type FileReviewExecution = 'executed' | 'reused';
 export type FileReviewErrorKind =
   | 'harness-failed'
   | 'harness-timeout'
@@ -180,6 +181,10 @@ export interface FileReviewRecord {
   readonly findings: readonly PublishedFinding[];
   readonly rejectedCandidates: readonly RejectedCandidate[];
   readonly durationMs: number;
+  /** Whether this run executed the harness or restored a validated semantic match. */
+  readonly execution?: FileReviewExecution | undefined;
+  /** Prior validated model time avoided by a reused record. */
+  readonly savedDurationMs?: number | undefined;
 }
 
 /** Kept during the PR-contract migration for existing benchmark/report consumers. */
@@ -191,8 +196,20 @@ export interface ReviewRunSummaryFile {
   readonly outcome: FileReviewOutcome;
   readonly errorKind?: FileReviewErrorKind | undefined;
   readonly codeContext: ReviewCodeContextCoverage;
+  readonly execution?: FileReviewExecution | undefined;
+  readonly savedDurationMs?: number | undefined;
   readonly findingCount: number;
   readonly findingSpans: readonly string[];
+}
+
+export interface ReviewReuseTelemetry {
+  readonly version: 1;
+  readonly status: 'disabled' | 'enabled';
+  readonly restoredEntries: number;
+  readonly invalidEntries: number;
+  readonly reusedFiles: number;
+  readonly executedFiles: number;
+  readonly savedDurationMs: number;
 }
 
 export interface ReviewRunSummary {
@@ -208,6 +225,7 @@ export interface ReviewRunSummary {
   readonly omittedFiles: number;
   readonly findings: number;
   readonly codeContext: ReviewCodeContextRunCoverage;
+  readonly reuse?: ReviewReuseTelemetry | undefined;
   readonly files: readonly ReviewRunSummaryFile[];
 }
 

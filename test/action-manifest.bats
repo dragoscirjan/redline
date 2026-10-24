@@ -41,6 +41,7 @@ for expected in [
     'Set up pinned Node runtime',
     'Build trusted TypeScript',
     'Validate action inputs with trusted TypeScript',
+    'Restore validated per-file review records',
     'Fetch pull request commits as data',
     'Build bounded code index',
     'Build review context bundle',
@@ -48,6 +49,7 @@ for expected in [
     'Ensure harness binary',
     'Announce review start',
     'Run harness review',
+    'Save validated per-file review records',
     'Generate Redline App token for publication',
     'Publish review',
     'Notify review failure',
@@ -129,6 +131,17 @@ PY
   grep -A5 '^      review-concurrency:' "$REUSABLE_WORKFLOW" | grep -Fq 'default: 4'
   grep -Fq 'review-concurrency: ${{ inputs.review-concurrency }}' "$DOGFOOD_WORKFLOW"
   grep -A5 '^      review-concurrency:' "$DOGFOOD_WORKFLOW" | grep -Fq 'default: 4'
+}
+
+@test "action restores and saves PR-scoped validated review records" {
+  grep -Fq 'actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3' "$ACTION"
+  grep -Fq 'actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3' "$ACTION"
+  grep -Fq 'redline-review-v1-${{ github.repository_id }}-pr-${{ github.event.pull_request.number }}-' "$ACTION"
+  count=$(grep -cF 'REDLINE_REUSE_DIR:' "$ACTION")
+  [ "$count" -eq 2 ]
+  count=$(grep -cF 'REDLINE_REUSE_NAMESPACE:' "$ACTION")
+  [ "$count" -eq 2 ]
+  grep -A2 -F 'name: Save validated per-file review records' "$ACTION" | grep -Fq 'always()'
 }
 
 @test "action maps the verbosity to the environment contract" {

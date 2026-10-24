@@ -65,6 +65,8 @@ A configured review also uploads `<artifact-name>-reviews`. It contains:
 - `summary.json` and `summary.md` with run counts and per-file outcomes;
 - `review.json` and `review.md` with synthesized findings, coverage, limitations, and the deterministic verdict.
 
+Configured dogfood reviews also use an automatic PR-scoped GitHub Actions cache for validated per-file `clean` and `findings` results. Unchanged semantic matches skip the model call; changed diffs, requirements, bounded source, or resolved indexed context execute again. The review artifact reports reused files, executed files, invalid cache entries ignored, and estimated model time saved.
+
 The output is not the historical review journal. See [review output](/review-reporting) for the current schemas and [GitHub composite action](/github-composite-action) for the full pipeline.
 
 ## Container status

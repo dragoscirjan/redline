@@ -26,6 +26,8 @@ export const REDLINE_ENV_KEYS = [
   'REDLINE_FINDING_SCOPE',
   'REDLINE_TIMEOUT',
   'REDLINE_REVIEW_CONCURRENCY',
+  'REDLINE_REUSE_DIR',
+  'REDLINE_REUSE_NAMESPACE',
   'REDLINE_PUBLISH_TOKEN',
   'REDLINE_REPOSITORY',
   'REDLINE_PULL_REQUEST',
@@ -49,6 +51,7 @@ const MAX_MODEL_CONFIG_BYTES = 16 * 1024;
 const MAX_MODEL_CREDENTIALS_BYTES = 64 * 1024;
 const MAX_SELECTED_CREDENTIAL_BYTES = 16 * 1024;
 const MAX_CODE_CONTEXT_PATH_BYTES = 4_096;
+const MAX_REUSE_PATH_BYTES = 4_096;
 const PROVIDER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
 const CONTROL_CHARACTER_PATTERN = /\p{Cc}/u;
 
@@ -92,6 +95,11 @@ export interface SelectedModelCredential {
   readonly value: string;
 }
 
+export interface ReviewReuseEnvironment {
+  readonly directory: string;
+  readonly namespace: string;
+}
+
 export interface ReviewEnvironment {
   readonly harness: HarnessName;
   readonly reviewDirectory: string;
@@ -105,6 +113,8 @@ export interface ReviewEnvironment {
   readonly timeout: Duration;
   /** Trusted maximum number of simultaneous per-file harness calls. */
   readonly reviewConcurrency: number;
+  /** Optional action-owned cross-run record cache; restored contents remain untrusted. */
+  readonly reuse?: ReviewReuseEnvironment | undefined;
 }
 
 /**
@@ -271,6 +281,22 @@ const PUBLICATION_REQUIRED_KEYS = [
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const COMMIT_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 
+function optionalReviewReuse(environment: NodeJS.ProcessEnv): ReviewReuseEnvironment | undefined {
+  const directory = environment.REDLINE_REUSE_DIR ?? '';
+  const namespace = environment.REDLINE_REUSE_NAMESPACE ?? '';
+  if (directory.length === 0 && namespace.length === 0) return undefined;
+  if (directory.length === 0 || namespace.length === 0) {
+    throw new Error('REDLINE_REUSE_DIR and REDLINE_REUSE_NAMESPACE must arrive together');
+  }
+  if (Buffer.byteLength(directory, 'utf8') > MAX_REUSE_PATH_BYTES || CONTROL_CHARACTER_PATTERN.test(directory)) {
+    throw new Error('REDLINE_REUSE_DIR is invalid');
+  }
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#[1-9][0-9]*$/u.test(namespace)) {
+    throw new Error('REDLINE_REUSE_NAMESPACE must use owner/name#pull-request syntax');
+  }
+  return Object.freeze({ directory, namespace });
+}
+
 function optionalCodeContext(environment: NodeJS.ProcessEnv): ReviewCodeContextInput | undefined {
   const path = environment.REDLINE_CODE_CONTEXT ?? '';
   const repository = environment.REDLINE_CODE_CONTEXT_REPOSITORY ?? '';
@@ -376,12 +402,14 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
   const reviewConcurrency = optionalReviewConcurrency(environment.REDLINE_REVIEW_CONCURRENCY);
   const publication = optionalPublication(environment);
   const codeContext = optionalCodeContext(environment);
+  const reuse = optionalReviewReuse(environment);
 
   const values = REVIEW_REQUIRED_KEYS.map((key) => environment[key] ?? '');
   const provided = REVIEW_REQUIRED_KEYS.filter((_key, index) => (values[index] ?? '').length > 0);
   if (provided.length === 0) {
     if (publication !== undefined) throw new Error('publication requires review execution');
     if (codeContext !== undefined) throw new Error('indexed code context requires review execution');
+    if (reuse !== undefined) throw new Error('review reuse requires review execution');
     return Object.freeze({ mode: 'context-only', timeout, verbosity, review: undefined, publication: undefined });
   }
   const missing = REVIEW_REQUIRED_KEYS.filter((key) => !provided.includes(key));
@@ -420,6 +448,7 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
     findingScope,
     timeout,
     reviewConcurrency,
+    reuse,
   });
   return Object.freeze({ mode: 'review', timeout, verbosity, review, publication });
 }

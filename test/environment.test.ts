@@ -160,6 +160,44 @@ describe('parseReviewEnvironment', () => {
     }
   });
 
+  it('parses the action-owned review reuse cache identity', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const parsed = parseReviewEnvironment({
+        ...cleanReviewEnvironment(fixture, 'echo'),
+        REDLINE_REUSE_DIR: '/tmp/redline-review-cache',
+        REDLINE_REUSE_NAMESPACE: 'owner/repository#42',
+      });
+      expect(parsed.review?.reuse).toEqual({
+        directory: '/tmp/redline-review-cache',
+        namespace: 'owner/repository#42',
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('requires a bounded review reuse path and namespace together', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const base = cleanReviewEnvironment(fixture, 'echo');
+      expect(() => parseReviewEnvironment({ ...base, REDLINE_REUSE_DIR: '/tmp/cache' })).toThrow(
+        /must arrive together/u,
+      );
+      expect(() => parseReviewEnvironment({
+        ...base,
+        REDLINE_REUSE_DIR: '/tmp/cache',
+        REDLINE_REUSE_NAMESPACE: 'invalid',
+      })).toThrow(/owner\/name#pull-request/u);
+      expect(() => parseReviewEnvironment({
+        REDLINE_REUSE_DIR: '/tmp/cache',
+        REDLINE_REUSE_NAMESPACE: 'owner/repository#42',
+      })).toThrow(/review reuse requires review execution/u);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('requires indexed context path and repository together', async () => {
     const fixture = await createBundleFixture();
     try {

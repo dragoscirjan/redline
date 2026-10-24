@@ -126,7 +126,7 @@ describe('createReviewWriter', () => {
       expect(summaryJson.findings).toBe(1);
       const summaryMarkdown = await readFile(join(output, 'reviews', 'summary.md'), 'utf8');
       expect(summaryMarkdown).toContain('# Review run summary');
-      expect(summaryMarkdown).toContain('| src/example.ts | findings | 1 (3-5) | disabled (0 spans) |');
+      expect(summaryMarkdown).toContain('| src/example.ts | findings | executed | 1 (3-5) | disabled (0 spans) |');
 
       const review = pullRequestReview({
         findings: [{ ...publishedFinding(), triggerFileId: '000001', triggerPath: 'src/example.ts' }],

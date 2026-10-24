@@ -44,7 +44,8 @@ function writeLine(stream: NodeJS.WriteStream, value: string): void {
 /** One bounded stderr line per completed file: live progress in the run log. */
 function progressLine(record: FileReviewRecord): void {
   const error = record.errorKind !== undefined ? ` (${record.errorKind})` : '';
-  writeLine(process.stderr, `redline-review: [${record.fileId} ${record.path}] ${record.outcome}${error}`);
+  const execution = record.execution === 'reused' ? ' [reused]' : '';
+  writeLine(process.stderr, `redline-review: [${record.fileId} ${record.path}] ${record.outcome}${error}${execution}`);
 }
 
 /** Marks the start of a file's review in the run log. */
@@ -53,10 +54,9 @@ function fileStartLine(file: FileReviewIdentity): void {
 }
 
 /**
- * Maps the verbosity level to the runner's progress callbacks. Per-file
- * start/done lines are always present — they are the minimal signal that
- * a bounded parallel run is alive; the level controls only the live model
- * stream.
+ * Maps the verbosity level to the runner's progress callbacks. Executed
+ * files emit start/done lines; restored files emit one reused completion
+ * line. The level controls only the live model stream.
  */
 export function progressCallbacks(verbosity: ReviewVerbosity): {
   onFileStart: typeof fileStartLine;

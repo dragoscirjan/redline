@@ -25,7 +25,11 @@ import {
   loadReviewCodeContext,
   type LoadedReviewCodeContext,
 } from './indexed-context.ts';
-import { buildFileReviewPrompt, type FileReviewPrompt } from './prompt.ts';
+import {
+  buildFileReviewPrompt,
+  type FileReviewPrompt,
+  type SourceContextStrategy,
+} from './prompt.ts';
 import { buildPullRequestReview, validateFindingReferences } from './pr-contract.ts';
 import { FileReviewValidator, parseFileReviewDocument } from './report.ts';
 import { buildRemediation, formatSpan } from './remediation.ts';
@@ -75,6 +79,8 @@ export interface ReviewRunInput {
   readonly executor?: HarnessExecutor | undefined;
   /** Enables the fail-closed verifier during benchmark evaluation before publication rollout. */
   readonly verifyCandidates?: boolean | undefined;
+  /** Trusted benchmark override; production uses the focused source strategy. */
+  readonly sourceContextStrategy?: SourceContextStrategy | undefined;
   /** Action-owned bounded provider resolver; review code never opens a provider database. */
   readonly followUpExecutor?: ((requests: FollowUpRequestBatch, remainingMs: number) => Promise<string>) | undefined;
   /**
@@ -147,6 +153,7 @@ async function reviewOneFile(
   onHarnessOutput?: (output: HarnessOutputLine) => void,
   harnessStreamMode?: HarnessStreamMode,
   verifyCandidates = false,
+  sourceContextStrategy: SourceContextStrategy = 'focused-v1',
 ): Promise<FileReviewRecord & {
   rawModelOutput?: string | undefined;
   verificationArtifact?: VerificationArtifact | undefined;
@@ -192,6 +199,7 @@ async function reviewOneFile(
       harness: environment.harness,
       model: environment.model.model,
       indexedContext: fileContext.prompt,
+      sourceContextStrategy,
       followUpAvailable: verifyCandidates && environment.codeContext !== undefined
         && followUpExecutor !== undefined && fileContext.coverage.provider !== null,
     });
@@ -415,6 +423,7 @@ async function reviewOneFile(
         harness: environment.harness,
         model: environment.model.model,
         indexedContext: fileContext.prompt,
+        sourceContextStrategy,
         ...(followUp === undefined ? {} : { followUp: {
           provider: indexedContext.coverage.provider,
           snapshot: indexedContext.coverage.provider === null ? null : bundle.manifest.base,
@@ -757,6 +766,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           onHarnessOutput,
           input.harnessStreamMode,
           verifyCandidates,
+          input.sourceContextStrategy,
         );
         input.onFileValidated?.({
           ...identity,

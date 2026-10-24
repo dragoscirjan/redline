@@ -29,7 +29,7 @@ import {
 } from './performance-corpus.ts';
 
 const PERFORMANCE_PROFILE_VERSION = 1 as const;
-const PERFORMANCE_REPORT_VERSION = 1 as const;
+const PERFORMANCE_REPORT_VERSION = 2 as const;
 const MAX_PROFILE_BYTES = 64 * 1024;
 const MAX_RUNS = 20;
 const TOKEN_ESTIMATE_CHARS = 4;
@@ -90,7 +90,12 @@ export interface PerformanceFileSample {
   readonly queueWaitMs: number;
   readonly modelDurationMs: number;
   readonly promptBytes: number;
+  readonly baselinePromptBytes: number;
+  readonly promptReductionBytes: number;
+  readonly promptReductionPercent: number;
   readonly estimatedInputTokens: number;
+  readonly baselineEstimatedInputTokens: number;
+  readonly estimatedInputTokenReduction: number;
   readonly estimatedOutputTokens: number;
   readonly processStartupMs: number | null;
   readonly timeToFirstTextMs: number | null;
@@ -124,7 +129,14 @@ export interface PerformanceRunSample {
   readonly modeledReviewMs: number;
   readonly publicationMs: number;
   readonly promptBytes: number;
+  readonly baselinePromptBytes: number;
+  readonly promptReductionBytes: number;
+  readonly promptReductionPercent: number;
+  readonly medianPromptReductionBytes: number;
+  readonly medianPromptReductionPercent: number;
   readonly estimatedInputTokens: number;
+  readonly baselineEstimatedInputTokens: number;
+  readonly estimatedInputTokenReduction: number;
   readonly estimatedOutputTokens: number;
   readonly actualInputTokens: number | null;
   readonly actualOutputTokens: number | null;
@@ -458,6 +470,19 @@ function estimatedTokens(value: string): number {
   return Math.ceil(value.length / TOKEN_ESTIMATE_CHARS);
 }
 
+function reductionPercent(baseline: number, candidate: number): number {
+  return baseline === 0 ? 0 : Number((((baseline - candidate) / baseline) * 100).toFixed(2));
+}
+
+function median(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
+    : (sorted[middle] ?? 0);
+}
+
 class MeasuringPerformanceExecutor implements HarnessExecutor {
   readonly harness: HarnessName;
   readonly measurements: ExecutionMeasurement[] = [];
@@ -636,6 +661,7 @@ async function runOne(
       environment,
       executor,
       harnessStreamMode: 'off',
+      sourceContextStrategy: 'focused-v1',
       onFileStart: ({ path }) => boundaries.set(path, { startedAt: Date.now() }),
       onFileValidated: (recordValue) => {
         const boundary = boundaries.get(recordValue.path);
@@ -663,6 +689,30 @@ async function runOne(
     });
     const measuredPublicationMs = Math.max(0, Date.now() - publicationStartedAt);
     const publicationMs = source === 'recorded' ? 0 : measuredPublicationMs;
+    const baselineExecutor = new MeasuringPerformanceExecutor(
+      new RecordedPerformanceExecutor(profile.configuration.harness, recording.responses),
+      corpus.files,
+      'recorded',
+    );
+    const baselineResult = await runFileReviews({
+      environment: {
+        ...environment,
+        outputDirectory: join(root, 'baseline-output'),
+        credential: undefined,
+      },
+      executor: baselineExecutor,
+      harnessStreamMode: 'off',
+      sourceContextStrategy: 'full-files-v1',
+    });
+    if (
+      baselineExecutor.measurements.length !== corpus.files.length
+      || baselineResult.records.length !== corpus.files.length
+    ) {
+      throw new Error('performance baseline did not produce one execution and record per corpus file');
+    }
+    const baselineMeasurementsById = new Map(
+      baselineExecutor.measurements.map((measurement) => [measurement.file.id, measurement]),
+    );
     if (executor.measurements.length !== corpus.files.length || result.records.length !== corpus.files.length) {
       throw new Error('performance run did not produce one execution and record per corpus file');
     }
@@ -675,8 +725,9 @@ async function runOne(
     );
     const files = corpus.files.map((file): PerformanceFileSample => {
       const measurement = measurementsById.get(file.id);
+      const baselineMeasurement = baselineMeasurementsById.get(file.id);
       const recordValue = recordsById.get(file.id);
-      if (measurement === undefined || recordValue === undefined) {
+      if (measurement === undefined || baselineMeasurement === undefined || recordValue === undefined) {
         throw new Error(`performance run is missing record or measurement ${file.id}`);
       }
       return {
@@ -691,7 +742,12 @@ async function runOne(
           : measurement.queueWaitMs,
         modelDurationMs: measurement.modelDurationMs,
         promptBytes: measurement.promptBytes,
+        baselinePromptBytes: baselineMeasurement.promptBytes,
+        promptReductionBytes: baselineMeasurement.promptBytes - measurement.promptBytes,
+        promptReductionPercent: reductionPercent(baselineMeasurement.promptBytes, measurement.promptBytes),
         estimatedInputTokens: measurement.estimatedInputTokens,
+        baselineEstimatedInputTokens: baselineMeasurement.estimatedInputTokens,
+        estimatedInputTokenReduction: baselineMeasurement.estimatedInputTokens - measurement.estimatedInputTokens,
         estimatedOutputTokens: measurement.estimatedOutputTokens,
         processStartupMs: measurement.processStartupMs,
         timeToFirstTextMs: measurement.timeToFirstTextMs,
@@ -748,7 +804,23 @@ async function runOne(
       modeledReviewMs,
       publicationMs,
       promptBytes: files.reduce((total, file) => total + file.promptBytes, 0),
+      baselinePromptBytes: files.reduce((total, file) => total + file.baselinePromptBytes, 0),
+      promptReductionBytes: files.reduce((total, file) => total + file.promptReductionBytes, 0),
+      promptReductionPercent: reductionPercent(
+        files.reduce((total, file) => total + file.baselinePromptBytes, 0),
+        files.reduce((total, file) => total + file.promptBytes, 0),
+      ),
+      medianPromptReductionBytes: median(files.map((file) => file.promptReductionBytes)),
+      medianPromptReductionPercent: median(files.map((file) => file.promptReductionPercent)),
       estimatedInputTokens: files.reduce((total, file) => total + file.estimatedInputTokens, 0),
+      baselineEstimatedInputTokens: files.reduce(
+        (total, file) => total + file.baselineEstimatedInputTokens,
+        0,
+      ),
+      estimatedInputTokenReduction: files.reduce(
+        (total, file) => total + file.estimatedInputTokenReduction,
+        0,
+      ),
       estimatedOutputTokens: files.reduce((total, file) => total + file.estimatedOutputTokens, 0),
       actualInputTokens: null,
       actualOutputTokens: null,
@@ -940,6 +1012,7 @@ export async function runPerformanceBenchmark(options: RunPerformanceOptions): P
       'Recorded mode uses checked-in model durations, a modeled bounded-worker schedule, and named production workflow timings; it is deterministic fixture evidence, not a live SLO pass.',
       'Live mode measures the fixed review corpus but combines it with checked-in warm/cold non-review stage samples from production Action runs.',
       'The benchmark command starts after checkout and runtime installation, so local run-stage fields for those boundaries are null; production profile samples provide them for end-to-end totals.',
+      'Full-file baseline prompts are assembled in a recorded prepass and are excluded from measured review latency; the focused strategy is the executed review path.',
       'Token counts are four-characters-per-token estimates until the selected harness exposes bounded provider usage.',
       'Cost is null until the selected harness exposes bounded provider cost metadata.',
       'The local publication stage uses the forge-neutral service with an in-memory publisher; end-to-end totals use sampled production publication latency.',
@@ -1008,11 +1081,11 @@ export function renderPerformanceMarkdown(report: PerformanceReport): string {
     '',
     '## Runs',
     '',
-    '| Run | Review wall | Total model work | Max active calls | Publication | Prompt bytes | Estimated input tokens | Estimated output tokens | Omitted | Findings |',
-    '| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+    '| Run | Review wall | Total model work | Max active calls | Publication | Full prompt bytes | Focused prompt bytes | Aggregate reduction | Median reduction | Est. input tokens full | Est. input tokens focused | Est. token reduction | Est. output tokens | Omitted | Findings |',
+    '| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
   );
   for (const run of report.runs) {
-    lines.push(`| ${run.run} | ${seconds(run.reviewWallMs)} | ${seconds(run.totalModelWorkMs)} | ${run.maximumActiveModelCalls} | ${seconds(run.publicationMs)} | ${run.promptBytes} | ${run.estimatedInputTokens} | ${run.estimatedOutputTokens} | ${run.omittedFiles} | ${run.findings} |`);
+    lines.push(`| ${run.run} | ${seconds(run.reviewWallMs)} | ${seconds(run.totalModelWorkMs)} | ${run.maximumActiveModelCalls} | ${seconds(run.publicationMs)} | ${run.baselinePromptBytes} | ${run.promptBytes} | ${run.promptReductionBytes} (${run.promptReductionPercent.toFixed(2)}%) | ${run.medianPromptReductionBytes} (${run.medianPromptReductionPercent.toFixed(2)}%) | ${run.baselineEstimatedInputTokens} | ${run.estimatedInputTokens} | ${run.estimatedInputTokenReduction} | ${run.estimatedOutputTokens} | ${run.omittedFiles} | ${run.findings} |`);
   }
   lines.push(
     '',
@@ -1029,13 +1102,13 @@ export function renderPerformanceMarkdown(report: PerformanceReport): string {
   if (first !== undefined) {
     lines.push(
       '',
-      '## Per-file baseline',
+      '## Per-file prompt volume',
       '',
-      '| File | Category | Queue wait | Model | First text | Prompt bytes | Output bytes | Outcome |',
-      '| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |',
+      '| File | Category | Queue wait | Model | First text | Full bytes | Focused bytes | Reduction | Est. tokens full | Est. tokens focused | Output bytes | Outcome |',
+      '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
     );
     for (const file of first.files) {
-      lines.push(`| ${file.path} | ${file.category} | ${seconds(file.queueWaitMs)} | ${seconds(file.modelDurationMs)} | ${file.timeToFirstTextMs === null ? 'n/a' : seconds(file.timeToFirstTextMs)} | ${file.promptBytes} | ${file.stdoutBytes} | ${file.outcome} |`);
+      lines.push(`| ${file.path} | ${file.category} | ${seconds(file.queueWaitMs)} | ${seconds(file.modelDurationMs)} | ${file.timeToFirstTextMs === null ? 'n/a' : seconds(file.timeToFirstTextMs)} | ${file.baselinePromptBytes} | ${file.promptBytes} | ${file.promptReductionBytes} (${file.promptReductionPercent.toFixed(2)}%) | ${file.baselineEstimatedInputTokens} | ${file.estimatedInputTokens} | ${file.stdoutBytes} | ${file.outcome} |`);
     }
   }
   lines.push('', '## Limitations', '', ...report.limitations.map((item) => `- ${item}`), '');

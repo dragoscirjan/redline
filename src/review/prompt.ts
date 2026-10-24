@@ -4,7 +4,7 @@
  * The system prompt is the review policy (loaded from `prompts/v7/`) plus a
  * trusted run configuration; it never contains repository content. The user
  * prompt embeds exactly one file's untrusted context — manifest entry, the
- * authoritative diff, bounded base and head file content, and optional
+ * authoritative diff, bounded revision-pinned source excerpts, and optional
  * source-validated indexed context — inside a
  * generated length-delimited boundary, with an explicit untrusted-data
  * framing the policy forbids following.
@@ -22,10 +22,14 @@ import {
   type ReviewManifestFile,
 } from './bundle.ts';
 import type { PromptCodeContext } from './indexed-context.ts';
+import { buildFocusedSourceContext } from './source-context.ts';
 import type { FindingScope } from './types.ts';
 
-export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v4' as const;
-export const FILE_REVIEW_PROMPT_VERSION = 4 as const;
+export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v5' as const;
+export const FILE_REVIEW_PROMPT_VERSION = 5 as const;
+
+export const SOURCE_CONTEXT_STRATEGIES = ['full-files-v1', 'focused-v1'] as const;
+export type SourceContextStrategy = (typeof SOURCE_CONTEXT_STRATEGIES)[number];
 
 const PROMPT_MODULES = ['core-policy.md', 'review-phases.md', 'file-reporting.md'] as const;
 
@@ -55,6 +59,8 @@ export interface FileReviewPromptOptions {
   readonly harness: string;
   readonly model: string;
   readonly indexedContext?: PromptCodeContext | undefined;
+  /** Trusted benchmark override; production uses focused-v1. */
+  readonly sourceContextStrategy?: SourceContextStrategy | undefined;
   /** Trusted execution capability; repository content must not select this value. */
   readonly followUpAvailable?: boolean;
   readonly promptRoot?: string;
@@ -132,18 +138,59 @@ export async function buildFileContextPayload(
   bundle: ReviewBundle,
   file: ReviewManifestFile,
   indexedContext?: PromptCodeContext,
+  sourceContextStrategy: SourceContextStrategy = 'focused-v1',
 ): Promise<string> {
   if (!bundle.manifest.files.includes(file)) throw new Error('prompt file is not part of the review manifest');
+  if (!SOURCE_CONTEXT_STRATEGIES.includes(sourceContextStrategy)) {
+    throw new Error('prompt source-context strategy is unsupported');
+  }
   const diff = await readFile(`${bundle.root}/${file.diffFile}`, 'utf8');
-  const base = file.baseFile
-    ? await embedFileContent(bundle.root, file.baseFile)
-    : { content: null, omitted: false };
-  const head = await embedFileContent(bundle.sourceRoot, file.newPath);
-  const omittedSides = [base.omitted ? 'base' : null, head.omitted ? 'head' : null].filter(
-    (value) => value !== null,
-  );
+  const contributingIndexedContext = indexedContext !== undefined && indexedContext.related.length > 0
+    ? indexedContext
+    : undefined;
+  let sourceContext: Record<string, unknown>;
+  if (sourceContextStrategy === 'full-files-v1') {
+    const base = file.baseFile
+      ? await embedFileContent(bundle.root, file.baseFile)
+      : { content: null, omitted: false };
+    const head = await embedFileContent(bundle.sourceRoot, file.newPath);
+    const omittedSides = [base.omitted ? 'base' : null, head.omitted ? 'head' : null].filter(
+      (value) => value !== null,
+    );
+    sourceContext = {
+      contextVersion: contributingIndexedContext === undefined ? 1 : 2,
+      baseFileContent: base.content,
+      headFileContent: head.content,
+      fileContentOmitted: omittedSides,
+    };
+  } else {
+    sourceContext = {
+      contextVersion: contributingIndexedContext === undefined ? 3 : 4,
+      sourceContext: {
+        strategy: sourceContextStrategy,
+        base: await buildFocusedSourceContext({
+          root: bundle.root,
+          relativePath: file.baseFile,
+          displayPath: file.oldPath,
+          revision: bundle.manifest.base,
+          side: 'base',
+          diff,
+          needed: file.status === 'D' || file.newPath === null,
+        }),
+        head: await buildFocusedSourceContext({
+          root: bundle.sourceRoot,
+          relativePath: file.newPath,
+          displayPath: file.newPath,
+          revision: bundle.manifest.head,
+          side: 'head',
+          diff,
+          needed: file.newPath !== null,
+        }),
+      },
+    };
+  }
   const context = JSON.stringify({
-    contextVersion: indexedContext === undefined ? 1 : 2,
+    ...sourceContext,
     fileId: file.id,
     revisions: { base: bundle.manifest.base, head: bundle.manifest.head },
     manifestEntry: {
@@ -156,10 +203,7 @@ export async function buildFileContextPayload(
       binary: file.binary,
     },
     diff,
-    baseFileContent: base.content,
-    headFileContent: head.content,
-    fileContentOmitted: omittedSides,
-    ...(indexedContext === undefined ? {} : { indexedContext }),
+    ...(contributingIndexedContext === undefined ? {} : { indexedContext: contributingIndexedContext }),
   });
   if (Buffer.byteLength(context, 'utf8') > MAX_UNTRUSTED_CONTEXT_BYTES) {
     throw new Error('untrusted file context exceeds its byte limit');
@@ -193,7 +237,12 @@ export async function buildFileReviewPrompt(options: FileReviewPromptOptions): P
   );
   const system = `${policy.text}# Trusted run configuration\n\n${trustedConfiguration}\n`;
 
-  const context = await buildFileContextPayload(bundle, file, options.indexedContext);
+  const context = await buildFileContextPayload(
+    bundle,
+    file,
+    options.indexedContext,
+    options.sourceContextStrategy,
+  );
   const contextBytes = Buffer.byteLength(context, 'utf8');
   const boundary = generatedBoundary(context);
   const user = [

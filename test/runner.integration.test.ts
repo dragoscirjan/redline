@@ -739,7 +739,7 @@ describe('runFileReviews', () => {
       const result = await runFileReviews({ environment: environment.review!, executor });
 
       expect(result.exitCode).toBe(0);
-      expect(executor.prompts[0]!.user).toContain('"contextVersion":2');
+      expect(executor.prompts[0]!.user).toContain('"contextVersion":4');
       expect(executor.prompts[0]!.user).toContain('"indexedContext"');
       expect(executor.prompts[0]!.user).toContain('export const related = true;\\nsecond line');
       expect(result.summary.codeContext).toMatchObject({
@@ -784,7 +784,7 @@ describe('runFileReviews', () => {
 
       expect(result.exitCode).toBe(0);
       expect(executor.prompts[0]).toEqual(baselineExecutor.prompts[0]);
-      expect(executor.prompts[0]!.user).toContain('"contextVersion":1');
+      expect(executor.prompts[0]!.user).toContain('"contextVersion":3');
       expect(executor.prompts[0]!.user).not.toContain('"indexedContext"');
       expect(result.summary.codeContext).toMatchObject({ status: 'unavailable', reason: 'artifact-invalid' });
       expect(result.records[0]!.codeContext).toMatchObject({ status: 'unavailable', reason: 'artifact-invalid' });

@@ -10,7 +10,7 @@ The historical file-only baseline remains under `benchmark/review-quality/v1/`. 
 mise run benchmark
 ```
 
-The command executes Redline's TypeScript source directly, runs both modes through the production review parser, indexed-context loader, exact-head source resolver, prompt builder, and finding validator, then writes:
+The command executes Redline's TypeScript source directly and replays each mode through both the full-file baseline and focused production prompt strategies. Both variants use the production review parser, indexed-context loader, exact-head source resolver, prompt builder, and finding validator. The focused result remains the reported review result, while the paired baseline supplies prompt-volume and quality-regression evidence. The command writes:
 
 - `benchmark/review-quality/v2/comparison/report.json`
 - `benchmark/review-quality/v2/comparison/report.md`
@@ -27,7 +27,9 @@ The report keeps raw counts for:
 - claimed matches with valid evidence locations;
 - review coverage and indexed-context coverage;
 - resolved related spans and source bytes;
-- total system and user prompt bytes;
+- per-file and aggregate full-file baseline bytes and focused prompt bytes;
+- byte reduction, median reduction, and stable byte-based input-token estimates for both strategies;
+- whether root-cause, evidence, false-positive, duplicate, and coverage metrics remained equal across prompt strategies;
 - recorded review duration;
 - recorded installation, restore, indexing, query, and save timings when present.
 
@@ -41,18 +43,19 @@ A finding receives credit only when a human judgment associates it with an expec
 | Credited issue recall | 1/2 | 2/2 | +1 |
 | False positives | 1 | 0 | -1 |
 | Duplicate findings | 0 | 0 | 0 |
-| Prompt bytes (v7 policy) | 47,647 | 48,686 | +1,039 |
+| Full-file prompt bytes | 47,647 | 48,686 | +1,039 |
+| Focused prompt bytes | 49,337 | 50,374 | +1,037 |
 | Resolved indexed source | 0 bytes | 216 bytes | +216 bytes |
 | Recorded review duration | 39 ms | 39 ms | 0 ms |
 
-The indexed recording recovers the cross-account cache collision and removes the false positive about an optional function argument. The file-local port defect remains detectable without indexed source.
+The indexed recording recovers the cross-account cache collision and removes the false positive about an optional function argument. The file-local port defect remains detectable without indexed source. Both prompt strategies produce identical recorded quality metrics. These deliberately tiny quality fixtures make the focused provenance metadata slightly larger than embedding both tiny files; the representative 20-file performance corpus measures the material prompt reduction.
 
 ## What the recorded comparison proves
 
 The checked-in comparison verifies that:
 
 - both modes use the same cases, review policy, model identity, and finding validator;
-- file-only scores preserve the original expected-issue judgments; prompt bytes reflect the v7 policy's explicit trusted follow-up capability, while older v6 live captures remain historical evidence;
+- file-only scores preserve the original expected-issue judgments, and both prompt-source strategies preserve the same recorded quality metrics;
 - indexed artifacts pass the production schema and identity checks;
 - every injected span is re-resolved from captured exact-head source;
 - context coverage, source bytes, prompt bytes, and timing fields remain reproducible;

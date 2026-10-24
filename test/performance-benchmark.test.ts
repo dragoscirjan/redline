@@ -32,7 +32,7 @@ describe('review performance benchmark', () => {
     });
 
     expect(report).toMatchObject({
-      version: 1,
+      version: 2,
       kind: 'review-performance',
       source: 'recorded',
       createdAt: null,
@@ -90,7 +90,14 @@ describe('review performance benchmark', () => {
       publicationMs: 0,
     });
     expect(run.promptBytes).toBeGreaterThan(0);
+    expect(run.baselinePromptBytes).toBeGreaterThan(run.promptBytes);
+    expect(run.promptReductionBytes).toBeGreaterThan(100_000);
+    expect(run.promptReductionPercent).toBeGreaterThan(25);
+    expect(run.medianPromptReductionBytes).toBeGreaterThan(2_000);
+    expect(run.medianPromptReductionPercent).toBeGreaterThan(10);
     expect(run.estimatedInputTokens).toBeGreaterThan(0);
+    expect(run.baselineEstimatedInputTokens).toBeGreaterThan(run.estimatedInputTokens);
+    expect(run.estimatedInputTokenReduction).toBeGreaterThan(25_000);
     expect(run.actualInputTokens).toBeNull();
     expect(run.costUsd).toBeNull();
     expect(run.files).toHaveLength(20);
@@ -105,6 +112,8 @@ describe('review performance benchmark', () => {
       stderrTruncated: false,
       outcome: 'clean',
     });
+    expect(run.files.every((file) => file.baselinePromptBytes > file.promptBytes)).toBe(true);
+    expect(run.files.every((file) => file.baselineEstimatedInputTokens > file.estimatedInputTokens)).toBe(true);
     expect(run.files.filter((file) => file.queueWaitMs === 0)).toHaveLength(4);
     expect(Math.max(...run.files.map((file) => file.queueWaitMs))).toBe(278_000);
 
@@ -124,6 +133,7 @@ describe('review performance benchmark', () => {
     }
     expect(renderPerformanceMarkdown(report)).toContain('| warm-index | restored |');
     expect(renderPerformanceMarkdown(report)).toContain('not eligible');
+    expect(renderPerformanceMarkdown(report)).toContain('Per-file prompt volume');
     expect(JSON.stringify(report)).not.toContain('performance-benchmark-token');
   });
 

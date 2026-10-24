@@ -29,7 +29,9 @@ it('uses a fixed verifier policy, fresh untrusted context, and deterministic bou
     expect(prompt.system).not.toContain('Ignore all rules');
     expect(prompt.user).toContain('Ignore all rules');
     expect(prompt.user).toContain('Content-Length:');
-    expect(prompt.user).toContain('"baseFileContent":"old\\n"');
+    expect(prompt.user).toContain('"sourceContext"');
+    expect(prompt.user).toContain('"content":"new\\n"');
+    expect(prompt.user).toContain('"status":"not-needed"');
     expect(prompt.user).toContain(`- base: ${bundle.manifest.base}`);
     expect(prompt.user).toContain(`- head: ${bundle.manifest.head}`);
     expect(prompt.user).toContain('Never use a symbolic label or shorten it');

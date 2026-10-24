@@ -1,6 +1,6 @@
 # Review performance benchmark
 
-Redline has a fixed 20-file performance corpus under `benchmark/performance/v1/`. It measures the bounded per-file review scheduler before later performance-epic changes to caching, indexing, prompts, or model execution.
+Redline has a fixed 20-file performance corpus under `benchmark/performance/v1/`. It measures the bounded per-file review scheduler and records the effect of each integrated performance-epic change.
 
 The corpus contains:
 
@@ -63,6 +63,12 @@ PR #169 workflow run `40125277504` measured a 113.55 MiB store. Four exact-key m
 
 The baseline uses four workers and largest-diff-first scheduling. It retains 1,208 seconds of total modeled model work and models 340 seconds of review wall time. The previous sequential baseline reported 1,260.8 seconds warm-index p95 and 1,474.3 seconds cold-index p95. The four-worker baseline reports 392.8 seconds warm and 606.3 seconds cold. Both are below the epic targets, but the report remains SLO-ineligible until at least five current live fixed-corpus runs pass the quality gate.
 
+## Prompt-volume comparison
+
+The performance benchmark assembles a full-file baseline prompt in a recorded prepass, then executes the focused production prompt. The prepass does not contribute to review latency. Both variants use the same policy, diff, indexed context, and recorded clean responses.
+
+On the representative 20-file corpus, focused source selection reduces aggregate prompt volume from 388,473 to 266,257 bytes: 122,216 bytes, or 31.46%. The median file saves 2,434 bytes, or 15.34%. The stable four-characters-per-token estimate falls from 97,132 to 66,579 input tokens, a reduction of 30,553. Every corpus file is smaller with the focused strategy. The review-quality corpus separately replays both strategies and records unchanged root-cause, evidence, false-positive, and coverage results.
+
 ## Run an opt-in live capture
 
 A live capture uses the pinned profile:
@@ -97,8 +103,9 @@ Each report contains:
 - publication duration;
 - per-file queue wait and model duration;
 - process startup and time to first streamed model text when available;
-- prompt and bounded stdout/stderr byte counts;
-- estimated input and output tokens;
+- per-file and aggregate full-file baseline bytes, focused prompt bytes, byte reduction, and median reduction;
+- baseline and focused estimated input tokens plus estimated token reduction;
+- bounded stdout/stderr byte counts and estimated output tokens;
 - output truncation state;
 - warm and cold index timing distributions;
 - omissions, invalid records, rejected candidates, findings, coverage, and publication status.

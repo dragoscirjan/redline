@@ -32,7 +32,7 @@ A workflow input overrides the base-revision file for that run. It is written to
 - `include` and `exclude` are required arrays; either can be empty.
 - When `include` is non-empty, a file must match at least one include pattern or it is excluded as `outside trusted review include policy`.
 - `exclude` is evaluated first. Each rule carries the reason persisted in coverage output.
-- A rename or copy is checked against both old and new paths. An exclude match on either path excludes the file.
+- A rename or copy is checked against both old and new paths. It is excluded only when every path matches an exclude rule. Moving a file into or out of an excluded area remains reviewable.
 - `*` and `?` match inside one path segment. `**` is supported only as a complete segment and matches zero or more segments.
 - Patterns are repository-relative, slash-separated, and cannot contain empty, `.` or `..` segments.
 

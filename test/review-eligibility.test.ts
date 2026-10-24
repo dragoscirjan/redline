@@ -34,6 +34,14 @@ describe('trusted review eligibility policy', () => {
       reviewed: false,
       reason: 'generated snapshot',
     });
+    expect(decideReviewEligibility([
+      'src/feature/__snapshots__/main.snap',
+      'src/security/main.ts',
+    ], policy)).toEqual({ reviewed: true, reason: null });
+    expect(decideReviewEligibility([
+      'src/feature/__snapshots__/old.snap',
+      'src/feature/__snapshots__/new.snap',
+    ], policy)).toEqual({ reviewed: false, reason: 'generated snapshot' });
     expect(decideReviewEligibility(['README.md'], policy)).toEqual({
       reviewed: false,
       reason: 'outside trusted review include policy',

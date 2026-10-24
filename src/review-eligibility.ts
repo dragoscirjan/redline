@@ -156,10 +156,17 @@ export function decideReviewEligibility(
   if (paths.includes(DEFAULT_REVIEW_ELIGIBILITY_PATH)) {
     return { reviewed: true, reason: null };
   }
-  for (const rule of policy.exclude) {
-    if (paths.some((path) => matchesReviewEligibilityPattern(rule.pattern, path))) {
-      return { reviewed: false, reason: rule.reason };
-    }
+  const excludedByPath = paths.map((path) => policy.exclude.find(
+    (rule) => matchesReviewEligibilityPattern(rule.pattern, path),
+  ));
+  if (excludedByPath.length > 0 && excludedByPath.every((rule) => rule !== undefined)) {
+    const reasons = [...new Set(excludedByPath.flatMap((rule) => rule === undefined ? [] : [rule.reason]))];
+    return {
+      reviewed: false,
+      reason: reasons.length === 1
+        ? reasons[0] as string
+        : 'all old and new paths match trusted exclusion rules',
+    };
   }
   if (policy.include.length > 0 && !paths.some((path) =>
     policy.include.some((pattern) => matchesReviewEligibilityPattern(pattern, path)))) {

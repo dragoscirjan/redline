@@ -11,6 +11,7 @@
     "benchmark": "pnpm run build && node dist/src/benchmark/cli.js",
     "benchmark:live-model": "pnpm run build && node dist/src/benchmark/live-cli.js",
     "benchmark:performance": "pnpm run build && node dist/src/benchmark/performance-cli.js",
+    "benchmark:code-index-value": "pnpm run build && node dist/src/benchmark/code-index-value-cli.js",
     "benchmark:performance:live": "pnpm run build && node dist/src/benchmark/performance-cli.js --live",
     "benchmark:verification": "pnpm run build && node dist/src/benchmark/verification-cli.js",
     "benchmark:live-verification": "pnpm run build && node dist/src/benchmark/live-verification-cli.js",

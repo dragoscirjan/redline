@@ -59,7 +59,7 @@ The indexed repository's builds, scripts, package installers, tests, and Git hoo
 
 ## Artifact contract
 
-The version 1 artifact contains:
+The version 2 artifact contains:
 
 - provider ID and exact version;
 - repository, exact head revision, and the exact base graph revision when a validated database exists;
@@ -68,11 +68,23 @@ The version 1 artifact contains:
 - related repository path, one-based line range, and fixed selection reason;
 - for each source-resolved provider result, a bounded action-produced graph reference whose digest binds the provider, version, base snapshot, capability, query identity, relationship, and resolution to that exact span;
 - bounded diagnostics;
-- separate installation, restore, index, query, and save timings.
+- separate installation, restore, database-validation, relationship-query, index, and save timings. Legacy version-1 artifacts remain readable; aggregate reporting treats their missing validation timing as zero.
 
 It contains no graph database, source text, credentials, model conclusions, or finding locations. The strict parser is exported from `src/code-context/artifact.ts`. Limits include 256 changed files, 64 related spans, eight spans per changed file, 80 lines per span, 48 KiB of resolved source coverage, 20 diagnostics, and a 128 KiB artifact.
 
 `complete` means every represented, supported changed file exists in the base graph and was queried within the limits. `partial` records a supported head-only file that is absent from the base graph, any unsupported file mixed with supported coverage, failed query direction, invalid provider row, or truncation. `unsupported` means no changed head file can anchor a provider query. `unavailable` means indexing or validation failed. Empty successful query output is only empty context; it is not proof that no relationship exists.
+
+## Provider value benchmark
+
+`mise run benchmark:code-index-value` regenerates `benchmark/code-index-value/v1/report.json` and `report.md` from the checked-in capture. The report compares three cold and three validated exact-base warm runs for both providers on the two-file TypeScript fixture and the Redline repository. It also includes three GitHub-hosted default-branch warmup runs per provider, bounded follow-up samples, prompt and source-byte cost, review-quality evidence, failures, cache size, and licensing.
+
+The current capture separates three conclusions:
+
+- **Capability:** GitNexus returned complete source-confirmed context in every current local sample. CGC returned partial context with zero related spans because its bounded incoming query failed.
+- **Latency:** exact-base restoration removed indexing for both providers. GitNexus had materially lower validation, query, and wall time in these samples.
+- **Review value:** the historical live-model comparison gained no credited issues and removed no false positives, while adding 1,039 prompt bytes and 216 source bytes. The deterministic recorded comparison shows possible value but is not live-provider evidence.
+
+The default remains CGC. GitNexus is not an unconditional default because its PolyForm Noncommercial 1.0.0 license requires use-specific review. The measurements do not enable independent verification or follow-up publication. Normal `summary.json` and `summary.md` now retain cache disposition, diagnostic codes, and install/restore/validation/index/query/save timings with the existing context span and source-byte counts.
 
 ## Action-owned follow-up (gated off)
 
@@ -99,7 +111,7 @@ The cache root contains only provider database files, the provider's bounded reg
 
 ## Tests
 
-Normal CI uses fake CGC and GitNexus providers and performs no provider download. It covers cold and restored-base equivalence, exact-base warmup followed by a zero-index review hit, unsupported-only cold-index avoidance, no-reindex reuse across head commits, exact-base and provider cache identity, invalid restore rebuilding, bounded queries, source validation, and provider failure fallback.
+Normal CI uses fake CGC and GitNexus providers and performs no provider download. It covers cold and restored-base equivalence, exact-base warmup followed by a zero-index review hit, unsupported-only and all-head-new cold-index avoidance, no-reindex reuse across head commits, exact-base and provider cache identity, invalid restore rebuilding, bounded queries, source validation, and provider failure fallback.
 
 Live smoke tests are separate opt-ins:
 

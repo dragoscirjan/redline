@@ -144,7 +144,7 @@ class ConcurrentExecutor implements HarnessExecutor {
 async function writeCodeContext(fixture: BundleFixture, value?: object): Promise<string> {
   const path = join(fixture.root, 'code-context.json');
   await writeFile(path, JSON.stringify(value ?? {
-    version: 1,
+    version: 2,
     provider: { id: 'cgc', version: '0.5.7' },
     repository: 'owner/repository',
     revision: HEAD_SHA,
@@ -159,7 +159,7 @@ async function writeCodeContext(fixture: BundleFixture, value?: object): Promise
       },
     ],
     diagnostics: [],
-    timings: { installationMs: 1, restoreMs: 2, indexMs: 3, queryMs: 4, saveMs: null },
+    timings: { installationMs: 1, restoreMs: 2, validationMs: 3, indexMs: 4, queryMs: 5, saveMs: null },
   }));
   return path;
 }
@@ -244,12 +244,12 @@ describe('runFileReviews', () => {
     try {
       await writeFile(join(fixture.source, 'src/related.ts'), 'export const related = true;\n');
       const contextPath = await writeCodeContext(fixture, {
-        version: 1, provider: { id: 'cgc', version: '0.5.7' },
+        version: 2, provider: { id: 'cgc', version: '0.5.7' },
         repository: 'owner/repository', revision: HEAD_SHA, status: 'complete',
         files: [{ changedPath: 'src/example.ts', status: 'complete', related: [{
           path: 'src/related.ts', startLine: 1, endLine: 1, reason: 'incoming CALLS',
         }] }],
-        diagnostics: [], timings: { installationMs: 0, restoreMs: 0, indexMs: 0, queryMs: 0, saveMs: null },
+        diagnostics: [], timings: { installationMs: 0, restoreMs: 0, validationMs: 0, indexMs: 0, queryMs: 0, saveMs: null },
       });
       const environment = parseReviewEnvironment({ ...cleanReviewEnvironment(fixture, 'echo'),
         REDLINE_CODE_CONTEXT: contextPath, REDLINE_CODE_CONTEXT_REPOSITORY: 'owner/repository',
@@ -746,10 +746,14 @@ describe('runFileReviews', () => {
         status: 'complete',
         filesWithContext: 1,
         relatedSpans: 1,
+        cache: 'built',
+        timings: { installationMs: 1, restoreMs: 2, validationMs: 3, indexMs: 4, queryMs: 5 },
       });
       expect(result.records[0]!.codeContext).toMatchObject({ status: 'complete', relatedSpans: 1 });
       const markdown = await readFile(join(fixture.output, 'reviews', 'summary.md'), 'utf8');
       expect(markdown).toContain('**Indexed context:** complete; 1 files, 1 spans');
+      expect(markdown).toContain('**Index cache:** built');
+      expect(markdown).toContain('validate 3 ms, index 4 ms, query 5 ms');
     } finally {
       await fixture.cleanup();
     }

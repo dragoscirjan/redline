@@ -74,7 +74,19 @@ describe('code-context artifact', () => {
         capability: 'related-spans',
       },
     });
+    expect(parsed.timings.validationMs).toBeUndefined();
     expect(parsed.timings.saveMs).toBeNull();
+  });
+
+  it('requires separate validation timing in version 2 while retaining version 1 compatibility', () => {
+    const current = structuredClone(validArtifact());
+    current['version'] = 2;
+    const timings = current['timings'] as Record<string, unknown>;
+    timings['validationMs'] = 7;
+    expect(parseCodeContextArtifact(current).timings.validationMs).toBe(7);
+
+    delete timings['validationMs'];
+    expect(() => parseCodeContextArtifact(current)).toThrow('validationMs is required in version 2');
   });
 
   it('rejects unknown fields and non-normalized source paths', () => {

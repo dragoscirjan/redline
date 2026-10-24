@@ -12,6 +12,7 @@ import {
 import { checkedFile, type ReviewBundle, type ReviewManifestFile } from './bundle.js';
 import type {
   GraphReference,
+  ReviewCodeContextCacheStatus,
   ReviewCodeContextCoverage,
   ReviewCodeContextReason,
   ReviewCodeContextRunCoverage,
@@ -84,6 +85,9 @@ function emptyLoaded(
     coverage: {
       ...coverage(status, provider, revision, 0, 0, reason),
       filesWithContext: 0,
+      cache: status === 'disabled' ? 'not-applicable' : 'unavailable',
+      timings: null,
+      diagnosticCodes: [],
     },
     files: new Map(),
     diagnostics: [],
@@ -98,6 +102,16 @@ function artifactStatusReason(status: CodeContextStatus): ReviewCodeContextReaso
   if (status === 'unsupported') return 'artifact-unsupported';
   if (status === 'unavailable') return 'artifact-unavailable';
   return null;
+}
+
+function cacheStatus(artifact: CodeContextArtifact): ReviewCodeContextCacheStatus {
+  if (artifact.status === 'unavailable') return 'unavailable';
+  const codes = new Set(artifact.diagnostics.map((item) => item.code));
+  if (codes.has('cache-base-revision')) return 'restored';
+  if (codes.has('cold-index-skipped')) return 'skipped';
+  if (artifact.status === 'unsupported') return 'unavailable';
+  if (artifact.timings.indexMs > 0) return 'built';
+  return 'unknown';
 }
 
 function reviewPaths(file: ReviewManifestFile): readonly string[] {
@@ -274,6 +288,9 @@ async function resolveArtifact(
         reason,
       ),
       filesWithContext,
+      cache: cacheStatus(artifact),
+      timings: artifact.timings,
+      diagnosticCodes: artifact.diagnostics.map((item) => item.code),
     },
     files,
     diagnostics: artifact.diagnostics,

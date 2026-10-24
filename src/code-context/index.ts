@@ -1,5 +1,6 @@
 export {
   CODE_CONTEXT_VERSION,
+  LEGACY_CODE_CONTEXT_VERSION,
   MAX_CODE_CONTEXT_ARTIFACT_BYTES,
   loadCodeContextArtifact,
   parseCodeContextArtifact,
@@ -10,5 +11,6 @@ export {
   type CodeContextProvider,
   type CodeContextStatus,
   type CodeContextTimings,
+  type CodeContextVersion,
   type RelatedCodeSpan,
 } from './artifact.js';

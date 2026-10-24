@@ -157,6 +157,13 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
     `- **Omitted:** ${summary.omittedFiles}`,
     `- **Findings:** ${summary.findings}`,
     `- **Indexed context:** ${summary.codeContext.status}; ${summary.codeContext.filesWithContext} files, ${summary.codeContext.relatedSpans} spans, ${summary.codeContext.sourceBytes} source bytes`,
+    `- **Index cache:** ${summary.codeContext.cache}`,
+    ...(summary.codeContext.timings === null ? [] : [
+      `- **Index timings:** install ${summary.codeContext.timings.installationMs} ms, restore ${summary.codeContext.timings.restoreMs} ms, validate ${summary.codeContext.timings.validationMs ?? 0} ms, index ${summary.codeContext.timings.indexMs} ms, query ${summary.codeContext.timings.queryMs} ms, save ${summary.codeContext.timings.saveMs === null ? 'n/a' : `${summary.codeContext.timings.saveMs} ms`}`,
+    ]),
+    ...(summary.codeContext.diagnosticCodes.length === 0 ? [] : [
+      `- **Index diagnostics:** ${summary.codeContext.diagnosticCodes.join(', ')}`,
+    ]),
     ...(summary.reuse === undefined ? [] : [
       `- **Review reuse:** ${summary.reuse.status}; ${summary.reuse.reusedFiles} reused, ${summary.reuse.executedFiles} executed, ${summary.reuse.savedDurationMs} ms estimated saved`,
       `- **Restored cache:** ${summary.reuse.restoredEntries} valid entries, ${summary.reuse.invalidEntries} invalid entries ignored`,

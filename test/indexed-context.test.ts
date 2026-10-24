@@ -15,7 +15,7 @@ const REPOSITORY = 'owner/repository';
 
 function artifact(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    version: 1,
+    version: 2,
     provider: { id: 'cgc', version: '0.5.7' },
     repository: REPOSITORY,
     revision: HEAD_SHA,
@@ -35,7 +35,7 @@ function artifact(overrides: Record<string, unknown> = {}): Record<string, unkno
       },
     ],
     diagnostics: [],
-    timings: { installationMs: 1, restoreMs: 2, indexMs: 3, queryMs: 4, saveMs: null },
+    timings: { installationMs: 1, restoreMs: 2, validationMs: 3, indexMs: 4, queryMs: 5, saveMs: null },
     ...overrides,
   };
 }
@@ -60,6 +60,9 @@ describe('review indexed context', () => {
         status: 'complete',
         filesWithContext: 1,
         relatedSpans: 1,
+        cache: 'built',
+        timings: { validationMs: 3, indexMs: 4, queryMs: 5 },
+        diagnosticCodes: [],
       });
       expect(selected.coverage).toMatchObject({ status: 'complete', relatedSpans: 1 });
       expect(selected.prompt?.related).toEqual([
@@ -74,6 +77,28 @@ describe('review indexed context', () => {
           content: 'one\ntwo',
         },
       ]);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('does not report a failed indexed artifact as a built cache', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const path = await writeArtifact(fixture.root, artifact({
+        status: 'unavailable',
+        files: [],
+        diagnostics: [{ level: 'error', code: 'code-index-build-failed', message: 'provider index failed' }],
+      }));
+      const bundle = await loadReviewBundle(fixture.review, fixture.source);
+      const loaded = await loadReviewCodeContext(bundle, { path, repository: REPOSITORY });
+
+      expect(loaded.coverage).toMatchObject({
+        status: 'unavailable',
+        cache: 'unavailable',
+        timings: { indexMs: 4 },
+        diagnosticCodes: ['code-index-build-failed'],
+      });
     } finally {
       await fixture.cleanup();
     }

@@ -234,7 +234,7 @@ PY
 import hashlib, json, sys
 cold = json.load(open(sys.argv[1], encoding='utf-8'))
 warm = json.load(open(sys.argv[2], encoding='utf-8'))
-assert cold['version'] == 1
+assert cold['version'] == 2
 assert cold['provider'] == {'id': 'cgc', 'version': '0.5.7'}
 assert cold['revision'] == sys.argv[3]
 assert cold['baseRevision'] == sys.argv[4]
@@ -498,6 +498,38 @@ assert artifact['files'] == [{
 }]
 codes = {item['code'] for item in artifact['diagnostics']}
 assert {'no-supported-changed-files', 'cold-index-skipped'} <= codes
+assert artifact['timings']['indexMs'] == 0
+PY
+}
+
+@test "all-head-new supported reviews skip a no-benefit cold index" {
+  git -C "$REPOSITORY" reset -q --hard "$BASE"
+  cat > "$REPOSITORY/src/new-module.ts" <<'EOF'
+export const newModule = true;
+EOF
+  git -C "$REPOSITORY" add src/new-module.ts
+  git -C "$REPOSITORY" commit -q -m all-head-new
+  HEAD_REVISION=$(git -C "$REPOSITORY" rev-parse HEAD)
+  export REDLINE_CODE_INDEX_HEAD="$HEAD_REVISION"
+
+  prepare_action
+  : > "$PROVIDER/calls.log"
+  build_action '' success
+
+  grep -Fq 'cache-ready=false' "$GITHUB_OUTPUT"
+  ! grep -Fq "index $RUNNER_TEMP/redline-code-index/source --no-progress" "$PROVIDER/calls.log"
+  [ ! -f "$RUNNER_TEMP/redline-code-index/cache/state.json" ]
+  python3 - "$REDLINE_CODE_INDEX_OUTPUT_DIRECTORY/code-context.json" <<'PY'
+import json, sys
+artifact = json.load(open(sys.argv[1], encoding='utf-8'))
+assert artifact['status'] == 'partial'
+assert artifact['files'] == [{
+    'changedPath': 'src/new-module.ts',
+    'status': 'partial',
+    'related': [],
+}]
+codes = {item['code'] for item in artifact['diagnostics']}
+assert {'changed-file-absent-from-base', 'no-base-query-anchors', 'cold-index-skipped'} <= codes
 assert artifact['timings']['indexMs'] == 0
 PY
 }
@@ -786,7 +818,7 @@ assert span['graphReference']['provider'] == 'cgc'
 assert span['graphReference']['providerVersion'] == '0.5.7'
 assert span['graphReference']['snapshotRevision'] == artifact['baseRevision']
 timings = artifact['timings']
-for key in ('installationMs', 'restoreMs', 'indexMs', 'queryMs'):
+for key in ('installationMs', 'restoreMs', 'validationMs', 'indexMs', 'queryMs'):
     assert isinstance(timings[key], int) and timings[key] >= 0
 assert timings['saveMs'] is None or isinstance(timings['saveMs'], int)
 PY

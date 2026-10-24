@@ -17,6 +17,14 @@ const DISABLED_CONTEXT = {
   reason: 'not-configured' as const,
 };
 
+const DISABLED_RUN_CONTEXT = {
+  ...DISABLED_CONTEXT,
+  filesWithContext: 0,
+  cache: 'not-applicable' as const,
+  timings: null,
+  diagnosticCodes: [],
+};
+
 const FIX_PROMPT = [
   'Fix one code-review finding.',
   '',
@@ -105,7 +113,7 @@ describe('createReviewWriter', () => {
         reviewedFiles: 1,
         omittedFiles: 0,
         findings: 1,
-        codeContext: { ...DISABLED_CONTEXT, filesWithContext: 0 },
+        codeContext: DISABLED_RUN_CONTEXT,
         files: [
           {
             fileId: '000001',

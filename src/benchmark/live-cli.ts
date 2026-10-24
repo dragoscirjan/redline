@@ -42,6 +42,7 @@ interface LiveConfiguration {
   readonly credential: ReviewEnvironment['credential'];
   readonly findingScope: FindingScope;
   readonly timeout: Duration;
+  readonly runTimeout: Duration;
 }
 
 interface LiveCaseCapture {
@@ -123,7 +124,8 @@ function parseConfiguration(environment: NodeJS.ProcessEnv): LiveConfiguration {
     model,
     credential,
     findingScope: findingScope as FindingScope,
-    timeout: parseDuration(environment.REDLINE_TIMEOUT ?? '30m'),
+    timeout: parseDuration(environment.REDLINE_TIMEOUT ?? '4m'),
+    runTimeout: parseDuration(environment.REDLINE_RUN_TIMEOUT ?? '10m'),
   };
 }
 
@@ -162,7 +164,7 @@ async function captureCase(
       credential: configuration.credential,
       findingScope: configuration.findingScope,
       timeout: configuration.timeout,
-      runTimeout: configuration.timeout,
+      runTimeout: configuration.runTimeout,
       reviewConcurrency: 1,
     };
     const result = await runFileReviews({ environment, executor });

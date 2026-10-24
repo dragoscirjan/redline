@@ -197,7 +197,8 @@ describe('review performance benchmark', () => {
           auth: undefined,
         },
         credential: undefined,
-        timeout: parseDuration('30m'),
+        timeout: parseDuration('4m'),
+        runTimeout: parseDuration('10m'),
         executorFactory: unreachableFactory,
       },
     })).rejects.toThrow('does not match the pinned profile');

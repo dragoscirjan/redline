@@ -32,10 +32,11 @@ import sys
 
 root = Path(sys.argv[1])
 ci = (root / '.github' / 'workflows' / 'ci.yml').read_text()
-assert 'git status --porcelain --untracked-files=all --' in ci, \
-    'the deterministic evidence guard must detect new and renamed files'
-assert 'benchmark/performance/v1/baseline' in ci
-assert 'benchmark/model-execution/v1/live-glm-5.3-flash/report.json' in ci
+prefix = 'evidence_changes="$(git status --porcelain --untracked-files=all --'
+assert prefix in ci, 'the deterministic evidence guard must detect new and renamed files'
+guard = ci.split(prefix, 1)[1].split(')"', 1)[0]
+assert 'benchmark/performance/v1/baseline' in guard
+assert 'benchmark/model-execution/v1/live-glm-5.3-flash/report.json' in guard
 assert 'performance evidence changed:' in ci, \
     'evidence drift must produce an explicit CI diagnostic'
 PY

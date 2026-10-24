@@ -10,8 +10,10 @@
 
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
+import type { ReviewEligibilityPolicyMetadata } from '../review-eligibility.ts';
 
-export const REVIEW_BUNDLE_VERSION = 1 as const;
+export const REVIEW_BUNDLE_VERSION = 2 as const;
+export const LEGACY_REVIEW_BUNDLE_VERSION = 1 as const;
 
 const MAX_MANIFEST_BYTES = 2 * 1024 * 1024;
 const MAX_REVISIONS_BYTES = 1024;
@@ -32,16 +34,18 @@ export interface ReviewManifestFile {
   additions: number | null;
   deletions: number | null;
   binary: boolean;
-  /** false marks files excluded from review by the bundle (generated, lock files). */
+  /** false marks files excluded from required review by trusted bundle policy. */
   reviewed: boolean;
+  exclusionReason: string | null;
   diffFile: string;
   baseFile: string | null;
 }
 
 export interface ReviewManifest {
-  version: typeof REVIEW_BUNDLE_VERSION;
+  version: typeof REVIEW_BUNDLE_VERSION | typeof LEGACY_REVIEW_BUNDLE_VERSION;
   base: string;
   head: string;
+  eligibility: ReviewEligibilityPolicyMetadata;
   files: ReviewManifestFile[];
 }
 
@@ -99,10 +103,46 @@ function validateRepositoryPath(value: string | null, label: string): void {
   if (byteLength(value) > MAX_REPOSITORY_PATH_BYTES) throw new Error(`${label} exceeds the path byte limit`);
 }
 
+function parseEligibilityMetadata(value: unknown): ReviewEligibilityPolicyMetadata {
+  if (!isRecord(value)) throw new Error('manifest.eligibility must be an object');
+  assertOnlyKeys(
+    value,
+    ['version', 'source', 'path', 'digest', 'includeRules', 'excludeRules'],
+    'manifest.eligibility',
+  );
+  if (value.version !== 1) throw new Error('manifest.eligibility uses an unsupported version');
+  if (value.source !== 'built-in' && value.source !== 'trusted-base' && value.source !== 'trusted-workflow') {
+    throw new Error('manifest.eligibility.source is unsupported');
+  }
+  const path = nullableString(value, 'path', 'manifest.eligibility');
+  const digest = nullableString(value, 'digest', 'manifest.eligibility');
+  if (digest !== null && !/^[0-9a-f]{64}$/u.test(digest)) {
+    throw new Error('manifest.eligibility.digest must be a SHA-256 digest or null');
+  }
+  const includeRules = nullableNonNegativeInteger(value, 'includeRules', 'manifest.eligibility');
+  const excludeRules = nullableNonNegativeInteger(value, 'excludeRules', 'manifest.eligibility');
+  if (includeRules === null || excludeRules === null) {
+    throw new Error('manifest.eligibility rule counts must be non-negative integers');
+  }
+  if (value.source === 'built-in' && (path !== null || digest !== null || includeRules !== 0 || excludeRules !== 0)) {
+    throw new Error('built-in manifest eligibility metadata is inconsistent');
+  }
+  if (value.source === 'trusted-base' && path === null) {
+    throw new Error('trusted-base manifest eligibility metadata requires a path');
+  }
+  if (value.source === 'trusted-workflow' && path !== null) {
+    throw new Error('trusted-workflow manifest eligibility metadata cannot expose a host path');
+  }
+  return { version: 1, source: value.source, path, digest, includeRules, excludeRules };
+}
+
 export function parseReviewManifest(value: unknown): ReviewManifest {
   if (!isRecord(value)) throw new Error('manifest.json must contain an object');
-  assertOnlyKeys(value, ['version', 'base', 'head', 'files'], 'manifest');
-  if (value.version !== REVIEW_BUNDLE_VERSION) throw new Error('manifest.json uses an unsupported version');
+  if (value.version !== LEGACY_REVIEW_BUNDLE_VERSION && value.version !== REVIEW_BUNDLE_VERSION) {
+    throw new Error('manifest.json uses an unsupported version');
+  }
+  const legacy = value.version === LEGACY_REVIEW_BUNDLE_VERSION;
+  assertOnlyKeys(value, legacy ? ['version', 'base', 'head', 'files'] : ['version', 'base', 'head', 'eligibility', 'files'], 'manifest');
 
   const base = requiredString(value, 'base', 'manifest');
   const head = requiredString(value, 'head', 'manifest');
@@ -112,6 +152,9 @@ export function parseReviewManifest(value: unknown): ReviewManifest {
   if (!Array.isArray(value.files)) throw new Error('manifest.files must be an array');
   if (value.files.length > MAX_MANIFEST_FILES) throw new Error('manifest.files exceeds the file-count limit');
 
+  const eligibility = legacy
+    ? { version: 1 as const, source: 'built-in' as const, path: null, digest: null, includeRules: 0, excludeRules: 0 }
+    : parseEligibilityMetadata(value.eligibility);
   const seenIds = new Set<string>();
   const files = value.files.map((item, index): ReviewManifestFile => {
     const label = `manifest.files[${index}]`;
@@ -130,6 +173,7 @@ export function parseReviewManifest(value: unknown): ReviewManifest {
         'diffFile',
         'baseFile',
         'reviewed',
+        ...(legacy ? [] : ['exclusionReason']),
       ],
       label,
     );
@@ -153,6 +197,12 @@ export function parseReviewManifest(value: unknown): ReviewManifest {
     if (item.reviewed !== undefined && typeof item.reviewed !== 'boolean') {
       throw new Error(`${label}.reviewed must be a boolean when present`);
     }
+    const reviewed = item.reviewed ?? true;
+    const exclusionReason = legacy
+      ? reviewed ? null : item.binary ? 'binary diff; not reviewable as text' : 'excluded by legacy bundle policy'
+      : nullableString(item, 'exclusionReason', label);
+    if (reviewed && exclusionReason !== null) throw new Error(`${label}.exclusionReason must be null for reviewed files`);
+    if (!reviewed && exclusionReason === null) throw new Error(`${label}.exclusionReason is required for excluded files`);
 
     const diffFile = requiredString(item, 'diffFile', label);
     if (diffFile !== `diffs/${id}.diff`) throw new Error(`${label}.diffFile does not match its file id`);
@@ -170,13 +220,14 @@ export function parseReviewManifest(value: unknown): ReviewManifest {
       additions,
       deletions,
       binary: item.binary,
-      reviewed: item.reviewed ?? true,
+      reviewed,
+      exclusionReason,
       diffFile,
       baseFile,
     };
   });
 
-  return { version: REVIEW_BUNDLE_VERSION, base, head, files };
+  return { version: value.version, base, head, eligibility, files };
 }
 
 export async function checkedDirectory(path: string, label: string): Promise<string> {

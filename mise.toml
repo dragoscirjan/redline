@@ -31,6 +31,10 @@ run = "pnpm run benchmark:code-index-value"
 description = "Regenerate the checked-in Pi model-execution policy report"
 run = "pnpm run benchmark:model-execution"
 
+[tasks."benchmark:review-eligibility"]
+description = "Regenerate the checked-in trusted review eligibility evidence"
+run = "pnpm run benchmark:review-eligibility"
+
 [tasks."benchmark:model-execution-live"]
 description = "Run the opt-in live Pi thinking, output-bound, and structured-output capture"
 run = "pnpm run benchmark:model-execution:live"

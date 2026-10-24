@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "include": [],
+  "exclude": [
+    {
+      "pattern": "benchmark/**/capture.json",
+      "reason": "generated raw benchmark capture"
+    }
+  ]
+}

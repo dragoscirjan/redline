@@ -25,6 +25,9 @@ jobs:
       run-timeout: 10m # whole review
       review-concurrency: 4 # default; valid range 1-8
       runtime: node # default; or bun
+      # Optional strict JSON. Empty loads .redline/review-eligibility.json
+      # from the exact base revision.
+      review-eligibility: ""
     secrets:
       github-token: ${{ secrets.GH_TOKEN }}
       model-auth: ${{ secrets.MODEL_CREDENTIALS }}
@@ -51,7 +54,8 @@ In context-only mode the workflow does not index and uploads only the `<artifact
 | `run-timeout` | duration | Whole-review deadline. Default `10m`, capped at `360m`; unstarted files become explicit omissions. |
 | `review-concurrency` | 1–8 | Maximum simultaneous per-file model calls. Default `4`. |
 | `runtime` | `node`, `bun` | Trusted TypeScript source runtime. Default `node`; Bun is pinned to `1.4.4`. Harness and index-provider runtimes do not change. |
-| `verbosity` | `silent`, `progress`, `full-output` | Live model stream in the run log. Default `progress` (dots). |
+| `verbosity` | `silent`, `progress`, `full-output` | Live model stream in the run log. Default `progress`, with bounded activity counts and diagnostics. |
+| `review-eligibility` | policy JSON | Optional strict policy from trusted workflow input. Empty loads the exact-base `.redline/review-eligibility.json` when present. Pull-request head content cannot select eligibility. |
 | `indexing` | `enabled`, `disabled` | Default `enabled`. The published action owns indexing; `disabled` selects file-only review. |
 | `indexing-provider` | `cgc`, `gitnexus` | Default `cgc`. GitNexus is PolyForm Noncommercial 1.0.0 licensed; confirm suitability before selecting it. |
 | `artifact-name` | name | Default `redline-review-<run id>`. |
@@ -66,7 +70,7 @@ In context-only mode the workflow does not index and uploads only the `<artifact
 
 ## What the run produces
 
-Two artifacts: `<artifact-name>-context` with the review context bundle, source-at-head export, and bounded `code-context.json` when indexing runs; and `<artifact-name>-reviews` with the per-file review records and run summary described in [review output](/review-reporting) (the latter only when review execution is enabled). Configured reviews automatically restore and save a PR-scoped cache of fingerprint-matched validated per-file results; cache availability is optional, and the artifact reports reuse counts and estimated time saved. When `github-token` is supplied, publication adds one review per file with findings and a managed summary comment to the pull request; see [publication](/github-composite-action#publication).
+Two artifacts: `<artifact-name>-context` with the review context bundle, source-at-head export, explicit eligibility decisions and reasons, and bounded `code-context.json` when indexing runs; and `<artifact-name>-reviews` with the per-file review records and run summary described in [review output](/review-reporting) (the latter only when review execution is enabled). Configured reviews automatically restore and save a PR-scoped cache of fingerprint-matched validated per-file results; cache availability is optional, and the artifact reports reuse counts and estimated time saved. When `github-token` is supplied, publication adds one review per file with findings and a managed summary comment to the pull request; see [publication](/github-composite-action#publication).
 
 ## Calling within Redline itself
 

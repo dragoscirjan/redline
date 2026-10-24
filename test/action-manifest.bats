@@ -5,6 +5,7 @@ setup() {
   ACTION="$ROOT/github/action.yaml"
   REUSABLE_WORKFLOW="$ROOT/.github/workflows/code-review.yml"
   DOGFOOD_WORKFLOW="$ROOT/.github/workflows/dogfood-review.yml"
+  PR_REVIEW_WORKFLOW="$ROOT/.github/workflows/pr-review.yml"
   WARMUP_WORKFLOW="$ROOT/.github/workflows/code-index-warmup.yml"
   DOCS_WORKFLOW="$ROOT/.github/workflows/docs.publish.yml"
   CI_WORKFLOW="$ROOT/.github/workflows/ci.yml"
@@ -25,7 +26,7 @@ action = yaml.safe_load(Path(sys.argv[1]).read_text())
 inputs = action['inputs']
 assert set(inputs) == {
     'backend', 'model-config', 'model-auth', 'finding-scope',
-    'timeout', 'run-timeout', 'review-concurrency', 'runtime', 'verbosity', 'indexing', 'indexing-provider', 'artifact-name', 'artifact-retention-days',
+    'timeout', 'run-timeout', 'review-concurrency', 'runtime', 'verbosity', 'review-eligibility', 'indexing', 'indexing-provider', 'artifact-name', 'artifact-retention-days',
     'github-token', 'github-app-id', 'github-app-key',
 }, f'unexpected input surface: {sorted(inputs)}'
 assert inputs['finding-scope']['default'] == 'defects'
@@ -34,6 +35,7 @@ assert inputs['run-timeout']['default'] == '10m'
 assert inputs['review-concurrency']['default'] == '4'
 assert inputs['runtime']['default'] == 'node'
 assert inputs['verbosity']['default'] == 'progress'
+assert inputs['review-eligibility']['default'] == ''
 assert inputs['indexing']['default'] == 'enabled'
 assert inputs['indexing-provider']['default'] == 'cgc'
 assert inputs['github-token']['default'] == ''
@@ -185,8 +187,18 @@ PY
   grep -Fq 'model-auth: ${{ secrets.model-auth }}' "$DOGFOOD_WORKFLOW"
   grep -Fq 'timeout: ${{ inputs.timeout }}' "$DOGFOOD_WORKFLOW"
   grep -Fq 'run-timeout: ${{ inputs.run-timeout }}' "$DOGFOOD_WORKFLOW"
+  grep -Fq 'review-eligibility: ${{ inputs.review-eligibility }}' "$DOGFOOD_WORKFLOW"
   ! grep -Fq 'Install pi harness binary' "$DOGFOOD_WORKFLOW"
   ! grep -Fq 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent' "$DOGFOOD_WORKFLOW"
+}
+
+@test "action loads bounded eligibility from trusted workflow input or exact base" {
+  grep -Fq 'review-eligibility: ${{ inputs.review-eligibility }}' "$REUSABLE_WORKFLOW"
+  grep -Fq 'REVIEW_ELIGIBILITY: ${{ inputs.review-eligibility }}' "$ACTION"
+  grep -Fq -- '--eligibility-policy-file "$eligibility_file"' "$ACTION"
+  grep -Fq '.redline/review-eligibility.json' "$ACTION"
+  grep -Fq 'verbosity: progress' "$PR_REVIEW_WORKFLOW"
+  ! grep -Fq 'verbosity: full-output' "$PR_REVIEW_WORKFLOW"
 }
 
 @test "action keeps the context bundle step and both artifact uploads" {

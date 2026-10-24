@@ -51,7 +51,9 @@ teardown() {
   grep -Fq 'src/old name.txt' "$TMP/review/manifest.json"
   grep -Fq 'src/new name.txt' "$TMP/review/manifest.json"
   grep -Fq 'config/new file.txt' "$TMP/review/manifest.json"
+  grep -Fq '"version": 2' "$TMP/review/manifest.json"
   grep -Fq 'reviewed' "$TMP/review/manifest.json"
+  grep -Fq 'exclusionReason' "$TMP/review/manifest.json"
   [ -n "$(find "$TMP/review/diffs" -type f -print -quit)" ]
   [ -n "$(find "$TMP/review/base-files" -type f -print -quit)" ]
   run node - "$TMP/review/manifest.json" "$TMP/review" <<'JS'
@@ -62,13 +64,75 @@ const modified = manifest.files.find((item) => item.status === 'M' && item.newPa
 if (modified?.reviewed !== true || modified.baseFile === null) process.exit(1);
 if (fs.readFileSync(path.join(process.argv[3], modified.baseFile), 'utf8') !== 'alpha\n') process.exit(1);
 const binary = manifest.files.find((item) => item.status === 'M' && item.binary === true);
-if (binary?.reviewed !== false || binary.baseFile !== null) process.exit(1);
+if (binary?.reviewed !== false || binary.baseFile !== null || binary.exclusionReason !== 'binary diff; not reviewable as text') process.exit(1);
 JS
   [ "$status" -eq 0 ]
   [ -f "$TMP/review/summary.txt" ]
   [ -f "$TMP/review/commits.txt" ]
   [ -f "$TMP/review/README.md" ]
   [ -f "$TMP/source-at-head/src/new name.txt" ]
+}
+
+@test "loads eligibility only from the exact base revision" {
+  git -C "$REPO" checkout -q --detach "$BASE"
+  mkdir -p "$REPO/.redline" "$REPO/benchmark/example/v1"
+  cat > "$REPO/.redline/review-eligibility.json" <<'JSON'
+{"version":1,"include":[],"exclude":[{"pattern":"benchmark/**/capture.json","reason":"generated raw benchmark capture"}]}
+JSON
+  printf '{"sample":1}\n' > "$REPO/benchmark/example/v1/capture.json"
+  git -C "$REPO" add .
+  git -C "$REPO" commit -qm 'add trusted eligibility policy'
+  policy_base="$(git -C "$REPO" rev-parse HEAD)"
+
+  printf '{"sample":2}\n' > "$REPO/benchmark/example/v1/capture.json"
+  cat > "$REPO/.redline/review-eligibility.json" <<'JSON'
+{"version":1,"include":[],"exclude":[]}
+JSON
+  git -C "$REPO" add .
+  git -C "$REPO" commit -qm 'attempt to change policy in head'
+  policy_head="$(git -C "$REPO" rev-parse HEAD)"
+  bundle_dir="$TMP/policy-review"
+
+  run bash -c 'cd "$1" && node "$2" --base "$3" --head "$4" --output "$5"' _ "$REPO" "$SCRIPT" "$policy_base" "$policy_head" "$bundle_dir"
+  [ "$status" -eq 0 ]
+  run node - "$bundle_dir/manifest.json" <<'JS'
+const fs = require('node:fs');
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+if (manifest.eligibility.source !== 'trusted-base') process.exit(1);
+const capture = manifest.files.find((item) => item.newPath === 'benchmark/example/v1/capture.json');
+if (capture?.reviewed !== false || capture.exclusionReason !== 'generated raw benchmark capture') process.exit(1);
+const policy = manifest.files.find((item) => item.newPath === '.redline/review-eligibility.json');
+if (policy?.reviewed !== true || policy.exclusionReason !== null) process.exit(1);
+JS
+  [ "$status" -eq 0 ]
+}
+
+@test "accepts a bounded trusted-workflow policy file" {
+  policy="$TMP/workflow-policy.json"
+  printf '%s\n' '{"version":1,"include":[],"exclude":[{"pattern":"config/**","reason":"generated configuration fixture"}]}' > "$policy"
+  bundle_dir="$TMP/workflow-policy-review"
+
+  run bash -c 'cd "$1" && node "$2" --base "$3" --head "$4" --output "$5" --eligibility-policy-file "$6"' _ "$TMP/source" "$SCRIPT" "$BASE" "$HEAD_SHA" "$bundle_dir" "$policy"
+  [ "$status" -eq 0 ]
+  run node - "$bundle_dir/manifest.json" <<'JS'
+const fs = require('node:fs');
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+if (manifest.eligibility.source !== 'trusted-workflow' || manifest.eligibility.path !== null) process.exit(1);
+const excluded = manifest.files.filter((item) => item.newPath?.startsWith('config/'));
+if (excluded.length === 0 || excluded.some((item) => item.reviewed || item.exclusionReason !== 'generated configuration fixture')) process.exit(1);
+JS
+  [ "$status" -eq 0 ]
+}
+
+@test "rejects malformed or symlinked trusted-workflow policy files" {
+  malformed="$TMP/malformed-policy.json"
+  printf '%s\n' '{"version":1,"include":[],"exclude":[{"pattern":"../escape","reason":"bad"}]}' > "$malformed"
+  run bash -c 'cd "$1" && node "$2" --base "$3" --head "$4" --output "$5" --eligibility-policy-file "$6"' _ "$TMP/source" "$SCRIPT" "$BASE" "$HEAD_SHA" "$TMP/malformed-review" "$malformed"
+  [ "$status" -ne 0 ]
+
+  ln -s "$malformed" "$TMP/policy-link.json"
+  run bash -c 'cd "$1" && node "$2" --base "$3" --head "$4" --output "$5" --eligibility-policy-file "$6"' _ "$TMP/source" "$SCRIPT" "$BASE" "$HEAD_SHA" "$TMP/symlink-review" "$TMP/policy-link.json"
+  [ "$status" -ne 0 ]
 }
 
 @test "rejects missing arguments" {

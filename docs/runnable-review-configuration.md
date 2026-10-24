@@ -20,12 +20,13 @@ The GitHub Action passes every value to the review tool through environment vari
 | `REDLINE_REVIEW_CONCURRENCY` | optional | Maximum simultaneous per-file model calls. Integer from `1` through `8`; default `4`. |
 | `REDLINE_REUSE_DIR` | optional in review mode | Action-owned directory for restored and newly validated per-file reuse entries. Requires `REDLINE_REUSE_NAMESPACE`. |
 | `REDLINE_REUSE_NAMESPACE` | with `REDLINE_REUSE_DIR` | Cache identity in `owner/name#pull-request` form. |
-| `REDLINE_VERBOSITY` | optional | `silent` (per-file lines only), `progress` (one dot per model text chunk, default), or `full-output` (readable stream text). |
+| `REDLINE_VERBOSITY` | optional | `silent` (per-file start/completion lines), `progress` (bounded activity counts and diagnostics, default), or `full-output` (readable stream text under a per-file cap). |
 
 Rules enforced by the parser:
 
 - Review inputs must arrive together. A partial selection fails instead of degrading to context-only mode.
 - Unknown `REDLINE_*` variables are rejected, so typos fail loudly.
+- Review eligibility is resolved while building the context bundle, before this environment contract is parsed. It comes only from strict trusted-workflow JSON or `.redline/review-eligibility.json` at the exact base revision; see [review eligibility](/review-eligibility).
 - Optional values are validated even without review execution.
 - When the whole-review deadline expires, Redline stops starting model calls. It records every remaining reviewed file as an explicit `run-deadline-exhausted` omission instead of silently dropping coverage.
 - Indexed-context path and repository identity arrive together. Configured context that is missing, invalid, stale, unsupported, or unavailable is recorded and degrades to file-only review instead of failing the run.

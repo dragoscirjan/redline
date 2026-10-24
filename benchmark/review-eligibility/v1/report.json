@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "kind": "review-eligibility-value",
+  "capturedAt": "2026-10-24T20:56:38Z",
+  "source": {
+    "repository": "dragoscirjan/redline",
+    "pullRequest": 171,
+    "runId": 40132029782,
+    "runUrl": "https://github.com/dragoscirjan/redline/actions/runs/40132029782",
+    "head": "8677c6be51e37903cbbb8111fe2480fe284fd83f"
+  },
+  "run": {
+    "files": 42,
+    "diffBytes": 212026,
+    "modelDurationMs": 1286445,
+    "findings": 1,
+    "omitted": 16
+  },
+  "classes": [
+    {
+      "id": "benchmark-capture",
+      "pattern": "benchmark/**/capture.json",
+      "observedFiles": 1,
+      "diffBytes": 63669,
+      "estimatedInputTokens": 15918,
+      "modelDurationMs": 3987,
+      "findings": 0,
+      "rejectedCandidates": 0,
+      "recommendation": "exclude-by-default",
+      "reason": "Observed raw generated data consumed prompt and model budget without findings or rejected candidates."
+    },
+    {
+      "id": "benchmark-report",
+      "pattern": "benchmark/**/report.{json,md}",
+      "observedFiles": 2,
+      "diffBytes": 9815,
+      "estimatedInputTokens": 2454,
+      "modelDurationMs": 5067,
+      "findings": 0,
+      "rejectedCandidates": 0,
+      "recommendation": "keep-reviewable",
+      "reason": "The class is review-relevant or lacks enough evidence for a default exclusion."
+    },
+    {
+      "id": "generated-snapshot",
+      "pattern": "**/__snapshots__/** or **/*.snap",
+      "observedFiles": 0,
+      "diffBytes": 0,
+      "estimatedInputTokens": 0,
+      "modelDurationMs": 0,
+      "findings": 0,
+      "rejectedCandidates": 0,
+      "recommendation": "insufficient-evidence",
+      "reason": "No files in this class were observed in the capture, so no default exclusion is justified."
+    }
+  ],
+  "selectedDefaults": [
+    "benchmark/**/capture.json"
+  ],
+  "limitations": [
+    "The live observation covers one Redline pull request and one model/provider configuration.",
+    "Model duration is scheduling-dependent; diff bytes and estimated input tokens are deterministic for the captured change.",
+    "Generated snapshots were not observed, so snapshot patterns remain configurable rather than enabled by default.",
+    "Benchmark reports remain reviewable because they summarize policy conclusions; only raw capture data is excluded by default."
+  ]
+}

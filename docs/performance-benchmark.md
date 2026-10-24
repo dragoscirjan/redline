@@ -61,6 +61,12 @@ PR #169 workflow run `40125277504` measured a 113.55 MiB store. Four exact-key m
 
 `node_modules` remains uncached because this capture does not prove a net benefit over restoring the 113.55 MiB pnpm store and running the frozen linker. The complete evidence is checked in at `benchmark/dependency-install/v1/ci-pr-169.json`.
 
+## Review eligibility evidence
+
+The separate deterministic report under `benchmark/review-eligibility/v1/` measures low-value generated classes before Redline enables repository-specific exclusions. PR #171 run `40132029782` observed one raw `benchmark/**/capture.json` file with 63,669 diff bytes, about 15,918 estimated input tokens, 3,987 ms of model work, and no findings or rejected candidates. That file represented 30.03% of the pull request's diff bytes.
+
+Redline therefore excludes only raw benchmark captures in its exact-base `.redline/review-eligibility.json`. Generated benchmark reports remain reviewable because they carry conclusions. No generated snapshots were observed, so snapshot exclusions remain configurable rather than default. Run `mise run benchmark:review-eligibility` to regenerate the JSON and Markdown report. See [review eligibility](/review-eligibility) for the policy and trust boundary.
+
 The baseline uses four workers and largest-diff-first scheduling. It retains 1,208 seconds of total modeled model work and models 340 seconds of review wall time. The previous sequential baseline reported 1,260.8 seconds warm-index p95 and 1,474.3 seconds cold-index p95. The four-worker baseline reports 392.8 seconds warm and 606.3 seconds cold. Both are below the epic targets, but the report remains SLO-ineligible until at least five current live fixed-corpus runs pass the quality gate.
 
 ## Prompt-volume comparison

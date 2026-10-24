@@ -112,6 +112,7 @@ describe('createReviewWriter', () => {
         manifestFiles: 1,
         reviewedFiles: 1,
         omittedFiles: 0,
+        excludedFiles: [],
         findings: 1,
         codeContext: DISABLED_RUN_CONTEXT,
         files: [

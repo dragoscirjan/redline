@@ -154,7 +154,8 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
     `- **Finding scope:** ${summary.findingScope}`,
     `- **Manifest files:** ${summary.manifestFiles}`,
     `- **Reviewed:** ${summary.reviewedFiles}`,
-    `- **Omitted:** ${summary.omittedFiles}`,
+    `- **Omitted required reviews:** ${summary.omittedFiles}`,
+    `- **Excluded by trusted policy:** ${summary.excludedFiles.length}`,
     `- **Findings:** ${summary.findings}`,
     `- **Indexed context:** ${summary.codeContext.status}; ${summary.codeContext.filesWithContext} files, ${summary.codeContext.relatedSpans} spans, ${summary.codeContext.sourceBytes} source bytes`,
     `- **Index cache:** ${summary.codeContext.cache}`,
@@ -187,6 +188,10 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
       `| ${file.path} | ${file.outcome} | ${file.execution ?? 'executed'} | ${file.findingCount}${spans} | ${file.codeContext.status} (${file.codeContext.relatedSpans} spans) |`,
     );
   }
+  if (summary.excludedFiles.length > 0) {
+    lines.push('', '## Excluded by trusted eligibility policy', '');
+    for (const file of summary.excludedFiles) lines.push(`- \`${file.path}\` — ${file.reason}`);
+  }
   return `${lines.join('\n')}\n`;
 }
 
@@ -199,6 +204,7 @@ function renderPullRequestReviewMarkdown(review: PullRequestReviewRecord): strin
     `- **Findings:** ${review.findings.length}`,
     `- **Rejected candidates:** ${review.rejectedCandidates.length}`,
     `- **Required file coverage:** ${review.coverage.files.status}`,
+    `- **Excluded by trusted policy:** ${review.coverage.files.excluded.length}`,
     `- **Baseline review coverage:** ${review.coverage.specialists[0]?.status ?? 'unavailable'}`,
     ...(review.coverage.verification === undefined ? [] : [`- **Candidate verification:** ${review.coverage.verification.status}`]),
     ...(review.coverage.followUp === undefined ? [] : [`- **Follow-up queries:** ${review.coverage.followUp.status}`]),
@@ -215,10 +221,12 @@ function renderPullRequestReviewMarkdown(review: PullRequestReviewRecord): strin
     '## Limitations',
     '',
     ...review.limitations.map((limitation) => `- ${limitation.required ? 'Required' : 'Advisory'} — ${limitation.code}: ${limitation.message}`),
-    '',
-    '## Findings',
-    '',
   ];
+  if (review.coverage.files.excluded.length > 0) {
+    lines.push('', '## Excluded by trusted eligibility policy', '');
+    for (const file of review.coverage.files.excluded) lines.push(`- \`${file.path}\` — ${file.reason}`);
+  }
+  lines.push('', '## Findings', '');
   if (review.findings.length === 0) lines.push('No validated findings.');
   for (const finding of review.findings) {
     lines.push(`- **${finding.title}** — \`${finding.triggerPath}:${finding.startLine}-${finding.endLine}\` (${finding.severity} ${finding.classification})`);

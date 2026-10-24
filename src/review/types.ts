@@ -238,6 +238,12 @@ export interface ReviewExecutionBudgetTelemetry {
   readonly deadlineOmittedFiles: number;
 }
 
+export interface ReviewExcludedFile {
+  readonly fileId: string;
+  readonly path: string;
+  readonly reason: string;
+}
+
 export interface ReviewRunSummary {
   readonly version: typeof REVIEW_RUN_SUMMARY_VERSION;
   readonly harness: string;
@@ -249,6 +255,7 @@ export interface ReviewRunSummary {
   readonly manifestFiles: number;
   readonly reviewedFiles: number;
   readonly omittedFiles: number;
+  readonly excludedFiles: readonly ReviewExcludedFile[];
   readonly findings: number;
   readonly codeContext: ReviewCodeContextRunCoverage;
   readonly executionBudget?: ReviewExecutionBudgetTelemetry | undefined;
@@ -267,7 +274,7 @@ export interface ReviewCoverageFacet {
 export interface ReviewFileCoverage extends ReviewCoverageFacet {
   readonly considered: readonly string[];
   readonly omitted: readonly string[];
-  readonly excluded: readonly string[];
+  readonly excluded: readonly ReviewExcludedFile[];
 }
 
 export interface ReviewSpecialistCoverage extends ReviewCoverageFacet {

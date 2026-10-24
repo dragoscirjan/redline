@@ -887,6 +887,11 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       if (record === undefined) throw new Error('review run did not produce a file record');
       return [record];
     });
+    const excludedFiles = bundle.manifest.files.flatMap((file) => !file.reviewed ? [{
+      fileId: file.id,
+      path: fileReviewPath(file),
+      reason: file.exclusionReason ?? 'excluded by trusted bundle policy',
+    }] : []);
     const summary: ReviewRunSummary = {
       version: REVIEW_RUN_SUMMARY_VERSION,
       harness: environment.harness,
@@ -898,6 +903,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       manifestFiles: bundle.manifest.files.length,
       reviewedFiles: records.length,
       omittedFiles: records.filter((record) => record.outcome === 'omitted').length,
+      excludedFiles,
       findings: records.reduce((total, record) => total + record.findings.length, 0),
       codeContext: indexedContext.coverage,
       executionBudget: {

@@ -160,6 +160,7 @@ async function captureCase(
       credential: configuration.credential,
       findingScope: configuration.findingScope,
       timeout: configuration.timeout,
+      reviewConcurrency: 1,
     };
     const result = await runFileReviews({ environment, executor });
     return {

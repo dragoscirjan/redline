@@ -11,7 +11,7 @@
  * generated file.
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   isRecord,
@@ -125,6 +125,8 @@ export interface PreparedPi extends PreparedHarness {
   readonly command: string;
   readonly args: readonly string[];
   readonly cwd: string;
+  readonly rootDirectory: string;
+  readonly agentConfig: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs: number;
 }
@@ -383,9 +385,8 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
   return {
     harness: 'pi',
     async prepare(settings: HarnessSettings): Promise<PreparedPi> {
-      const directory = join(settings.workDirectory, 'pi-agent');
-      await mkdir(directory, { recursive: true });
-      await writeFile(join(directory, 'models.json'), buildAgentConfig(settings), { mode: 0o600 });
+      const rootDirectory = join(settings.workDirectory, 'pi-agent');
+      await mkdir(rootDirectory, { recursive: true });
       const args = [
         '--print',
         '--mode',
@@ -401,7 +402,6 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         PATH: process.env.PATH,
         HOME: process.env.HOME,
         LANG: process.env.LANG,
-        PI_CODING_AGENT_DIR: directory,
       };
       if (settings.credential !== undefined) {
         env[PI_CREDENTIAL_ENV_NAME] = settings.credential.value;
@@ -409,26 +409,33 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
       return Object.freeze({
         harness: 'pi',
         model: settings.model,
-        description: `pi with generated agent directory ${directory} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
+        description: `pi with isolated per-invocation agent directories under ${rootDirectory} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
         command,
         args,
         cwd: settings.workDirectory,
+        rootDirectory,
+        agentConfig: buildAgentConfig(settings),
         env,
         timeoutMs: settings.timeoutMs,
       });
     },
     async execute(prepared: PreparedHarness, prompt: HarnessPrompt, options?: HarnessExecuteOptions): Promise<HarnessRun> {
       const state = prepared as PreparedPi;
-      const systemPromptFile = join(state.cwd, 'pi-agent', 'system-prompt.md');
-      await writeFile(systemPromptFile, prompt.system, { mode: 0o600 });
+      const invocationDirectory = await mkdtemp(join(state.rootDirectory, 'invocation-'));
+      const systemPromptFile = join(invocationDirectory, 'system-prompt.md');
+      await Promise.all([
+        writeFile(join(invocationDirectory, 'models.json'), state.agentConfig, { mode: 0o600 }),
+        writeFile(systemPromptFile, prompt.system, { mode: 0o600 }),
+      ]);
       const args = [...state.args, '--system-prompt', systemPromptFile];
+      const env: NodeJS.ProcessEnv = { ...state.env, PI_CODING_AGENT_DIR: invocationDirectory };
       // Readable live output: the NDJSON event stream is decoded, and the
       // model's text deltas are forwarded per the stream mode — raw
       // fragments ('text') or one dot per chunk ('dots'). Text is
       // redacted against the credential and capped; boundary events stay
       // compact lines in text mode and are suppressed in dots mode.
       const streamMode = options?.streamMode ?? 'text';
-      const credential = state.env[PI_CREDENTIAL_ENV_NAME];
+      const credential = env[PI_CREDENTIAL_ENV_NAME];
       let streamedBytes = 0;
       let capReported = false;
       const forwardText = (text: string): void => {
@@ -467,7 +474,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         command: state.command,
         args,
         cwd: state.cwd,
-        env: state.env,
+        env,
         stdin: prompt.user,
         timeoutMs: options?.timeoutMs ?? state.timeoutMs,
         onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {

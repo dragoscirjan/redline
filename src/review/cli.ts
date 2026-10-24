@@ -9,7 +9,6 @@
  */
 
 import { pathToFileURL } from 'node:url';
-import type { HarnessOutputLine } from '../harness-executor/types.js';
 import {
   GitHubReviewPublisher,
   PublicationService,
@@ -27,10 +26,16 @@ import {
   type ReviewVerbosity,
 } from './environment.js';
 import { loadPublishedRun } from './run-output.js';
-import { runFileReviews, type ReviewRunInput } from './runner.js';
+import {
+  runFileReviews,
+  type FileHarnessOutputEvent,
+  type FileReviewIdentity,
+  type ReviewRunInput,
+} from './runner.js';
 
 const USAGE_ERROR_EXIT = 2;
 const RUN_FAILURE_EXIT = 1;
+const MAX_LIVE_OUTPUT_CHARS_PER_FILE = 32 * 1024;
 
 function writeLine(stream: NodeJS.WriteStream, value: string): void {
   stream.write(`${value}\n`);
@@ -39,21 +44,21 @@ function writeLine(stream: NodeJS.WriteStream, value: string): void {
 /** One bounded stderr line per completed file: live progress in the run log. */
 function progressLine(record: FileReviewRecord): void {
   const error = record.errorKind !== undefined ? ` (${record.errorKind})` : '';
-  writeLine(process.stderr, `redline-review: ${record.path}: ${record.outcome}${error}`);
+  writeLine(process.stderr, `redline-review: [${record.fileId} ${record.path}] ${record.outcome}${error}`);
 }
 
 /** Marks the start of a file's review in the run log. */
-function fileStartLine(file: { readonly path: string }): void {
-  writeLine(process.stderr, `redline-review: reviewing ${file.path}…`);
+function fileStartLine(file: FileReviewIdentity): void {
+  writeLine(process.stderr, `redline-review: [${file.fileId} ${file.path}] reviewing…`);
 }
 
 /**
  * Maps the verbosity level to the runner's progress callbacks. Per-file
  * start/done lines are always present — they are the minimal signal that
- * a long sequential run is alive; the level controls only the live model
+ * a bounded parallel run is alive; the level controls only the live model
  * stream.
  */
-function progressCallbacks(verbosity: ReviewVerbosity): {
+export function progressCallbacks(verbosity: ReviewVerbosity): {
   onFileStart: typeof fileStartLine;
   onFileDone: typeof progressLine;
   onHarnessOutput?: ReviewRunInput['onHarnessOutput'];
@@ -62,24 +67,27 @@ function progressCallbacks(verbosity: ReviewVerbosity): {
   if (verbosity === 'silent') {
     return { onFileStart: fileStartLine, onFileDone: progressLine };
   }
+  const emitted = new Map<string, number>();
+  const truncated = new Set<string>();
+  const harnessLine = (output: FileHarnessOutputEvent): void => {
+    const used = emitted.get(output.fileId) ?? 0;
+    if (used >= MAX_LIVE_OUTPUT_CHARS_PER_FILE) return;
+    const payload = output.line.replaceAll(/\r\n|[\r\n]/gu, ' ↵ ').slice(0, 200);
+    const rendered = `redline-review: [${output.fileId} ${output.path}] harness ${output.stream}: ${payload}`;
+    const bounded = rendered.slice(0, MAX_LIVE_OUTPUT_CHARS_PER_FILE - used);
+    emitted.set(output.fileId, used + bounded.length);
+    writeLine(process.stderr, bounded);
+    if (bounded.length < rendered.length && !truncated.has(output.fileId)) {
+      truncated.add(output.fileId);
+      writeLine(process.stderr, `redline-review: [${output.fileId} ${output.path}] live harness output truncated`);
+    }
+  };
   return {
     onFileStart: fileStartLine,
     onFileDone: progressLine,
     onHarnessOutput: harnessLine,
     harnessStreamMode: verbosity === 'progress' ? 'dots' : 'text',
   };
-}
-
-/** Bounded live harness output on stderr. */
-function harnessLine(output: HarnessOutputLine): void {
-  if (output.kind === 'text') {
-    // Raw fragments of the model's streaming text; written unprefixed so
-    // consecutive fragments read as continuous output. Already redacted
-    // and sanitized by the harness layer.
-    process.stderr.write(output.line);
-    return;
-  }
-  writeLine(process.stderr, `redline-review: harness ${output.stream}: ${output.line.slice(0, 200)}`);
 }
 
 export interface CliDependencies {
@@ -207,6 +215,7 @@ export async function main(
               harness: parsed.review?.harness,
               publication: parsed.publication !== undefined,
               timeoutMinutes: parsed.timeout.minutes,
+              reviewConcurrency: parsed.review?.reviewConcurrency,
             }
           : { mode: 'context-only', timeoutMinutes: parsed.timeout.minutes },
       ),

@@ -731,6 +731,7 @@ async function runRecording(fixture: BenchmarkFixture, recording: FixtureRecordi
       credential: undefined,
       findingScope: 'defects',
       timeout: parseDuration('1m'),
+      reviewConcurrency: 1,
     };
     const result = await runFileReviews({ environment, executor });
     return scoreBenchmarkCase(

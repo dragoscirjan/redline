@@ -98,6 +98,11 @@ export interface HarnessOutputLine {
 export type HarnessStreamMode = 'off' | 'dots' | 'text';
 
 export interface HarnessExecuteOptions {
+  /** Bounded caller identity for invocation telemetry; harnesses must not persist it independently. */
+  readonly invocation?: {
+    readonly fileId: string;
+    readonly path: string;
+  };
   /** Positive safe integer in milliseconds; overrides HarnessSettings.timeoutMs when supplied.
    * An undefined override uses the prepared setting. The bounded runner rejects
    * zero, negative, fractional, or unsafe values before spawning and kills at expiry. */

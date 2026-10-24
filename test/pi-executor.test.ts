@@ -77,15 +77,17 @@ describe('createPiExecutor', () => {
       spawner.script('{"type":"session"}\n', 0);
       await executor.execute(prepared, { system: 'SYS', user: 'USER' });
 
-      const modelsJson = JSON.parse(await readFile(join(settings.workDirectory, 'pi-agent', 'models.json'), 'utf8'));
+      const request = spawner.requests[0]!;
+      const agentDirectory = request.env?.PI_CODING_AGENT_DIR;
+      expect(agentDirectory).toBeDefined();
+      const modelsJson = JSON.parse(await readFile(join(agentDirectory!, 'models.json'), 'utf8'));
       expect(modelsJson.providers.mock.baseUrl).toBe('http://127.0.0.1:8787/v1');
       expect(modelsJson.providers.mock.api).toBe('openai-completions');
       expect(modelsJson.providers.mock.apiKey).toBe(`$${PI_CREDENTIAL_ENV_NAME}`);
       expect(modelsJson.providers.mock.models).toEqual([{ id: 'test-model' }]);
 
-      const request = spawner.requests[0]!;
       expect(request.command).toBe('pi-fake');
-      expect(request.args).toEqual([
+      expect(request.args.slice(0, -1)).toEqual([
         '--print',
         '--mode',
         'json',
@@ -96,17 +98,44 @@ describe('createPiExecutor', () => {
         '--model',
         'test-model',
         '--system-prompt',
-        join(settings.workDirectory, 'pi-agent', 'system-prompt.md'),
       ]);
+      const systemPromptFile = request.args.at(-1)!;
+      expect(systemPromptFile).toBe(join(agentDirectory!, 'system-prompt.md'));
       expect(request.stdin).toBe('USER');
-      expect(await readFile(join(settings.workDirectory, 'pi-agent', 'system-prompt.md'), 'utf8')).toBe('SYS');
-      expect((await stat(join(settings.workDirectory, 'pi-agent', 'system-prompt.md'))).mode & 0o777).toBe(0o600);
-      expect(request.env?.PI_CODING_AGENT_DIR).toContain('pi-agent');
+      expect(await readFile(systemPromptFile, 'utf8')).toBe('SYS');
+      expect((await stat(systemPromptFile)).mode & 0o777).toBe(0o600);
+      expect(request.env?.PI_CODING_AGENT_DIR).toContain(join('pi-agent', 'invocation-'));
       expect(request.env?.[PI_CREDENTIAL_ENV_NAME]).toBe('test-key');
       // No ambient credentials leak into the child environment.
       expect(Object.keys(request.env ?? {}).sort()).toEqual(
         ['HOME', 'LANG', 'PATH', 'PI_CODING_AGENT_DIR', PI_CREDENTIAL_ENV_NAME].sort(),
       );
+    } finally {
+      await settings.cleanup();
+    }
+  });
+
+  it('isolates configuration and system prompts across concurrent invocations', async () => {
+    const settings = await createSettings();
+    try {
+      const spawner = new RecordingSpawner();
+      const executor = createPiExecutor({ command: 'pi-fake', spawner });
+      const prepared = await executor.prepare(settings);
+      await Promise.all([
+        executor.execute(prepared, { system: 'SYSTEM-A', user: 'USER-A' }),
+        executor.execute(prepared, { system: 'SYSTEM-B', user: 'USER-B' }),
+      ]);
+
+      const [first, second] = spawner.requests;
+      expect(first?.env?.PI_CODING_AGENT_DIR).toBeDefined();
+      expect(second?.env?.PI_CODING_AGENT_DIR).toBeDefined();
+      expect(first?.env?.PI_CODING_AGENT_DIR).not.toBe(second?.env?.PI_CODING_AGENT_DIR);
+      expect(await readFile(first!.args.at(-1)!, 'utf8')).toBe('SYSTEM-A');
+      expect(await readFile(second!.args.at(-1)!, 'utf8')).toBe('SYSTEM-B');
+      expect(first?.stdin).toBe('USER-A');
+      expect(second?.stdin).toBe('USER-B');
+      expect(await readFile(join(first!.env!.PI_CODING_AGENT_DIR!, 'models.json'), 'utf8'))
+        .toBe(await readFile(join(second!.env!.PI_CODING_AGENT_DIR!, 'models.json'), 'utf8'));
     } finally {
       await settings.cleanup();
     }
@@ -147,9 +176,13 @@ describe('createPiExecutor', () => {
   it('uses an unauthenticated placeholder when no credential is configured', async () => {
     const settings = await createSettings({ credential: undefined });
     try {
-      const executor = createPiExecutor({ spawner: new RecordingSpawner() });
+      const spawner = new RecordingSpawner();
+      const executor = createPiExecutor({ spawner });
       const prepared = await executor.prepare(settings);
-      const modelsJson = JSON.parse(await readFile(join(settings.workDirectory, 'pi-agent', 'models.json'), 'utf8'));
+      await executor.execute(prepared, { system: 'S', user: 'U' });
+      const agentDirectory = spawner.requests[0]?.env?.PI_CODING_AGENT_DIR;
+      expect(agentDirectory).toBeDefined();
+      const modelsJson = JSON.parse(await readFile(join(agentDirectory!, 'models.json'), 'utf8'));
       expect(modelsJson.providers.mock.apiKey).toBe('redline-unauthenticated');
       expect(prepared.description).not.toContain('test-key');
     } finally {

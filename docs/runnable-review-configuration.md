@@ -16,6 +16,7 @@ The GitHub Action passes every value to the review tool through environment vari
 | `REDLINE_MODEL_AUTH` | review mode | Provider-keyed credential map JSON (below). Not consulted when the model config declares `auth: "none"`. |
 | `REDLINE_FINDING_SCOPE` | optional | `defects` (default) or `defects-and-risks`. |
 | `REDLINE_TIMEOUT` | optional | Duration like `10m`, `2h`, `1h30m`. Default `30m`, capped at `360m`. |
+| `REDLINE_REVIEW_CONCURRENCY` | optional | Maximum simultaneous per-file model calls. Integer from `1` through `8`; default `4`. |
 | `REDLINE_VERBOSITY` | optional | `silent` (per-file lines only), `progress` (one dot per model text chunk, default), or `full-output` (readable stream text). |
 
 Rules enforced by the parser:

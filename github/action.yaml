@@ -43,6 +43,10 @@ inputs:
     description: Review deadline as a duration, for example 10m, 2h, or 1h30m. Capped at 360m; values above the cap are rejected.
     required: false
     default: 30m
+  review-concurrency:
+    description: Maximum simultaneous per-file model calls. Must be an integer from 1 through 8.
+    required: false
+    default: "4"
   verbosity:
     description: Live model stream in the run log - silent (per-file lines only), progress (one dot per model text chunk), full-output (readable stream text). Default progress.
     required: false
@@ -75,6 +79,7 @@ runs:
         HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
         INDEXING: ${{ inputs.indexing }}
         INDEXING_PROVIDER: ${{ inputs.indexing-provider }}
+        REVIEW_CONCURRENCY: ${{ inputs.review-concurrency }}
         ARTIFACT_RETENTION_DAYS: ${{ inputs.artifact-retention-days }}
       run: |
         set -euo pipefail
@@ -87,6 +92,7 @@ runs:
         [[ "$HEAD_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
         [[ "$INDEXING" == 'enabled' || "$INDEXING" == 'disabled' ]]
         [[ "$INDEXING_PROVIDER" == 'cgc' || "$INDEXING_PROVIDER" == 'gitnexus' ]]
+        [[ "$REVIEW_CONCURRENCY" =~ ^[1-8]$ ]]
         [[ "$ARTIFACT_RETENTION_DAYS" =~ ^[0-9]+$ ]]
         (( ARTIFACT_RETENTION_DAYS >= 1 && ARTIFACT_RETENTION_DAYS <= 90 ))
 
@@ -145,6 +151,7 @@ runs:
         REDLINE_MODEL_AUTH: ${{ inputs.model-auth }}
         REDLINE_FINDING_SCOPE: ${{ inputs.finding-scope }}
         REDLINE_TIMEOUT: ${{ inputs.timeout }}
+        REDLINE_REVIEW_CONCURRENCY: ${{ inputs.review-concurrency }}
         REDLINE_VERBOSITY: ${{ inputs.verbosity }}
         REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
         REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head
@@ -272,6 +279,7 @@ runs:
         REDLINE_MODEL_AUTH: ${{ inputs.model-auth }}
         REDLINE_FINDING_SCOPE: ${{ inputs.finding-scope }}
         REDLINE_TIMEOUT: ${{ inputs.timeout }}
+        REDLINE_REVIEW_CONCURRENCY: ${{ inputs.review-concurrency }}
         REDLINE_VERBOSITY: ${{ inputs.verbosity }}
         REDLINE_REVIEW_DIR: ${{ github.workspace }}/review
         REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head

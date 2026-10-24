@@ -12,10 +12,11 @@ interface HarnessExecutor {
 }
 ```
 
-- `prepare` runs once per review: it generates the harness configuration
-  (model endpoint, credential, review agent) inside a caller-managed work
-  directory.
-- `execute` runs once per file: one non-interactive prompt with a fixed
+- `prepare` runs once per review: it validates and retains the bounded model,
+  credential, command, and configuration template inside a caller-managed
+  work directory.
+- `execute` runs once per file: it creates an invocation-specific configuration,
+  prompt, home, and state directory, then sends one non-interactive prompt with a fixed
   system policy and the file's untrusted context, under a timeout and
   bounded output limits. The optional `options.timeoutMs` is a positive safe
   integer in milliseconds; it overrides the prepared `HarnessSettings.timeoutMs`
@@ -33,8 +34,7 @@ core makes.
 
 ### Pi
 
-- Generated `models.json` in an isolated agent directory, selected with
-  `PI_CODING_AGENT_DIR`. The host user's own Pi configuration never loads.
+- Every invocation gets a separate mode-0600 `models.json` and system-prompt file in an isolated agent directory selected with `PI_CODING_AGENT_DIR`. Concurrent calls never share generated files. The host user's own Pi configuration never loads.
 - The provider credential travels through the `REDLINE_MODEL_API_KEY`
   environment variable; `models.json` only references it by interpolation,
   so the value never appears in a generated file.
@@ -58,10 +58,7 @@ core makes.
 
 ### OpenCode
 
-- Generated `opencode.json` (mode 0600) selected with `OPENCODE_CONFIG`, plus
-  redirected `HOME` and `XDG_*` directories so the host user's
-  configuration, plugins, and MCP servers never load. The process runs with
-  `--pure`.
+- Every invocation gets a separate generated `opencode.json` (mode 0600) selected with `OPENCODE_CONFIG`, plus separate redirected `HOME` and `XDG_*` directories. Concurrent calls never share mutable configuration or state, the host user's configuration, plugins, and MCP servers never load, and the process runs with `--pure`.
 - The config registers a `redline-review` agent with the fixed review
   policy as its system prompt and every built-in tool disabled, including
   the `skill` tool.

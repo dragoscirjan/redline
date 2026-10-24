@@ -8,7 +8,8 @@
     "model": "z-ai/glm-5.3-flash",
     "indexProvider": "cgc",
     "indexProviderVersion": "0.5.7",
-    "execution": "sequential"
+    "execution": "bounded-parallel",
+    "reviewConcurrency": 4
   },
   "targets": {
     "warmIndexP95Ms": 600000,

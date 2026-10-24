@@ -187,6 +187,7 @@ async function runCase(
       credential: undefined,
       findingScope: 'defects',
       timeout: parseDuration('1m'),
+      reviewConcurrency: 1,
     };
     const discoveryExecutor = new ScriptedExecutor(fixture, recording);
     const discovery = await runFileReviews({ environment, executor: discoveryExecutor });

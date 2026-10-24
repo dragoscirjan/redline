@@ -22,6 +22,7 @@ jobs:
       credential-isolation: direct
       container-engine: docker
       timeout: 30m
+      review-concurrency: 4 # default; valid range 1-8
     secrets:
       github-token: ${{ secrets.GH_TOKEN }}
       model-auth: ${{ secrets.MODEL_CREDENTIALS }}
@@ -45,6 +46,7 @@ In context-only mode the workflow does not index and uploads only the `<artifact
 | `model-config` | JSON | Provider-neutral model configuration. See [runnable review configuration](/runnable-review-configuration). |
 | `finding-scope` | `defects`, `defects-and-risks` | Default `defects`. |
 | `timeout` | duration | Default `30m`, capped at `360m`. |
+| `review-concurrency` | 1–8 | Maximum simultaneous per-file model calls. Default `4`. |
 | `verbosity` | `silent`, `progress`, `full-output` | Live model stream in the run log. Default `progress` (dots). |
 | `indexing` | `enabled`, `disabled` | Default `enabled`. The published action owns indexing; `disabled` selects file-only review. |
 | `indexing-provider` | `cgc`, `gitnexus` | Default `cgc`. GitNexus is PolyForm Noncommercial 1.0.0 licensed; confirm suitability before selecting it. |

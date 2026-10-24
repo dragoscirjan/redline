@@ -65,8 +65,10 @@ describe('createOpenCodeExecutor', () => {
       spawner.script('', 0);
       await executor.execute(prepared, { system: 'POLICY-SYSTEM', user: 'USER' });
 
-      const configFile = join(workDirectory, 'opencode', 'config', 'opencode.json');
-      const config = JSON.parse(await readFile(configFile, 'utf8'));
+      const request = spawner.requests[0]!;
+      const configFile = request.env?.OPENCODE_CONFIG;
+      expect(configFile).toBeDefined();
+      const config = JSON.parse(await readFile(configFile!, 'utf8'));
       expect(config.provider.mock.options.baseURL).toBe('http://127.0.0.1:8787/v1');
       expect(config.provider.mock.options.apiKey).toBe('test-key');
       expect(config.provider.mock.models['test-model']).toEqual({});
@@ -74,10 +76,9 @@ describe('createOpenCodeExecutor', () => {
       expect(config.agent[OPENCODE_REVIEW_AGENT].tools).toMatchObject({ bash: false, read: false, skill: false });
 
       // The credential-bearing config file is mode 0600.
-      const info = await stat(configFile);
+      const info = await stat(configFile!);
       expect(info.mode & 0o777).toBe(0o600);
 
-      const request = spawner.requests[0]!;
       expect(request.command).toBe('opencode-fake');
       expect(request.args).toEqual([
         'run',
@@ -93,15 +94,42 @@ describe('createOpenCodeExecutor', () => {
       ]);
       expect(request.stdin).toBe('USER');
       expect(request.env?.OPENCODE_CONFIG).toBe(configFile);
-      expect(request.env?.XDG_CONFIG_HOME).toContain(join('opencode', 'config'));
-      expect(request.env?.XDG_DATA_HOME).toContain(join('opencode', 'data'));
-      expect(request.env?.XDG_STATE_HOME).toContain(join('opencode', 'state'));
-      expect(request.env?.HOME).toContain(join('opencode', 'home'));
+      expect(request.env?.XDG_CONFIG_HOME).toContain(join('opencode', 'invocation-'));
+      expect(request.env?.XDG_DATA_HOME).toContain(join('opencode', 'invocation-'));
+      expect(request.env?.XDG_STATE_HOME).toContain(join('opencode', 'invocation-'));
+      expect(request.env?.HOME).toContain(join('opencode', 'invocation-'));
       // No ambient credentials leak into the child environment.
       expect(Object.keys(request.env ?? {}).sort()).toEqual(
         ['HOME', 'LANG', 'OPENCODE_CONFIG', 'PATH', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME'].sort(),
       );
       expect(prepared.description).not.toContain('test-key');
+    } finally {
+      await rm(workDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('isolates configuration and home directories across concurrent invocations', async () => {
+    const workDirectory = await mkdtemp(join(tmpdir(), 'redline-oc-'));
+    try {
+      const spawner = new RecordingSpawner();
+      const executor = createOpenCodeExecutor({ command: 'opencode-fake', spawner });
+      const prepared = await executor.prepare({ ...SETTINGS, workDirectory });
+      await Promise.all([
+        executor.execute(prepared, { system: 'SYSTEM-A', user: 'USER-A' }),
+        executor.execute(prepared, { system: 'SYSTEM-B', user: 'USER-B' }),
+      ]);
+
+      const [first, second] = spawner.requests;
+      expect(first?.env?.OPENCODE_CONFIG).toBeDefined();
+      expect(second?.env?.OPENCODE_CONFIG).toBeDefined();
+      expect(first?.env?.OPENCODE_CONFIG).not.toBe(second?.env?.OPENCODE_CONFIG);
+      expect(first?.env?.HOME).not.toBe(second?.env?.HOME);
+      const firstConfig = JSON.parse(await readFile(first!.env!.OPENCODE_CONFIG!, 'utf8'));
+      const secondConfig = JSON.parse(await readFile(second!.env!.OPENCODE_CONFIG!, 'utf8'));
+      expect(firstConfig.agent[OPENCODE_REVIEW_AGENT].prompt).toBe('SYSTEM-A');
+      expect(secondConfig.agent[OPENCODE_REVIEW_AGENT].prompt).toBe('SYSTEM-B');
+      expect(first?.stdin).toBe('USER-A');
+      expect(second?.stdin).toBe('USER-B');
     } finally {
       await rm(workDirectory, { recursive: true, force: true });
     }
@@ -142,10 +170,13 @@ describe('createOpenCodeExecutor', () => {
   it('omits the api key when no credential is configured', async () => {
     const workDirectory = await mkdtemp(join(tmpdir(), 'redline-oc-'));
     try {
-      const executor = createOpenCodeExecutor({ spawner: new RecordingSpawner() });
+      const spawner = new RecordingSpawner();
+      const executor = createOpenCodeExecutor({ spawner });
       const prepared = await executor.prepare({ ...SETTINGS, workDirectory, credential: undefined });
       await executor.execute(prepared, { system: 'S', user: 'U' });
-      const config = JSON.parse(await readFile(join(workDirectory, 'opencode', 'config', 'opencode.json'), 'utf8'));
+      const configFile = spawner.requests[0]?.env?.OPENCODE_CONFIG;
+      expect(configFile).toBeDefined();
+      const config = JSON.parse(await readFile(configFile!, 'utf8'));
       expect(config.provider.mock.options).toEqual({ baseURL: 'http://127.0.0.1:8787/v1' });
     } finally {
       await rm(workDirectory, { recursive: true, force: true });

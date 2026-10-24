@@ -44,7 +44,8 @@ interface PerformanceConfiguration {
   readonly model: string;
   readonly indexProvider: 'cgc' | 'gitnexus';
   readonly indexProviderVersion: string;
-  readonly execution: 'sequential';
+  readonly execution: 'bounded-parallel';
+  readonly reviewConcurrency: number;
 }
 
 interface PerformanceTargets {
@@ -115,7 +116,10 @@ export interface PerformanceRunStages {
 
 export interface PerformanceRunSample {
   readonly run: number;
+  readonly reviewConcurrency: number;
+  readonly maximumActiveModelCalls: number;
   readonly reviewWallMs: number;
+  readonly totalModelWorkMs: number;
   readonly stages: PerformanceRunStages;
   readonly modeledReviewMs: number;
   readonly publicationMs: number;
@@ -199,7 +203,8 @@ export interface PerformanceReport {
     readonly model: string;
     readonly indexProvider: string;
     readonly indexProviderVersion: string;
-    readonly execution: 'sequential';
+    readonly execution: 'bounded-parallel';
+    readonly reviewConcurrency: number;
   };
   readonly targets: PerformanceTargets;
   readonly quality: PerformanceQualityGate;
@@ -265,6 +270,7 @@ function parseProfile(value: unknown): PerformanceProfile {
   const configuration = record(input['configuration'], 'performance profile.configuration');
   exactKeys(configuration, [
     'harness', 'provider', 'endpoint', 'model', 'indexProvider', 'indexProviderVersion', 'execution',
+    'reviewConcurrency',
   ], 'performance profile.configuration');
   if (configuration['harness'] !== 'pi' && configuration['harness'] !== 'opencode') {
     throw new Error('performance profile.configuration.harness is unsupported');
@@ -272,8 +278,8 @@ function parseProfile(value: unknown): PerformanceProfile {
   if (configuration['indexProvider'] !== 'cgc' && configuration['indexProvider'] !== 'gitnexus') {
     throw new Error('performance profile.configuration.indexProvider is unsupported');
   }
-  if (configuration['execution'] !== 'sequential') {
-    throw new Error('performance profile.configuration.execution must be sequential');
+  if (configuration['execution'] !== 'bounded-parallel') {
+    throw new Error('performance profile.configuration.execution must be bounded-parallel');
   }
   const targets = record(input['targets'], 'performance profile.targets');
   exactKeys(
@@ -351,7 +357,13 @@ function parseProfile(value: unknown): PerformanceProfile {
         configuration['indexProviderVersion'],
         'performance profile.configuration.indexProviderVersion',
       ),
-      execution: 'sequential',
+      execution: 'bounded-parallel',
+      reviewConcurrency: integer(
+        configuration['reviewConcurrency'],
+        'performance profile.configuration.reviewConcurrency',
+        1,
+        8,
+      ),
     },
     targets: {
       warmIndexP95Ms: integer(targets['warmIndexP95Ms'], 'performance profile.targets.warmIndexP95Ms', 1),
@@ -379,21 +391,31 @@ export async function loadPerformanceProfile(path: string): Promise<PerformanceP
 
 class RecordedPerformanceExecutor implements HarnessExecutor {
   readonly harness: HarnessName;
-  readonly #responses: FixtureRecording['responses'];
-  #index = 0;
+  readonly #responses: ReadonlyMap<string, FixtureRecording['responses'][number]>;
+  readonly #used = new Set<string>();
 
   constructor(harness: HarnessName, responses: FixtureRecording['responses']) {
     this.harness = harness;
-    this.#responses = responses;
+    this.#responses = new Map(responses.map((response) => [response.fileId, response]));
   }
 
   async prepare(settings: HarnessSettings): Promise<PreparedHarness> {
     return { harness: this.harness, model: settings.model, description: 'recorded performance responses' };
   }
 
-  async execute(_prepared: PreparedHarness, _prompt: HarnessPrompt): Promise<HarnessRun> {
-    const response = this.#responses[this.#index++];
-    if (response === undefined) throw new Error('recorded performance executor ran out of responses');
+  async execute(
+    _prepared: PreparedHarness,
+    _prompt: HarnessPrompt,
+    options?: HarnessExecuteOptions,
+  ): Promise<HarnessRun> {
+    const fileId = options?.invocation?.fileId;
+    if (fileId === undefined) throw new Error('recorded performance invocation has no file id');
+    const response = this.#responses.get(fileId);
+    if (response === undefined || this.#used.has(fileId)) {
+      throw new Error(`recorded performance response is missing or repeated for ${fileId}`);
+    }
+    this.#used.add(fileId);
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 0));
     const textValue = JSON.stringify(response.document);
     return {
       status: 'succeeded',
@@ -442,14 +464,17 @@ class MeasuringPerformanceExecutor implements HarnessExecutor {
   readonly #startedAt = Date.now();
   prepareStartedAt: number | null = null;
   prepareFinishedAt: number | null = null;
-  #modeledElapsedMs = 0;
+  maximumActiveCalls = 0;
+  #activeCalls = 0;
+  readonly #files: ReadonlyMap<string, PerformanceCorpusFile>;
 
   constructor(
     private readonly delegate: HarnessExecutor,
-    private readonly files: readonly PerformanceCorpusFile[],
+    files: readonly PerformanceCorpusFile[],
     private readonly source: PerformanceSource,
   ) {
     this.harness = delegate.harness;
+    this.#files = new Map(files.map((file) => [file.id, file]));
   }
 
   async prepare(settings: HarnessSettings): Promise<PreparedHarness> {
@@ -466,35 +491,39 @@ class MeasuringPerformanceExecutor implements HarnessExecutor {
     prompt: HarnessPrompt,
     options?: HarnessExecuteOptions,
   ): Promise<HarnessRun> {
-    const file = this.files[this.measurements.length];
-    if (file === undefined) throw new Error('performance executor received more calls than corpus files');
-    const queueWaitMs = this.source === 'recorded'
-      ? this.#modeledElapsedMs
-      : Math.max(0, Date.now() - this.#startedAt);
+    const fileId = options?.invocation?.fileId;
+    const file = fileId === undefined ? undefined : this.#files.get(fileId);
+    if (file === undefined) throw new Error('performance executor received an invocation without a corpus file');
+    const queueWaitMs = this.source === 'recorded' ? 0 : Math.max(0, Date.now() - this.#startedAt);
     const promptBytes = Buffer.byteLength(prompt.system, 'utf8') + Buffer.byteLength(prompt.user, 'utf8');
     const wallStartedAt = Date.now();
-    const run = await this.delegate.execute(prepared, prompt, options);
-    const wallFinishedAt = Date.now();
-    this.#modeledElapsedMs += run.durationMs;
-    const telemetry = run.telemetry;
-    this.measurements.push({
-      file,
-      status: run.status,
-      queueWaitMs,
-      modelDurationMs: run.durationMs,
-      promptBytes,
-      estimatedInputTokens: estimatedTokens(`${prompt.system}\n${prompt.user}`),
-      estimatedOutputTokens: estimatedTokens(run.text),
-      processStartupMs: telemetry?.processStartupMs ?? null,
-      timeToFirstTextMs: telemetry?.timeToFirstTextMs ?? null,
-      stdoutBytes: telemetry?.stdoutBytes ?? Buffer.byteLength(run.text, 'utf8'),
-      stderrBytes: telemetry?.stderrBytes ?? Buffer.byteLength(run.diagnostic, 'utf8'),
-      stdoutTruncated: telemetry?.stdoutTruncated ?? false,
-      stderrTruncated: telemetry?.stderrTruncated ?? false,
-      wallStartedAt,
-      wallFinishedAt,
-    });
-    return run;
+    this.#activeCalls += 1;
+    this.maximumActiveCalls = Math.max(this.maximumActiveCalls, this.#activeCalls);
+    try {
+      const run = await this.delegate.execute(prepared, prompt, options);
+      const wallFinishedAt = Date.now();
+      const telemetry = run.telemetry;
+      this.measurements.push({
+        file,
+        status: run.status,
+        queueWaitMs,
+        modelDurationMs: run.durationMs,
+        promptBytes,
+        estimatedInputTokens: estimatedTokens(`${prompt.system}\n${prompt.user}`),
+        estimatedOutputTokens: estimatedTokens(run.text),
+        processStartupMs: telemetry?.processStartupMs ?? null,
+        timeToFirstTextMs: telemetry?.timeToFirstTextMs ?? null,
+        stdoutBytes: telemetry?.stdoutBytes ?? Buffer.byteLength(run.text, 'utf8'),
+        stderrBytes: telemetry?.stderrBytes ?? Buffer.byteLength(run.diagnostic, 'utf8'),
+        stdoutTruncated: telemetry?.stdoutTruncated ?? false,
+        stderrTruncated: telemetry?.stderrTruncated ?? false,
+        wallStartedAt,
+        wallFinishedAt,
+      });
+      return run;
+    } finally {
+      this.#activeCalls -= 1;
+    }
   }
 }
 
@@ -522,6 +551,37 @@ function indexedRecording(corpus: PerformanceCorpus): Extract<FixtureRecording, 
   return recording;
 }
 
+function scheduledPerformanceFiles(corpus: PerformanceCorpus, concurrency: number): readonly PerformanceCorpusFile[] {
+  if (concurrency === 1) return corpus.files;
+  const diffBytes = new Map(corpus.fixture.files.map((file) => [file.id, Buffer.byteLength(file.diff, 'utf8')]));
+  return corpus.files
+    .map((file, index) => ({ file, index, bytes: diffBytes.get(file.id) ?? 0 }))
+    .sort((left, right) => right.bytes - left.bytes || left.index - right.index)
+    .map((task) => task.file);
+}
+
+function modeledParallelSchedule(
+  measurements: readonly ExecutionMeasurement[],
+  scheduledFiles: readonly PerformanceCorpusFile[],
+  concurrency: number,
+): { readonly queueWaitByFile: ReadonlyMap<string, number>; readonly wallMs: number } {
+  const availableAt = Array.from({ length: concurrency }, () => 0);
+  const measurementsById = new Map(measurements.map((measurement) => [measurement.file.id, measurement]));
+  const queueWaitByFile = new Map<string, number>();
+  for (const file of scheduledFiles) {
+    const measurement = measurementsById.get(file.id);
+    if (measurement === undefined) throw new Error(`performance schedule is missing measurement ${file.id}`);
+    let worker = 0;
+    for (let index = 1; index < availableAt.length; index += 1) {
+      if ((availableAt[index] ?? 0) < (availableAt[worker] ?? 0)) worker = index;
+    }
+    const queueWaitMs = availableAt[worker] ?? 0;
+    queueWaitByFile.set(file.id, queueWaitMs);
+    availableAt[worker] = queueWaitMs + measurement.modelDurationMs;
+  }
+  return { queueWaitByFile, wallMs: Math.max(...availableAt) };
+}
+
 async function runOne(
   run: number,
   corpus: PerformanceCorpus,
@@ -541,6 +601,7 @@ async function runOne(
       ? new RecordedPerformanceExecutor(profile.configuration.harness, recording.responses)
       : live?.executorFactory();
     if (delegate === undefined) throw new Error('live performance execution requires an executor');
+    const scheduledFiles = scheduledPerformanceFiles(corpus, profile.configuration.reviewConcurrency);
     const executor = new MeasuringPerformanceExecutor(delegate, corpus.files, source);
     const environment: ReviewEnvironment = {
       harness: profile.configuration.harness,
@@ -559,6 +620,7 @@ async function runOne(
       credential: source === 'recorded' ? undefined : live!.credential,
       findingScope: 'defects',
       timeout: source === 'recorded' ? parseDuration('30m') : live!.timeout,
+      reviewConcurrency: profile.configuration.reviewConcurrency,
     };
     const boundaries = new Map<string, {
       startedAt: number;
@@ -601,17 +663,28 @@ async function runOne(
       throw new Error('performance run did not produce one execution and record per corpus file');
     }
     const recordsById = new Map(result.records.map((recordValue) => [recordValue.fileId, recordValue]));
-    const files = executor.measurements.map((measurement): PerformanceFileSample => {
-      const recordValue = recordsById.get(measurement.file.id);
-      if (recordValue === undefined) throw new Error(`performance run is missing record ${measurement.file.id}`);
+    const measurementsById = new Map(executor.measurements.map((measurement) => [measurement.file.id, measurement]));
+    const modeledSchedule = modeledParallelSchedule(
+      executor.measurements,
+      scheduledFiles,
+      profile.configuration.reviewConcurrency,
+    );
+    const files = corpus.files.map((file): PerformanceFileSample => {
+      const measurement = measurementsById.get(file.id);
+      const recordValue = recordsById.get(file.id);
+      if (measurement === undefined || recordValue === undefined) {
+        throw new Error(`performance run is missing record or measurement ${file.id}`);
+      }
       return {
-        fileId: measurement.file.id,
-        path: measurement.file.path,
-        category: measurement.file.category,
+        fileId: file.id,
+        path: file.path,
+        category: file.category,
         status: measurement.status,
         outcome: recordValue.outcome,
         errorKind: recordValue.errorKind ?? null,
-        queueWaitMs: measurement.queueWaitMs,
+        queueWaitMs: source === 'recorded'
+          ? modeledSchedule.queueWaitByFile.get(file.id) ?? 0
+          : measurement.queueWaitMs,
         modelDurationMs: measurement.modelDurationMs,
         promptBytes: measurement.promptBytes,
         estimatedInputTokens: measurement.estimatedInputTokens,
@@ -646,10 +719,15 @@ async function runOne(
       : measured(executor.prepareFinishedAt - executor.prepareStartedAt);
     const lastDoneAt = Math.max(...[...boundaries.values()].map((boundary) => boundary.doneAt ?? reviewFinishedAt));
     const summaryWritingMs = measured(reviewFinishedAt - lastDoneAt);
-    const reviewWallMs = source === 'recorded' ? modeledReviewMs : measuredReviewWallMs;
+    const reviewWallMs = source === 'recorded' ? modeledSchedule.wallMs : measuredReviewWallMs;
     return {
       run,
+      reviewConcurrency: profile.configuration.reviewConcurrency,
+      maximumActiveModelCalls: source === 'recorded'
+        ? Math.min(profile.configuration.reviewConcurrency, files.length)
+        : executor.maximumActiveCalls,
       reviewWallMs,
+      totalModelWorkMs: modeledReviewMs,
       stages: {
         checkoutFetchMs: null,
         runtimeSetupInstallMs: null,
@@ -848,13 +926,14 @@ export async function runPerformanceBenchmark(options: RunPerformanceOptions): P
       indexProvider: profile.configuration.indexProvider,
       indexProviderVersion: profile.configuration.indexProviderVersion,
       execution: profile.configuration.execution,
+      reviewConcurrency: profile.configuration.reviewConcurrency,
     },
     targets: profile.targets,
     quality,
     runs,
     conditions: conditionResults(profile, options.source, runs, quality),
     limitations: [
-      'Recorded mode uses checked-in model durations and named production workflow timings; it is deterministic fixture evidence, not a live SLO pass.',
+      'Recorded mode uses checked-in model durations, a modeled bounded-worker schedule, and named production workflow timings; it is deterministic fixture evidence, not a live SLO pass.',
       'Live mode measures the fixed review corpus but combines it with checked-in warm/cold non-review stage samples from production Action runs.',
       'The benchmark command starts after checkout and runtime installation, so local run-stage fields for those boundaries are null; production profile samples provide them for end-to-end totals.',
       'Token counts are four-characters-per-token estimates until the selected harness exposes bounded provider usage.',
@@ -874,7 +953,7 @@ export function renderPerformanceMarkdown(report: PerformanceReport): string {
     '',
     `- **Source:** ${report.source}`,
     `- **Corpus:** ${report.corpus.title} (${report.corpus.files} files)`,
-    `- **Execution:** ${report.profile.execution}`,
+    `- **Execution:** ${report.profile.execution} (${report.profile.reviewConcurrency} workers)`,
     `- **Harness/model:** ${report.profile.harness} (${report.profile.provider}/${report.profile.model})`,
     `- **Index provider:** ${report.profile.indexProvider} ${report.profile.indexProviderVersion}`,
     `- **Runs:** ${report.runs.length}`,
@@ -925,17 +1004,17 @@ export function renderPerformanceMarkdown(report: PerformanceReport): string {
     '',
     '## Runs',
     '',
-    '| Run | Review wall | Modeled model time | Publication | Prompt bytes | Estimated input tokens | Estimated output tokens | Omitted | Findings |',
-    '| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+    '| Run | Review wall | Total model work | Max active calls | Publication | Prompt bytes | Estimated input tokens | Estimated output tokens | Omitted | Findings |',
+    '| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
   );
   for (const run of report.runs) {
-    lines.push(`| ${run.run} | ${seconds(run.reviewWallMs)} | ${seconds(run.modeledReviewMs)} | ${seconds(run.publicationMs)} | ${run.promptBytes} | ${run.estimatedInputTokens} | ${run.estimatedOutputTokens} | ${run.omittedFiles} | ${run.findings} |`);
+    lines.push(`| ${run.run} | ${seconds(run.reviewWallMs)} | ${seconds(run.totalModelWorkMs)} | ${run.maximumActiveModelCalls} | ${seconds(run.publicationMs)} | ${run.promptBytes} | ${run.estimatedInputTokens} | ${run.estimatedOutputTokens} | ${run.omittedFiles} | ${run.findings} |`);
   }
   lines.push(
     '',
     '## Measured benchmark stages',
     '',
-    '| Run | Context build | Bundle load | Harness prepare | File prepare | Model | Validation | Writing | Summary writing | Publication |',
+    '| Run | Context build | Bundle load | Harness prepare | File prepare | Total model work | Validation | Writing | Summary writing | Publication |',
     '| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
   );
   for (const run of report.runs) {

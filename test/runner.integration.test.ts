@@ -52,6 +52,85 @@ function reviewDocument(value: object): string {
   return JSON.stringify(value);
 }
 
+async function createMultiFileFixture(diffPadding: readonly number[]): Promise<BundleFixture> {
+  const fixture = await createBundleFixture();
+  const files = diffPadding.map((padding, index) => {
+    const id = String(index + 1).padStart(6, '0');
+    const path = `src/file-${id}.ts`;
+    const oldLine = `old-${id}`;
+    const newLine = `new-${id}-${'x'.repeat(padding)}`;
+    return {
+      id,
+      status: 'M',
+      oldPath: path,
+      newPath: path,
+      similarity: null,
+      additions: 1,
+      deletions: 1,
+      binary: false,
+      reviewed: true,
+      diffFile: `diffs/${id}.diff`,
+      baseFile: `base-files/${id}`,
+      oldLine,
+      newLine,
+    } as const;
+  });
+  await Promise.all(files.flatMap((file) => [
+    writeFile(
+      join(fixture.review, file.diffFile),
+      `diff --git a/${file.newPath} b/${file.newPath}\n--- a/${file.newPath}\n+++ b/${file.newPath}\n@@ -1 +1 @@\n-${file.oldLine}\n+${file.newLine}\n`,
+    ),
+    writeFile(join(fixture.review, file.baseFile), `${file.oldLine}\n`),
+    writeFile(join(fixture.source, file.newPath), `${file.newLine}\n`),
+  ]));
+  await writeFile(join(fixture.review, 'manifest.json'), JSON.stringify({
+    version: 1,
+    base: BASE_SHA,
+    head: HEAD_SHA,
+    files: files.map(({ oldLine: _oldLine, newLine: _newLine, ...file }) => file),
+  }));
+  return fixture;
+}
+
+class ConcurrentExecutor implements HarnessExecutor {
+  readonly harness = 'echo' as const;
+  readonly started: string[] = [];
+  active = 0;
+  maximumActive = 0;
+
+  async prepare(): Promise<PreparedHarness> {
+    return { harness: 'echo', model: { provider: 'mock', endpoint: 'http://x', model: 'test-model' }, description: 'concurrency test double' };
+  }
+
+  async execute(
+    _prepared: PreparedHarness,
+    _prompt: HarnessPrompt,
+    options?: HarnessExecuteOptions,
+  ): Promise<HarnessRun> {
+    const fileId = options?.invocation?.fileId;
+    if (fileId === undefined || options?.invocation?.path !== `src/file-${fileId}.ts`) {
+      throw new Error('concurrency test invocation has no matching file identity');
+    }
+    this.started.push(fileId);
+    this.active += 1;
+    this.maximumActive = Math.max(this.maximumActive, this.active);
+    options?.onOutputLine?.({ stream: 'stdout', kind: 'text', line: `chunk-${fileId}` });
+    try {
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 5 + (7 - Number(fileId)) * 2));
+      return {
+        status: 'succeeded',
+        harness: 'echo',
+        exitCode: 0,
+        text: reviewDocument({ version: 4, fileId, outcome: 'clean', findings: [], contextRequests: [] }),
+        diagnostic: '',
+        durationMs: 10,
+      };
+    } finally {
+      this.active -= 1;
+    }
+  }
+}
+
 async function writeCodeContext(fixture: BundleFixture, value?: object): Promise<string> {
   const path = join(fixture.root, 'code-context.json');
   await writeFile(path, JSON.stringify(value ?? {
@@ -76,6 +155,80 @@ async function writeCodeContext(fixture: BundleFixture, value?: object): Promise
 }
 
 describe('runFileReviews', () => {
+  it('bounds active model calls, starts largest diffs first, and restores manifest order', async () => {
+    const fixture = await createMultiFileFixture([10, 600, 100, 500, 200, 400]);
+    try {
+      const parsed = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ConcurrentExecutor();
+      const starts: string[] = [];
+      const output: Array<{ fileId: string; path: string; line: string }> = [];
+      const result = await runFileReviews({
+        environment: parsed.review!,
+        executor,
+        onFileStart: (file) => starts.push(file.fileId),
+        onHarnessOutput: (event) => output.push({ fileId: event.fileId, path: event.path, line: event.line }),
+      });
+
+      expect(executor.maximumActive).toBe(4);
+      expect(starts.slice(0, 4)).toEqual(['000002', '000004', '000006', '000005']);
+      expect(result.records.map((record) => record.fileId)).toEqual([
+        '000001', '000002', '000003', '000004', '000005', '000006',
+      ]);
+      expect(output).toHaveLength(6);
+      for (const event of output) {
+        expect(event.line).toBe(`chunk-${event.fileId}`);
+        expect(event.path).toBe(`src/file-${event.fileId}.ts`);
+      }
+      expect(result.review.coverage.files).toMatchObject({ status: 'completed', required: true, omitted: [] });
+      expect(result.review.coverage.files.considered).toHaveLength(6);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('keeps manifest traversal and one active call when concurrency is one', async () => {
+    const fixture = await createMultiFileFixture([10, 600, 100]);
+    try {
+      const parsed = parseReviewEnvironment({
+        ...cleanReviewEnvironment(fixture, 'echo'),
+        REDLINE_REVIEW_CONCURRENCY: '1',
+      });
+      const executor = new ConcurrentExecutor();
+      const starts: string[] = [];
+      const result = await runFileReviews({
+        environment: parsed.review!,
+        executor,
+        onFileStart: (file) => starts.push(file.fileId),
+      });
+
+      expect(executor.maximumActive).toBe(1);
+      expect(starts).toEqual(['000001', '000002', '000003']);
+      expect(result.records.map((record) => record.fileId)).toEqual(starts);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('keeps candidate verification serial to preserve the shared follow-up budget', async () => {
+    const fixture = await createMultiFileFixture([10, 600, 100]);
+    try {
+      const parsed = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ConcurrentExecutor();
+      const starts: string[] = [];
+      await runFileReviews({
+        environment: parsed.review!,
+        executor,
+        verifyCandidates: true,
+        onFileStart: (file) => starts.push(file.fileId),
+      });
+
+      expect(executor.maximumActive).toBe(1);
+      expect(starts).toEqual(['000001', '000002', '000003']);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('passes only action-resolved source and counts duplicate requests once', async () => {
     const fixture = await createBundleFixture();
     try {

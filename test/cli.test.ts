@@ -1,9 +1,45 @@
-import { describe, expect, it } from 'vitest';
-import { main, type CliDependencies } from '../src/review/cli.js';
+import { describe, expect, it, vi } from 'vitest';
+import { main, progressCallbacks, type CliDependencies } from '../src/review/cli.js';
 import type { ReviewPublisher } from '../src/publish/index.js';
 import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.js';
 
 describe('redline-review CLI', () => {
+  it('attributes concurrent progress and bounds each file live stream', () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const callbacks = progressCallbacks('full-output');
+      callbacks.onFileStart({ fileId: '000001', path: 'src/one.ts' });
+      callbacks.onFileStart({ fileId: '000002', path: 'src/two.ts' });
+      callbacks.onHarnessOutput?.({
+        fileId: '000002',
+        path: 'src/two.ts',
+        stream: 'stdout',
+        kind: 'text',
+        line: 'two\r\nlines\rtail',
+      });
+      for (let index = 0; index < 200; index += 1) {
+        callbacks.onHarnessOutput?.({
+          fileId: '000001',
+          path: 'src/one.ts',
+          stream: 'stdout',
+          kind: 'text',
+          line: 'x'.repeat(300),
+        });
+      }
+
+      const lines = stderr.mock.calls.map((call) => String(call[0]));
+      expect(lines).toContain('redline-review: [000001 src/one.ts] reviewing…\n');
+      expect(lines).toContain('redline-review: [000002 src/two.ts] reviewing…\n');
+      expect(lines).toContain('redline-review: [000002 src/two.ts] harness stdout: two ↵ lines ↵ tail\n');
+      expect(lines.join('')).toContain('[000001 src/one.ts] live harness output truncated');
+      const fileOneOutput = lines.filter((line) => line.includes('[000001 src/one.ts]')).join('');
+      expect(fileOneOutput.length).toBeLessThan(34_000);
+      expect(lines.every((line) => !line.slice(0, -1).includes('\n'))).toBe(true);
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
   it('rejects unsupported arguments', async () => {
     expect(await main(['--nonsense'])).toBe(2);
     expect(await main(['run'])).toBe(2);

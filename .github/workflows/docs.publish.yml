@@ -1,8 +1,8 @@
 # Builds the documentation site and publishes it under projects/redline/ in
-# the dragoscirjan.github.io repository. Copied from the neottia pattern.
+# the dragoscirjan.github.io repository.
 #
-# The publish job reuses the actor-owned PAT with contents:write on the pages
-# repository; a caller GITHUB_TOKEN cannot push to a different repository.
+# The publish job uses the actor-owned PAT only for the destination checkout
+# and push; a caller GITHUB_TOKEN cannot push to a different repository.
 name: Publish documentation
 
 on:
@@ -16,12 +16,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build the site
+  publish:
+    name: Build and publish the site
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+      - name: Check out Redline
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
         with:
           persist-credentials: false
 
@@ -47,11 +48,31 @@ jobs:
           name: docs-site
           path: docs/.vitepress/dist
 
-  publish:
-    name: Publish to dragoscirjan.github.io
-    needs: build
-    uses: dragoscirjan/dragoscirjan.github.io/.github/workflows/docs.yml@main
-    with:
-      project: redline
-    secrets:
-      token: ${{ secrets.GH_TOKEN }}
+      - name: Check out documentation repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          repository: dragoscirjan/dragoscirjan.github.io
+          ref: main
+          token: ${{ secrets.GH_TOKEN }}
+          path: documentation-repository
+
+      - name: Publish Redline documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p documentation-repository/projects/redline
+          rsync -a --delete \
+            docs/.vitepress/dist/ \
+            documentation-repository/projects/redline/
+
+          git -C documentation-repository config user.name 'github-actions[bot]'
+          git -C documentation-repository config user.email 'github-actions[bot]@users.noreply.github.com'
+          git -C documentation-repository add -- projects/redline
+
+          if git -C documentation-repository diff --cached --quiet; then
+            printf 'Redline documentation is unchanged; nothing to publish.\n'
+            exit 0
+          fi
+
+          git -C documentation-repository commit -m 'docs(redline): update documentation site'
+          git -C documentation-repository push origin main

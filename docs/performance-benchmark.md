@@ -35,7 +35,16 @@ Recorded mode performs no network requests. It uses checked-in per-file model du
 | Node 24.21.0 | 64/67 ms | 165/184 ms |
 | Bun 1.4.4 | 13/14 ms | 79/85 ms |
 
-These local process samples exclude dependency installation, harness installation, indexing, model calls, network latency, and publication. On pull requests, the CI source-runtime matrix separately times the root composite action end to end under both selected runtimes and uploads `action.json` with the runtime, outcome, and duration. Bun is faster in this bounded local capture, but model work dominates live reviews, so Node remains the default and this result does not claim an end-to-end model-bound latency improvement.
+These local process samples exclude dependency installation, harness installation, indexing, model calls, network latency, and publication. On pull requests, the CI source-runtime matrix separately times the root composite action end to end under both selected runtimes and uploads `action.json` with the runtime, outcome, and duration.
+
+PR #168 workflow run `40121913292` supplied the first GitHub-hosted runner capture:
+
+| Runtime | CLI startup p50/p95 | Echo review p50/p95 | Composite action |
+| --- | ---: | ---: | ---: |
+| Node 24.21.0 | 145/156 ms | 371/372 ms | 14,097 ms |
+| Bun 1.4.4 | 16/16 ms | 123/125 ms | 9,771 ms |
+
+Both composite-action runs succeeded with the deterministic echo harness and indexing disabled. This is one runner capture, not a latency distribution. Bun is faster in the bounded local and CI captures, but model work dominates live reviews, so Node remains the default and these results do not claim an end-to-end model-bound latency improvement. The complete capture is checked in at `benchmark/source-runtime/v1/ci-pr-168.json`.
 
 The baseline uses four workers and largest-diff-first scheduling. It retains 1,208 seconds of total modeled model work and models 340 seconds of review wall time. The previous sequential baseline reported 1,260.8 seconds warm-index p95 and 1,474.3 seconds cold-index p95. The four-worker baseline reports 392.8 seconds warm and 606.3 seconds cold. Both are below the epic targets, but the report remains SLO-ineligible until at least five current live fixed-corpus runs pass the quality gate.
 

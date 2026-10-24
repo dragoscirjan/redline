@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "repository": "dragoscirjan/redline",
+  "pullRequest": 168,
+  "runId": 40121913292,
+  "commit": "a9b7d31a20b2bdc1489e019c2714ddbd2f678b19",
+  "runtimes": {
+    "node": {
+      "runtimeVersion": "v24.21.0",
+      "artifactId": 12571089100,
+      "startupMs": {
+        "samples": 5,
+        "minimum": 143,
+        "p50NearestRank": 145,
+        "p95NearestRank": 156,
+        "maximum": 156
+      },
+      "echoReviewMs": {
+        "samples": 3,
+        "minimum": 366,
+        "p50NearestRank": 371,
+        "p95NearestRank": 372,
+        "maximum": 372
+      },
+      "compositeAction": {
+        "outcome": "success",
+        "durationMs": 14097
+      }
+    },
+    "bun": {
+      "runtimeVersion": "1.4.4",
+      "artifactId": 12570929057,
+      "startupMs": {
+        "samples": 5,
+        "minimum": 16,
+        "p50NearestRank": 16,
+        "p95NearestRank": 16,
+        "maximum": 16
+      },
+      "echoReviewMs": {
+        "samples": 3,
+        "minimum": 121,
+        "p50NearestRank": 123,
+        "p95NearestRank": 125,
+        "maximum": 125
+      },
+      "compositeAction": {
+        "outcome": "success",
+        "durationMs": 9771
+      }
+    }
+  },
+  "limits": [
+    "This is one GitHub-hosted runner capture, not a latency distribution.",
+    "The composite action used the deterministic echo harness with indexing disabled.",
+    "The capture does not measure or predict model-bound review latency."
+  ]
+}

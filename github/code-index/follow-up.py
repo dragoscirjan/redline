@@ -95,8 +95,7 @@ def check_graph(args: argparse.Namespace, runtime: Path) -> tuple[bool, str]:
     control = runtime / "control"
     state = index.read_cache_state(cache / "state.json")
     config_file = control / "config-id"
-    index.PROVIDER_ID = args.provider
-    index.PROVIDER_VERSION = "0.5.7" if args.provider == "cgc" else "1.6.12"
+    index.select_provider(args.provider, index.PROVIDER_VERSIONS[args.provider])
     if config_file.is_symlink() or not config_file.is_file():
         return False, "not-configured"
     config_id = config_file.read_text(encoding="utf-8")

@@ -12,11 +12,11 @@ The `redline review` CLI needs no GitHub repository, pull request, remote URL, o
 
 ```bash
 # Source-checkout smoke tests; echo does not perform model-based review.
-node bin/redline.mjs review --base main --head feature --harness echo
-node bin/redline.mjs review --worktree all --harness echo
+node bin/redline.mjs review --base main --head HEAD --harness echo --indexing disabled
+node bin/redline.mjs review --worktree all --harness echo --indexing disabled
 ```
 
-The npm distribution is `@dragoscirjan/redline` for Node.js 24, published only through an approved manual release. Pi/OpenCode binaries are installed separately. See [Local CLI](docs/local-cli.md) for configuration, credentials, output bounds, and exit statuses, and [Portable architecture](docs/portable-architecture.md) for adapter boundaries. Future VCS/reporter values are recognized but fail explicitly until implemented.
+The npm distribution is `@dragoscirjan/redline` for Node.js 24, published only through an approved manual release. Pi/OpenCode binaries are installed separately. Indexed cross-file context is enabled by default through separately installed pinned CGC; unavailable context is reported as file-only. `--indexing required` rejects those gaps before model review. See [Local CLI](docs/local-cli.md) for configuration, credentials, output bounds, and exit statuses, and [Portable architecture](docs/portable-architecture.md) for adapter boundaries. Future VCS/reporter values are recognized but fail explicitly until implemented.
 
 ## Adoption
 

@@ -9,7 +9,7 @@ export class LocalOperationError extends Error {}
 
 export function gitEnvironment(command: string, host: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
-    PATH: dirname(command), SystemRoot: host.SystemRoot ?? process.env.SystemRoot,
+    PATH: dirname(command), SystemRoot: host.SystemRoot ?? host.SYSTEMROOT ?? process.env.SystemRoot ?? process.env.SYSTEMROOT,
     GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
     GIT_ATTR_NOSYSTEM: '1', GIT_NO_REPLACE_OBJECTS: '1', GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0',
     GIT_LITERAL_PATHSPECS: '1', GIT_OPTIONAL_LOCKS: '0', LC_ALL: 'C',
@@ -49,7 +49,7 @@ function kill(child: ReturnType<typeof spawn>): void {
   try {
     if (process.platform !== 'win32' && child.pid !== undefined) process.kill(-child.pid, 'SIGKILL');
     else if (child.pid !== undefined) {
-      const taskkill = spawn(join(process.env.SystemRoot ?? '', 'System32', 'taskkill.exe'), ['/PID', String(child.pid), '/T', '/F'],
+      const taskkill = spawn(join(process.env.SystemRoot ?? process.env.SYSTEMROOT ?? '', 'System32', 'taskkill.exe'), ['/PID', String(child.pid), '/T', '/F'],
         { stdio: 'ignore', windowsHide: true });
       taskkill.once('error', () => child.kill('SIGKILL'));
       taskkill.once('close', (code) => { if (code !== 0) child.kill('SIGKILL'); });
@@ -60,8 +60,8 @@ function kill(child: ReturnType<typeof spawn>): void {
 export interface LaunchCommand { readonly command: string; readonly prefix: readonly string[] }
 
 /** Resolve npm harness shims without invoking cmd.exe, PowerShell, or a shell. */
-export async function harnessCommand(name: 'pi' | 'opencode', path: string, repository: string): Promise<LaunchCommand> {
-  const packageName = name === 'pi' ? '@earendil-works/pi-coding-agent' : 'opencode-ai';
+export async function hostToolCommand(name: 'pi' | 'opencode' | 'cgc' | 'gitnexus', path: string, repository: string): Promise<LaunchCommand> {
+  const packageName = name === 'pi' ? '@earendil-works/pi-coding-agent' : name === 'opencode' ? 'opencode-ai' : name === 'gitnexus' ? 'gitnexus' : undefined;
   for (const directory of path.split(delimiter)) {
     if (!isAbsolute(directory) || inside(repository, directory)) continue;
     const canonicalDirectory = await realpath(directory).catch(() => undefined);
@@ -81,6 +81,7 @@ export async function harnessCommand(name: 'pi' | 'opencode', path: string, repo
       if (isNode || /\.(?:mjs|cjs|js)$/u.test(candidate)) return { command: process.execPath, prefix: [candidate] };
       if (process.platform !== 'win32' || candidate.toLowerCase().endsWith('.exe')) return { command: candidate, prefix: [] };
     }
+    if (packageName === undefined) continue;
     // npm global layouts differ between Unix prefixes and Windows prefixes.
     for (const root of [join(directory, 'node_modules', packageName), resolve(directory, '../lib/node_modules', packageName)]) {
       const canonical = await realpath(root).catch(() => undefined);
@@ -102,13 +103,17 @@ export async function harnessCommand(name: 'pi' | 'opencode', path: string, repo
   throw new LocalOperationError(`trusted ${name} executable not found outside the reviewed repository`);
 }
 
+export function harnessCommand(name: 'pi' | 'opencode', path: string, repository: string): Promise<LaunchCommand> {
+  return hostToolCommand(name, path, repository);
+}
+
 export function cancellableSpawner(signal: AbortSignal, launch?: LaunchCommand): ProcessSpawner {
   return {
     spawn(request) {
       signal.throwIfAborted();
       const child = spawn(request.command, [...(request.command === launch?.command ? launch.prefix : []), ...request.args], {
         cwd: request.cwd, env: process.platform === 'win32' ? {
-          ...request.env, SystemRoot: process.env.SystemRoot, TEMP: request.cwd, TMP: request.cwd,
+          ...request.env, SystemRoot: process.env.SystemRoot ?? process.env.SYSTEMROOT ?? request.env?.SystemRoot, TEMP: request.cwd, TMP: request.cwd,
         } : request.env, stdio: ['pipe', 'pipe', 'pipe'],
         detached: process.platform !== 'win32', windowsHide: true,
       });

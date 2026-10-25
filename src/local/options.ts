@@ -8,7 +8,7 @@ import { parseReviewEnvironment, type ReviewEnvironment } from '../review/enviro
 import { executable, GitCommand, gitEnvironment, inside, repositoryBoundary } from './process.ts';
 
 const KEYS = ['repository', 'output', 'vcs', 'base', 'head', 'worktree', 'comparison', 'untracked', 'harness',
-  'provider', 'endpoint', 'model', 'auth', 'timeout', 'run-timeout', 'concurrency', 'finding-scope', 'fail-on', 'color'] as const;
+  'provider', 'endpoint', 'model', 'auth', 'timeout', 'run-timeout', 'concurrency', 'finding-scope', 'fail-on', 'color', 'indexing', 'indexing-provider', 'index-executable', 'index-runtime', 'code-context', 'code-context-repository'] as const;
 type Key = (typeof KEYS)[number];
 export interface LocalOptions {
   readonly repository: string;
@@ -19,6 +19,14 @@ export interface LocalOptions {
     | { readonly kind: 'worktree'; readonly mode: 'staged' | 'unstaged' | 'all'; readonly untracked: boolean };
   readonly reporters: readonly string[];
   readonly color: 'auto' | 'always' | 'never';
+  readonly indexing: {
+    readonly mode: 'enabled' | 'disabled' | 'required';
+    readonly provider: 'cgc' | 'gitnexus';
+    readonly executable: string | undefined;
+    readonly runtime: string | undefined;
+    readonly artifact: string | undefined;
+    readonly repository: string | undefined;
+  };
   readonly failOn: 'none' | 'findings' | 'high' | 'critical';
   readonly environment: ReviewEnvironment;
 }
@@ -39,6 +47,12 @@ No target: review staged and unstaged tracked changes against HEAD.
                                     github|forgejo|gitea|gitlab|bitbucket reserved
   --output PATH                      New directory; default user state directory
   --color auto|always|never           Default auto; NO_COLOR disables colors
+  --indexing enabled|disabled|required  Default enabled; required rejects file-only fallback
+  --indexing-provider cgc|gitnexus     Default cgc; external provider installed separately
+  --index-executable PATH            Trusted existing indexer override
+  --index-runtime PATH               Trusted Python helper runtime override
+  --code-context PATH                Import an existing revision-matched context artifact
+  --code-context-repository ID        Expected artifact namespace; default local identity
   --config PATH                      Trusted user JSON; never repository config
   --harness pi|opencode|echo          pi by default; binaries installed separately
   --provider ID --endpoint URL --model ID
@@ -184,12 +198,27 @@ export async function parseLocalOptions(args: readonly string[], env: NodeJS.Pro
     REDLINE_REVIEW_CONCURRENCY: get('concurrency', '4'), REDLINE_FINDING_SCOPE: get('finding-scope', 'defects'),
   });
   if (parsed.review === undefined) throw new UsageError('review configuration is incomplete');
+  const optional = (key: Key): string | undefined => {
+    const value = flag(key) ?? env[`REDLINE_${key.toUpperCase().replaceAll('-', '_')}`] ?? defaults[key];
+    return value === undefined ? undefined : get(key, '');
+  };
+  const artifact = optional('code-context');
+  const indexExecutable = optional('index-executable');
+  const indexRuntime = optional('index-runtime');
+  const contextRepository = optional('code-context-repository');
+  const indexMode = choice(get('indexing', 'enabled'), ['enabled', 'disabled', 'required'], 'indexing');
+  if (artifact !== undefined && (indexMode === 'disabled' || indexExecutable !== undefined)) throw new UsageError('imported context conflicts with disabled indexing or an indexer executable');
+  if (contextRepository !== undefined && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(contextRepository)) throw new UsageError('invalid code-context repository namespace');
   const base = get('base', 'HEAD');
   const target: LocalOptions['target'] = head === undefined
     ? { kind: 'worktree', mode, untracked: untracked === 'include' }
     : { kind: 'revision', head: get('head', String(head)), comparison: choice(get('comparison', 'merge-base'), ['merge-base', 'direct'], 'comparison') };
   return {
     repository, stateDirectory: resolve(cwd, stateDirectory), output: output === undefined ? undefined : resolve(cwd, String(output)), base, target,
+    indexing: { mode: indexMode, provider: choice(get('indexing-provider', 'cgc'), ['cgc', 'gitnexus'], 'indexing-provider'),
+      artifact: artifact === undefined ? undefined : resolve(cwd, artifact),
+      executable: indexExecutable === undefined ? undefined : resolve(cwd, indexExecutable),
+      runtime: indexRuntime === undefined ? undefined : resolve(cwd, indexRuntime), repository: contextRepository },
     reporters, color: choice(get('color', 'auto'), ['auto', 'always', 'never'], 'color'), failOn: choice(get('fail-on', 'none'), ['none', 'findings', 'high', 'critical'], 'fail-on'), environment: parsed.review,
   };
 }

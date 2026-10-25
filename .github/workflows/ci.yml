@@ -203,6 +203,14 @@ jobs:
           node-version: 24
           architecture: ${{ matrix.arch }}
 
+      # Exercise the shared standard-library exporter on all six native targets.
+      # 3.12.10 is the common compatibility baseline available for every target.
+      - name: Set up native Python helper runtime
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12.10'
+          architecture: ${{ matrix.arch }}
+
       - name: Verify actual runtime platform and architecture
         env:
           EXPECTED_PLATFORM: ${{ matrix.platform }}
@@ -216,7 +224,7 @@ jobs:
         run: corepack pnpm@10.33.0 run typecheck
 
       - name: Exercise local capture, reporting, cancellation, and offline npm installation
-        run: corepack pnpm@10.33.0 exec vitest run test/application.test.ts test/local-cli.test.ts test/package.test.ts test/npm-release.test.ts test/cli-reporter.test.ts
+        run: corepack pnpm@10.33.0 exec vitest run test/application.test.ts test/local-cli.test.ts test/package.test.ts test/npm-release.test.ts test/cli-reporter.test.ts test/local-context.test.ts
 
   source-runtime:
     name: Source runtime (${{ matrix.runtime }})

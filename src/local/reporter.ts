@@ -43,6 +43,7 @@ export class CliReporter implements ReviewReporter {
   private readonly files = new Map<string, Status>();
   private activeLine = false;
   private reported = false;
+  private phase = 'Capturing changes…';
   constructor(stdout: (line: string) => void, stderr: (line: string) => void, credential?: string, options: CliReporterOptions = {}) {
     this.stdout = stdout; this.stderr = stderr; this.credential = credential; this.options = options;
   }
@@ -64,7 +65,7 @@ export class CliReporter implements ReviewReporter {
     const done = states.filter((state) => !['waiting', 'running'].includes(state)).length;
     const running = states.filter((state) => state === 'running').length;
     const width = Math.max(1, Math.min(240, Math.floor(terminal.columns() || 80)) - 1);
-    const prefix = states.length === 0 ? 'Capturing changes…' : `Review ${done}/${states.length} · ${running} running `;
+    const prefix = states.length === 0 ? this.phase : `Review ${done}/${states.length} · ${running} running `;
     const available = Math.max(0, width - prefix.length - 2);
     const frame = prefix.slice(0, width) + (available > 0 ? `[${this.strip(terminal.color, available)}]` : '');
     // One physical line, no cursor movement into previous output and no terminal-width wrapping.
@@ -80,6 +81,15 @@ export class CliReporter implements ReviewReporter {
     if (this.reported) return;
     if (event.kind === 'started') {
       if (this.options.terminal === undefined) this.stderr('Reviewing changes…');
+    } else if (event.kind === 'context-started') {
+      this.phase = `Preparing ${terminalText(event.provider)} context…`;
+      if (this.options.terminal === undefined) this.stderr(this.phase);
+    } else if (event.kind === 'context-ready') {
+      this.phase = 'Preparing review…';
+      if (event.fileOnlyFiles > 0) {
+        this.finishLine();
+        this.stderr(`Indexed context: ${terminalText(event.status)}; ${event.relatedSpans} related spans; ${event.fileOnlyFiles} required ${event.fileOnlyFiles === 1 ? 'file remains' : 'files remain'} file-only.`);
+      }
     } else if (event.kind === 'planned') {
       this.files.clear();
       for (const file of event.files.slice(0, 2_000)) this.files.set(file.fileId, file.reviewed ? 'waiting' : 'inert');
@@ -144,6 +154,9 @@ export class CliReporter implements ReviewReporter {
     const completed = result.summary.reviewedFiles - result.summary.omittedFiles;
     this.stdout(`Coverage: ${completed}/${result.summary.reviewedFiles} required files completed; ${result.summary.omittedFiles} failed; ${result.summary.excludedFiles?.length ?? 0} inert`);
     this.stdout(`Verdict: ${result.review.verdict.status}; findings: ${result.review.findings.length}`);
+    const context = result.summary.codeContext;
+    this.stdout(`Indexed context: ${context.status}; ${context.filesWithContext} file${context.filesWithContext === 1 ? '' : 's'} with context; ${context.relatedSpans} related span${context.relatedSpans === 1 ? '' : 's'}${context.provider === null ? '' : `; ${safe(context.provider.id)} ${safe(context.provider.version)}`}`);
+    if (context.diagnosticCodes.length > 0) this.stdout(`Context diagnostics: ${safe(context.diagnosticCodes.join(', '))}`);
     if (result.omissions.length > 0) {
       const failures = new Map<string, number>();
       for (const file of result.omissions) failures.set(file.errorKind, (failures.get(file.errorKind) ?? 0) + 1);

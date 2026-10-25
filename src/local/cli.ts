@@ -9,6 +9,7 @@ import { createHarnessExecutor } from '../harness-executor/registry.ts';
 import { GitRevisionSource } from './git-source.ts';
 import { HELP, parseLocalOptions, UsageError } from './options.ts';
 import { cancellableSpawner, harnessCommand, inside, LocalOperationError } from './process.ts';
+import { prepareLocalContext } from './context.ts';
 import { FindingDiffReader } from './finding-diff.ts';
 import { CliReporter, terminalColors, terminalText } from './reporter.ts';
 
@@ -103,6 +104,17 @@ export async function main(
     timer = setTimeout(() => { deadlineExpired = true; controller.abort(); }, options.environment.runTimeout.milliseconds);
     const application = new ReviewApplication({
       source: new GitRevisionSource(options, env, destination), reporter,
+      prepareContext: async (capture, contextSignal) => {
+        if (options.indexing.mode === 'disabled') return undefined;
+        reporter.progress({ kind: 'context-started', provider: options.indexing.artifact === undefined ? options.indexing.provider : 'imported' });
+        const context = await prepareLocalContext(capture, options, env, destination, contextSignal,
+          Math.max(1, options.environment.runTimeout.milliseconds - (performance.now() - start)));
+        reporter.progress({ kind: 'context-ready', status: context.coverage.status, relatedSpans: context.coverage.relatedSpans, fileOnlyFiles: context.fileOnlyReviewedFiles });
+        if (options.indexing.mode === 'required' && context.fileOnlyReviewedFiles > 0) {
+          throw new LocalOperationError('required indexed context is missing source-validated related spans for one or more reviewed files; review was not started');
+        }
+        return context.input;
+      },
       execute: (input) => {
         signal.throwIfAborted();
         const remaining = Math.max(1, Math.floor(options.environment.runTimeout.milliseconds - (performance.now() - start)));

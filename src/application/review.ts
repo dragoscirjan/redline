@@ -5,6 +5,8 @@ import type { ReviewWriter } from '../review/writer.ts';
 
 export type ReviewEvent =
   | { readonly kind: 'started' }
+  | { readonly kind: 'context-started'; readonly provider: string }
+  | { readonly kind: 'context-ready'; readonly status: ReviewRunResult['summary']['codeContext']['status']; readonly relatedSpans: number; readonly fileOnlyFiles: number }
   | { readonly kind: 'planned'; readonly files: readonly { readonly fileId: string; readonly reviewed: boolean }[] }
   | { readonly kind: 'file-started'; readonly fileId: string }
   | { readonly kind: 'file-completed'; readonly fileId: string; readonly outcome: 'clean' | 'findings' | 'omitted' }
@@ -18,10 +20,18 @@ export interface CaptureCoverage {
   readonly inertSubmodules: number;
 }
 
+export interface CapturedContextSnapshot {
+  readonly repository: string;
+  readonly base: string;
+  readonly head: string;
+  prepareSources(): Promise<{ readonly baseDirectory: string; readonly headDirectory: string }>;
+}
+
 export interface CapturedRevision {
   readonly reviewDirectory: string;
   readonly sourceDirectory: string;
   readonly coverage?: CaptureCoverage;
+  readonly contextSnapshot?: CapturedContextSnapshot;
   dispose(): Promise<void>;
 }
 
@@ -82,6 +92,7 @@ export interface ReviewApplicationDependencies {
   readonly reporter: CompositeReporter;
   readonly execute?: (input: ReviewRunInput) => Promise<ReviewRunResult>;
   readonly artifacts?: ReviewWriter;
+  readonly prepareContext?: (capture: CapturedRevision, signal: AbortSignal) => Promise<ReviewEnvironment['codeContext']>;
 }
 
 export class ReviewApplication {
@@ -96,8 +107,11 @@ export class ReviewApplication {
     try {
       captured = await source.capture(signal);
       signal.throwIfAborted();
+      const codeContext = this.dependencies.prepareContext === undefined ? command.environment.codeContext
+        : await this.dependencies.prepareContext(captured, signal);
+      signal.throwIfAborted();
       const result = await (this.dependencies.execute ?? executePreparedReview)({
-        environment: { ...command.environment, reviewDirectory: captured.reviewDirectory, sourceDirectory: captured.sourceDirectory },
+        environment: { ...command.environment, reviewDirectory: captured.reviewDirectory, sourceDirectory: captured.sourceDirectory, codeContext },
         ...(this.dependencies.artifacts === undefined ? {} : { writer: this.dependencies.artifacts }),
         onReviewPlan: (files) => reporter.progress({ kind: 'planned', files }),
         onFileStart: ({ fileId }) => reporter.progress({ kind: 'file-started', fileId }),

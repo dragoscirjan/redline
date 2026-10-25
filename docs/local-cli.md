@@ -4,7 +4,7 @@ The local CLI reviews Git changes without a forge, pull request, remote URL, or 
 
 ## Install
 
-Requires Node.js 24 and Git on the trusted host. Release compatibility requires native execution tests on Linux, macOS, and Windows, each on x64 and ARM64. The CI matrix verifies the actual Node platform/architecture and runs local capture, reporting, cancellation, and installed-package tests on all six targets. A target is not considered verified until its job passes. npm publishing requires successful CI for the exact main commit.
+Requires Node.js 24 and Git on the trusted host. Release compatibility requires native execution tests on Linux, macOS, and Windows, each on x64 and ARM64. The CI matrix verifies the actual Node platform/architecture and runs local capture, context-builder contracts, reporting, cancellation, and installed-package tests on all six targets. External indexer compatibility is separate from these CLI tests. A target is not considered verified until its job passes. npm publishing requires successful CI for the exact main commit.
 
 After an approved npm release:
 
@@ -36,6 +36,36 @@ redline review --base main --head feature --comparison direct --harness echo
 ```
 
 Tags, object IDs, detached HEADs, and remote-tracking refs work as local Git revisions. A dirty working tree does not affect a committed-revision review. Reflog selectors and auxiliary pseudo-refs such as `FETCH_HEAD` are not exported into scratch metadata; resolve them to a commit ID first. A repository must already have a committed `HEAD`.
+
+## Indexed cross-file context
+
+Indexing is enabled by default, with CGC 0.5.7 as the default provider. Like the GitHub action, Redline indexes the captured **base** snapshot and resolves bounded related callers, tests, and contracts from captured **head** source. Working-tree reviews use their synthetic revision IDs; later live edits cannot alter these inputs. Newly added or unsupported files can remain file-only because they have no supported base-graph anchor.
+
+```bash
+redline review --base main --head HEAD --harness pi
+redline review --base main --head HEAD --harness pi --indexing required
+redline review --base main --head HEAD --harness echo --indexing disabled
+```
+
+- `enabled`: attempt indexing; retain explicit file-only coverage on unavailable providers, unsupported files, missing relationships, or invalid source evidence.
+- `required`: stop **before model review** if any reviewed file lacks a usable, source-validated related span. This can reject changes containing new files or documentation. It does not claim complete semantic coverage.
+- `disabled`: do not discover or run an indexer.
+
+The external provider and Python 3.12+ helper runtime must already be installed on the trusted host. Redline does not download, install, upgrade, or downgrade them. CGC must report exactly 0.5.7. An already-provisioned, checksum-matching Linux x64 binary at `$XDG_STATE_HOME/redline/tools/cgc/0.5.7/linux-x64/cgc` (or `$HOME/.local/state/...`) takes precedence over PATH; an explicit `--index-executable PATH` takes precedence over both. A mismatched global version is not silently replaced.
+
+`--index-runtime PATH` selects an existing Python executable; otherwise Redline searches trusted PATH directories for `python3` or `python`. Indexers, runtimes, and Node entrypoints must resolve outside the reviewed repository. GitNexus 1.6.12 is an explicit opt-in through `--indexing-provider gitnexus`; check its PolyForm Noncommercial license before use. CGC remains the default. Native provider assets and database backends do **not** have proven support on all six CLI targets. A provider that cannot run yields explicit unavailable coverage, not a claim of cross-platform compatibility.
+
+An existing artifact can be imported without running an indexer or Python:
+
+```bash
+redline review --base main --head HEAD --harness pi \
+  --code-context /absolute/path/to/code-context.json \
+  --code-context-repository owner/repository
+```
+
+Replace the path and namespace with the artifact's actual values. Without `--code-context-repository`, the expected namespace is `local/<opaque Git-common-directory hash>` from `capture.json`; no GitHub remote is needed. Import checks namespace, head, optional base identity, supported provider/schema, bounded paths/spans, and captured head source. An import is not trusted merely because it was produced earlier. Provider selection flags apply to building; an imported artifact supplies its own validated provider identity.
+
+Local indexing uses fresh per-run scratch databases, not the action's persistent cache. Databases, provider homes, and sanitized index snapshots are removed after preparation. The bounded artifact and coverage remain in `index/`. This establishes context-input parity, not equal indexing latency, model output validity, or finding quality. The default local finding scope remains `defects`; use `--finding-scope defects-and-risks` to match the dogfood workflow's broader scope. Candidate verification remains disabled in both paths.
 
 ## Review uncommitted changes
 
@@ -116,10 +146,14 @@ Run `redline review --help` for the complete contract.
 - Repeatable `--reporter cli|github|forgejo|gitea|gitlab|bitbucket`: only `cli` works today; default `cli`. Duplicates are rejected.
 - `--output PATH`: a new directory outside the reviewed repository, with an existing parent.
 - `--color auto|always|never`: default `auto`. A defined `NO_COLOR` disables colors, and `TERM=dumb` disables live terminal redraw and colors.
+- `--indexing enabled|disabled|required`: default `enabled`.
+- `--indexing-provider cgc|gitnexus`: default `cgc`.
+- `--index-executable PATH`, `--index-runtime PATH`: trusted existing provider/Python overrides.
+- `--code-context PATH`, `--code-context-repository ID`: optional artifact import and expected namespace.
 - `--harness pi|opencode|echo`: default `pi`.
 - `--provider`, `--endpoint`, `--model`, `--auth none`: trusted model selection.
 - `--timeout`: per-file deadline, default `4m`.
-- `--run-timeout`: whole-run deadline including capture, default `10m`.
+- `--run-timeout`: whole-run deadline including capture, indexing, and review, default `10m`. Local context preparation has an additional five-minute ceiling within that budget.
 - `--concurrency`: integer `1`–`8`, default `4`.
 - `--finding-scope defects|defects-and-risks`: default `defects`.
 - `--fail-on none|findings|high|critical`: default `none`.
@@ -133,6 +167,7 @@ Default artifact location: `$XDG_STATE_HOME/redline/reviews/run-*`, or `$HOME/.l
 - `bundle/`: authoritative manifest, diffs, base files, and commit metadata.
 - `source/`: captured bounded head files, never a live worktree.
 - `capture.json`: requested and resolved revisions, snapshot identity, capture coverage, excluded untracked paths, and inert symlink path/target data.
+- `index/code-context.json`, `index/status.json`: bounded normalized context and actual source-validated coverage when indexing/import is enabled.
 - `reviews/`: existing validated file records, summary, and consolidated review as JSON and Markdown.
 - `status.json`: local completion, failure, cancellation, or deadline classification and exit code.
 
@@ -140,14 +175,14 @@ Review schemas remain unchanged. Synthetic working-copy commit IDs and the index
 
 Interactive stderr uses one updating, width-bounded dot strip in manifest order, with completed/total and running counts. Green means a validated clean file; red means findings; gray means intentionally inert/excluded; yellow `!` means a failed or omitted review. Waiting/running files use outlined dots. Failures never appear as inert or clean. Without colors, distinct symbols (`+`, `x`, `-`, `!`, `o`, `.`) retain these meanings. Redirected output has no animation or automatic ANSI colors and does not emit per-file start/completion lines.
 
-Final output states complete/incomplete coverage, verdict, grouped failure counts, and the artifact path. Findings are grouped by filename, with severity, side, line span, explanation, and an excerpt from the authoritative captured diff. Old/new line numbers are preserved and `>` marks cited changed lines. Each excerpt is capped at 20 lines and clearly marked when clipped or unavailable. The reader revalidates the bundle revisions, file identity, evidence, and span endpoints; it never substitutes model text for missing diff context. Existing proposed fixes are shown separately, capped at 20 lines, and labeled as not applied or test-verified. A missing fix is reported explicitly, not invented.
+Final output states complete/incomplete review coverage, indexed-context status/provider/usable span counts, verdict, grouped failure counts, and the artifact path. File-only fallbacks are reported before model review; they are not labeled as indexed coverage. Findings are grouped by filename, with severity, side, line span, explanation, and an excerpt from the authoritative captured diff. Old/new line numbers are preserved and `>` marks cited changed lines. Each excerpt is capped at 20 lines and clearly marked when clipped or unavailable. The reader revalidates the bundle revisions, file identity, evidence, and span endpoints; it never substitutes model text for missing diff context. Existing proposed fixes are shown separately, capped at 20 lines, and labeled as not applied or test-verified. A missing fix is reported explicitly, not invented.
 
 Terminal data is control-character filtered, bounded, and credential-redacted before coloring. Only these bounded reviewed-diff excerpts and proposed-fix blocks are displayed—not full source payloads, prompts, raw model output, reasoning, or publication tokens. Source and bounded redacted model artifacts remain on disk under the existing artifact contract; protect the output directory accordingly.
 
 | Exit | Meaning |
 | --- | --- |
 | `0` | Completed; findings do not fail by default |
-| `1` | Operational failure, deadline exhaustion, or incomplete required file review |
+| `1` | Operational failure, required context unavailable, deadline exhaustion, or incomplete required file review |
 | `2` | Usage/configuration error |
 | `3` | Completed review meets the explicit finding failure threshold |
 | `4` | Selected VCS/reporter capability unavailable |
@@ -156,7 +191,7 @@ Terminal data is control-character filtered, bounded, and credential-redacted be
 
 `--fail-on high` includes high and critical findings. Incomplete reviews fail regardless of the finding threshold. Reporter failure cannot erase review artifacts or stop other reporters. Preflight configuration failure stops before review execution.
 
-SIGINT and SIGTERM cancel capture and active harness processes. Unix uses process-group termination; Windows uses the OS process-tree termination tool for the spawned process IDs. No shell is used to launch a harness. Node-based npm harness shims are resolved to their installed JavaScript entrypoints rather than executing Windows command scripts. Temporary Git/harness scratch directories are removed on handled exit paths. Interrupted runs can retain partial artifacts and `status.json`; they are never presented as complete reviews. Force-killing the Redline process cannot guarantee cleanup.
+SIGINT and SIGTERM cancel capture, active indexers, and active harness processes. Unix uses process-group termination; Windows uses the OS process-tree termination tool for the spawned process IDs. No shell is used to launch a harness. Node-based npm harness shims are resolved to their installed JavaScript entrypoints rather than executing Windows command scripts. Temporary Git/harness scratch directories are removed on handled exit paths. Interrupted runs can retain partial artifacts and `status.json`; they are never presented as complete reviews. Force-killing the Redline process cannot guarantee cleanup.
 
 ## Bounds and trust
 

@@ -31,7 +31,7 @@ async function fixture() {
   let runs = 0;
   const run = async (args: string[] = [], overrides: NodeJS.ProcessEnv = {}) => {
     const output = join(root, `output-${runs++}`); const stdout: string[] = []; const stderr: string[] = [];
-    const code = await main(['review', '--harness', 'echo', '--output', output, ...args], { ...env, ...overrides }, {
+    const code = await main(['review', '--harness', 'echo', '--indexing', 'disabled', '--output', output, ...args], { ...env, ...overrides }, {
       cwd: repository, stdout: (line) => { stdout.push(line); }, stderr: (line) => { stderr.push(line); },
     });
     return { code, output, stdout: stdout.join('\n'), stderr: stderr.join('\n') };
@@ -207,7 +207,7 @@ describe('local Git review CLI', () => {
     const watcher = watch(f.root, (_event, filename) => { if (filename === 'harness-pid') controller.abort(); });
     const output = join(f.root, 'cancelled-output');
     try {
-      const code = await main(['review', '--harness', 'pi', '--provider', 'mock', '--endpoint', 'http://127.0.0.1:1/v1', '--model', 'fixture', '--auth', 'none',
+      const code = await main(['review', '--harness', 'pi', '--indexing', 'disabled', '--provider', 'mock', '--endpoint', 'http://127.0.0.1:1/v1', '--model', 'fixture', '--auth', 'none',
         '--base', f.base, '--head', f.head, '--output', output], { ...f.env, PATH: bin + delimiter + process.env.PATH },
         { cwd: f.repository, signal: controller.signal, stdout: () => {}, stderr: () => {} });
       expect(code).toBe(130);

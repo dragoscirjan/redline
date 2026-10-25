@@ -189,23 +189,29 @@ export class GitRevisionSource implements RevisionSource {
       }
       const bundleDirectory = join(output, 'bundle');
       const sourceDirectory = join(output, 'source');
-      await mkdir(sourceDirectory, { recursive: true });
-      let writtenBytes = 0;
-      let omittedSourceFiles = 0;
-      let inertSubmodules = 0;
-      const links: { path: string; target: string }[] = [];
-      for (const entry of entries(await git.run(['ls-tree', '-r', '-z', head]), false)) {
-        if (entry.mode === '160000') { inertSubmodules += 1; continue; }
-        const size = Number(decode.decode(await git.run(['cat-file', '-s', entry.oid])).trim());
-        if (!Number.isSafeInteger(size) || size > 128 * 1024) { omittedSourceFiles += 1; continue; }
-        const data = await git.run(['cat-file', 'blob', entry.oid]);
-        writtenBytes += data.length;
-        if (writtenBytes > MAX_TOTAL_BYTES) throw new LocalOperationError('captured source exceeded its total byte limit');
-        if (entry.mode === '120000') { links.push({ path: entry.path, target: decode.decode(data) }); continue; }
-        const destination = join(sourceDirectory, entry.path);
-        await mkdir(dirname(destination), { recursive: true });
-        await writeFile(destination, data, { flag: 'wx' });
-      }
+      const exportSnapshot = async (revision: string, directory: string, sanitize = false) => {
+        await mkdir(directory, { recursive: true });
+        let writtenBytes = 0;
+        let omittedSourceFiles = 0;
+        let inertSubmodules = 0;
+        const links: { path: string; target: string }[] = [];
+        const controls = new Set(['.codegraphcontext', '.gitnexus', '.cgcignore', '.gitnexusignore', '.gitnexusrc']);
+        for (const entry of entries(await git.run(['ls-tree', '-r', '-z', revision]), false)) {
+          if (sanitize && entry.path.split('/').some((part) => controls.has(part))) continue;
+          if (entry.mode === '160000') { inertSubmodules += 1; continue; }
+          const size = Number(decode.decode(await git.run(['cat-file', '-s', entry.oid])).trim());
+          if (!Number.isSafeInteger(size) || size > 128 * 1024) { omittedSourceFiles += 1; continue; }
+          const data = await git.run(['cat-file', 'blob', entry.oid]);
+          writtenBytes += data.length;
+          if (writtenBytes > MAX_TOTAL_BYTES) throw new LocalOperationError('captured source exceeded its total byte limit');
+          if (entry.mode === '120000') { links.push({ path: entry.path, target: decode.decode(data) }); continue; }
+          const destination = join(directory, entry.path);
+          await mkdir(dirname(destination), { recursive: true });
+          await writeFile(destination, data, { flag: 'wx' });
+        }
+        return { omittedSourceFiles, inertSubmodules, links };
+      };
+      const { omittedSourceFiles, inertSubmodules, links } = await exportSnapshot(head, sourceDirectory);
       let bundleBytes = 0;
       const commands: BundleGit = {
         run: (args) => git.run(args),
@@ -221,14 +227,29 @@ export class GitRevisionSource implements RevisionSource {
       };
       await buildBundle({ base, head, output: bundleDirectory, sourceDirectory: null, eligibilityPolicyFile: null,
         policyBase: options.target.kind === 'worktree' ? requestedBase : base }, scratch, commands);
+      const commonDirectory = await realpath(resolve(root, decode.decode(await original.run(['rev-parse', '--git-common-dir'])).trim()));
+      const repositoryIdentity = `local/${digest(Buffer.from(commonDirectory))}`;
       const coverage = { excludedUntrackedFiles: ignoredUntracked.length, omittedSourceFiles, inertSymlinks: links.length, inertSubmodules };
       await writeFile(join(output, 'capture.json'), `${JSON.stringify({
-        version: 1, vcs: 'git', requestedBase, requestedHead, base, head, target: options.target,
+        version: 1, vcs: 'git', repositoryIdentity, requestedBase, requestedHead, base, head, target: options.target,
         ...(capturedIndex === undefined ? {} : { indexDigest: capturedIndex }), excludedUntracked: ignoredUntracked,
         symlinks: links, coverage,
       }, null, 2)}\n`);
-      await rm(scratch, { recursive: true, force: true });
-      return { reviewDirectory: bundleDirectory, sourceDirectory, coverage, dispose: async () => {} };
+      let prepared: Promise<{ baseDirectory: string; headDirectory: string }> | undefined;
+      return {
+        reviewDirectory: bundleDirectory, sourceDirectory, coverage,
+        contextSnapshot: {
+          repository: repositoryIdentity, base, head,
+          prepareSources: () => prepared ??= (async () => {
+            const baseDirectory = join(output, 'index', 'base');
+            const headDirectory = join(output, 'index', 'head');
+            await exportSnapshot(base, baseDirectory, true);
+            await exportSnapshot(head, headDirectory, true);
+            return { baseDirectory, headDirectory };
+          })(),
+        },
+        dispose: () => rm(scratch, { recursive: true, force: true }),
+      };
     } catch (error) {
       await rm(scratch, { recursive: true, force: true });
       throw error;

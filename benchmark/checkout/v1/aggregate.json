@@ -1,11 +1,16 @@
 {
   "version": 1,
   "kind": "checkout-benchmark-aggregate",
-  "status": "pending",
+  "status": "complete",
   "profileDigest": "c3ea2610a70a62b4c620e7d561e3d839cb08c0e3e6884ac7071aff1fc7e68c7a",
-  "capturedAt": null,
-  "runUrl": null,
-  "environment": null,
+  "capturedAt": "2026-10-25T13:08:45.644Z",
+  "runUrl": "https://github.com/dragoscirjan/redline/actions/runs/40194071271",
+  "environment": {
+    "runnerOs": "Linux",
+    "architecture": "x64",
+    "gitVersion": "git version 2.55.0",
+    "nodeVersion": "v24.21.0"
+  },
   "repositories": [
     {
       "id": "redline-small",
@@ -24,18 +29,514 @@
       "head": "86db3b69224f75a786f815684bc96fc0eb5d9300"
     }
   ],
-  "strategies": [],
+  "strategies": [
+    {
+      "repositoryId": "redline-small",
+      "strategy": "full",
+      "equivalent": true,
+      "checkoutMs": {
+        "samples": 5,
+        "minimum": 488,
+        "p50NearestRank": 539,
+        "p95NearestRank": 593,
+        "maximum": 593
+      },
+      "fetchMs": {
+        "samples": 5,
+        "minimum": 481,
+        "p50NearestRank": 559,
+        "p95NearestRank": 597,
+        "maximum": 597
+      },
+      "objectHydrationMs": {
+        "samples": 5,
+        "minimum": 0,
+        "p50NearestRank": 2,
+        "p95NearestRank": 18,
+        "maximum": 18
+      },
+      "bundleMs": {
+        "samples": 5,
+        "minimum": 348,
+        "p50NearestRank": 352,
+        "p95NearestRank": 367,
+        "maximum": 367
+      },
+      "indexSourceMs": {
+        "samples": 5,
+        "minimum": 68,
+        "p50NearestRank": 69,
+        "p95NearestRank": 71,
+        "maximum": 71
+      },
+      "criticalPathMs": {
+        "samples": 5,
+        "minimum": 1401,
+        "p50NearestRank": 1520,
+        "p95NearestRank": 1598,
+        "maximum": 1598
+      },
+      "checkoutObjectBytes": {
+        "samples": 5,
+        "minimum": 1810165,
+        "p50NearestRank": 1810165,
+        "p95NearestRank": 1810165,
+        "maximum": 1810165
+      },
+      "fetchObjectBytes": {
+        "samples": 5,
+        "minimum": 1878843,
+        "p50NearestRank": 1878843,
+        "p95NearestRank": 1878843,
+        "maximum": 1878843
+      },
+      "indexSourceObjectBytes": {
+        "samples": 5,
+        "minimum": 0,
+        "p50NearestRank": 0,
+        "p95NearestRank": 0,
+        "maximum": 0
+      },
+      "bundleObjectBytes": {
+        "samples": 5,
+        "minimum": 0,
+        "p50NearestRank": 0,
+        "p95NearestRank": 0,
+        "maximum": 0
+      },
+      "finalObjectBytes": {
+        "samples": 5,
+        "minimum": 3689008,
+        "p50NearestRank": 3689008,
+        "p95NearestRank": 3689008,
+        "maximum": 3689008
+      }
+    },
+    {
+      "repositoryId": "redline-small",
+      "strategy": "shallow",
+      "equivalent": true,
+      "checkoutMs": {
+        "samples": 5,
+        "minimum": 488,
+        "p50NearestRank": 519,
+        "p95NearestRank": 570,
+        "maximum": 570
+      },
+      "fetchMs": {
+        "samples": 5,
+        "minimum": 1694,
+        "p50NearestRank": 1706,
+        "p95NearestRank": 1872,
+        "maximum": 1872
+      },
+      "objectHydrationMs": {
+        "samples": 5,
+        "minimum": 0,
+        "p50NearestRank": 2,
+        "p95NearestRank": 8,
+        "maximum": 8
+      },
+      "bundleMs": {
+        "samples": 5,
+        "minimum": 347,
+        "p50NearestRank": 355,
+        "p95NearestRank": 361,
+        "maximum": 361
+      },
+      "indexSourceMs": {
+        "samples": 5,
+        "minimum": 67,
+        "p50NearestRank": 71,
+        "p95NearestRank": 72,
+        "maximum": 72
+      },
+      "criticalPathMs": {
+        "samples": 5,
+        "minimum": 2617,
+        "p50NearestRank": 2648,
+        "p95NearestRank": 2864,
+        "maximum": 2864
+      },
+      "checkoutObjectBytes": {
+        "samples": 5,
+        "minimum": 780701,
+        "p50NearestRank": 780701,
+        "p95NearestRank": 780701,
+        "maximum": 780701
+      },
+      "fetchObjectBytes": {
+        "samples": 5,
+        "minimum": 1572982,
+        "p50NearestRank": 1572982,
+        "p95NearestRank": 1572982,
+        "maximum": 1572982
+      },
+      "indexSourceObjectBytes": {
+        "samples": 5,
+        "minimum": 0,
+        "p50NearestRank": 0,
+        "p95NearestRank": 0,
+        "maximum": 0
+      },
+      "bundleObjectBytes": {
+        "samples": 5,
+        "minimum": 0,
+        "p50NearestRank": 0,
+        "p95NearestRank": 0,
+        "maximum": 0
+      },
+      "finalObjectBytes": {
+        "samples": 5,
+        "minimum": 2353683,
+        "p50NearestRank": 2353683,
+        "p95NearestRank": 2353683,
+        "maximum": 2353683
+      }
+    },
+    {
+      "repositoryId": "redline-small",
+      "strategy": "partial",
+      "equivalent": true,
+      "checkoutMs": {
+        "samples": 5,
+        "minimum": 788,
+        "p50NearestRank": 815,
+        "p95NearestRank": 895,
+        "maximum": 895
+      },
+      "fetchMs": {
+        "samples": 5,
+        "minimum": 315,
+        "p50NearestRank": 336,
+        "p95NearestRank": 455,
+        "maximum": 455
+      },
+      "objectHydrationMs": {
+        "samples": 5,
+        "minimum": 510,
+        "p50NearestRank": 542,
+        "p95NearestRank": 696,
+        "maximum": 696
+      },
+      "bundleMs": {
+        "samples": 5,
+        "minimum": 346,
+        "p50NearestRank": 353,
+        "p95NearestRank": 358,
+        "maximum": 358
+      },
+      "indexSourceMs": {
+        "samples": 5,
+        "minimum": 67,
+        "p50NearestRank": 69,
+        "p95NearestRank": 70,
+        "maximum": 70
+      },
+      "criticalPathMs": {
+        "samples": 5,
+        "minimum": 2043,
+        "p50NearestRank": 2112,
+        "p95NearestRank": 2467,
+        "maximum": 2467
+      },
+      "checkoutObjectBytes": {
+        "samples": 5,
+        "minimum": 1074173,
+        "p50NearestRank": 1074173,
+        "p95NearestRank": 1074173,
+        "maximum": 1074173
+      },
+      "fetchObjectBytes": {
+        "samples": 5,
+        "minimum": 287892,
+        "p50NearestRank": 287892,
+        "p95NearestRank": 287892,
+        "maximum": 287892
+      },
+      "indexSourceObjectBytes": {
+        "samples": 5,
+        "minimum": 127315,
+        "p50NearestRank": 127315,
+        "p95NearestRank": 127315,
+        "maximum": 127315
+      },
+      "bundleObjectBytes": {
+        "samples": 5,
+        "minimum": 54706,
+        "p50NearestRank": 54706,
+        "p95NearestRank": 54706,
+        "maximum": 54706
+      },
+      "finalObjectBytes": {
+        "samples": 5,
+        "minimum": 1544086,
+        "p50NearestRank": 1544086,
+        "p95NearestRank": 1544086,
+        "maximum": 1544086
+      }
+    },
+    {
+      "repositoryId": "vscode-large",
+      "strategy": "full",
+      "equivalent": true,
+      "checkoutMs": {
+        "samples": 5,
+        "minimum": 58287,
+        "p50NearestRank": 60043,
+        "p95NearestRank": 66072,
+        "maximum": 66072
+      },
+      "fetchMs": {
+        "samples": 5,
+        "minimum": 72718,
+        "p50NearestRank": 73033,
+        "p95NearestRank": 73603,
+        "maximum": 73603
+      },
+      "objectHydrationMs": {
+        "samples": 5,
+        "minimum": 0,
+        "p50NearestRank": 0,
+        "p95NearestRank": 147,
+        "maximum": 147
+      },
+      "bundleMs": {
+        "samples": 5,
+        "minimum": 3107,
+        "p50NearestRank": 3144,
+        "p95NearestRank": 3200,
+        "maximum": 3200
+      },
+      "indexSourceMs": {
+        "samples": 5,
+        "minimum": 4483,
+        "p50NearestRank": 4523,
+        "p95NearestRank": 4634,
+        "maximum": 4634
+      },
+      "criticalPathMs": {
+        "samples": 5,
+        "minimum": 138749,
+        "p50NearestRank": 141015,
+        "p95NearestRank": 146676,
+        "maximum": 146676
+      },
+      "checkoutObjectBytes": {
+        "samples": 5,
+        "minimum": 1476409598,
+        "p50NearestRank": 1520343159,
+        "p95NearestRank": 1520884360,
+        "maximum": 1520884360
+      },
+      "fetchObjectBytes": {
+        "samples": 5,
+        "minimum": 1521420855,
+        "p50NearestRank": 1521420855,
+        "p95NearestRank": 1521420855,
+        "maximum": 1521420855
+      },
+      "indexSourceObjectBytes": {
+        "samples": 5,
+        "minimum": 0,
+        "p50NearestRank": 0,
+        "p95NearestRank": 0,
+        "maximum": 0
+      },
+      "bundleObjectBytes": {
+        "samples": 5,
+        "minimum": 0,
+        "p50NearestRank": 0,
+        "p95NearestRank": 0,
+        "maximum": 0
+      },
+      "finalObjectBytes": {
+        "samples": 5,
+        "minimum": 2997830453,
+        "p50NearestRank": 3041764014,
+        "p95NearestRank": 3042305215,
+        "maximum": 3042305215
+      }
+    },
+    {
+      "repositoryId": "vscode-large",
+      "strategy": "shallow",
+      "equivalent": false,
+      "checkoutMs": {
+        "samples": 5,
+        "minimum": 8983,
+        "p50NearestRank": 9099,
+        "p95NearestRank": 9342,
+        "maximum": 9342
+      },
+      "fetchMs": {
+        "samples": 5,
+        "minimum": 19637,
+        "p50NearestRank": 19883,
+        "p95NearestRank": 20372,
+        "maximum": 20372
+      },
+      "objectHydrationMs": {
+        "samples": 5,
+        "minimum": 0,
+        "p50NearestRank": 0,
+        "p95NearestRank": 54,
+        "maximum": 54
+      },
+      "bundleMs": {
+        "samples": 5,
+        "minimum": 2917,
+        "p50NearestRank": 3019,
+        "p95NearestRank": 3488,
+        "maximum": 3488
+      },
+      "indexSourceMs": {
+        "samples": 5,
+        "minimum": 4279,
+        "p50NearestRank": 4317,
+        "p95NearestRank": 4563,
+        "maximum": 4563
+      },
+      "criticalPathMs": {
+        "samples": 5,
+        "minimum": 36101,
+        "p50NearestRank": 36181,
+        "p95NearestRank": 37245,
+        "maximum": 37245
+      },
+      "checkoutObjectBytes": {
+        "samples": 5,
+        "minimum": 71893579,
+        "p50NearestRank": 71894121,
+        "p95NearestRank": 71902367,
+        "maximum": 71902367
+      },
+      "fetchObjectBytes": {
+        "samples": 5,
+        "minimum": 84673711,
+        "p50NearestRank": 156630879,
+        "p95NearestRank": 156642322,
+        "maximum": 156642322
+      },
+      "indexSourceObjectBytes": {
+        "samples": 5,
+        "minimum": 0,
+        "p50NearestRank": 0,
+        "p95NearestRank": 0,
+        "maximum": 0
+      },
+      "bundleObjectBytes": {
+        "samples": 5,
+        "minimum": 0,
+        "p50NearestRank": 0,
+        "p95NearestRank": 0,
+        "maximum": 0
+      },
+      "finalObjectBytes": {
+        "samples": 5,
+        "minimum": 156567290,
+        "p50NearestRank": 228525000,
+        "p95NearestRank": 228536443,
+        "maximum": 228536443
+      }
+    },
+    {
+      "repositoryId": "vscode-large",
+      "strategy": "partial",
+      "equivalent": false,
+      "checkoutMs": {
+        "samples": 5,
+        "minimum": 24741,
+        "p50NearestRank": 25038,
+        "p95NearestRank": 25902,
+        "maximum": 25902
+      },
+      "fetchMs": {
+        "samples": 5,
+        "minimum": 21339,
+        "p50NearestRank": 22774,
+        "p95NearestRank": 22946,
+        "maximum": 22946
+      },
+      "objectHydrationMs": {
+        "samples": 5,
+        "minimum": 4630,
+        "p50NearestRank": 4695,
+        "p95NearestRank": 5067,
+        "maximum": 5067
+      },
+      "bundleMs": {
+        "samples": 5,
+        "minimum": 2948,
+        "p50NearestRank": 3127,
+        "p95NearestRank": 3506,
+        "maximum": 3506
+      },
+      "indexSourceMs": {
+        "samples": 5,
+        "minimum": 4293,
+        "p50NearestRank": 4307,
+        "p95NearestRank": 4478,
+        "maximum": 4478
+      },
+      "criticalPathMs": {
+        "samples": 5,
+        "minimum": 58130,
+        "p50NearestRank": 60003,
+        "p95NearestRank": 61240,
+        "maximum": 61240
+      },
+      "checkoutObjectBytes": {
+        "samples": 5,
+        "minimum": 397244150,
+        "p50NearestRank": 397272884,
+        "p95NearestRank": 397279839,
+        "maximum": 397279839
+      },
+      "fetchObjectBytes": {
+        "samples": 5,
+        "minimum": 324112182,
+        "p50NearestRank": 324112182,
+        "p95NearestRank": 324810756,
+        "maximum": 324810756
+      },
+      "indexSourceObjectBytes": {
+        "samples": 5,
+        "minimum": 2500381,
+        "p50NearestRank": 2500381,
+        "p95NearestRank": 2500381,
+        "maximum": 2500381
+      },
+      "bundleObjectBytes": {
+        "samples": 5,
+        "minimum": 1062648,
+        "p50NearestRank": 1062648,
+        "p95NearestRank": 1062966,
+        "maximum": 1062966
+      },
+      "finalObjectBytes": {
+        "samples": 5,
+        "minimum": 724919361,
+        "p50NearestRank": 724948413,
+        "p95NearestRank": 725653624,
+        "maximum": 725653624
+      }
+    }
+  ],
   "decision": {
-    "status": "pending",
-    "selectedStrategy": null,
-    "fastestStrategy": null,
-    "largeRepositoryId": null,
-    "savedMs": null,
-    "savedPercent": null,
+    "status": "retain-full",
+    "selectedStrategy": "full",
+    "fastestStrategy": "full",
+    "largeRepositoryId": "vscode-large",
+    "savedMs": 0,
+    "savedPercent": 0,
     "material": false,
     "cacheEvaluation": "not-eligible",
-    "rejectedStrategies": [],
-    "reason": "The manual GitHub-hosted benchmark must run after this workflow is available on the default branch."
+    "rejectedStrategies": [
+      "shallow",
+      "partial"
+    ],
+    "reason": "Full checkout is retained because shallow and partial changed authoritative output on at least one repository."
   },
   "limitations": [
     "GitHub-hosted network and server load vary; five nearest-rank samples provide bounded evidence, not a universal latency guarantee.",

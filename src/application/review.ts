@@ -10,9 +10,17 @@ export type ReviewEvent =
   | { readonly kind: 'completed' }
   | { readonly kind: 'failed' };
 
+export interface CaptureCoverage {
+  readonly excludedUntrackedFiles: number;
+  readonly omittedSourceFiles: number;
+  readonly inertSymlinks: number;
+  readonly inertSubmodules: number;
+}
+
 export interface CapturedRevision {
   readonly reviewDirectory: string;
   readonly sourceDirectory: string;
+  readonly coverage?: CaptureCoverage;
   dispose(): Promise<void>;
 }
 
@@ -20,11 +28,20 @@ export interface RevisionSource {
   capture(signal: AbortSignal): Promise<CapturedRevision>;
 }
 
+/** Publication-safe projection; raw per-file model output never reaches reporters. */
+export interface ReviewReport {
+  readonly review: ReviewRunResult['review'];
+  readonly summary: ReviewRunResult['summary'];
+  readonly outputDirectory: string;
+  readonly captureCoverage?: CaptureCoverage;
+  readonly omissions: readonly { readonly path: string; readonly errorKind: string }[];
+}
+
 export interface ReviewReporter {
   readonly id: string;
   preflight(): Promise<void>;
   progress(event: ReviewEvent): void;
-  complete(result: ReviewRunResult): Promise<void>;
+  complete(result: ReviewReport): Promise<void>;
 }
 
 /** Reporting failures are isolated; a failed preflight still aborts before capture. */
@@ -38,12 +55,14 @@ export class CompositeReporter implements ReviewReporter {
   }
   progress(event: ReviewEvent): void {
     for (const reporter of this.reporters) {
-      try { reporter.progress(event); } catch { this.failures.add(reporter.id); }
+      try { reporter.progress({ ...event }); } catch { this.failures.add(reporter.id); }
     }
   }
-  async complete(result: ReviewRunResult): Promise<void> {
+  async complete(result: ReviewReport): Promise<void> {
     for (const reporter of this.reporters) {
-      try { await reporter.complete(result); } catch { this.failures.add(reporter.id); }
+      // Each adapter gets its own copy. One reporter cannot change another
+      // reporter's output or the runner's already-written authoritative result.
+      try { await reporter.complete(structuredClone(result)); } catch { this.failures.add(reporter.id); }
     }
   }
 }
@@ -72,8 +91,9 @@ export class ReviewApplication {
     await reporter.preflight();
     signal.throwIfAborted();
     reporter.progress({ kind: 'started' });
-    const captured = await source.capture(signal);
+    let captured: CapturedRevision | undefined;
     try {
+      captured = await source.capture(signal);
       signal.throwIfAborted();
       const result = await (this.dependencies.execute ?? executePreparedReview)({
         environment: { ...command.environment, reviewDirectory: captured.reviewDirectory, sourceDirectory: captured.sourceDirectory },
@@ -82,14 +102,20 @@ export class ReviewApplication {
         onFileDone: ({ fileId, outcome }) => reporter.progress({ kind: 'file-completed', fileId, outcome }),
       });
       signal.throwIfAborted();
-      await reporter.complete(result);
+      await reporter.complete({
+        review: result.review, summary: result.summary, outputDirectory: result.outputDirectory,
+        ...(captured.coverage === undefined ? {} : { captureCoverage: captured.coverage }),
+        omissions: result.records.filter((record) => record.outcome === 'omitted').map((record) => ({
+          path: record.path, errorKind: record.errorKind ?? 'omitted',
+        })),
+      });
       reporter.progress({ kind: 'completed' });
       return result;
     } catch (error) {
       reporter.progress({ kind: 'failed' });
       throw error;
     } finally {
-      await captured.dispose();
+      await captured?.dispose();
     }
   }
 }

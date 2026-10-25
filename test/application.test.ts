@@ -53,6 +53,27 @@ describe('portable review application', () => {
     } finally { await fixture.cleanup(); }
   });
 
+  it('isolates reporter mutation and never passes raw per-file model output', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo')).review!;
+      const bad = reporter('mutator');
+      bad.complete = async (view) => { Object.defineProperty(view.summary, 'findings', { value: 999 }); };
+      const good = reporter('good');
+      good.complete = vi.fn(async (view) => {
+        expect(view.summary.findings).toBe(0);
+        expect(Object.hasOwn(view, 'records')).toBe(false);
+        expect(JSON.stringify(view)).not.toContain('rawModelOutput');
+      });
+      const result = await new ReviewApplication({
+        source: { capture: async () => ({ reviewDirectory: fixture.review, sourceDirectory: fixture.source, dispose: async () => {} }) },
+        reporter: new CompositeReporter([bad, good]),
+      }).run({ environment }, new AbortController().signal);
+      expect(result.summary.findings).toBe(0);
+      expect(good.complete).toHaveBeenCalledOnce();
+    } finally { await fixture.cleanup(); }
+  });
+
   it('distinguishes planned capabilities from unknown IDs and never falls back', () => {
     expect(() => requireCapability('vcs', 'git')).not.toThrow();
     for (const id of ['jj', 'mercurial']) expect(() => requireCapability('vcs', id)).toThrow('not implemented');

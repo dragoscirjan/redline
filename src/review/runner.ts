@@ -56,7 +56,7 @@ import {
   type ReviewRunSummaryFile,
   type ValidatedFinding,
 } from './types.ts';
-import { createReviewWriter, type FollowUpArtifact, type VerificationArtifact } from './writer.ts';
+import { createReviewWriter, type ReviewWriter, type FollowUpArtifact, type VerificationArtifact } from './writer.ts';
 
 export const VERIFICATION_TIMEOUT_MS = 10 * 60 * 1_000;
 
@@ -76,6 +76,8 @@ export interface FileHarnessOutputEvent extends HarnessOutputLine, FileReviewIde
 
 export interface ReviewRunInput {
   readonly environment: ReviewEnvironment;
+  /** Artifact port; defaults to the deterministic filesystem writer. */
+  readonly writer?: ReviewWriter;
   /** Executor override for tests; defaults to the registry for the harness. */
   readonly executor?: HarnessExecutor | undefined;
   /** Enables the fail-closed verifier during benchmark evaluation before publication rollout. */
@@ -726,7 +728,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
   const runDeadlineAtMs = runStartedAtMs + environment.runTimeout.milliseconds;
   const bundle = await loadReviewBundle(environment.reviewDirectory, environment.sourceDirectory);
   const indexedContext = await loadReviewCodeContext(bundle, environment.codeContext);
-  const writer = createReviewWriter(environment.outputDirectory);
+  const writer = input.writer ?? createReviewWriter(environment.outputDirectory);
   const executor = input.executor ?? createHarnessExecutor(environment.harness);
   // Independent verification is not active in production. Keep its shared
   // follow-up budgets manifest-ordered until the activation gate permits a

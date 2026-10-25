@@ -1,6 +1,6 @@
 # redline
 
-Redline is currently an automated pull request code reviewer for GitHub. It reviews a pull request's diff with a fixed policy and publishes a managed summary plus bounded inline comments.
+Redline is currently an automated pull request code reviewer for GitHub. A configured review analyzes a pull request's diff with a fixed policy, writes deterministic artifacts, and, when publication credentials are supplied, publishes a managed summary plus bounded inline comments.
 
 ## How it works
 

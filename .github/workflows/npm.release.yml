@@ -1,0 +1,73 @@
+name: Release npm CLI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact package.json version (immutable)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-cli-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'dragoscirjan/redline' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm-release
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - name: Check out trusted source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Require successful CI for this exact main commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run list --workflow ci.yml --branch main --commit "$GITHUB_SHA" --limit 1 \
+            --json status,conclusion > "$RUNNER_TEMP/release-ci.json"
+          node --input-type=module - "$RUNNER_TEMP/release-ci.json" <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const runs = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          if (runs.length !== 1 || runs[0].status !== 'completed' || runs[0].conclusion !== 'success') {
+            throw new Error('the exact main commit must pass CI, including all harness jobs');
+          }
+          NODE
+
+      - name: Check immutable npm version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: node src/release/npm-check.ts "$VERSION"
+
+      - name: Install development dependencies
+        uses: ./.github/actions/install-dependencies
+        with:
+          telemetry-label: npm-release
+
+      - name: Validate source and installed package
+        run: |
+          pnpm run typecheck
+          pnpm test
+          pnpm run docs
+
+      - name: Publish with npm trusted publishing
+        run: npm publish --ignore-scripts --provenance --access public

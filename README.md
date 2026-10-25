@@ -1,16 +1,31 @@
 # redline
 
-Redline is currently an automated pull request code reviewer for GitHub. A configured review analyzes a pull request's diff with a fixed policy, writes deterministic artifacts, and, when publication credentials are supplied, publishes a managed summary plus bounded inline comments.
+Redline reviews Git changes locally or through its GitHub Action. It uses a fixed review policy, validates findings against the diff, and writes JSON and Markdown artifacts. When publication credentials are supplied, the GitHub integration can also publish a managed summary and bounded inline comments.
 
 ## How it works
 
 The review fetches the pull request's base and head commits as Git data, builds a bounded context bundle, and runs Pi or OpenCode with tools disabled and isolated generated configuration. Findings are schema-validated, mapped to the reviewed diff, and published through a host-side GitHub client. Pull request code is never checked out or executed.
+
+## Local Git reviews
+
+The `redline review` CLI needs no GitHub repository, pull request, remote URL, or publication token. It supports branch comparisons and staged/unstaged changes, with a terminal reporter and deterministic review artifacts.
+
+```bash
+# Source-checkout smoke tests; echo does not perform model-based review.
+node bin/redline.mjs review --base main --head feature --harness echo
+node bin/redline.mjs review --worktree all --harness echo
+```
+
+The npm distribution is `@dragoscirjan/redline` for Node.js 24, published only through an approved manual release. Pi/OpenCode binaries are installed separately. See [Local CLI](docs/local-cli.md) for configuration, credentials, output bounds, and exit statuses, and [Portable architecture](docs/portable-architecture.md) for adapter boundaries. Future VCS/reporter values are recognized but fail explicitly until implemented.
 
 ## Adoption
 
 Call the reusable review workflow from a `pull_request_target` workflow in your repository. See [docs/reusable-review-workflow.md](docs/reusable-review-workflow.md) for the caller pattern, secret mapping, and version pinning.
 
 Product documentation:
+
+- [Local Git CLI](docs/local-cli.md)
+- [Portable application architecture](docs/portable-architecture.md)
 
 - [GitHub composite action contract](docs/github-composite-action.md)
 - [Reusable review workflow](docs/reusable-review-workflow.md)

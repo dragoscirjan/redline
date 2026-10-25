@@ -14,6 +14,12 @@
  */
 
 import { byteLength, isRecord } from '../review/bundle.ts';
+import {
+  COMPLETED_SUMMARY_HEADING,
+  FAILED_SUMMARY_HEADING,
+  FILE_REVIEW_HEADING_PREFIX,
+  RUNNING_SUMMARY_HEADING,
+} from './headings.ts';
 import type { FileReviewPublication, ReviewPublisher, ReviewScope } from './types.ts';
 
 const API_ROOT = 'https://api.github.com';
@@ -67,15 +73,27 @@ function trailingMarker(body: string, marker: string): boolean {
   return body.trimEnd().split(/\r?\n/u).at(-1) === marker;
 }
 
+const MANAGED_SUMMARY_HEADINGS = new Set([
+  RUNNING_SUMMARY_HEADING,
+  FAILED_SUMMARY_HEADING,
+  COMPLETED_SUMMARY_HEADING,
+]);
+
+function firstContentLine(body: string): string {
+  return body.split(/\r?\n/u).find((line) => line.trim().length > 0) ?? '';
+}
+
 /**
- * Every managed body opens with a `## Redline review…` heading. When the
- * actor is unknown, marker plus this heading is the adoption contract —
- * a comment that carries the marker but no managed heading is never
- * touched.
+ * Actor-unavailable adoption accepts only headings emitted by Redline.
+ * A marker with a lookalike or unrelated heading remains foreign content.
  */
-function isManagedHeading(body: string): boolean {
-  const first = body.split(/\r?\n/u).find((line) => line.trim().length > 0) ?? '';
-  return first.startsWith('## Redline review');
+function isManagedSummaryHeading(body: string): boolean {
+  return MANAGED_SUMMARY_HEADINGS.has(firstContentLine(body));
+}
+
+function isManagedFileReviewHeading(body: string): boolean {
+  const heading = firstContentLine(body);
+  return heading.startsWith(FILE_REVIEW_HEADING_PREFIX) && heading.length > FILE_REVIEW_HEADING_PREFIX.length;
 }
 
 function parseActor(value: unknown, label: string): GitHubActor {
@@ -178,7 +196,7 @@ export class GitHubReviewPublisher implements ReviewPublisher {
       const matches = comments.filter(
         (comment) =>
           trailingMarker(comment.body, marker) &&
-          (actor === undefined ? isManagedHeading(comment.body) : comment.user.id === actor.id),
+          (actor === undefined ? isManagedSummaryHeading(comment.body) : comment.user.id === actor.id),
       );
       if (matches.length > 1) throw new Error('managed summary ownership is ambiguous');
       return matches[0];
@@ -226,7 +244,7 @@ export class GitHubReviewPublisher implements ReviewPublisher {
       const matches = reviews.filter(
         (review) =>
           trailingMarker(review.body, publication.marker) &&
-          (actor === undefined ? isManagedHeading(review.body) : review.user.id === actor.id),
+          (actor === undefined ? isManagedFileReviewHeading(review.body) : review.user.id === actor.id),
       );
       if (matches.length > 1) throw new Error('managed file review ownership is ambiguous');
       return matches[0];

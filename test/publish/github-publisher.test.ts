@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { GitHubReviewPublisher } from '../../src/publish/github-publisher.ts';
+import {
+  COMPLETED_SUMMARY_HEADING,
+  FAILED_SUMMARY_HEADING,
+  RUNNING_SUMMARY_HEADING,
+} from '../../src/publish/headings.ts';
 import type { FileReviewPublication, ReviewScope } from '../../src/publish/types.ts';
 
 const HEAD = 'b'.repeat(40);
@@ -7,6 +12,9 @@ const SCOPE: ReviewScope = { repository: 'owner/repository', pullRequest: 14, he
 
 const SUMMARY_MARKER = `<!-- redline:summary:v2 repository=owner%2Frepository pr=14 -->`;
 const FILE_MARKER = `<!-- redline:file:v1 file=000001 head=${HEAD} -->`;
+const RUNNING_SUMMARY = `${RUNNING_SUMMARY_HEADING}\n\n${SUMMARY_MARKER}`;
+const FAILED_SUMMARY = `${FAILED_SUMMARY_HEADING}\n\n${SUMMARY_MARKER}`;
+const COMPLETED_SUMMARY = `${COMPLETED_SUMMARY_HEADING}\n\n${SUMMARY_MARKER}`;
 
 interface ExpectedRequest {
   path: string;
@@ -196,7 +204,58 @@ describe('GitHubReviewPublisher', () => {
     await expect(publisher.upsertSummary(SCOPE, `summary\n${SUMMARY_MARKER}`, SUMMARY_MARKER)).resolves.toBe(9);
   });
 
-  it('adopts a marker-managed summary across runs without an identity', async () => {
+  it('updates one App-managed summary across sequential runs without an identity', async () => {
+    const unresolvedActor: ExpectedRequest = {
+      path: '/user',
+      method: 'GET',
+      status: 403,
+      body: { message: 'Resource not accessible by integration', status: '403' },
+    };
+    const listComments = (body: string | undefined): ExpectedRequest => ({
+      path: '/repos/owner/repository/issues/14/comments?per_page=100&page=1',
+      method: 'GET',
+      status: 200,
+      body: body === undefined ? [] : [{ id: 9, body, user: { id: 901, login: 'my-app[bot]' } }],
+    });
+    const updateComment = (body: string): ExpectedRequest => ({
+      path: '/repos/owner/repository/issues/comments/9',
+      method: 'PATCH',
+      status: 200,
+      body: { id: 9, body, user: { id: 901, login: 'my-app[bot]' } },
+    });
+    const queue = queuedFetch([
+      unresolvedActor,
+      listComments(undefined),
+      {
+        path: '/repos/owner/repository/issues/14/comments',
+        method: 'POST',
+        status: 201,
+        body: { id: 9, body: RUNNING_SUMMARY, user: { id: 901, login: 'my-app[bot]' } },
+      },
+      unresolvedActor,
+      listComments(RUNNING_SUMMARY),
+      updateComment(COMPLETED_SUMMARY),
+      unresolvedActor,
+      listComments(COMPLETED_SUMMARY),
+      updateComment(RUNNING_SUMMARY),
+      unresolvedActor,
+      listComments(RUNNING_SUMMARY),
+      updateComment(FAILED_SUMMARY),
+      unresolvedActor,
+      listComments(FAILED_SUMMARY),
+      updateComment(RUNNING_SUMMARY),
+    ]);
+
+    for (const body of [RUNNING_SUMMARY, COMPLETED_SUMMARY, RUNNING_SUMMARY, FAILED_SUMMARY, RUNNING_SUMMARY]) {
+      const publisher = new GitHubReviewPublisher({ token: 'token', fetch: queue.fetch });
+      await expect(publisher.upsertSummary(SCOPE, body, SUMMARY_MARKER)).resolves.toBe(9);
+    }
+
+    expect(queue.requests.filter((request) => request.init?.method === 'POST')).toHaveLength(1);
+    expect(queue.requests.filter((request) => request.init?.method === 'PATCH')).toHaveLength(4);
+  });
+
+  it('never adopts copied markers under unrecognized headings', async () => {
     const queue = queuedFetch([
       {
         path: '/user',
@@ -209,48 +268,25 @@ describe('GitHubReviewPublisher', () => {
         method: 'GET',
         status: 200,
         body: [
-          // An earlier run's managed summary: managed heading + marker,
-          // authored by the app bot (whose id this run cannot resolve).
-          { id: 9, body: `## Redline review in progress\n\n${SUMMARY_MARKER}`, user: { id: 901, login: 'my-app[bot]' } },
+          { id: 54, body: `attacker text\n${SUMMARY_MARKER}`, user: { id: 666, login: 'attacker' } },
+          {
+            id: 55,
+            body: `## Redline review copied by attacker\n\n${SUMMARY_MARKER}`,
+            user: { id: 666, login: 'attacker' },
+          },
         ],
-      },
-      {
-        path: '/repos/owner/repository/issues/comments/9',
-        method: 'PATCH',
-        status: 200,
-        body: { id: 9, body: 'summary', user: { id: 901, login: 'my-app[bot]' } },
-      },
-    ]);
-    const publisher = new GitHubReviewPublisher({ token: 'token', fetch: queue.fetch });
-    await expect(publisher.upsertSummary(SCOPE, `summary\n${SUMMARY_MARKER}`, SUMMARY_MARKER)).resolves.toBe(9);
-    expect(queue.requests.length).toBe(3); // No duplicate POST.
-  });
-
-  it('never adopts a marker comment without the managed heading', async () => {
-    const queue = queuedFetch([
-      {
-        path: '/user',
-        method: 'GET',
-        status: 403,
-        body: { message: 'Resource not accessible by integration', status: '403' },
-      },
-      {
-        path: '/repos/owner/repository/issues/14/comments?per_page=100&page=1',
-        method: 'GET',
-        status: 200,
-        body: [{ id: 55, body: `attacker text\n${SUMMARY_MARKER}`, user: { id: 666, login: 'attacker' } }],
       },
       {
         path: '/repos/owner/repository/issues/14/comments',
         method: 'POST',
         status: 201,
-        body: { id: 9, body: 'summary', user: { id: 901, login: 'my-app[bot]' } },
+        body: { id: 9, body: RUNNING_SUMMARY, user: { id: 901, login: 'my-app[bot]' } },
       },
     ]);
     const publisher = new GitHubReviewPublisher({ token: 'token', fetch: queue.fetch });
     // The foreign marker comment is ignored: a fresh managed summary is
     // created instead of hijacking someone else's comment.
-    await expect(publisher.upsertSummary(SCOPE, `summary\n${SUMMARY_MARKER}`, SUMMARY_MARKER)).resolves.toBe(9);
+    await expect(publisher.upsertSummary(SCOPE, RUNNING_SUMMARY, SUMMARY_MARKER)).resolves.toBe(9);
   });
 
   it('fails closed when several marker-managed summaries exist without an identity', async () => {
@@ -266,8 +302,8 @@ describe('GitHubReviewPublisher', () => {
         method: 'GET',
         status: 200,
         body: [
-          { id: 1, body: `## Redline review in progress\n\n${SUMMARY_MARKER}`, user: { id: 901, login: 'my-app[bot]' } },
-          { id: 2, body: `## Redline review in progress\n\n${SUMMARY_MARKER}`, user: { id: 901, login: 'my-app[bot]' } },
+          { id: 1, body: COMPLETED_SUMMARY, user: { id: 901, login: 'my-app[bot]' } },
+          { id: 2, body: FAILED_SUMMARY, user: { id: 901, login: 'my-app[bot]' } },
         ],
       },
     ]);

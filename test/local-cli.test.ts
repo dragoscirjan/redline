@@ -201,7 +201,7 @@ describe('local Git review CLI', () => {
   it('cancels an active harness and records an incomplete local status', async () => {
     const f = await fixture(); const bin = join(f.root, 'bin'); await mkdir(bin);
     const marker = join(f.root, 'harness-pid');
-    await writeFile(join(bin, 'pi'), `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)}, String(process.pid)); setInterval(() => {}, 1000);\n`);
+    await writeFile(join(bin, 'pi'), `#!${process.execPath}\nconst fs = require('node:fs'); fs.writeFileSync(${JSON.stringify(marker + '.tmp')}, String(process.pid)); fs.renameSync(${JSON.stringify(marker + '.tmp')}, ${JSON.stringify(marker)}); setInterval(() => {}, 1000);\n`);
     await chmod(join(bin, 'pi'), 0o755);
     const controller = new AbortController();
     const watcher = watch(f.root, (_event, filename) => { if (filename === 'harness-pid') controller.abort(); });
@@ -213,6 +213,7 @@ describe('local Git review CLI', () => {
       expect(code).toBe(130);
       expect(JSON.parse(await readFile(join(output, 'status.json'), 'utf8')).status).toBe('cancelled');
       const pid = Number(await readFile(marker, 'utf8'));
+      expect(Number.isSafeInteger(pid) && pid > 0).toBe(true);
       expect(() => process.kill(pid, 0)).toThrow();
     } finally { watcher.close(); }
   });

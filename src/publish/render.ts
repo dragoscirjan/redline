@@ -8,6 +8,12 @@
 
 import { spanLocation } from '../review/remediation.ts';
 import type { FileReviewRecord, PublishedFinding, PullRequestReviewRecord } from '../review/types.ts';
+import {
+  COMPLETED_SUMMARY_HEADING,
+  FAILED_SUMMARY_HEADING,
+  FILE_REVIEW_HEADING_PREFIX,
+  RUNNING_SUMMARY_HEADING,
+} from './headings.ts';
 import type { ReviewScope } from './types.ts';
 
 export function summaryMarker(scope: ReviewScope): string {
@@ -108,7 +114,7 @@ export function renderFileReviewBody(scope: ReviewScope, record: FileReviewRecor
     .map((finding) => `\`${spanLocation(record.path, finding.startLine, finding.endLine)}\``)
     .join(', ');
   const lines = [
-    `## Redline review: ${record.path}`,
+    `${FILE_REVIEW_HEADING_PREFIX}${record.path}`,
     '',
     `- **File id:** ${record.fileId}`,
     `- **Outcome:** ${record.outcome} — ${findings.length} validated finding${findings.length === 1 ? '' : 's'}`,
@@ -136,7 +142,7 @@ export interface RunningSummaryInfo {
  */
 export function renderRunningSummaryBody(scope: ReviewScope, info: RunningSummaryInfo): string {
   const lines = [
-    '## Redline review in progress',
+    RUNNING_SUMMARY_HEADING,
     '',
     `- **Started at:** ${info.startedAt}`,
     `- **Harness:** ${info.harness} (${info.model})`,
@@ -156,7 +162,7 @@ export function renderRunningSummaryBody(scope: ReviewScope, info: RunningSummar
 export function renderFailedSummaryBody(scope: ReviewScope, info: RunningSummaryInfo, message: string): string {
   const bounded = message.slice(0, 500).replaceAll(/[\u0000-\u001f]+/gu, ' ');
   const lines = [
-    '## Redline review failed',
+    FAILED_SUMMARY_HEADING,
     '',
     `- **Started at:** ${info.startedAt}`,
     `- **Harness:** ${info.harness} (${info.model})`,
@@ -189,7 +195,7 @@ export function renderSummaryBody(
     (path) => ({ path, reason: 'excluded by legacy review policy' }),
   );
   const lines = [
-    '## Redline pull request review',
+    COMPLETED_SUMMARY_HEADING,
     '',
     `- **Verdict:** ${review.verdict.status}`,
     `- **Revisions:** \`${review.base.slice(0, 12)}\`…\`${review.head.slice(0, 12)}\``,

@@ -79,7 +79,7 @@ On the representative 20-file corpus, focused source selection reduces aggregate
 
 The separate [checkout benchmark](/checkout-benchmark) compares full-history, shallow exact-revision, and blobless partial Git strategies on pinned Redline and Visual Studio Code revisions. It separates checkout, exact fetch, object hydration, context-bundle, index-source-export, object-store, and critical-path measurements. Synthetic tests prove fork, force-push, merge-commit, and shallow-history behavior before any production change.
 
-The benchmark is manual and evidence-gated. Redline retains the production full-history checkout unless five GitHub-hosted runs show a correct alternative saves at least 30 seconds and 5% of the critical path. Git object caching is not evaluated unless that uncached gate is crossed.
+Final workflow run [`40194071271`](https://github.com/dragoscirjan/redline/actions/runs/40194071271) completed five samples per repository and strategy. Full checkout was stable and fastest on Redline at 1.598 seconds p95. On VS Code, full checkout was 146.676 seconds p95; shallow was 37.245 seconds and partial was 61.240 seconds, but both alternatives changed the authoritative context bundle and failed correctness. Redline therefore retains full checkout. No correct uncached alternative crossed the combined 30-second and 5% gate, so Git object caching remains out of scope.
 
 ## Run an opt-in live capture
 

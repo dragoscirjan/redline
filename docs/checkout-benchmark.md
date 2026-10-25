@@ -8,9 +8,9 @@ Redline reviews an exact pull request base and head. The repository checkout mus
 - context-bundle base-file reads;
 - source exports for the review and both code-index revisions.
 
-Issue #127 is evidence-gated. Stage 1 adds the benchmark and correctness tests but does **not** change the production checkout. Stage 2 runs the merged workflow, checks in only its bounded aggregate JSON and Markdown report, and changes production behavior only if the agreed materiality and correctness gates pass.
+Issue #127 was evidence-gated. The completed benchmark retains the production full-history checkout. Shallow exact-revision and blobless partial fetches were faster on the large repository, but both changed the authoritative context bundle and therefore failed the correctness gate. No Git object cache is added.
 
-The current aggregate is at [`benchmark/checkout/v1/report.md`](https://github.com/dragoscirjan/redline/blob/main/benchmark/checkout/v1/report.md). It remains pending until the manual workflow is available on the default branch.
+The bounded aggregate is at [`benchmark/checkout/v1/report.md`](https://github.com/dragoscirjan/redline/blob/main/benchmark/checkout/v1/report.md). Raw per-sample JSON remains only in [workflow run 40194071271](https://github.com/dragoscirjan/redline/actions/runs/40194071271).
 
 ## Fixed profile
 
@@ -27,7 +27,24 @@ The strategies are:
 2. **Shallow exact-revision** — fetch the exact base at depth one, fetch the exact head at depth one, and deepen only until the base-to-head history is connected.
 3. **Blobless partial** — fetch complete commit and tree history with `blob:none`; checkout and authoritative Git operations hydrate required blobs.
 
-The benchmark does not use a Git object cache. Cache measurement becomes eligible only if the uncached result saves at least 30 seconds and at least 5% of the measured critical path.
+The benchmark does not use a Git object cache. Cache measurement becomes eligible only if a correct uncached alternative saves at least 30 seconds and at least 5% of the measured critical path.
+
+## Recorded result
+
+The final capture ran on GitHub-hosted Linux with Git 2.55.0 and Node 24.21.0. Each repository/strategy pair has five samples.
+
+| Repository | Strategy | Correct | Critical path p50/p95 | Decision |
+| --- | --- | --- | ---: | --- |
+| Redline | full | yes | 1,520/1,598 ms | retain |
+| Redline | shallow | yes | 2,648/2,864 ms | slower |
+| Redline | partial | yes | 2,112/2,467 ms | slower |
+| VS Code | full | yes | 141,015/146,676 ms | retain |
+| VS Code | shallow | no | 36,181/37,245 ms | reject |
+| VS Code | partial | no | 60,003/61,240 ms | reject |
+
+All five full-checkout samples were stable. On VS Code, shallow and partial strategies preserved the pinned source exports and ordered revision list, but their context-bundle digest differed from full checkout. Shallow output also varied between captures during the branch verification. These strategies cannot replace production checkout even though their raw timings were materially lower.
+
+The fastest correct strategy is therefore full checkout. Its selected savings are 0 ms and 0%, so the materiality gate does not pass and Git object caching remains out of scope.
 
 ## Timing boundaries
 

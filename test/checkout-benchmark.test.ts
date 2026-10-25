@@ -110,6 +110,7 @@ describe('checkout benchmark report', () => {
       savedPercent: 40,
       material: true,
       cacheEvaluation: 'eligible',
+      rejectedStrategies: [],
     });
     expect(renderCheckoutBenchmarkReport(aggregate)).toContain('| vscode-large | shallow | yes |');
   });
@@ -126,12 +127,29 @@ describe('checkout benchmark report', () => {
     expect(() => validateCheckoutBenchmarkAggregate(profileValue, malformed)).toThrow(/sample count/u);
   });
 
-  it('invalidates evidence when any authoritative output differs', async () => {
+  it('rejects an incorrect alternative without invalidating correct candidates', async () => {
     const profileValue = await profile();
     const aggregate = buildCheckoutBenchmarkAggregate(profileValue, capture(profileValue, true));
+    expect(aggregate.status).toBe('complete');
+    expect(aggregate.decision).toMatchObject({
+      status: 'candidate-shallow',
+      selectedStrategy: 'shallow',
+      rejectedStrategies: ['partial'],
+    });
+    expect(aggregate.strategies.find((entry) => entry.repositoryId === 'vscode-large' && entry.strategy === 'partial')?.equivalent).toBe(false);
+  });
+
+  it('invalidates evidence when repeated full samples are not equivalent', async () => {
+    const profileValue = await profile();
+    const valid = capture(profileValue);
+    const samples = valid.samples.map((entry) =>
+      entry.repositoryId === 'vscode-large' && entry.strategy === 'full' && entry.repetition === 5
+        ? { ...entry, digests: { ...entry.digests, bundle: 'f'.repeat(64) } }
+        : entry);
+    const aggregate = buildCheckoutBenchmarkAggregate(profileValue, { ...valid, samples });
     expect(aggregate.status).toBe('invalid');
     expect(aggregate.decision.status).toBe('invalid');
-    expect(aggregate.strategies.find((entry) => entry.repositoryId === 'vscode-large' && entry.strategy === 'partial')?.equivalent).toBe(false);
+    expect(aggregate.decision.rejectedStrategies).toContain('full');
   });
 
   it('rejects a repository URL that does not match the declared repository', async () => {

@@ -62,7 +62,7 @@ Deterministic local fixtures cover:
 - separate base and fork remotes;
 - a force-pushed branch whose reviewed head remains reachable only by its exact commit.
 
-Any digest mismatch invalidates the benchmark and blocks a production change.
+A digest mismatch rejects that strategy. A mismatch among repeated full-checkout samples invalidates the capture because the reference itself is unstable. Rejected strategies cannot satisfy the materiality gate or make Git object caching eligible.
 
 ## Decision policy
 

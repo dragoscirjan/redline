@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import {
-  lstat, mkdir, mkdtemp, readdir, readFile, rm, stat, unlink, writeFile,
+  lstat, mkdir, mkdtemp, readdir, readFile, readlink, rm, stat, unlink, writeFile,
 } from 'node:fs/promises';
 import { arch, tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
@@ -130,7 +130,23 @@ async function runGit(
   timeoutMs: number,
   allowFailure = false,
 ): Promise<ProcessResult> {
-  return runProcess('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'advice.detachedHead=false', ...args], repository, environment, timeoutMs, allowFailure);
+  return runProcess('git', [
+    '-c', 'core.hooksPath=/dev/null',
+    '-c', 'advice.detachedHead=false',
+    '-c', 'gc.auto=0',
+    '-c', 'maintenance.auto=false',
+    '-c', 'maintenance.autoDetach=false',
+    ...args,
+  ], repository, environment, timeoutMs, allowFailure);
+}
+
+async function removeTree(path: string): Promise<void> {
+  await rm(path, {
+    recursive: true,
+    force: true,
+    maxRetries: 10,
+    retryDelay: 250,
+  });
 }
 
 async function elapsed(operation: () => Promise<void>): Promise<number> {
@@ -166,7 +182,7 @@ async function digestFile(path: string): Promise<string> {
   return hash.digest('hex');
 }
 
-export async function digestDirectory(root: string): Promise<string> {
+export async function digestDirectory(root: string, allowSymbolicLinks = false): Promise<string> {
   const hash = createHash('sha256');
   let entries = 0;
   const visit = async (directory: string): Promise<void> => {
@@ -178,8 +194,10 @@ export async function digestDirectory(root: string): Promise<string> {
       const childPath = join(directory, child.name);
       const path = relative(root, childPath).split('\\').join('/');
       const metadata = await lstat(childPath);
-      if (metadata.isSymbolicLink()) throw new Error(`benchmark tree retained a symbolic link: ${path}`);
-      if (metadata.isDirectory()) {
+      if (metadata.isSymbolicLink()) {
+        if (!allowSymbolicLinks) throw new Error(`benchmark tree retained a symbolic link: ${path}`);
+        hash.update(`symlink\0${path}\0${await readlink(childPath)}\0`);
+      } else if (metadata.isDirectory()) {
         hash.update(`directory\0${path}\0`);
         await visit(childPath);
       } else if (metadata.isFile()) {
@@ -454,7 +472,7 @@ export async function runCheckoutBenchmarkSample(
   const afterIndexSource = await objectBytes(join(repositoryPath, '.git/objects'));
   const baseSourceDigest = await digestDirectory(join(coldIndexSource, 'base'));
   const headSourceDigest = await digestDirectory(join(coldIndexSource, 'head'));
-  await rm(coldIndexSource, { recursive: true, force: true });
+  await removeTree(coldIndexSource);
   const indexSourceWarmMs = await elapsed(async () => sourceExports(
     repositoryPath, candidate.base, candidate.head, warmIndexSource, environment, profile.commandTimeoutMs,
   ));
@@ -462,7 +480,7 @@ export async function runCheckoutBenchmarkSample(
     || headSourceDigest !== await digestDirectory(join(warmIndexSource, 'head'))) {
     throw new Error('cold and warm index source exports differ');
   }
-  await rm(warmIndexSource, { recursive: true, force: true });
+  await removeTree(warmIndexSource);
 
   const coldBundle = join(sampleRoot, 'bundle-cold');
   const coldReviewSource = join(sampleRoot, 'review-source-cold');
@@ -473,18 +491,18 @@ export async function runCheckoutBenchmarkSample(
   ));
   const afterBundle = await objectBytes(join(repositoryPath, '.git/objects'));
   const coldBundleDigest = await digestDirectory(coldBundle);
-  const reviewSourceDigest = await digestDirectory(coldReviewSource);
-  await rm(coldBundle, { recursive: true, force: true });
-  await rm(coldReviewSource, { recursive: true, force: true });
+  const reviewSourceDigest = await digestDirectory(coldReviewSource, true);
+  await removeTree(coldBundle);
+  await removeTree(coldReviewSource);
   const bundleWarmMs = await elapsed(async () => buildBundle(
     repositoryPath, candidate.base, candidate.head, warmBundle, warmReviewSource, environment, profile.commandTimeoutMs,
   ));
   if (coldBundleDigest !== await digestDirectory(warmBundle)
-    || reviewSourceDigest !== await digestDirectory(warmReviewSource)) {
+    || reviewSourceDigest !== await digestDirectory(warmReviewSource, true)) {
     throw new Error('cold and warm context bundles differ');
   }
-  await rm(warmBundle, { recursive: true, force: true });
-  await rm(warmReviewSource, { recursive: true, force: true });
+  await removeTree(warmBundle);
+  await removeTree(warmReviewSource);
 
   const objectHydrationMs = Math.max(0, indexSourceColdMs - indexSourceWarmMs)
     + Math.max(0, bundleColdMs - bundleWarmMs);
@@ -541,7 +559,7 @@ export async function runCheckoutBenchmark(
 ): Promise<CheckoutBenchmarkCapture> {
   const outputDirectory = resolve(options.outputDirectory);
   const rawDirectory = join(outputDirectory, 'raw');
-  await rm(outputDirectory, { recursive: true, force: true });
+  await removeTree(outputDirectory);
   await mkdir(rawDirectory, { recursive: true });
   await writeFile(join(outputDirectory, 'profile.json'), `${JSON.stringify(profile, null, 2)}\n`);
   const samples: CheckoutBenchmarkSample[] = [];
@@ -553,6 +571,7 @@ export async function runCheckoutBenchmark(
       progress(`checkout benchmark start ${identity}`);
       const sampleRoot = join(workspaceParent, `${run.repository.id}-${run.strategy}-${run.repetition}`);
       await mkdir(sampleRoot, { recursive: true });
+      let sampleCompleted = false;
       try {
         const sample = await runCheckoutBenchmarkSample(
           profile, run.repository, run.strategy, run.repetition, sampleRoot,
@@ -560,12 +579,26 @@ export async function runCheckoutBenchmark(
         samples.push(sample);
         await writeFile(join(rawDirectory, `${run.repository.id}-${run.strategy}-${run.repetition}.json`), `${JSON.stringify(sample, null, 2)}\n`);
         progress(`checkout benchmark complete ${identity}`);
+        sampleCompleted = true;
       } finally {
-        if (options.keepWorkspaces !== true) await rm(sampleRoot, { recursive: true, force: true });
+        if (options.keepWorkspaces !== true) {
+          try {
+            await removeTree(sampleRoot);
+          } catch (cleanupError) {
+            if (sampleCompleted) throw cleanupError;
+            progress(`checkout benchmark cleanup incomplete ${identity}`);
+          }
+        }
       }
     }
   } finally {
-    if (options.keepWorkspaces !== true) await rm(workspaceParent, { recursive: true, force: true });
+    if (options.keepWorkspaces !== true) {
+      try {
+        await removeTree(workspaceParent);
+      } catch {
+        progress('checkout benchmark workspace cleanup incomplete');
+      }
+    }
   }
   const gitVersion = (await runProcess('git', ['--version'], ROOT, safeEnvironment(join(outputDirectory, '.home')), profile.commandTimeoutMs)).stdout.trim();
   const capture: CheckoutBenchmarkCapture = {

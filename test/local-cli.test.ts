@@ -131,7 +131,7 @@ describe('local Git review CLI', () => {
     expect(await readFile(join(result.output, 'status.json')).catch(() => null)).toBeNull();
   });
 
-  it.each([['--head', 'HEAD', '--worktree', 'all'], ['--comparison', 'direct'], ['--worktree', 'staged', '--untracked', 'include'], ['--api-key', 'do-not-print'], ['--concurrency', '9']])('rejects invalid arguments without leaking values: %s', async (...args) => {
+  it.each([['--head', 'HEAD', '--worktree', 'all'], ['--comparison', 'direct'], ['--worktree', 'staged', '--untracked', 'include'], ['--api-key', 'do-not-print'], ['--concurrency', '9'], ['--color', 'rainbow']])('rejects invalid arguments without leaking values: %s', async (...args) => {
     const f = await fixture(); const result = await f.run(args); expect(result.code).toBe(2);
     expect(result.stderr).not.toContain('do-not-print');
   });
@@ -192,7 +192,9 @@ describe('local Git review CLI', () => {
     const result = await f.run(['--harness', 'pi', '--provider', 'mock', '--endpoint', 'http://127.0.0.1:1/v1', '--model', 'fixture', '--auth', 'none',
       '--base', f.base, '--head', f.head, '--fail-on', String(policy)], { PATH: bin + delimiter + process.env.PATH });
     expect(result.code, result.stderr).toBe(expected);
-    expect(result.stdout).toContain('MEDIUM example.ts:1-1 [RIGHT]');
+    expect(result.stdout).toContain('example.ts\n  MEDIUM 1-1 [RIGHT]');
+    expect(result.stdout).toContain('Reviewed change');
+    expect(result.stdout).toContain('+export const value = 2;');
     expect(result.stdout).not.toContain('behavioralContract');
   });
 

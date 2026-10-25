@@ -8,7 +8,7 @@ import { parseReviewEnvironment, type ReviewEnvironment } from '../review/enviro
 import { executable, GitCommand, gitEnvironment, inside, repositoryBoundary } from './process.ts';
 
 const KEYS = ['repository', 'output', 'vcs', 'base', 'head', 'worktree', 'comparison', 'untracked', 'harness',
-  'provider', 'endpoint', 'model', 'auth', 'timeout', 'run-timeout', 'concurrency', 'finding-scope', 'fail-on'] as const;
+  'provider', 'endpoint', 'model', 'auth', 'timeout', 'run-timeout', 'concurrency', 'finding-scope', 'fail-on', 'color'] as const;
 type Key = (typeof KEYS)[number];
 export interface LocalOptions {
   readonly repository: string;
@@ -18,6 +18,7 @@ export interface LocalOptions {
   readonly target: { readonly kind: 'revision'; readonly head: string; readonly comparison: 'merge-base' | 'direct' }
     | { readonly kind: 'worktree'; readonly mode: 'staged' | 'unstaged' | 'all'; readonly untracked: boolean };
   readonly reporters: readonly string[];
+  readonly color: 'auto' | 'always' | 'never';
   readonly failOn: 'none' | 'findings' | 'high' | 'critical';
   readonly environment: ReviewEnvironment;
 }
@@ -37,6 +38,7 @@ No target: review staged and unstaged tracked changes against HEAD.
   --reporter ID                      Repeatable; cli implemented
                                     github|forgejo|gitea|gitlab|bitbucket reserved
   --output PATH                      New directory; default user state directory
+  --color auto|always|never           Default auto; NO_COLOR disables colors
   --config PATH                      Trusted user JSON; never repository config
   --harness pi|opencode|echo          pi by default; binaries installed separately
   --provider ID --endpoint URL --model ID
@@ -188,6 +190,6 @@ export async function parseLocalOptions(args: readonly string[], env: NodeJS.Pro
     : { kind: 'revision', head: get('head', String(head)), comparison: choice(get('comparison', 'merge-base'), ['merge-base', 'direct'], 'comparison') };
   return {
     repository, stateDirectory: resolve(cwd, stateDirectory), output: output === undefined ? undefined : resolve(cwd, String(output)), base, target,
-    reporters, failOn: choice(get('fail-on', 'none'), ['none', 'findings', 'high', 'critical'], 'fail-on'), environment: parsed.review,
+    reporters, color: choice(get('color', 'auto'), ['auto', 'always', 'never'], 'color'), failOn: choice(get('fail-on', 'none'), ['none', 'findings', 'high', 'critical'], 'fail-on'), environment: parsed.review,
   };
 }

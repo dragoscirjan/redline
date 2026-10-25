@@ -115,6 +115,7 @@ Run `redline review --help` for the complete contract.
 - `--untracked exclude|include`: working-tree reviews only; default `exclude`.
 - Repeatable `--reporter cli|github|forgejo|gitea|gitlab|bitbucket`: only `cli` works today; default `cli`. Duplicates are rejected.
 - `--output PATH`: a new directory outside the reviewed repository, with an existing parent.
+- `--color auto|always|never`: default `auto`. A defined `NO_COLOR` disables colors, and `TERM=dumb` disables live terminal redraw and colors.
 - `--harness pi|opencode|echo`: default `pi`.
 - `--provider`, `--endpoint`, `--model`, `--auth none`: trusted model selection.
 - `--timeout`: per-file deadline, default `4m`.
@@ -137,7 +138,11 @@ Default artifact location: `$XDG_STATE_HOME/redline/reviews/run-*`, or `$HOME/.l
 
 Review schemas remain unchanged. Synthetic working-copy commit IDs and the index digest identify captured states, not user commits. Bundle/evidence selection is deterministic; existing operational durations and telemetry still vary between runs.
 
-The CLI reporter prints validated finding titles, locations, side, severity, coverage, verdict, and the artifact path. Stderr progress contains lifecycle names and file IDs, not model text. Terminal data is control-character filtered, bounded, and credential-redacted. Prompts, source payloads, model output, reasoning, and publication tokens are never streamed to the terminal. Source and bounded redacted model artifacts remain on disk under the existing artifact contract; protect the output directory accordingly.
+Interactive stderr uses one updating, width-bounded dot strip in manifest order, with completed/total and running counts. Green means a validated clean file; red means findings; gray means intentionally inert/excluded; yellow `!` means a failed or omitted review. Waiting/running files use outlined dots. Failures never appear as inert or clean. Without colors, distinct symbols (`+`, `x`, `-`, `!`, `o`, `.`) retain these meanings. Redirected output has no animation or automatic ANSI colors and does not emit per-file start/completion lines.
+
+Final output states complete/incomplete coverage, verdict, grouped failure counts, and the artifact path. Findings are grouped by filename, with severity, side, line span, explanation, and an excerpt from the authoritative captured diff. Old/new line numbers are preserved and `>` marks cited changed lines. Each excerpt is capped at 20 lines and clearly marked when clipped or unavailable. The reader revalidates the bundle revisions, file identity, evidence, and span endpoints; it never substitutes model text for missing diff context. Existing proposed fixes are shown separately, capped at 20 lines, and labeled as not applied or test-verified. A missing fix is reported explicitly, not invented.
+
+Terminal data is control-character filtered, bounded, and credential-redacted before coloring. Only these bounded reviewed-diff excerpts and proposed-fix blocks are displayed—not full source payloads, prompts, raw model output, reasoning, or publication tokens. Source and bounded redacted model artifacts remain on disk under the existing artifact contract; protect the output directory accordingly.
 
 | Exit | Meaning |
 | --- | --- |

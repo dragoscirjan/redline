@@ -78,6 +78,8 @@ export interface ReviewRunInput {
   readonly environment: ReviewEnvironment;
   /** Artifact port; defaults to the deterministic filesystem writer. */
   readonly writer?: ReviewWriter;
+  /** Metadata-only manifest order for progress adapters; never includes paths or source. */
+  readonly onReviewPlan?: (files: readonly { readonly fileId: string; readonly reviewed: boolean }[]) => void;
   /** Executor override for tests; defaults to the registry for the harness. */
   readonly executor?: HarnessExecutor | undefined;
   /** Enables the fail-closed verifier during benchmark evaluation before publication rollout. */
@@ -727,6 +729,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
   const runStartedAtMs = now();
   const runDeadlineAtMs = runStartedAtMs + environment.runTimeout.milliseconds;
   const bundle = await loadReviewBundle(environment.reviewDirectory, environment.sourceDirectory);
+  input.onReviewPlan?.(bundle.manifest.files.map((file) => ({ fileId: file.id, reviewed: file.reviewed })));
   const indexedContext = await loadReviewCodeContext(bundle, environment.codeContext);
   const writer = input.writer ?? createReviewWriter(environment.outputDirectory);
   const executor = input.executor ?? createHarnessExecutor(environment.harness);

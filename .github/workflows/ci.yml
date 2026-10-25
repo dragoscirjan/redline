@@ -216,7 +216,7 @@ jobs:
         run: corepack pnpm@10.33.0 run typecheck
 
       - name: Exercise local capture, reporting, cancellation, and offline npm installation
-        run: corepack pnpm@10.33.0 exec vitest run test/application.test.ts test/local-cli.test.ts test/package.test.ts test/npm-release.test.ts
+        run: corepack pnpm@10.33.0 exec vitest run test/application.test.ts test/local-cli.test.ts test/package.test.ts test/npm-release.test.ts test/cli-reporter.test.ts
 
   source-runtime:
     name: Source runtime (${{ matrix.runtime }})

@@ -27,7 +27,7 @@ redline-review -> existing environment/publication modes
 | Strategy / Adapter | `GitRevisionSource` captures Git states; `CliReporter` presents validated results. The existing harness registry selects Pi, OpenCode, or echo. |
 | Factory / capability registry | The local composition root chooses adapters after `requireCapability()` checks known IDs. Planned values fail explicitly rather than loading arbitrary plugins. |
 | Composite | `CompositeReporter` preflights all children, isolates runtime failures, and records adapter IDs that failed. |
-| Observer | Discriminated `ReviewEvent` values carry content-free lifecycle progress. Events contain neither source paths nor model payloads. |
+| Observer | Discriminated `ReviewEvent` values carry content-free lifecycle progress. The review-plan event exposes only bounded file IDs and review eligibility in manifest order; per-file events expose only identity and outcome. Events contain neither source paths nor model payloads. |
 | Dependency injection | Source, reporters, artifact writer, execution function, cancellation signal, streams, and existing runner clock/executor seams are supplied explicitly. |
 
 There is no inheritance hierarchy or plugin loader. Adding an adapter requires trusted package code and tests, not repository configuration. A pattern is used only when it has a concrete responsibility.
@@ -45,6 +45,8 @@ A working-tree review writes synthetic tree/commit objects into temporary metada
 Artifact writing is mandatory and separate from output adapters. Reporters cannot select review files, change prompts, relax validation, or provide a verdict. Completion reporters receive a publication-safe projection containing the validated review, summary, omission classifications, and output path, not raw per-file model output. Each reporter receives an independent copy, so mutation cannot alter the authoritative result or another reporter's input.
 
 Preflight failure aborts before source capture. Progress/completion failures are isolated; valid review artifacts remain available and the local CLI reports a nonzero reporter outcome. The application disposes a successful capture on completion or execution failure. The source adapter owns cleanup if capture itself fails.
+
+The terminal adapter can also read bounded excerpts through `FindingDiffReader`, scoped to the private captured bundle supplied by the composition root. It verifies base/head identities and file IDs/paths, checks changed-line evidence and both span endpoints, and clips excerpts without modifying review records. It reads neither live repository files nor model-generated replacements as original diff context. Unavailable excerpts affect presentation only; artifacts, coverage, verdict, and exit policy remain authoritative.
 
 ## Compatibility and future work
 

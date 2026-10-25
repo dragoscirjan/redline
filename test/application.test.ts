@@ -30,6 +30,7 @@ describe('portable review application', () => {
       expect(good.complete).toHaveBeenCalledOnce();
       expect(dispose).toHaveBeenCalledOnce();
       expect([...composite.failures]).toEqual(['bad']);
+      expect(good.progress).toHaveBeenCalledWith({ kind: 'planned', files: [{ fileId: '000001', reviewed: true }] });
       expect(good.progress).toHaveBeenCalledWith({ kind: 'file-completed', fileId: '000001', outcome: 'clean' });
     } finally { await fixture.cleanup(); }
   });

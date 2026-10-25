@@ -5,6 +5,7 @@ import type { ReviewWriter } from '../review/writer.ts';
 
 export type ReviewEvent =
   | { readonly kind: 'started' }
+  | { readonly kind: 'planned'; readonly files: readonly { readonly fileId: string; readonly reviewed: boolean }[] }
   | { readonly kind: 'file-started'; readonly fileId: string }
   | { readonly kind: 'file-completed'; readonly fileId: string; readonly outcome: 'clean' | 'findings' | 'omitted' }
   | { readonly kind: 'completed' }
@@ -55,7 +56,7 @@ export class CompositeReporter implements ReviewReporter {
   }
   progress(event: ReviewEvent): void {
     for (const reporter of this.reporters) {
-      try { reporter.progress({ ...event }); } catch { this.failures.add(reporter.id); }
+      try { reporter.progress(structuredClone(event)); } catch { this.failures.add(reporter.id); }
     }
   }
   async complete(result: ReviewReport): Promise<void> {
@@ -98,6 +99,7 @@ export class ReviewApplication {
       const result = await (this.dependencies.execute ?? executePreparedReview)({
         environment: { ...command.environment, reviewDirectory: captured.reviewDirectory, sourceDirectory: captured.sourceDirectory },
         ...(this.dependencies.artifacts === undefined ? {} : { writer: this.dependencies.artifacts }),
+        onReviewPlan: (files) => reporter.progress({ kind: 'planned', files }),
         onFileStart: ({ fileId }) => reporter.progress({ kind: 'file-started', fileId }),
         onFileDone: ({ fileId, outcome }) => reporter.progress({ kind: 'file-completed', fileId, outcome }),
       });

@@ -9,7 +9,8 @@ import { createHarnessExecutor } from '../harness-executor/registry.ts';
 import { GitRevisionSource } from './git-source.ts';
 import { HELP, parseLocalOptions, UsageError } from './options.ts';
 import { cancellableSpawner, harnessCommand, inside, LocalOperationError } from './process.ts';
-import { CliReporter, terminalText } from './reporter.ts';
+import { FindingDiffReader } from './finding-diff.ts';
+import { CliReporter, terminalColors, terminalText } from './reporter.ts';
 
 export interface LocalCliDependencies {
   readonly cwd?: string;
@@ -87,7 +88,17 @@ export async function main(
       output = options.output;
     }
     const destination = output;
-    const reporter = new CompositeReporter(options.reporters.map(() => new CliReporter(stdout, stderr, options.environment.credential?.value)));
+    const diffReader = new FindingDiffReader(join(destination, 'bundle'), join(destination, 'source'));
+    const reporter = new CompositeReporter(options.reporters.map(() => new CliReporter(stdout, stderr, options.environment.credential?.value, {
+      color: terminalColors(options.color, dependencies.stdout === undefined && process.stdout.isTTY === true, env),
+      ...(dependencies.stderr === undefined && process.stderr.isTTY === true && env.TERM !== 'dumb' ? {
+        terminal: {
+          write: (text: string) => { process.stderr.write(text); }, columns: () => process.stderr.columns || 80,
+          color: terminalColors(options.color, true, env),
+        },
+      } : {}),
+      readDiff: (finding, revisions) => diffReader.read(finding, revisions),
+    })));
     const start = performance.now();
     timer = setTimeout(() => { deadlineExpired = true; controller.abort(); }, options.environment.runTimeout.milliseconds);
     const application = new ReviewApplication({

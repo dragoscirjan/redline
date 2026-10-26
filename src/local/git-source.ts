@@ -69,6 +69,45 @@ async function fileBytes(root: string, path: string): Promise<{ data: Buffer; mo
   } finally { await handle.close(); }
 }
 
+/** Shallow grafts are history data, not repository configuration. Copy only bounded commit IDs. */
+async function shallowBoundary(git: GitCommand, root: string, oidLength: number): Promise<Buffer | undefined> {
+  const path = resolve(root, decode.decode(await git.run(['rev-parse', '--git-path', 'shallow'])).trim());
+  const maximumBytes = MAX_FILES * (oidLength + 2);
+  const info = await lstat(path).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return undefined;
+    throw error;
+  });
+  if (info === undefined) return undefined;
+  if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > maximumBytes) {
+    throw new LocalOperationError('unsafe or oversized Git shallow boundary');
+  }
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const before = await handle.stat();
+    if (!before.isFile() || before.nlink !== 1 || before.size > maximumBytes
+      || before.ino !== info.ino || before.dev !== info.dev) throw new LocalOperationError('Git shallow boundary changed during capture');
+    const buffer = Buffer.alloc(maximumBytes + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, length, buffer.length - length, null);
+      if (bytesRead === 0) break;
+      length += bytesRead;
+    }
+    const after = await handle.stat();
+    if (length > maximumBytes || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) {
+      throw new LocalOperationError('Git shallow boundary changed or exceeded its byte limit');
+    }
+    const data = buffer.subarray(0, length);
+    const lines = data.toString('utf8').split('\n');
+    if (lines.at(-1) === '') lines.pop();
+    const oid = new RegExp('^[0-9a-f]{' + oidLength + '}$', 'u');
+    if (lines.length > MAX_FILES || lines.some((line) => !oid.test(line.replace(/\r$/u, '')))) {
+      throw new LocalOperationError('invalid Git shallow boundary');
+    }
+    return data;
+  } finally { await handle.close(); }
+}
+
 export class GitRevisionSource implements RevisionSource {
   private readonly options: LocalOptions;
   private readonly environment: NodeJS.ProcessEnv;
@@ -97,6 +136,8 @@ export class GitRevisionSource implements RevisionSource {
       if (format !== 'sha1' && format !== 'sha256') throw new LocalOperationError('unsupported Git object format');
       await git.run(['init', '--quiet', `--object-format=${format}`, '--template=']);
       await git.run(['config', 'core.abbrev', format === 'sha1' ? '40' : '64']);
+      const shallow = await shallowBoundary(original, root, format === 'sha1' ? 40 : 64);
+      if (shallow !== undefined) await writeFile(join(scratch, '.git/shallow'), shallow, { flag: 'wx', mode: 0o600 });
       await writeFile(join(scratch, '.git/objects/info/alternates'), `${objectPath}\n`);
       if (refs.length > 0) await git.run(['update-ref', '--stdin'], Buffer.from(refs.map((ref) => {
         const [oid, name] = ref.split(' ');
@@ -227,6 +268,10 @@ export class GitRevisionSource implements RevisionSource {
       };
       await buildBundle({ base, head, output: bundleDirectory, sourceDirectory: null, eligibilityPolicyFile: null,
         policyBase: options.target.kind === 'worktree' ? requestedBase : base }, scratch, commands);
+      const currentShallow = await shallowBoundary(original, root, format === 'sha1' ? 40 : 64);
+      if (shallow === undefined ? currentShallow !== undefined : currentShallow === undefined || !shallow.equals(currentShallow)) {
+        throw new LocalOperationError('Git shallow boundary changed during capture');
+      }
       const commonDirectory = await realpath(resolve(root, decode.decode(await original.run(['rev-parse', '--git-common-dir'])).trim()));
       const repositoryIdentity = `local/${digest(Buffer.from(commonDirectory))}`;
       const coverage = { excludedUntrackedFiles: ignoredUntracked.length, omittedSourceFiles, inertSymlinks: links.length, inertSubmodules };

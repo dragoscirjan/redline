@@ -5,7 +5,7 @@ import { MAX_EXCERPT_LINES, type FindingDiffExcerpt } from './finding-diff.ts';
 /** Terminal data is untrusted too: remove control characters and bound every line. */
 export function terminalText(value: string, credential?: string): string {
   const redacted = credential === undefined || credential.length === 0 ? value : value.split(credential).join('[redacted]');
-  return redacted.replace(/[\p{Cc}\p{Cf}]/gu, '?').slice(0, 512);
+  return redacted.replaceAll('\t', '    ').replace(/[\p{Cc}\p{Cf}]/gu, '?').slice(0, 512);
 }
 
 export function terminalColors(mode: 'auto' | 'always' | 'never', tty: boolean, env: NodeJS.ProcessEnv): boolean {

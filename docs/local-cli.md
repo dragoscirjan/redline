@@ -29,6 +29,8 @@ Supply credentials through `REDLINE_MODEL_AUTH`, a provider-keyed JSON object po
 
 By default, Redline resolves the common ancestor of `main` and `feature` and reviews that ancestor against `feature`. Both user refs are pinned to immutable commit IDs before capture. Multiple merge bases fail rather than choosing arbitrarily.
 
+Shallow clones work when the selected refs and required common ancestor are available locally. Redline preserves the shallow boundary in its scratch metadata, including for linked worktrees and synthetic working-tree snapshots. It accepts only a bounded regular metadata file containing at most 20,000 commit IDs in the repository's object format, rejects symlinks and concurrent boundary changes, and leaves the original boundary and index unchanged. It never fetches or deepens history; unavailable ancestry still fails the comparison.
+
 For an exact tree comparison:
 
 ```bash
@@ -177,7 +179,7 @@ Interactive stderr uses one updating, width-bounded dot strip in manifest order,
 
 Final output states complete/incomplete review coverage, indexed-context status/provider/usable span counts, verdict, grouped failure counts, and the artifact path. File-only fallbacks are reported before model review; they are not labeled as indexed coverage. Findings are grouped by filename, with severity, side, line span, explanation, and an excerpt from the authoritative captured diff. Old/new line numbers are preserved and `>` marks cited changed lines. Each excerpt is capped at 20 lines and clearly marked when clipped or unavailable. The reader revalidates the bundle revisions, file identity, evidence, and span endpoints; it never substitutes model text for missing diff context. Existing proposed fixes are shown separately, capped at 20 lines, and labeled as not applied or test-verified. A missing fix is reported explicitly, not invented.
 
-Terminal data is control-character filtered, bounded, and credential-redacted before coloring. Only these bounded reviewed-diff excerpts and proposed-fix blocks are displayed—not full source payloads, prompts, raw model output, reasoning, or publication tokens. Source and bounded redacted model artifacts remain on disk under the existing artifact contract; protect the output directory accordingly.
+Terminal data is control-character filtered, bounded, and credential-redacted before coloring. Tabs are displayed as four spaces; authoritative source and diff bytes remain unchanged. Only these bounded reviewed-diff excerpts and proposed-fix blocks are displayed—not full source payloads, prompts, raw model output, reasoning, or publication tokens. Source and bounded redacted model artifacts remain on disk under the existing artifact contract; protect the output directory accordingly.
 
 | Exit | Meaning |
 | --- | --- |

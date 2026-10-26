@@ -9,6 +9,30 @@ import { npmArguments } from './helpers/npm.ts';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
 
+it.each(['redline.mjs', 'redline-review.mjs'])('%s reports the supported Node version before using missing module exports', (entry) => {
+  const runtime = new URL('../bin/runtime.mjs', import.meta.url).href;
+  const binary = new URL('../bin/' + entry, import.meta.url).href;
+  // Simulate an older Node module namespace through the real ESM linker.
+  // No legacy runtime is downloaded, and each hook stays in its child process.
+  const script = `
+    import { registerHooks } from 'node:module';
+    registerHooks({ resolve(specifier, context, nextResolve) {
+      if (specifier === 'node:module' && context.parentURL === ${JSON.stringify(runtime)}) {
+        return { url: 'data:text/javascript,export const fixture = true;', shortCircuit: true };
+      }
+      return nextResolve(specifier, context);
+    } });
+    Object.defineProperty(process.versions, 'node', { value: '18.20.0' });
+    await import(${JSON.stringify(binary)});
+  `;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot }, encoding: 'utf8',
+  });
+  expect(result.status, result.stderr).toBe(2);
+  expect(result.stderr).toBe('redline requires Node.js 24 or newer\n');
+  expect(result.stdout).toBe('');
+});
+
 it('installs the packed package offline and runs both CLIs without source checkout dependencies', async () => {
   const root = await mkdtemp(join(tmpdir(), 'redline-package-test-'));
   const fixture = await createBundleFixture();

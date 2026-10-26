@@ -7,7 +7,7 @@ import { parseReviewEnvironment } from '../src/review/environment.ts';
 import { runFileReviews } from '../src/review/runner.ts';
 import type { PullRequestFinding } from '../src/review/types.ts';
 import { FindingDiffReader, findingDiffExcerpt, MAX_EXCERPT_LINES } from '../src/local/finding-diff.ts';
-import { CliReporter, terminalColors } from '../src/local/reporter.ts';
+import { CliReporter, terminalColors, terminalText } from '../src/local/reporter.ts';
 import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
 import { publishedFinding } from './helpers/finding.ts';
 
@@ -66,6 +66,21 @@ describe('terminal progress and finding cards', () => {
     expect(terminalColors('always', true, { NO_COLOR: '' })).toBe(false);
     expect(terminalColors('never', true, {})).toBe(false);
     expect(terminalColors('always', true, { TERM: 'dumb' })).toBe(false);
+  });
+
+  it('renders tab-indented excerpts and fixes as spaces while retaining control filtering and redaction', async () => {
+    expect(terminalText('\tsecret\u001b[2J', 'secret')).toBe('    [redacted]?[2J');
+    expect(terminalText('\t'.repeat(200))).toHaveLength(512);
+    const { report } = await reportFixture(); const stdout: string[] = [];
+    const issue = finding({ suggestion: '+\tcorrected' });
+    const renderer = new CliReporter((line) => { stdout.push(line); }, () => {}, undefined, {
+      readDiff: async () => ({ header: '@@ -1 +1 @@', lines: [{ left: null, right: 1, text: '+\tnew', cited: true }], truncated: false }),
+    });
+    await renderer.complete({ ...report, review: { ...report.review, findings: [issue] } });
+    expect(stdout.join('\n')).toContain('+    new');
+    expect(stdout.join('\n')).toContain('+    corrected');
+    expect(stdout.join('\n')).not.toContain('+?');
+    expect(stdout.join('\n')).not.toContain('\t');
   });
 
   it('prints grouped finding cards with authoritative changes and existing proposed fixes', async () => {

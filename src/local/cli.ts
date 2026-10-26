@@ -67,7 +67,7 @@ export async function main(
       while (true) {
         const canonicalAncestor = await realpath(ancestor).catch((error: NodeJS.ErrnoException) => {
           if (error.code === 'ENOENT') return undefined;
-          throw error;
+          throw new LocalOperationError('default output parent directory is inaccessible');
         });
         if (canonicalAncestor !== undefined) {
           if (inside(options.repository, canonicalAncestor)) throw new LocalOperationError('output directory symlink enters the reviewed repository');
@@ -75,17 +75,31 @@ export async function main(
         }
         ancestor = dirname(ancestor);
       }
-      await mkdir(options.stateDirectory, { recursive: true, mode: 0o700 });
-      const canonical = await realpath(options.stateDirectory);
-      if (inside(options.repository, canonical)) throw new Error('default output is inside reviewed repository');
-      output = await mkdtemp(join(canonical, 'run-'));
+      await mkdir(options.stateDirectory, { recursive: true, mode: 0o700 }).catch(() => {
+        throw new LocalOperationError('cannot create default output directory');
+      });
+      const canonical = await realpath(options.stateDirectory).catch(() => {
+        throw new LocalOperationError('default output directory is unavailable');
+      });
+      if (inside(options.repository, canonical)) throw new LocalOperationError('default output is inside the reviewed repository');
+      output = await mkdtemp(join(canonical, 'run-')).catch(() => {
+        throw new LocalOperationError('cannot create a run directory in the default output directory');
+      });
     } else {
       // Output must be new: never overwrite an old run or follow an existing output symlink.
-      const parent = await realpath(resolve(options.output, '..'));
+      const parent = await realpath(resolve(options.output, '..')).catch(() => {
+        throw new LocalOperationError('output parent directory is unavailable');
+      });
       if (inside(options.repository, options.output) || inside(options.repository, parent)) {
-        throw new Error('output must be outside the reviewed repository');
+        throw new LocalOperationError('output must be outside the reviewed repository');
       }
-      await mkdir(options.output, { mode: 0o700 });
+      await mkdir(options.output, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
+        const reason = error.code === 'EEXIST' ? 'output directory already exists'
+          : error.code === 'ENOENT' || error.code === 'ENOTDIR' ? 'output parent directory is unavailable'
+          : error.code === 'EACCES' || error.code === 'EPERM' ? 'permission denied creating output directory'
+          : 'could not create output directory';
+        throw new LocalOperationError(reason);
+      });
       output = options.output;
     }
     const destination = output;

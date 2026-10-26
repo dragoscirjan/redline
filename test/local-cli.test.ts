@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { watch } from 'node:fs';
 import { delimiter } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { reviewFinding } from './helpers/finding.ts';
 import { chmod, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -13,14 +14,14 @@ import { terminalText } from '../src/local/reporter.ts';
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
-async function fixture() {
+async function fixture(objectFormat: 'sha1' | 'sha256' = 'sha1') {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'redline-local-test-'))); roots.push(root);
   const repository = join(root, 'repo'); await mkdir(repository);
   const git = (...args: string[]): string => execFileSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], {
     encoding: 'utf8', env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: root, TEMP: root, TMP: root,
       GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
   }).trim();
-  git('init', '--quiet', '-b', 'main'); git('config', 'core.autocrlf', 'false'); git('config', 'user.name', 'test'); git('config', 'user.email', 'test@localhost');
+  git('init', '--quiet', '-b', 'main', '--object-format=' + objectFormat); git('config', 'core.autocrlf', 'false'); git('config', 'user.name', 'test'); git('config', 'user.email', 'test@localhost');
   await writeFile(join(repository, 'example.ts'), 'export const value = 1;\n');
   git('add', '.'); git('commit', '--quiet', '-m', 'base');
   const base = git('rev-parse', 'HEAD');
@@ -67,6 +68,68 @@ describe('local Git review CLI', () => {
     expect((await manifest(merge.output)).files).toHaveLength(1);
     expect((await manifest(direct.output)).base).toBe(other);
     expect((await manifest(direct.output)).files).toHaveLength(2);
+  });
+
+  it.each(['sha1', 'sha256'] as const)('preserves %s shallow boundaries for committed and synthetic captures', async (objectFormat) => {
+    const f = await fixture(objectFormat);
+    await writeFile(join(f.repository, 'example.ts'), 'export const value = 3;\n');
+    f.git('commit', '--quiet', '-am', 'common'); const common = f.git('rev-parse', 'HEAD');
+    await writeFile(join(f.repository, 'main.ts'), 'export const main = true;\n');
+    f.git('add', '.'); f.git('commit', '--quiet', '-m', 'main change');
+    f.git('checkout', '--quiet', '-b', 'topic', common);
+    await writeFile(join(f.repository, 'topic.ts'), 'export const topic = true;\n');
+    f.git('add', '.'); f.git('commit', '--quiet', '-m', 'topic change'); f.git('checkout', '--quiet', 'main');
+    const shallow = join(f.root, 'shallow');
+    f.git('clone', '--quiet', '--depth', '2', '--no-single-branch', pathToFileURL(f.repository).href, shallow);
+    const boundary = join(shallow, '.git/shallow'); const before = await readFile(boundary);
+    const indexBefore = await readFile(join(shallow, '.git/index'));
+    const committed = await f.run(['--repository', shallow, '--base', 'origin/topic', '--head', 'HEAD']);
+    expect(committed.code, committed.stderr).toBe(0);
+    expect((await manifest(committed.output)).base).toBe(common);
+    expect((await manifest(committed.output)).files.map((file: { newPath: string }) => file.newPath)).toEqual(['main.ts']);
+    const linked = join(f.root, 'linked-shallow-worktree');
+    f.git('-C', shallow, 'worktree', 'add', '--quiet', '--detach', linked, 'HEAD');
+    const linkedReview = await f.run(['--repository', linked, '--base', 'origin/topic', '--head', 'HEAD']);
+    expect(linkedReview.code, linkedReview.stderr).toBe(0);
+    expect((await manifest(linkedReview.output)).base).toBe(common);
+    await writeFile(join(shallow, 'example.ts'), 'working shallow snapshot\n');
+    const working = await f.run(['--repository', shallow]);
+    expect(working.code, working.stderr).toBe(0);
+    expect(await readFile(join(working.output, 'source/example.ts'), 'utf8')).toBe('working shallow snapshot\n');
+    expect(await readFile(boundary)).toEqual(before);
+    expect(await readFile(join(shallow, '.git/index'))).toEqual(indexBefore);
+  });
+
+  it.each(['malformed', 'oversized'] as const)('rejects %s shallow metadata before review', async (kind) => {
+    const f = await fixture(); const boundary = join(f.repository, '.git/shallow');
+    await writeFile(boundary, kind === 'malformed' ? f.head + ' trailing-data\n' : 'a'.repeat(20_000 * 42 + 1));
+    const result = await f.run(['--base', f.head, '--head', f.head]);
+    expect(result.code).toBe(1); expect(result.stderr).toContain('Git shallow boundary');
+    expect(await readFile(join(result.output, 'reviews/summary.json'), 'utf8').catch(() => null)).toBeNull();
+  });
+
+  it.skipIf(process.platform === 'win32')('rejects a symlinked shallow boundary without modifying its temporary target', async () => {
+    const f = await fixture(); const target = join(f.root, 'boundary-target');
+    await writeFile(target, f.head + '\n');
+    await symlink(target, join(f.repository, '.git/shallow'));
+    const result = await f.run(['--base', f.head, '--head', f.head]);
+    expect(result.code).toBe(1); expect(result.stderr).toContain('unsafe or oversized Git shallow boundary');
+    expect(await readFile(target, 'utf8')).toBe(f.head + '\n');
+  });
+
+  it('rejects shallow boundary changes during capture', async () => {
+    const f = await fixture();
+    const options = await parseLocalOptions(['--harness', 'echo'], f.env, f.repository);
+    const output = join(f.root, 'capture-shallow'); await mkdir(output);
+    const { GitCommand } = await import('../src/local/process.ts');
+    const original = GitCommand.prototype.run; let changed = false;
+    vi.spyOn(GitCommand.prototype, 'run').mockImplementation(async function (this: InstanceType<typeof GitCommand>, args, input, env) {
+      const value = await original.call(this, args, input, env);
+      if (args[0] === 'ls-tree' && !changed) { changed = true; await writeFile(join(f.repository, '.git/shallow'), f.head + '\n'); }
+      return value;
+    });
+    await expect(new GitRevisionSource(options, f.env, output).capture(new AbortController().signal)).rejects.toThrow('Git shallow boundary changed during capture');
+    expect(changed).toBe(true);
   });
 
   it('defaults to HEAD versus combined tracked changes and excludes untracked files', async () => {
@@ -157,6 +220,21 @@ describe('local Git review CLI', () => {
     const f = await fixture(); const bad = await f.run(['--head', 'does-not-exist']); expect(bad.code).toBe(1);
     expect(JSON.parse(await readFile(join(bad.output, 'status.json'), 'utf8')).status).toBe('failed');
     const result = await f.run(['--output', f.repository]); expect(result.code).toBe(1);
+  });
+
+  it.each(['existing', 'missing-parent', 'inside-repository', 'file-parent'] as const)('explains %s output failures without echoing argument values', async (kind) => {
+    const f = await fixture();
+    const sensitive = 'private-output-name';
+    const existing = join(f.root, sensitive); await mkdir(existing);
+    const file = join(f.root, 'parent-file'); await writeFile(file, 'fixture');
+    const path = kind === 'existing' ? existing : kind === 'missing-parent' ? join(f.root, 'absent', sensitive)
+      : kind === 'inside-repository' ? join(f.repository, sensitive) : join(file, sensitive);
+    const expected = kind === 'existing' ? 'output directory already exists'
+      : kind === 'inside-repository' ? 'output must be outside the reviewed repository' : 'output parent directory is unavailable';
+    const result = await f.run(['--output', path]);
+    expect(result.code).toBe(1); expect(result.stderr).toContain(expected);
+    expect(result.stderr).not.toContain(sensitive); expect(result.stderr).toContain('no output created');
+    expect(await readFile(join(path, 'status.json'), 'utf8').catch(() => null)).toBeNull();
   });
 
   it('loads eligibility from the committed base, not uncommitted policy', async () => {

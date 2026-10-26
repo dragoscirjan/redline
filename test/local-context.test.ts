@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { watch } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { EOL, tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 import { main } from '../src/local/cli.ts';
 import { loadReviewBundle } from '../src/review/bundle.ts';
@@ -232,7 +232,7 @@ describe('GitHub exporter compatibility entrypoint', () => {
       'def main():\n    raise ' + error + '("controlled fixture failure")\n']) {
       const run = await exporter(source); const result = run();
       expect(result.status, result.stderr).toBe(2);
-      expect(result.stderr).toBe('redline code-index: controlled fixture failure\n');
+      expect(result.stderr).toBe('redline code-index: controlled fixture failure' + EOL);
       expect(result.stdout).toBe('');
     }
   });

@@ -67,7 +67,13 @@ redline review --base main --head HEAD --harness pi \
 
 Replace the path and namespace with the artifact's actual values. Without `--code-context-repository`, the expected namespace is `local/<opaque Git-common-directory hash>` from `capture.json`; no GitHub remote is needed. Import checks namespace, head, optional base identity, supported provider/schema, bounded paths/spans, and captured head source. An import is not trusted merely because it was produced earlier. Provider selection flags apply to building; an imported artifact supplies its own validated provider identity.
 
-Local indexing uses fresh per-run scratch databases, not the action's persistent cache. Databases, provider homes, and sanitized index snapshots are removed after preparation. The bounded artifact and coverage remain in `index/`. This establishes context-input parity, not equal indexing latency, model output validity, or finding quality. The default local finding scope remains `defects`; use `--finding-scope defects-and-risks` to match the dogfood workflow's broader scope. Candidate verification remains disabled in both paths.
+Local indexing automatically retains validated base databases under `$XDG_STATE_HOME/redline/indexes/v1` (or `$HOME/.local/state/redline/indexes/v1`), separate from review outputs and pinned tools. Identity includes the local repository namespace, base commit, provider/version, platform/architecture, and index configuration. Head-only changes and token-budget changes do not rebuild a healthy matching base index. Missing, corrupt, incompatible, or unsafe state is rebuilt; an unavailable cache falls back to a fresh per-run index rather than trusting it. The terminal reports `Base index: reused`, `rebuilt`, or `uncached`.
+
+Each run refreshes sanitized base bytes from immutable Git objects at a stable pathname, validates the database through the pinned provider, and queries again. Head evidence and review artifacts are always rebuilt from the new captured head; retaining a graph does not retain model answers. Source export and provider query/startup time therefore remain on warm runs. Per-run head snapshots, socket directories, and provider homes are removed after preparation. The bounded artifact and coverage remain in `index/`.
+
+The private cache retains at most eight completed entries and 2 GiB of managed state, with least-recently-used eviction. Oversized or unsafe entries are not retained. An OS-backed lock serializes local index preparation, so overlapping runs do not publish partial databases or index the same base concurrently. Lock ownership releases on normal completion or process exit; cancelled incomplete builds are discarded. Unknown files are not deleted by cache cleanup. These controls do not establish arbitrary-runner sandboxing.
+
+This establishes context-input parity, not equal indexing latency, model output validity, or finding quality. The default local finding scope remains `defects`; use `--finding-scope defects-and-risks` to match the dogfood workflow's broader scope. Candidate verification remains disabled in both paths.
 
 ## Review uncommitted changes
 
@@ -135,6 +141,18 @@ Other environment names mirror their scalar flags using uppercase and underscore
 
 Repository configuration cannot choose model endpoints, executables, credentials, output paths, or reporters. The only repository policy consumed is the existing strict `.redline/review-eligibility.json` from the resolved committed base. Uncommitted policy cannot hide its own changes. There is no additional project config loader.
 
+## Output-token budget
+
+`--max-output-tokens COUNT` sets the maximum output tokens for each model invocation. Its environment equivalent is `REDLINE_MAX_OUTPUT_TOKENS`; the trusted user-config key is `"max-output-tokens"` with a string value. Precedence remains CLI → environment → user config. Values must be decimal integers from 1,024 through 262,144; larger explicit values such as `32768` or `65536` are supported. This safety ceiling is not a claim about any model's capacity. Providers can reject requests above their supported limits; Redline does not retry token exhaustion automatically.
+
+```bash
+redline review --base main --head HEAD --harness pi --max-output-tokens 32768
+```
+
+When unset, Pi retains its benchmark-derived 16,384-token default; OpenCode retains its existing model/provider defaults. An explicit setting configures Pi's isolated model `maxTokens` and OpenCode's runtime output ceiling, without changing OpenCode's model context-window metadata. OpenCode's catalog/provider may impose a lower model limit. Echo makes no model call; it validates and records the selection for integration tests.
+
+Output tokens are not bytes, words, context-window capacity, a whole-run allowance, or a dollar budget. Reasoning can consume this allowance depending on the provider. This setting does not allocate separate reasoning tokens or reserve tokens for final JSON, and does not promise syntactically valid output. Timeouts remain independent. Higher token allowances can increase cost and memory use: retained harness stdout remains separately bounded at 8–64 MiB; persisted diagnostics and prompt bounds remain unchanged. An explicit token allowance participates in semantic review-cache fingerprints and is recorded in local `status.json` and terminal output.
+
 ## Arguments
 
 Run `redline review --help` for the complete contract.
@@ -154,6 +172,7 @@ Run `redline review --help` for the complete contract.
 - `--code-context PATH`, `--code-context-repository ID`: optional artifact import and expected namespace.
 - `--harness pi|opencode|echo`: default `pi`.
 - `--provider`, `--endpoint`, `--model`, `--auth none`: trusted model selection.
+- `--max-output-tokens COUNT`: optional per-call generation cap, `1024`–`262144`; Pi defaults to `16384` when unset.
 - `--timeout`: per-file deadline, default `4m`.
 - `--run-timeout`: whole-run deadline including capture, indexing, and review, default `10m`. Local context preparation has an additional five-minute ceiling within that budget.
 - `--concurrency`: integer `1`–`8`, default `4`.

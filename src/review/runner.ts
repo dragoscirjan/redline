@@ -811,6 +811,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           model: environment.model,
           credential: environment.credential,
           timeoutMs: environment.timeout.milliseconds,
+          ...(environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: environment.maxOutputTokens }),
           workDirectory: workDirectory as string,
         });
 

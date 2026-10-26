@@ -158,6 +158,8 @@ export async function readBounded(
 
 export interface BoundedRunRequest extends SpawnRequest {
   readonly timeoutMs: number;
+  /** Trusted capture allowance; bounded independently from model generation. */
+  readonly stdoutLimitBytes?: number | undefined;
   /**
    * Live per-line tap of the child's streams while it runs. Lines are
    * decoded incrementally and bounded by the caller; stream collection
@@ -231,13 +233,17 @@ export async function runBoundedProcess(
   if (request.stdin !== undefined && Buffer.byteLength(request.stdin, 'utf8') > MAX_INPUT_BYTES) {
     throw new Error('process input exceeds its byte limit');
   }
+  const stdoutLimitBytes = request.stdoutLimitBytes ?? MAX_OUTPUT_BYTES;
+  if (!Number.isSafeInteger(stdoutLimitBytes) || stdoutLimitBytes < 1 || stdoutLimitBytes > 64 * 1024 * 1024) {
+    throw new Error('process stdout byte limit is invalid');
+  }
   const startedAt = Date.now();
   const child = spawner.spawn(request);
   const processStartupMs = Date.now() - startedAt;
   const tap = request.onOutputLine;
   const stdoutReader = createBoundedReader(
     tap ? tappedStream(child.stdout, (line) => tap('stdout', line)) : child.stdout,
-    MAX_OUTPUT_BYTES,
+    stdoutLimitBytes,
   );
   const stderrReader = createBoundedReader(
     tap ? tappedStream(child.stderr, (line) => tap('stderr', line)) : child.stderr,

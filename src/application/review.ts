@@ -6,7 +6,7 @@ import type { ReviewWriter } from '../review/writer.ts';
 export type ReviewEvent =
   | { readonly kind: 'started' }
   | { readonly kind: 'context-started'; readonly provider: string }
-  | { readonly kind: 'context-ready'; readonly status: ReviewRunResult['summary']['codeContext']['status']; readonly relatedSpans: number; readonly fileOnlyFiles: number }
+  | { readonly kind: 'context-ready'; readonly status: ReviewRunResult['summary']['codeContext']['status']; readonly relatedSpans: number; readonly fileOnlyFiles: number; readonly indexCache?: 'reused' | 'rebuilt' | 'uncached' | 'not-needed' | 'unavailable' | 'imported' }
   | { readonly kind: 'planned'; readonly files: readonly { readonly fileId: string; readonly reviewed: boolean }[] }
   | { readonly kind: 'file-started'; readonly fileId: string }
   | { readonly kind: 'file-completed'; readonly fileId: string; readonly outcome: 'clean' | 'findings' | 'omitted' }
@@ -25,7 +25,7 @@ export interface CapturedContextSnapshot {
   readonly repository: string;
   readonly base: string;
   readonly head: string;
-  prepareSources(): Promise<{ readonly baseDirectory: string; readonly headDirectory: string }>;
+  prepareSources(baseDirectory?: string): Promise<{ readonly baseDirectory: string; readonly headDirectory: string }>;
 }
 
 export interface CapturedRevision {

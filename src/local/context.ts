@@ -60,6 +60,7 @@ export async function prepareLocalContext(capture: CapturedRevision, options: Lo
     importedArtifact: options.indexing.artifact, repository: options.indexing.repository,
     timeoutMs: Math.max(1, Math.min(remainingMs, 5 * 60_000)), hostPath: directories.join(delimiter),
     systemRoot: env.SystemRoot ?? env.SYSTEMROOT,
+    cacheDirectory: join(dirname(options.stateDirectory), 'indexes', 'v1'), cacheAnchor: dirname(options.stateDirectory), repositoryDirectory: options.repository,
     spawner: cancellableSpawner(signal), resolveProvider: () => providerCommand(options, env), resolvePython: python,
     redact: (text) => credential === undefined ? text : text.split(credential).join('[redacted]'),
   }, signal);

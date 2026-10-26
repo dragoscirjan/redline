@@ -43,6 +43,23 @@ async function manifest(output: string) { return JSON.parse(await readFile(join(
 async function capture(output: string) { return JSON.parse(await readFile(join(output, 'capture.json'), 'utf8')); }
 
 describe('local Git review CLI', () => {
+  it('applies output-token budget precedence and records the explicit allowance', async () => {
+    const f = await fixture(); const config = join(f.root, 'user.json');
+    await writeFile(config, JSON.stringify({ 'max-output-tokens': '32768' }));
+    const parse = (args: string[], env: NodeJS.ProcessEnv = {}) => parseLocalOptions(['--harness', 'echo', '--config', config, ...args], { ...f.env, ...env }, f.repository);
+    expect((await parse([])).environment.maxOutputTokens).toBe(32768);
+    expect((await parse([], { REDLINE_MAX_OUTPUT_TOKENS: '65536' })).environment.maxOutputTokens).toBe(65536);
+    expect((await parse(['--max-output-tokens', '131072'], { REDLINE_MAX_OUTPUT_TOKENS: '65536' })).environment.maxOutputTokens).toBe(131072);
+    const result = await f.run(['--max-output-tokens', '32768']);
+    expect(result.code, result.stderr).toBe(0); expect(result.stdout).toContain('Output budget: 32768 tokens per model call');
+    expect(JSON.parse(await readFile(join(result.output, 'status.json'), 'utf8')).maxOutputTokens).toBe(32768);
+  });
+
+  it.each(['0', '1023', '262145', '1.5', '-1', 'Infinity', '32k', ' 32768'])('rejects invalid output-token allowance %s before creating output', async (value) => {
+    const f = await fixture(); const result = await f.run([`--max-output-tokens=${value}`]);
+    expect(result.code).toBe(2); expect(result.stderr).toContain('max-output-tokens');
+    expect(await readFile(join(result.output, 'status.json'), 'utf8').catch(() => null)).toBeNull();
+  });
   it('reviews branches without forge metadata and preserves deterministic bundle bytes', async () => {
     const f = await fixture();
     f.git('branch', 'base', f.base); f.git('branch', 'feature', f.head);

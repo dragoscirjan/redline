@@ -32,6 +32,8 @@ export interface HarnessSettings {
    */
   readonly credential: HarnessCredential | undefined;
   readonly timeoutMs: number;
+  /** Optional per-call generation cap. Unset retains the harness's production default. */
+  readonly maxOutputTokens?: number | undefined;
   /** Caller-managed scratch directory for generated harness configuration. */
   readonly workDirectory: string;
 }

@@ -56,6 +56,19 @@ class RecordingSpawner implements ProcessSpawner {
 }
 
 describe('createOpenCodeExecutor', () => {
+  it('sets the runtime output ceiling without replacing model context-window metadata', async () => {
+    const workDirectory = await mkdtemp(join(tmpdir(), 'redline-oc-budget-'));
+    try {
+      const spawner = new RecordingSpawner(); const executor = createOpenCodeExecutor({ spawner });
+      const prepared = await executor.prepare({ ...SETTINGS, workDirectory, maxOutputTokens: 65536 });
+      spawner.script('', 0); await executor.execute(prepared, { system: 'policy', user: 'review' });
+      const request = spawner.requests[0]!;
+      const config = JSON.parse(await readFile(request.env!.OPENCODE_CONFIG!, 'utf8'));
+      expect(config.provider.mock.models['test-model']).toEqual({});
+      expect(request.env!.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX).toBe('65536');
+      expect(prepared.description).toContain('max-output-tokens=65536');
+    } finally { await rm(workDirectory, { recursive: true, force: true }); }
+  });
   it('generates an isolated config with the review agent and disabled tools', async () => {
     const workDirectory = await mkdtemp(join(tmpdir(), 'redline-oc-'));
     try {

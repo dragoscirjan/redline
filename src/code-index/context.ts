@@ -1,5 +1,8 @@
 /** Host-side context preparation shared with the action's Python artifact builder. */
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { acquireBaseIndex, type BaseIndexLease } from './cache.ts';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CapturedRevision } from '../application/review.ts';
@@ -23,10 +26,14 @@ export interface ContextPreparationOptions {
   readonly resolveProvider: () => Promise<IndexCommand>;
   readonly resolvePython: () => Promise<string>;
   readonly redact?: (text: string) => string;
+  readonly cacheDirectory?: string | undefined;
+  readonly cacheAnchor?: string | undefined;
+  readonly repositoryDirectory?: string | undefined;
 }
 export interface PreparedReviewContext {
   readonly input: ReviewCodeContextInput;
   readonly fileOnlyReviewedFiles: number;
+  readonly indexCache: 'reused' | 'rebuilt' | 'uncached' | 'not-needed' | 'unavailable' | 'imported';
   readonly coverage: Awaited<ReturnType<typeof loadReviewCodeContext>>['coverage'];
 }
 
@@ -38,7 +45,7 @@ export async function prepareReviewContext(capture: CapturedRevision, options: C
   const directory = join(options.outputDirectory, 'index');
   const artifactPath = join(directory, 'code-context.json');
   const home = join(directory, 'home');
-  const cache = join(directory, 'cache');
+  let cache = join(directory, 'cache');
   const temporary = join(directory, 'tmp');
   await Promise.all([home, cache, temporary].map((path) => mkdir(path, { recursive: true, mode: 0o700 })));
   const environment: NodeJS.ProcessEnv = {
@@ -61,6 +68,9 @@ export async function prepareReviewContext(capture: CapturedRevision, options: C
     })) };
     await writeFile(artifactPath, `${JSON.stringify(redacted, null, 2)}\n`, { mode: 0o600 });
   };
+  let lease: BaseIndexLease | undefined;
+  let socketDirectory: string | undefined;
+  let indexCache: PreparedReviewContext['indexCache'] = options.importedArtifact === undefined ? 'unavailable' : 'imported';
   const started = performance.now();
   const remaining = (): number => Math.max(1, Math.floor(options.timeoutMs - (performance.now() - started)));
   try {
@@ -85,34 +95,59 @@ export async function prepareReviewContext(capture: CapturedRevision, options: C
         await save(unavailable('index-provider-version-unavailable'));
       } else {
         const python = await options.resolvePython();
-        const sources = await capture.contextSnapshot.prepareSources();
+        const configuration = `${options.provider}-captured-source-v2-${createHash('sha256')
+          .update(await readFile(new URL('./export.py', import.meta.url)))
+          .update(await readFile(new URL('./gitnexus-query.mjs', import.meta.url)))
+          .update(JSON.stringify({ command: command.command, prefix: command.prefix })).digest('hex')}`;
+        if (options.cacheDirectory !== undefined && options.repositoryDirectory !== undefined) {
+          lease = await acquireBaseIndex(options.cacheDirectory, options.repositoryDirectory, {
+            repository, base: bundle.manifest.base, provider: provider.id, providerVersion: provider.version,
+            configuration, platform: `${process.platform}-${process.arch}`,
+          }, python, environment, signal, remaining(), options.cacheAnchor).catch(() => undefined);
+          signal.throwIfAborted();
+          if (lease !== undefined) cache = join(lease.directory, 'cache');
+        }
+        socketDirectory = await mkdtemp(join(tmpdir(), 'rl-index-'));
+        const sources = await capture.contextSnapshot.prepareSources(lease === undefined ? undefined : join(lease.directory, 'base'));
         signal.throwIfAborted();
         const executable = command.prefix.length === 1 ? command.prefix[0]! : command.command;
         if (command.prefix.length > 1 || (options.provider === 'gitnexus' && command.prefix.length !== 1)) throw new Error('unsupported indexer launch shape');
         const result = await runBoundedProcess(options.spawner, {
           command: python, cwd: home, env: environment, timeoutMs: remaining(),
-          args: [fileURLToPath(new URL('./export.py', import.meta.url)), 'build',
+          args: ['-I', '-B', fileURLToPath(new URL('./export.py', import.meta.url)), 'build',
             '--provider', options.provider, '--provider-version', provider.version, '--mode', 'review',
             '--base', bundle.manifest.base, '--head', bundle.manifest.head, '--repository', repository,
             '--workspace', options.outputDirectory, '--output-directory', directory,
+            ...(lease === undefined ? [] : ['--base-workspace', lease.directory]),
+            '--socket-path', join(socketDirectory, 'f.sock'),
             '--prepared-manifest', join(capture.reviewDirectory, 'manifest.json'),
             '--source-root', sources.baseDirectory, '--head-source-root', sources.headDirectory,
             '--cache-root', cache, '--provider-home', options.provider === 'gitnexus' ? join(cache, 'gitnexus-home') : home, '--executable', executable,
             '--runtime-executable', command.command, '--query-adapter', fileURLToPath(new URL('./gitnexus-query.mjs', import.meta.url)),
-            '--configuration-id', `${options.provider}-base-only-captured-v1`, '--installation-ms', '0', '--restore-ms', '0',
-            '--cache-matched-key', '', '--cache-restore-outcome', 'skipped', '--result-file', join(directory, 'build-result.json')],
+            '--configuration-id', configuration, '--installation-ms', '0', '--restore-ms', '0',
+            '--cache-matched-key', lease?.restored === true ? lease.key : '', '--cache-restore-outcome', lease?.restored === true ? 'success' : 'skipped', '--result-file', join(directory, 'build-result.json')],
         });
         signal.throwIfAborted();
         if (result.code !== 0 || result.timedOut || result.stdoutTruncated) await save(unavailable('index-provider-build-failed'));
-        else await save(await loadCodeContextArtifact(artifactPath));
+        else {
+          const artifact = await loadCodeContextArtifact(artifactPath);
+          indexCache = artifact.diagnostics.some((item) => item.code === 'cache-base-revision') ? 'reused'
+            : artifact.diagnostics.some((item) => item.code === 'cold-index-skipped') ? 'not-needed'
+            : ['complete', 'partial'].includes(artifact.status) && artifact.timings?.indexMs !== null ? (lease === undefined ? 'uncached' : 'rebuilt') : 'unavailable';
+          await save(lease === undefined && options.cacheDirectory !== undefined ? { ...artifact, diagnostics: [...artifact.diagnostics,
+            { level: 'warning', code: 'local-index-cache-unavailable', message: 'Persistent base-index state was unavailable; fresh per-run preparation was used.' }] } : artifact);
+        }
       }
     }
   } catch {
     signal.throwIfAborted();
     await save(unavailable(options.importedArtifact === undefined ? 'index-provider-unavailable' : 'imported-context-invalid'));
   } finally {
-    // Provider configuration and databases are private, per-run scratch. Only the bounded artifact is retained.
-    for (const path of [home, cache, temporary, join(directory, 'base'), join(directory, 'head')]) {
+    // Release only after the bounded provider process has stopped. Retained
+    // state is separate from per-run cleanup and never supplies head evidence.
+    await lease?.release();
+    for (const path of [home, join(directory, 'cache'), temporary, join(directory, 'base'), join(directory, 'head'),
+      ...(socketDirectory === undefined ? [] : [socketDirectory])]) {
       await rm(path, { recursive: true, force: true }).catch(() => undefined);
     }
   }
@@ -120,6 +155,6 @@ export async function prepareReviewContext(capture: CapturedRevision, options: C
   const loaded = await loadReviewCodeContext(bundle, input);
   const fileOnlyReviewedFiles = bundle.manifest.files.filter((file) => file.reviewed && codeContextForFile(loaded, file).coverage.relatedSpans === 0).length;
   await writeFile(join(directory, 'status.json'), `${JSON.stringify({ version: 1, provider: loaded.coverage.provider,
-    status: loaded.coverage.status, relatedSpans: loaded.coverage.relatedSpans, fileOnlyReviewedFiles, diagnosticCodes: loaded.coverage.diagnosticCodes }, null, 2)}\n`, { mode: 0o600 });
-  return { input, coverage: loaded.coverage, fileOnlyReviewedFiles };
+    status: loaded.coverage.status, relatedSpans: loaded.coverage.relatedSpans, fileOnlyReviewedFiles, indexCache, diagnosticCodes: loaded.coverage.diagnosticCodes }, null, 2)}\n`, { mode: 0o600 });
+  return { input, coverage: loaded.coverage, fileOnlyReviewedFiles, indexCache };
 }

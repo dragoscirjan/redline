@@ -131,6 +131,8 @@ jobs:
         env:
           HARNESS: ${{ matrix.harness }}
           HARNESS_MATRIX_OUTPUT_DIR: ${{ runner.temp }}/harness-reviews
+          REDLINE_MAX_OUTPUT_TOKENS: '32768'
+          MOCK_EXPECT_MAX_OUTPUT_TOKENS: '32768'
         run: bash test/harness-matrix-run.sh "$HARNESS"
 
       # The per-harness review findings artifact: per-file JSON/Markdown
@@ -224,7 +226,7 @@ jobs:
         run: corepack pnpm@10.33.0 run typecheck
 
       - name: Exercise local capture, reporting, cancellation, and offline npm installation
-        run: corepack pnpm@10.33.0 exec vitest run test/application.test.ts test/local-cli.test.ts test/package.test.ts test/npm-release.test.ts test/cli-reporter.test.ts test/local-context.test.ts
+        run: corepack pnpm@10.33.0 exec vitest run test/application.test.ts test/local-cli.test.ts test/package.test.ts test/npm-release.test.ts test/cli-reporter.test.ts test/local-context.test.ts test/index-cache.test.ts test/output-budget.test.ts
 
   source-runtime:
     name: Source runtime (${{ matrix.runtime }})

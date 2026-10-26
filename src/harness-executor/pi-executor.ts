@@ -11,6 +11,7 @@
  * generated file.
  */
 
+import { MAX_OUTPUT_TOKENS, outputCaptureBytes } from './output-budget.ts';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -51,7 +52,7 @@ export type PiStructuredOutput = 'none' | 'json-object';
 export const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel = 'off';
 export const DEFAULT_PI_MAX_OUTPUT_TOKENS = 16_384;
 export const MIN_PI_MAX_OUTPUT_TOKENS = 1_024;
-export const MAX_PI_MAX_OUTPUT_TOKENS = 16_384;
+export const MAX_PI_MAX_OUTPUT_TOKENS = MAX_OUTPUT_TOKENS;
 
 type PiDiagnosticEventType =
   | 'session'
@@ -157,6 +158,7 @@ export interface PreparedPi extends PreparedHarness {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs: number;
   readonly transientRetries: 0 | 1;
+  readonly maxOutputTokens: number;
 }
 
 interface PiExecutionPolicy {
@@ -554,6 +556,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
   return {
     harness: 'pi',
     async prepare(settings: HarnessSettings): Promise<PreparedPi> {
+      const effectivePolicy = settings.maxOutputTokens === undefined ? policy : validatePolicy({ ...options, maxOutputTokens: settings.maxOutputTokens });
       const rootDirectory = join(settings.workDirectory, 'pi-agent');
       await mkdir(rootDirectory, { recursive: true });
       const args = [
@@ -563,7 +566,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         '--no-session',
         '--no-tools',
         '--thinking',
-        policy.thinkingLevel,
+        effectivePolicy.thinkingLevel,
         '--provider',
         settings.model.provider,
         '--model',
@@ -581,16 +584,17 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
       return Object.freeze({
         harness: 'pi',
         model: settings.model,
-        description: `pi with isolated per-invocation agent directories under ${rootDirectory}; thinking=${policy.thinkingLevel}, max-output-tokens=${policy.maxOutputTokens}, temperature=${policy.temperature ?? 'provider-default'}, structured-output=${policy.structuredOutput}, transient-retries=${policy.transientRetries} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
+        description: `pi with isolated per-invocation agent directories under ${rootDirectory}; thinking=${effectivePolicy.thinkingLevel}, max-output-tokens=${effectivePolicy.maxOutputTokens}, temperature=${effectivePolicy.temperature ?? 'provider-default'}, structured-output=${effectivePolicy.structuredOutput}, transient-retries=${effectivePolicy.transientRetries} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
         command,
         args,
         cwd: settings.workDirectory,
         rootDirectory,
-        agentConfig: buildAgentConfig(settings, policy),
-        settingsConfig: buildSettingsConfig(policy),
+        agentConfig: buildAgentConfig(settings, effectivePolicy),
+        settingsConfig: buildSettingsConfig(effectivePolicy),
         env,
         timeoutMs: settings.timeoutMs,
-        transientRetries: policy.transientRetries,
+        transientRetries: effectivePolicy.transientRetries,
+        maxOutputTokens: effectivePolicy.maxOutputTokens,
       });
     },
     async execute(prepared: PreparedHarness, prompt: HarnessPrompt, options?: HarnessExecuteOptions): Promise<HarnessRun> {
@@ -658,6 +662,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
           env,
           stdin: prompt.user,
           timeoutMs: remainingTimeoutMs,
+          stdoutLimitBytes: outputCaptureBytes(state.maxOutputTokens),
           onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {
             if (stream === 'stderr') {
               if (streamMode !== 'off') options?.onOutputLine?.({ stream, kind: 'line', line });

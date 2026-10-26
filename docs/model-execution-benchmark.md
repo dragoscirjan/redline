@@ -45,7 +45,7 @@ No mode introduced a validated false positive. The live provider still omitted f
 `off-16384` had the best repeated completion and expected-issue credit counts. Redline therefore uses:
 
 - thinking `off`;
-- a 16,384-token output cap;
+- a 16,384-token default output cap; local CLI users can override it with `--max-output-tokens`, and the review environment accepts `REDLINE_MAX_OUTPUT_TOKENS`. The historical benchmark selected a default, not a universal model limit;
 - provider-default sampling in production (temperature `0` is a benchmark control only);
 - normal JSON text output, not provider-native response formatting.
 

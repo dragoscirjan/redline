@@ -15,6 +15,7 @@ The GitHub Action passes every value to the review tool through environment vari
 | `REDLINE_MODEL_CONFIG` | review mode | Model configuration JSON (below). |
 | `REDLINE_MODEL_AUTH` | review mode | Provider-keyed credential map JSON (below). Not consulted when the model config declares `auth: "none"`. |
 | `REDLINE_FINDING_SCOPE` | optional | `defects` (default) or `defects-and-risks`. |
+| `REDLINE_MAX_OUTPUT_TOKENS` | optional | Per-model-call output-token cap, decimal integer `1024`–`262144`. Unset preserves Pi's `16384` and OpenCode's existing defaults. Separate from timeouts and provider-dependent reasoning allocation. |
 | `REDLINE_TIMEOUT` | optional | Per-file model deadline. Duration like `4m`, `10m`, or `1h30m`; default `4m`, capped at `360m`. |
 | `REDLINE_RUN_TIMEOUT` | optional | Whole-review deadline. Default `10m`, capped at `360m`. Each model call is capped by the remaining run budget. |
 | `REDLINE_REVIEW_CONCURRENCY` | optional | Maximum simultaneous per-file model calls. Integer from `1` through `8`; default `4`. |

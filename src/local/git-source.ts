@@ -285,8 +285,8 @@ export class GitRevisionSource implements RevisionSource {
         reviewDirectory: bundleDirectory, sourceDirectory, coverage,
         contextSnapshot: {
           repository: repositoryIdentity, base, head,
-          prepareSources: () => prepared ??= (async () => {
-            const baseDirectory = join(output, 'index', 'base');
+          prepareSources: (persistentBase) => prepared ??= (async () => {
+            const baseDirectory = persistentBase ?? join(output, 'index', 'base');
             const headDirectory = join(output, 'index', 'head');
             await exportSnapshot(base, baseDirectory, true);
             await exportSnapshot(head, headDirectory, true);

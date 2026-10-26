@@ -4,11 +4,12 @@ import { open, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { requireCapability } from '../application/capabilities.ts';
+import { parseOutputTokens } from '../harness-executor/output-budget.ts';
 import { parseReviewEnvironment, type ReviewEnvironment } from '../review/environment.ts';
 import { executable, GitCommand, gitEnvironment, inside, repositoryBoundary } from './process.ts';
 
 const KEYS = ['repository', 'output', 'vcs', 'base', 'head', 'worktree', 'comparison', 'untracked', 'harness',
-  'provider', 'endpoint', 'model', 'auth', 'timeout', 'run-timeout', 'concurrency', 'finding-scope', 'fail-on', 'color', 'indexing', 'indexing-provider', 'index-executable', 'index-runtime', 'code-context', 'code-context-repository'] as const;
+  'provider', 'endpoint', 'model', 'auth', 'max-output-tokens', 'timeout', 'run-timeout', 'concurrency', 'finding-scope', 'fail-on', 'color', 'indexing', 'indexing-provider', 'index-executable', 'index-runtime', 'code-context', 'code-context-repository'] as const;
 type Key = (typeof KEYS)[number];
 export interface LocalOptions {
   readonly repository: string;
@@ -58,6 +59,7 @@ No target: review staged and unstaged tracked changes against HEAD.
   --provider ID --endpoint URL --model ID
   --auth none                        Credential-less endpoint; otherwise use
                                     REDLINE_MODEL_AUTH provider-keyed JSON
+  --max-output-tokens COUNT           Per model call; Pi default 16384; range 1024..262144
   --timeout DURATION                 Per file; default 4m
   --run-timeout DURATION             Whole review; default 10m
   --concurrency 1..8                 Default 4
@@ -190,11 +192,16 @@ export async function parseLocalOptions(args: readonly string[], env: NodeJS.Pro
   const authValue = env.REDLINE_MODEL_AUTH ?? (defaults['model-auth'] === undefined ? undefined : JSON.stringify(defaults['model-auth']));
   const stateDirectory = join(env.XDG_STATE_HOME ?? join(env.HOME ?? homedir(), '.local/state'), 'redline/reviews');
   const output = flag('output') ?? env.REDLINE_OUTPUT_DIR ?? defaults.output;
+  const tokenInput = flag('max-output-tokens') ?? env.REDLINE_MAX_OUTPUT_TOKENS ?? defaults['max-output-tokens'];
+  let maxOutputTokens: number | undefined;
+  try { maxOutputTokens = parseOutputTokens(tokenInput === undefined ? undefined : String(tokenInput)); }
+  catch (error) { throw new UsageError(error instanceof Error ? error.message : 'invalid max-output-tokens'); }
   const parsed = parseReviewEnvironment({
     REDLINE_HARNESS: harness, REDLINE_REVIEW_DIR: '/prepared/bundle', REDLINE_SOURCE_DIR: '/prepared/source',
     REDLINE_OUTPUT_DIR: output === undefined ? stateDirectory : resolve(cwd, String(output)),
     REDLINE_MODEL_CONFIG: JSON.stringify(model), ...(authValue === undefined ? {} : { REDLINE_MODEL_AUTH: authValue }),
     REDLINE_TIMEOUT: get('timeout', '4m'), REDLINE_RUN_TIMEOUT: get('run-timeout', '10m'),
+    ...(maxOutputTokens === undefined ? {} : { REDLINE_MAX_OUTPUT_TOKENS: String(maxOutputTokens) }),
     REDLINE_REVIEW_CONCURRENCY: get('concurrency', '4'), REDLINE_FINDING_SCOPE: get('finding-scope', 'defects'),
   });
   if (parsed.review === undefined) throw new UsageError('review configuration is incomplete');

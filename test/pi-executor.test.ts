@@ -100,6 +100,14 @@ class RecordingSpawner implements ProcessSpawner {
 }
 
 describe('createPiExecutor', () => {
+  it('uses the trusted per-call output-token setting above the old fixed ceiling', async () => {
+    const settings = await createSettings({ maxOutputTokens: 65536 });
+    try {
+      const prepared = await createPiExecutor().prepare(settings);
+      expect(JSON.parse((prepared as import('../src/harness-executor/pi-executor.ts').PreparedPi).agentConfig).providers.mock.models[0].maxTokens).toBe(65536);
+      expect(prepared.description).toContain('max-output-tokens=65536');
+    } finally { await settings.cleanup(); }
+  });
   it('generates models.json without embedding the credential and sets the agent dir env', async () => {
     const settings = await createSettings();
     try {

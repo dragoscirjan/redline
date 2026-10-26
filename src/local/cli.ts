@@ -103,6 +103,7 @@ export async function main(
       output = options.output;
     }
     const destination = output;
+    if (options.environment.maxOutputTokens !== undefined) stdout(`Output budget: ${options.environment.maxOutputTokens} tokens per model call`);
     const diffReader = new FindingDiffReader(join(destination, 'bundle'), join(destination, 'source'));
     const reporter = new CompositeReporter(options.reporters.map(() => new CliReporter(stdout, stderr, options.environment.credential?.value, {
       color: terminalColors(options.color, dependencies.stdout === undefined && process.stdout.isTTY === true, env),
@@ -123,7 +124,7 @@ export async function main(
         reporter.progress({ kind: 'context-started', provider: options.indexing.artifact === undefined ? options.indexing.provider : 'imported' });
         const context = await prepareLocalContext(capture, options, env, destination, contextSignal,
           Math.max(1, options.environment.runTimeout.milliseconds - (performance.now() - start)));
-        reporter.progress({ kind: 'context-ready', status: context.coverage.status, relatedSpans: context.coverage.relatedSpans, fileOnlyFiles: context.fileOnlyReviewedFiles });
+        reporter.progress({ kind: 'context-ready', status: context.coverage.status, relatedSpans: context.coverage.relatedSpans, fileOnlyFiles: context.fileOnlyReviewedFiles, indexCache: context.indexCache });
         if (options.indexing.mode === 'required' && context.fileOnlyReviewedFiles > 0) {
           throw new LocalOperationError('required indexed context is missing source-validated related spans for one or more reviewed files; review was not started');
         }
@@ -150,7 +151,7 @@ export async function main(
       if (result.review.findings.some((finding) => severities.includes(finding.severity))) code = 3;
     }
     if (reporter.failures.size > 0) code = 5;
-    await writeFile(join(destination, 'status.json'), `${JSON.stringify({ version: 1, status: code === 0 || code === 3 ? 'completed' : 'incomplete', exitCode: code, reporterFailures: [...reporter.failures] }, null, 2)}\n`);
+    await writeFile(join(destination, 'status.json'), `${JSON.stringify({ version: 1, status: code === 0 || code === 3 ? 'completed' : 'incomplete', exitCode: code, ...(options.environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: options.environment.maxOutputTokens }), reporterFailures: [...reporter.failures] }, null, 2)}\n`);
     return code;
   } catch (error) {
     if (error instanceof LocalOperationError) stderr(`redline: ${terminalText(error.message, options.environment.credential?.value)}`);

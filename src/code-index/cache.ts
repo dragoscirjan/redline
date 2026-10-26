@@ -144,7 +144,11 @@ export async function acquireBaseIndex(root: string, repositoryDirectory: string
   }
   if (!inside(anchor, root)) throw new Error('index cache escaped its state namespace');
   const suffix = relative(anchor, root);
-  await privateDirectory(anchor);
+  // The application parent may also hold public tool binaries. Require
+  // privacy on the cache root, not by chmod-ing an existing parent.
+  await mkdir(anchor, { recursive: true, mode: 0o700 });
+  const anchorInfo = await lstat(anchor);
+  if (!anchorInfo.isDirectory() || anchorInfo.isSymbolicLink()) throw new Error('unsafe index-cache anchor');
   anchor = await realpath(anchor);
   let cursor = anchor;
   for (const part of suffix.split(/[\\/]/u).filter(Boolean)) {

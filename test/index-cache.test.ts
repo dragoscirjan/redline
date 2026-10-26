@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -62,6 +62,13 @@ it('refuses a cache root redirected into reviewed content before creating direct
   await symlink(f.repository, alias, process.platform === 'win32' ? 'junction' : 'dir');
   await expect(acquireBaseIndex(join(alias, 'cache/new'), f.repository, identity, f.python, f.env, new AbortController().signal, 1000)).rejects.toThrow('inside reviewed repository');
   expect(await readdir(f.repository)).toEqual([]);
+});
+
+it('accepts a normal application parent while keeping the cache itself private', async () => {
+  const f = await fixture(); await mkdir(f.cache, { mode: 0o755 });
+  if (process.platform !== 'win32') await chmod(f.cache, 0o755);
+  const lease = await acquireBaseIndex(join(f.cache, 'indexes/v1'), f.repository, identity, f.python, f.env, new AbortController().signal, 1000, f.cache);
+  await lease.release();
 });
 
 it('refuses links in managed cache parents without writing through them', async () => {

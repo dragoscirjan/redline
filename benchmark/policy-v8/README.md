@@ -6,4 +6,4 @@ These reports replay the existing checked-in responses and timings through the c
 - `performance/`: unchanged 20-file `benchmark/performance/v1` corpus/profile.
 - `verification/`: existing scripted verification corpus/dispositions; activation remains false.
 
-Historical reports remain unchanged at their original locations. The performance timing inputs and earlier measured/simulated claims are not replaced by new live measurements.
+The default deterministic `benchmark:performance` command now writes `benchmark/policy-v8/performance`; CI checks that replay and protects the historical baseline from changes. Historical reports remain unchanged at their original locations. The performance timing inputs and earlier measured/simulated claims are not replaced by new live measurements.

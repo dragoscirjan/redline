@@ -5,6 +5,7 @@ import type { ReviewWriter } from '../review/writer.ts';
 
 export type ReviewEvent =
   | { readonly kind: 'started' }
+  | { readonly kind: 'workload'; readonly files: number; readonly workers: number; readonly maximumExecutionMs: number; readonly remainingMs: number; readonly mayExceedDeadline: boolean; readonly scheduling: string; readonly staticHeadFiles: number }
   | { readonly kind: 'context-started'; readonly provider: string }
   | { readonly kind: 'context-ready'; readonly status: ReviewRunResult['summary']['codeContext']['status']; readonly relatedSpans: number; readonly fileOnlyFiles: number; readonly indexCache?: 'reused' | 'rebuilt' | 'uncached' | 'not-needed' | 'unavailable' | 'imported' }
   | { readonly kind: 'planned'; readonly files: readonly { readonly fileId: string; readonly reviewed: boolean }[] }
@@ -114,6 +115,7 @@ export class ReviewApplication {
       const result = await (this.dependencies.execute ?? executePreparedReview)({
         environment: { ...command.environment, reviewDirectory: captured.reviewDirectory, sourceDirectory: captured.sourceDirectory, codeContext },
         ...(this.dependencies.artifacts === undefined ? {} : { writer: this.dependencies.artifacts }),
+        onWorkload: (value) => reporter.progress({ kind: 'workload', ...value }),
         onReviewPlan: (files) => reporter.progress({ kind: 'planned', files }),
         onFileStart: ({ fileId }) => reporter.progress({ kind: 'file-started', fileId }),
         onFileDone: ({ fileId, outcome }) => reporter.progress({ kind: 'file-completed', fileId, outcome }),

@@ -307,6 +307,21 @@ describe('runFileReviews', () => {
     }
   });
 
+  it('mixes large and small tasks without changing bounded concurrency or artifact order', async () => {
+    const fixture = await createMultiFileFixture([10, 600, 100, 500, 200, 400]);
+    try {
+      const parsed = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      const executor = new ConcurrentExecutor(); const starts: string[] = [];
+      const workload: unknown[] = [];
+      const result = await runFileReviews({ environment: { ...parsed.review!, scheduling: 'mixed' }, executor,
+        onFileStart: (file) => starts.push(file.fileId), onWorkload: (value) => workload.push(value) });
+      expect(executor.maximumActive).toBe(4);
+      expect(starts.slice(0, 4)).toEqual(['000002', '000001', '000004', '000003']);
+      expect(result.records.map((record) => record.fileId)).toEqual(['000001', '000002', '000003', '000004', '000005', '000006']);
+      expect(workload).toEqual([expect.objectContaining({ files: 6, workers: 4, scheduling: 'mixed' })]);
+    } finally { await fixture.cleanup(); }
+  });
+
   it('keeps manifest traversal and one active call when concurrency is one', async () => {
     const fixture = await createMultiFileFixture([10, 600, 100]);
     try {

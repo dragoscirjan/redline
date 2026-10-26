@@ -10,6 +10,7 @@ import { GitRevisionSource } from './git-source.ts';
 import { HELP, parseLocalOptions, UsageError } from './options.ts';
 import { cancellableSpawner, harnessCommand, inside, LocalOperationError } from './process.ts';
 import { prepareLocalContext } from './context.ts';
+import { localReviewReuse } from './reuse.ts';
 import { FindingDiffReader } from './finding-diff.ts';
 import { CliReporter, terminalColors, terminalText } from './reporter.ts';
 
@@ -117,9 +118,17 @@ export async function main(
     })));
     const start = performance.now();
     timer = setTimeout(() => { deadlineExpired = true; controller.abort(); }, options.environment.runTimeout.milliseconds);
+    let reuse: Awaited<ReturnType<typeof localReviewReuse>>;
+    stdout(`Model protocol: ${options.environment.modelProtocol}; requested controls are not proof the model honors them.`);
+    if (options.environment.modelProtocol === 'openrouter-json'
+      && (options.environment.harness !== 'pi' || options.environment.model.provider !== 'openrouter')) {
+      throw new LocalOperationError('openrouter-json requires the Pi harness and openrouter provider; no silent protocol fallback');
+    }
     const application = new ReviewApplication({
       source: new GitRevisionSource(options, env, destination), reporter,
       prepareContext: async (capture, contextSignal) => {
+        reuse = await localReviewReuse(capture, options);
+        stderr(`Review reuse: ${options.reuse === 'disabled' ? 'disabled' : reuse === undefined ? 'unavailable' : 'enabled'}`);
         if (options.indexing.mode === 'disabled') return undefined;
         reporter.progress({ kind: 'context-started', provider: options.indexing.artifact === undefined ? options.indexing.provider : 'imported' });
         const context = await prepareLocalContext(capture, options, env, destination, contextSignal,
@@ -134,7 +143,7 @@ export async function main(
         signal.throwIfAborted();
         const remaining = Math.max(1, Math.floor(options.environment.runTimeout.milliseconds - (performance.now() - start)));
         return executePreparedReview({ ...input,
-          environment: { ...input.environment, runTimeout: { minutes: remaining / 60_000, milliseconds: remaining } },
+          environment: { ...input.environment, reuse, runTimeout: { minutes: remaining / 60_000, milliseconds: remaining } },
           executor: {
             harness: executor.harness,
             prepare: (settings) => { signal.throwIfAborted(); return executor.prepare(settings); },
@@ -151,7 +160,7 @@ export async function main(
       if (result.review.findings.some((finding) => severities.includes(finding.severity))) code = 3;
     }
     if (reporter.failures.size > 0) code = 5;
-    await writeFile(join(destination, 'status.json'), `${JSON.stringify({ version: 1, status: code === 0 || code === 3 ? 'completed' : 'incomplete', exitCode: code, ...(options.environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: options.environment.maxOutputTokens }), reporterFailures: [...reporter.failures] }, null, 2)}\n`);
+    await writeFile(join(destination, 'status.json'), `${JSON.stringify({ version: 1, status: code === 0 || code === 3 ? 'completed' : 'incomplete', exitCode: code, ...(options.environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: options.environment.maxOutputTokens }), modelProtocol: options.environment.modelProtocol, reporterFailures: [...reporter.failures] }, null, 2)}\n`);
     return code;
   } catch (error) {
     if (error instanceof LocalOperationError) stderr(`redline: ${terminalText(error.message, options.environment.credential?.value)}`);

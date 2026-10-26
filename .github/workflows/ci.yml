@@ -135,6 +135,12 @@ jobs:
           MOCK_EXPECT_MAX_OUTPUT_TOKENS: '32768'
         run: bash test/harness-matrix-run.sh "$HARNESS"
 
+      - name: Verify Pi request protocol at loopback HTTP boundary
+        if: matrix.harness == 'pi'
+        env:
+          REDLINE_LIVE_HARNESS_TESTS: '1'
+        run: mise exec -- pnpm exec vitest run test/live-harness.integration.test.ts -t 'sends actual Pi'
+
       # The per-harness review findings artifact: per-file JSON/Markdown
       # records and the run summary exactly as the review tool wrote them.
       # The name carries run id and attempt so workflow re-runs do not
@@ -226,7 +232,7 @@ jobs:
         run: corepack pnpm@10.33.0 run typecheck
 
       - name: Exercise local capture, reporting, cancellation, and offline npm installation
-        run: corepack pnpm@10.33.0 exec vitest run test/application.test.ts test/local-cli.test.ts test/package.test.ts test/npm-release.test.ts test/cli-reporter.test.ts test/local-context.test.ts test/index-cache.test.ts test/output-budget.test.ts
+        run: corepack pnpm@10.33.0 exec vitest run test/application.test.ts test/local-cli.test.ts test/package.test.ts test/npm-release.test.ts test/cli-reporter.test.ts test/local-context.test.ts test/index-cache.test.ts test/output-budget.test.ts test/head-context.test.ts test/local-tool-discovery.test.ts test/scheduling.test.ts
 
   source-runtime:
     name: Source runtime (${{ matrix.runtime }})

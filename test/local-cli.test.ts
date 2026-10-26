@@ -43,6 +43,72 @@ async function manifest(output: string) { return JSON.parse(await readFile(join(
 async function capture(output: string) { return JSON.parse(await readFile(join(output, 'capture.json'), 'utf8')); }
 
 describe('local Git review CLI', () => {
+  it('automatically resumes exact validated results and invalidates budget and source changes', async () => {
+    const f = await fixture();
+    const args = ['--base', f.base, '--head', 'HEAD'];
+    const first = await f.run(args); expect(first.code, first.stderr).toBe(0);
+    const summary = async (output: string) => JSON.parse(await readFile(join(output, 'reviews/summary.json'), 'utf8'));
+    expect((await summary(first.output)).reuse).toMatchObject({ reusedFiles: 0, executedFiles: 1 });
+    const second = await f.run(args); expect(second.code, second.stderr).toBe(0);
+    expect((await summary(second.output)).reuse).toMatchObject({ reusedFiles: 1, executedFiles: 0 });
+    expect(second.stdout).toContain('Reuse: 1 validated files reused; 0 executed');
+    const disabled = await f.run([...args, '--reuse', 'disabled']);
+    expect((await summary(disabled.output)).reuse.status).toBe('disabled');
+    const budget = await f.run([...args, '--max-output-tokens', '32768']);
+    expect((await summary(budget.output)).reuse.reusedFiles).toBe(0);
+    await writeFile(join(f.repository, 'example.ts'), 'export const value = 3;\n');
+    f.git('commit', '--quiet', '-am', 'changed');
+    const changed = await f.run(args);
+    expect((await summary(changed.output)).reuse.reusedFiles).toBe(0);
+  });
+
+  it('discards corrupt result records and never follows a symlinked cache root', async () => {
+    const f = await fixture(); const args = ['--base', f.base, '--head', 'HEAD'];
+    const first = await f.run(args); expect(first.code).toBe(0);
+    const root = join(f.root, 'state/redline/results/v1');
+    const { readdir } = await import('node:fs/promises');
+    const [namespace] = await readdir(root); const entries = join(root, namespace!, 'entries');
+    const [entry] = await readdir(entries); await writeFile(join(entries, entry!), '{}');
+    const second = await f.run(args);
+    const summary = JSON.parse(await readFile(join(second.output, 'reviews/summary.json'), 'utf8'));
+    expect(summary.reuse).toMatchObject({ reusedFiles: 0, executedFiles: 1, invalidEntries: 1 });
+    await rm(join(f.root, 'state/redline/results'), { recursive: true });
+    const outside = join(f.root, 'outside-cache'); await mkdir(outside);
+    try { await symlink(outside, join(f.root, 'state/redline/results'), process.platform === 'win32' ? 'junction' : 'dir'); }
+    catch { return; }
+    const third = await f.run(args); expect(third.code).toBe(0); expect(third.stderr).toContain('Review reuse: unavailable');
+    expect(await readdir(outside)).toEqual([]);
+  });
+
+  it('captures static import/test evidence for a newly added file without any indexer', async () => {
+    const f = await fixture();
+    await writeFile(join(f.repository, 'new.ts'), 'export const result = 1;\n');
+    await writeFile(join(f.repository, 'new.test.ts'), "import { result } from './new';\n// TEST_SENTINEL\n");
+    f.git('add', '.'); f.git('commit', '--quiet', '-m', 'new source and test');
+    const result = await f.run(['--base', f.base, '--head', 'HEAD']); expect(result.code, result.stderr).toBe(0);
+    const summary = JSON.parse(await readFile(join(result.output, 'reviews/summary.json'), 'utf8'));
+    expect(summary.codeContext.diagnosticCodes).toContain('static-head-context');
+    expect(summary.files.find((file: { path: string }) => file.path === 'new.ts').codeContext.provider.id).toBe('static-head');
+    expect(result.stderr).toContain('Static head context:');
+  });
+
+  it('applies new non-secret options with flag > environment > trusted configuration precedence', async () => {
+    const f = await fixture(); const path = join(f.root, 'user.json');
+    await writeFile(path, JSON.stringify({ reuse: 'disabled', scheduling: 'mixed', 'head-context': 'disabled', 'model-protocol': 'openrouter-json' }));
+    const parse = (args: string[], env: NodeJS.ProcessEnv = {}) => parseLocalOptions(['--harness', 'echo', '--config', path, ...args], { ...f.env, ...env }, f.repository);
+    const defaults = await parse([]);
+    expect(defaults.reuse).toBe('disabled'); expect(defaults.environment).toMatchObject({ scheduling: 'mixed', headContext: false, modelProtocol: 'openrouter-json' });
+    const environment = await parse([], { REDLINE_REUSE: 'enabled', REDLINE_MODEL_PROTOCOL: 'compatible' });
+    expect(environment.reuse).toBe('enabled'); expect(environment.environment.modelProtocol).toBe('compatible');
+    const flags = await parse(['--reuse', 'disabled', '--scheduling', 'largest-first', '--head-context', 'enabled'], { REDLINE_REUSE: 'enabled' });
+    expect(flags.reuse).toBe('disabled'); expect(flags.environment).toMatchObject({ scheduling: 'largest-first', headContext: true });
+  });
+
+  it('rejects an unavailable protocol rather than downgrading it or making a model call', async () => {
+    const f = await fixture(); const result = await f.run(['--model-protocol', 'openrouter-json']);
+    expect(result.code).toBe(1); expect(result.stderr).toContain('requires the Pi harness');
+  });
+
   it('applies output-token budget precedence and records the explicit allowance', async () => {
     const f = await fixture(); const config = join(f.root, 'user.json');
     await writeFile(config, JSON.stringify({ 'max-output-tokens': '32768' }));

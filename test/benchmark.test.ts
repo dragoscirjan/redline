@@ -188,10 +188,10 @@ describe('review-quality benchmark', () => {
     });
 
     const checkedInJson = JSON.parse(
-      await readFile(join(CORPUS, 'comparison', 'report.json'), 'utf8'),
+      await readFile(resolve('benchmark/policy-v8/quality/report.json'), 'utf8'),
     ) as unknown;
     expect(checkedInJson).toEqual(report);
-    await expect(readFile(join(CORPUS, 'comparison', 'report.md'), 'utf8')).resolves.toBe(
+    await expect(readFile(resolve('benchmark/policy-v8/quality/report.md'), 'utf8')).resolves.toBe(
       renderBenchmarkMarkdown(report),
     );
 

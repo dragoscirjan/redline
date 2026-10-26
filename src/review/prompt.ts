@@ -1,7 +1,7 @@
 /**
  * Builds the fixed, versioned per-file review prompts.
  *
- * The system prompt is the review policy (loaded from `prompts/v7/`) plus a
+ * The system prompt is the review policy (loaded from `prompts/v8/`) plus a
  * trusted run configuration; it never contains repository content. The user
  * prompt embeds exactly one file's untrusted context — manifest entry, the
  * authoritative diff, bounded revision-pinned source excerpts, and optional
@@ -22,11 +22,12 @@ import {
   type ReviewManifestFile,
 } from './bundle.ts';
 import type { PromptCodeContext } from './indexed-context.ts';
+import { FILE_REVIEW_GENERATION_SCHEMA } from './generation-schema.ts';
 import { buildFocusedSourceContext } from './source-context.ts';
 import type { FindingScope } from './types.ts';
 
-export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v5' as const;
-export const FILE_REVIEW_PROMPT_VERSION = 5 as const;
+export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v6' as const;
+export const FILE_REVIEW_PROMPT_VERSION = 6 as const;
 
 export const SOURCE_CONTEXT_STRATEGIES = ['full-files-v1', 'focused-v1'] as const;
 export type SourceContextStrategy = (typeof SOURCE_CONTEXT_STRATEGIES)[number];
@@ -36,7 +37,7 @@ const PROMPT_MODULES = ['core-policy.md', 'review-phases.md', 'file-reporting.md
 /** Resolves the fixed policy directory from the TypeScript source module. */
 function defaultPromptRoot(): string {
   const moduleDirectory = fileURLToPath(new URL('.', import.meta.url));
-  return resolve(moduleDirectory, '../../prompts/v7/');
+  return resolve(moduleDirectory, '../../prompts/v8/');
 }
 const DEFAULT_PROMPT_ROOT = defaultPromptRoot();
 const MAX_PROMPT_MODULE_BYTES = 64 * 1024;
@@ -46,6 +47,7 @@ const MAX_UNTRUSTED_CONTEXT_BYTES = 512 * 1024;
 const MAX_EMBEDDED_FILE_BYTES = 128 * 1024;
 
 export interface FileReviewPrompt {
+  readonly responseSchema?: Readonly<Record<string, unknown>>;
   readonly system: string;
   readonly user: string;
   readonly policyDigest: string;
@@ -264,6 +266,7 @@ export async function buildFileReviewPrompt(options: FileReviewPromptOptions): P
   return {
     system,
     user,
+    responseSchema: FILE_REVIEW_GENERATION_SCHEMA,
     policyDigest: policy.digest,
     promptDigest: sha256(`${system}\n${user}`),
   };

@@ -154,6 +154,7 @@ export interface PreparedPi extends PreparedHarness {
   readonly cwd: string;
   readonly rootDirectory: string;
   readonly agentConfig: string;
+  readonly modelProtocol: 'compatible' | 'openrouter-json';
   readonly settingsConfig: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs: number;
@@ -215,9 +216,14 @@ function buildAgentConfig(settings: HarnessSettings, policy: PiExecutionPolicy):
           id: settings.model.model,
           reasoning: policy.thinkingLevel !== 'off',
           maxTokens: policy.maxOutputTokens,
-          ...(policy.temperature === undefined && policy.structuredOutput === 'none' ? {} : {
+          ...(policy.temperature === undefined && policy.structuredOutput === 'none' && settings.modelProtocol !== 'openrouter-json' ? {} : {
             samplingParams: {
               ...(policy.temperature === undefined ? {} : { temperature: policy.temperature }),
+              ...(settings.modelProtocol === 'openrouter-json' ? {
+                reasoning: { enabled: false },
+                provider: { require_parameters: true },
+                response_format: { type: 'json_object' },
+              } : {}),
               ...(policy.structuredOutput === 'json-object'
                 ? { response_format: { type: 'json_object' } }
                 : {}),
@@ -228,6 +234,15 @@ function buildAgentConfig(settings: HarnessSettings, policy: PiExecutionPolicy):
     },
   };
   return `${JSON.stringify(config, null, 2)}\n`;
+}
+
+function invocationAgentConfig(state: PreparedPi, prompt: HarnessPrompt): string {
+  if (state.modelProtocol !== 'openrouter-json' || prompt.responseSchema === undefined) return state.agentConfig;
+  const config = JSON.parse(state.agentConfig) as { providers: Record<string, { models: { samplingParams: Record<string, unknown> }[] }> };
+  config.providers[state.model.provider]!.models[0]!.samplingParams['response_format'] = {
+    type: 'json_schema', json_schema: { name: 'redline_file_review', strict: true, schema: prompt.responseSchema },
+  };
+  return JSON.stringify(config);
 }
 
 function buildSettingsConfig(policy: PiExecutionPolicy): string {
@@ -556,6 +571,9 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
   return {
     harness: 'pi',
     async prepare(settings: HarnessSettings): Promise<PreparedPi> {
+      if (settings.modelProtocol === 'openrouter-json' && settings.model.provider !== 'openrouter') {
+        throw new Error('openrouter-json requires the openrouter provider');
+      }
       const effectivePolicy = settings.maxOutputTokens === undefined ? policy : validatePolicy({ ...options, maxOutputTokens: settings.maxOutputTokens });
       const rootDirectory = join(settings.workDirectory, 'pi-agent');
       await mkdir(rootDirectory, { recursive: true });
@@ -584,12 +602,13 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
       return Object.freeze({
         harness: 'pi',
         model: settings.model,
-        description: `pi with isolated per-invocation agent directories under ${rootDirectory}; thinking=${effectivePolicy.thinkingLevel}, max-output-tokens=${effectivePolicy.maxOutputTokens}, temperature=${effectivePolicy.temperature ?? 'provider-default'}, structured-output=${effectivePolicy.structuredOutput}, transient-retries=${effectivePolicy.transientRetries} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
+        description: `pi with isolated per-invocation agent directories under ${rootDirectory}; thinking=${effectivePolicy.thinkingLevel}, max-output-tokens=${effectivePolicy.maxOutputTokens}, temperature=${effectivePolicy.temperature ?? 'provider-default'}, structured-output=${effectivePolicy.structuredOutput}, model-protocol=${settings.modelProtocol ?? 'compatible'}, transient-retries=${effectivePolicy.transientRetries} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
         command,
         args,
         cwd: settings.workDirectory,
         rootDirectory,
         agentConfig: buildAgentConfig(settings, effectivePolicy),
+        modelProtocol: settings.modelProtocol ?? 'compatible',
         settingsConfig: buildSettingsConfig(effectivePolicy),
         env,
         timeoutMs: settings.timeoutMs,
@@ -648,7 +667,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         const invocationDirectory = await mkdtemp(join(state.rootDirectory, 'invocation-'));
         const systemPromptFile = join(invocationDirectory, 'system-prompt.md');
         await Promise.all([
-          writeFile(join(invocationDirectory, 'models.json'), state.agentConfig, { mode: 0o600 }),
+          writeFile(join(invocationDirectory, 'models.json'), invocationAgentConfig(state, prompt), { mode: 0o600 }),
           writeFile(join(invocationDirectory, 'settings.json'), state.settingsConfig, { mode: 0o600 }),
           writeFile(systemPromptFile, prompt.system, { mode: 0o600 }),
         ]);

@@ -213,6 +213,7 @@ export async function buildReviewSemanticFingerprint(options: {
       verificationPromptId: options.verifyCandidates ? VERIFICATION_PROMPT_ID : null,
     },
     systemPrompt: prompt.system,
+    generationSchema: prompt.responseSchema,
     policyDigest: prompt.policyDigest,
     verificationPolicyDigest: verificationPolicy?.digest ?? null,
     harness: options.environment.harness,
@@ -225,6 +226,7 @@ export async function buildReviewSemanticFingerprint(options: {
     findingScope: options.environment.findingScope,
     timeoutMs: options.environment.timeout.milliseconds,
     ...(options.environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: options.environment.maxOutputTokens }),
+    modelProtocol: options.environment.modelProtocol ?? 'compatible',
     verifyCandidates: options.verifyCandidates,
     followUpAvailable: options.followUpAvailable,
     requirementsDigest: await requirementsDigest(options.bundle),
@@ -477,6 +479,9 @@ export async function loadReviewReuseCache(configuration: ReviewReuseEnvironment
   const entriesDirectory = await safeCacheDirectory(configuration);
   const entries = new Map<string, StoredReviewReuseEntry>();
   let invalidEntries = entriesDirectory === undefined ? 1 : 0;
+  let storedBytes = 0; let storedCount = 0;
+  let writable = entriesDirectory !== undefined;
+  const storedSizes = new Map<string, number>();
   if (entriesDirectory !== undefined) {
     const names: string[] = [];
     let totalBytes = 0;
@@ -486,7 +491,9 @@ export async function loadReviewReuseCache(configuration: ReviewReuseEnvironment
         names.push(entry.name);
         if (names.length > MAX_REUSE_ENTRIES) break;
       }
+      storedCount = names.length;
       if (names.length > MAX_REUSE_ENTRIES) {
+        writable = false;
         invalidEntries += names.length;
       } else {
         for (const name of names.sort()) {
@@ -497,10 +504,11 @@ export async function loadReviewReuseCache(configuration: ReviewReuseEnvironment
           const path = join(entriesDirectory, name);
           try {
             const info = await lstat(path);
-            if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_REUSE_ENTRY_BYTES) {
+            if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > MAX_REUSE_ENTRY_BYTES) {
               throw new Error('reuse cache entry is not a bounded regular file');
             }
             totalBytes += info.size;
+            storedBytes += info.size; storedSizes.set(name, info.size);
             if (totalBytes > MAX_REUSE_TOTAL_BYTES) throw new Error('reuse cache exceeds its total byte limit');
             const parsed = parseStoredEntry(
               JSON.parse(await readFile(path, 'utf8')) as unknown,
@@ -526,7 +534,7 @@ export async function loadReviewReuseCache(configuration: ReviewReuseEnvironment
       return entry?.fingerprint === fingerprint ? entry : undefined;
     },
     async write(path, fingerprint, base, head, record, executionDurationMs, verifyCandidates): Promise<void> {
-      if (entriesDirectory === undefined || (record.outcome !== 'clean' && record.outcome !== 'findings')) return;
+      if (!writable || entriesDirectory === undefined || (record.outcome !== 'clean' && record.outcome !== 'findings')) return;
       const result = cacheResult(record, executionDurationMs);
       if (!reusableResult(result, verifyCandidates)) return;
       const payload = {
@@ -542,7 +550,16 @@ export async function loadReviewReuseCache(configuration: ReviewReuseEnvironment
       const stored: StoredReviewReuseEntry = { ...payload, digest: sha256(canonicalJson(payload)) };
       const content = `${JSON.stringify(stored, null, 2)}\n`;
       if (Buffer.byteLength(content, 'utf8') > MAX_REUSE_ENTRY_BYTES) return;
-      const target = join(entriesDirectory, `${pathKey(path)}.json`);
+      const name = `${pathKey(path)}.json`;
+      const size = Buffer.byteLength(content, 'utf8');
+      const previous = storedSizes.get(name);
+      if ((previous === undefined && storedCount >= MAX_REUSE_ENTRIES)
+        || storedBytes - (previous ?? 0) + size > MAX_REUSE_TOTAL_BYTES) return;
+      // Reserve synchronously before I/O so concurrent file completions share
+      // the same bounded quota. Failed writes may conservatively reserve space.
+      if (previous === undefined) storedCount += 1;
+      storedBytes += size - (previous ?? 0); storedSizes.set(name, size);
+      const target = join(entriesDirectory, name);
       const temporary = `${target}.${randomUUID()}.tmp`;
       try {
         const handle = await open(temporary, 'wx', 0o600);

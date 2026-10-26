@@ -41,7 +41,7 @@ Tags, object IDs, detached HEADs, and remote-tracking refs work as local Git rev
 
 ## Indexed cross-file context
 
-Indexing is enabled by default, with CGC 0.5.7 as the default provider. Like the GitHub action, Redline indexes the captured **base** snapshot and resolves bounded related callers, tests, and contracts from captured **head** source. Working-tree reviews use their synthetic revision IDs; later live edits cannot alter these inputs. Newly added or unsupported files can remain file-only because they have no supported base-graph anchor.
+Indexing is enabled by default, with CGC 0.5.7 as the default provider. Like the GitHub action, Redline indexes the captured **base** snapshot and resolves bounded related callers, tests, and contracts from captured **head** source. Working-tree reviews use their synthetic revision IDs; later live edits cannot alter these inputs. Newly added or unsupported files have no supported base-graph anchor. The local CLI additionally attempts bounded static-head discovery described below; remaining gaps stay explicit.
 
 ```bash
 redline review --base main --head HEAD --harness pi
@@ -81,6 +81,37 @@ Each run refreshes sanitized base bytes from immutable Git objects at a stable p
 The private cache retains at most eight completed entries and 2 GiB of managed state, with least-recently-used eviction. Oversized or unsafe entries are not retained. An OS-backed lock serializes local index preparation, so overlapping runs do not publish partial databases or index the same base concurrently. Lock ownership releases on normal completion or process exit; cancelled incomplete builds are discarded. Unknown files are not deleted by cache cleanup. These controls do not establish arbitrary-runner sandboxing.
 
 This establishes context-input parity, not equal indexing latency, model output validity, or finding quality. The default local finding scope remains `defects`; use `--finding-scope defects-and-risks` to match the dogfood workflow's broader scope. Candidate verification remains disabled in both paths.
+
+## Static captured-head context
+
+`--head-context enabled|disabled` defaults to enabled locally, independent of whether an indexer runs. For reviewed text files with no usable base-graph spans, it finds literal relative ESM imports/re-exports and their importing files in captured JavaScript/TypeScript source. This includes test files when they import the changed module. It never runs a resolver, interpreter, test, or repository configuration. Package aliases, dynamic imports, Python imports, runtime resolution, and exhaustive test discovery are not implemented.
+
+Spans carry provider `static-head` version `1`, the captured **head** revision, and an explicit lexical-candidate limitation. They have no graph references and are never proof of reachability. Coverage remains partial. The graph artifact in `index/` still describes only the external provider; review coverage counts the additional source-backed spans and reports `static-head-context`. This fallback does not satisfy `--indexing required`'s provider-context preflight.
+
+Discovery examines at most 512 code files, 256 directories, depth 12, 4,096 entries per directory, 128 KiB per file, 8 MiB total, the first 4,096 lines per file, and 32 literal imports per file. Selection is deterministic; directories exceeding the entry bound are omitted. It selects at most four related files per reviewed file, 40 lines/8 KiB per span, within the existing 24 KiB per-file and 48 KiB run-wide related-source bounds. Missing, unsafe, symlinked, invalid-UTF8 or oversized source is never evidence of absence.
+
+## Resume validated work
+
+Local result reuse defaults to enabled. Repeat the same review command; no previous run path is required:
+
+```bash
+redline review --base main --head HEAD --harness pi
+redline review --base main --head HEAD --harness pi
+# Explicitly bypass result reuse:
+redline review --base main --head HEAD --harness pi --reuse disabled
+```
+
+The private repository-scoped cache lives in `$XDG_STATE_HOME/redline/results/v1` (or `$HOME/.local/state/...`). It stores only validated clean/findings records, not failures. Completed files can therefore survive a partially failed or interrupted run. An exact semantic fingerprint includes model/endpoint/auth mode, protocol, output allowance, policy/schema, diff, captured source, related context and per-file timeout. Current evidence is revalidated, file IDs/revisions are remapped, and each run rebuilds coverage, verdicts, synthesis and artifacts. A cache hit does not authorize stale publication.
+
+Readers bound restored entries to 2,000 files, 512 KiB per record, and 32 MiB total. Writers reserve the same quotas per loaded cache; concurrent publication uses atomic replacement, so a collision can lose reuse but cannot become an unvalidated success. Unsafe/private-directory failures disable reuse, not review; cache misses, invalid records and changed fingerprints run normally. Existing state parents are never chmod'ed.
+
+Old run directories are not retroactively imported as trustworthy cache records. Reuse starts with records written by this implementation. The v8 prompt-policy change invalidates earlier fingerprints. Terminal output reports both the configured availability and actual reused/executed counts.
+
+## Scheduling and deadlines
+
+After reuse selection, preflight reports uncached file count, worker count, policy, remaining time, and a worst-case bound if every file consumes its full per-file allowance. This is **not** a model-latency or cost forecast. Capture/index time already spent reduces the available review time. Redline never expands timeouts, concurrency or token allowances automatically.
+
+`--scheduling largest-first|mixed` defaults to the existing largest-diff-first policy. `mixed` alternates largest and smallest diffs to start some short work earlier. Both preserve bounded workers and manifest-order artifacts. Serial execution, including gated candidate verification, retains manifest order. Size is only a heuristic; mixed scheduling can improve deadline coverage while increasing makespan. The deterministic experiment in `benchmark/performance/mixed-scheduling/v1/` records that trade-off on one fixed synthetic corpus; it is not live-model evidence.
 
 ## Review uncommitted changes
 
@@ -160,6 +191,25 @@ When unset, Pi retains its benchmark-derived 16,384-token default; OpenCode reta
 
 Output tokens are not bytes, words, context-window capacity, a whole-run allowance, or a dollar budget. Reasoning can consume this allowance depending on the provider. This setting does not allocate separate reasoning tokens or reserve tokens for final JSON, and does not promise syntactically valid output. Timeouts remain independent. Higher token allowances can increase cost and memory use: retained harness stdout remains separately bounded at 8–64 MiB (16 MiB for a 32,768-token allowance); persisted diagnostics and prompt bounds remain unchanged. An explicit token allowance participates in semantic review-cache fingerprints and is recorded in local `status.json` and terminal output.
 
+## Model request protocol
+
+`--model-protocol compatible|openrouter-json` defaults to `compatible`, preserving existing provider behavior. Pi's `thinking off` metadata alone does not establish that an endpoint disabled reasoning.
+
+For an explicit Pi/OpenRouter probe:
+
+```bash
+redline review --base main --head HEAD --harness pi \
+  --provider openrouter --endpoint https://openrouter.ai/api/v1 \
+  --model z-ai/glm-5.3-flash --max-output-tokens 32768 \
+  --model-protocol openrouter-json --scheduling mixed
+```
+
+The profile sends `reasoning: {enabled:false}`, `provider: {require_parameters:true}`, and a strict JSON Schema generation request for the fixed v4 discovery document. Tools remain disabled and sampling remains provider-default. The schema requires a concise reason even on clean results and excludes null optional fields; guidance findings omit proposed replacement text. Core JSON, schema, source/diff and impact-reference validation still runs independently. Other prompts without a supplied schema use JSON-object formatting.
+
+Selecting this profile with another harness/provider fails before model execution; it never silently downgrades. An unsupported endpoint, model, schema feature or upstream provider can reject the request. Loopback tests verify actual wire fields, not that every upstream honors them or that findings are correct. There is no repair model call, silent JSON repair, or retry for rejected/malformed output. Separate reasoning allocation and reserved final-answer tokens remain unimplemented.
+
+The new local flags have corresponding `REDLINE_REUSE`, `REDLINE_HEAD_CONTEXT`, `REDLINE_SCHEDULING` and `REDLINE_MODEL_PROTOCOL` settings and same-named string keys in trusted user configuration. They do not change the legacy GitHub Action environment contract.
+
 ## Arguments
 
 Run `redline review --help` for the complete contract.
@@ -179,6 +229,10 @@ Run `redline review --help` for the complete contract.
 - `--code-context PATH`, `--code-context-repository ID`: optional artifact import and expected namespace.
 - `--harness pi|opencode|echo`: default `pi`.
 - `--provider`, `--endpoint`, `--model`, `--auth none`: trusted model selection.
+- `--reuse enabled|disabled`: default `enabled`; exact validated-result reuse.
+- `--head-context enabled|disabled`: default `enabled`; bounded static-head source candidates.
+- `--scheduling largest-first|mixed`: default `largest-first`.
+- `--model-protocol compatible|openrouter-json`: default `compatible`; explicit Pi/OpenRouter wire controls.
 - `--max-output-tokens COUNT`: optional per-call generation cap, `1024`–`262144`; Pi defaults to `16384` when unset.
 - `--timeout`: per-file deadline, default `4m`.
 - `--run-timeout`: whole-run deadline including capture, indexing, and review, default `10m`. Local context preparation has an additional five-minute ceiling within that budget.

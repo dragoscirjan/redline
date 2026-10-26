@@ -18,16 +18,22 @@ async function suppliedCommand(path: string, repository: string): Promise<Launch
   return /\.(?:mjs|cjs|js)$/iu.test(canonical) ? { command: process.execPath, prefix: [canonical] } : { command: canonical, prefix: [] };
 }
 
-async function providerCommand(options: LocalOptions, env: NodeJS.ProcessEnv): Promise<LaunchCommand> {
+export async function providerCommand(options: LocalOptions, env: NodeJS.ProcessEnv,
+  probe: { realpath(path: string): Promise<string>; readFile(path: string): Promise<Buffer> } = { realpath, readFile }): Promise<LaunchCommand> {
   if (options.indexing.executable !== undefined) return suppliedCommand(options.indexing.executable, options.repository);
   if (options.indexing.provider === 'cgc' && process.platform === 'linux' && process.arch === 'x64') {
     const path = join(dirname(options.stateDirectory), 'tools/cgc/0.5.7/linux-x64/cgc');
     const info = await lstat(path).catch(() => undefined);
     if (info?.isFile() && !info.isSymbolicLink() && info.size <= 80 * 1024 * 1024) {
-      const canonical = await realpath(path);
-      if (!inside(options.repository, canonical)) {
-        const hash = createHash('sha256').update(await readFile(canonical)).digest('hex');
-        if (hash === CGC_LINUX_SHA256) return { command: canonical, prefix: [] };
+      try {
+        const canonical = await probe.realpath(path);
+        if (!inside(options.repository, canonical)) {
+          const hash = createHash('sha256').update(await probe.readFile(canonical)).digest('hex');
+          if (hash === CGC_LINUX_SHA256) return { command: canonical, prefix: [] };
+        }
+      } catch {
+        // A managed-tool probe is optional. Explicit executable overrides
+        // still fail closed; automatic discovery can try a trusted PATH.
       }
     }
   }

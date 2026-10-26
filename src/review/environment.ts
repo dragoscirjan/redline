@@ -121,6 +121,9 @@ export interface ReviewEnvironment {
   /** Trusted maximum number of simultaneous per-file harness calls. */
   readonly reviewConcurrency: number;
   readonly maxOutputTokens?: number | undefined;
+  readonly modelProtocol?: 'compatible' | 'openrouter-json' | undefined;
+  readonly scheduling?: 'largest-first' | 'mixed' | undefined;
+  readonly headContext?: boolean | undefined;
   /** Optional action-owned cross-run record cache; restored contents remain untrusted. */
   readonly reuse?: ReviewReuseEnvironment | undefined;
 }

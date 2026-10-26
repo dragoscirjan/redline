@@ -16,6 +16,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { createHarnessExecutor } from '../harness-executor/registry.ts';
+import { augmentHeadContext } from './head-context.ts';
+import { scheduleBySize, workloadBound } from './scheduling.ts';
 import { FollowUpBudget, type FollowUpRequestBatch } from '../code-context/follow-up.ts';
 import type { HarnessExecutor, HarnessOutputLine, HarnessStreamMode } from '../harness-executor/types.ts';
 import { loadReviewBundle, type ReviewBundle, type ReviewManifestFile } from './bundle.ts';
@@ -78,6 +80,8 @@ export interface ReviewRunInput {
   readonly environment: ReviewEnvironment;
   /** Artifact port; defaults to the deterministic filesystem writer. */
   readonly writer?: ReviewWriter;
+  /** Bounded metadata only: counts, explicit limits and policy, never source or credentials. */
+  readonly onWorkload?: (value: ReturnType<typeof workloadBound> & { readonly scheduling: string; readonly staticHeadFiles: number }) => void;
   /** Metadata-only manifest order for progress adapters; never includes paths or source. */
   readonly onReviewPlan?: (files: readonly { readonly fileId: string; readonly reviewed: boolean }[]) => void;
   /** Executor override for tests; defaults to the registry for the harness. */
@@ -256,7 +260,8 @@ async function reviewOneFile(
       indexedContext: fileContext.prompt,
       sourceContextStrategy,
       followUpAvailable: verifyCandidates && environment.codeContext !== undefined
-        && followUpExecutor !== undefined && fileContext.coverage.provider !== null,
+        && followUpExecutor !== undefined && fileContext.coverage.provider !== null
+        && fileContext.coverage.provider.id !== 'static-head',
     });
   } catch (error) {
     return {
@@ -675,6 +680,7 @@ async function reviewTasks(
   bundle: ReviewBundle,
   concurrency: number,
   selectedManifestIndexes: ReadonlySet<number>,
+  policy: 'largest-first' | 'mixed' = 'largest-first',
 ): Promise<readonly ReviewTask[]> {
   const tasks = await Promise.all(bundle.manifest.files.flatMap((file, manifestIndex) =>
     file.reviewed && selectedManifestIndexes.has(manifestIndex)
@@ -687,9 +693,7 @@ async function reviewTasks(
           }),
         )]
       : []));
-  if (concurrency === 1) return tasks;
-  return tasks.sort((left, right) =>
-    right.estimatedPromptBytes - left.estimatedPromptBytes || left.manifestIndex - right.manifestIndex);
+  return scheduleBySize(tasks, concurrency, policy);
 }
 
 async function runBoundedWorkerPool<T>(
@@ -730,7 +734,10 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
   const runDeadlineAtMs = runStartedAtMs + environment.runTimeout.milliseconds;
   const bundle = await loadReviewBundle(environment.reviewDirectory, environment.sourceDirectory);
   input.onReviewPlan?.(bundle.manifest.files.map((file) => ({ fileId: file.id, reviewed: file.reviewed })));
-  const indexedContext = await loadReviewCodeContext(bundle, environment.codeContext);
+  const baseContext = await loadReviewCodeContext(bundle, environment.codeContext);
+  const indexedContext = environment.headContext === true
+    ? await augmentHeadContext(bundle, baseContext, () => remainingRunMs(runDeadlineAtMs, now) === 0)
+    : baseContext;
   const writer = input.writer ?? createReviewWriter(environment.outputDirectory);
   const executor = input.executor ?? createHarnessExecutor(environment.harness);
   // Independent verification is not active in production. Keep its shared
@@ -753,7 +760,8 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       if (!file.reviewed || file.binary) continue;
       const fileContext = codeContextForFile(indexedContext, file);
       const followUpAvailable = verifyCandidates && environment.codeContext !== undefined
-        && input.followUpExecutor !== undefined && fileContext.coverage.provider !== null;
+        && input.followUpExecutor !== undefined && fileContext.coverage.provider !== null
+        && fileContext.coverage.provider.id !== 'static-head';
       let fingerprint: string;
       try {
         fingerprint = await buildReviewSemanticFingerprint({
@@ -801,7 +809,11 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
 
   const selectedManifestIndexes = new Set(bundle.manifest.files.flatMap((file, manifestIndex) =>
     file.reviewed && !recordsByManifestIndex.has(manifestIndex) ? [manifestIndex] : []));
-  const tasks = await reviewTasks(bundle, concurrency, selectedManifestIndexes);
+  const scheduling = environment.scheduling ?? 'largest-first';
+  const tasks = await reviewTasks(bundle, concurrency, selectedManifestIndexes, scheduling);
+  input.onWorkload?.({ ...workloadBound(tasks.length, concurrency, environment.timeout.milliseconds, remainingRunMs(runDeadlineAtMs, now)),
+    scheduling: concurrency === 1 ? 'manifest-order' : scheduling,
+    staticHeadFiles: [...indexedContext.files.values()].filter((file) => file.coverage.provider?.id === 'static-head').length });
   let workDirectory: string | undefined;
   try {
     if (tasks.length > 0) workDirectory = await mkdtemp(join(tmpdir(), 'redline-review-'));
@@ -812,6 +824,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           credential: environment.credential,
           timeoutMs: environment.timeout.milliseconds,
           ...(environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: environment.maxOutputTokens }),
+          ...(environment.modelProtocol === undefined ? {} : { modelProtocol: environment.modelProtocol }),
           workDirectory: workDirectory as string,
         });
 

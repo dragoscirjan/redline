@@ -185,6 +185,7 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
   return {
     harness: 'opencode',
     async prepare(settings: HarnessSettings): Promise<PreparedOpenCode> {
+      if (settings.modelProtocol === 'openrouter-json') throw new Error('openrouter-json is not supported by the OpenCode executor');
       const maxOutputTokens = settings.maxOutputTokens === undefined ? undefined : validateOutputTokens(settings.maxOutputTokens);
       const rootDirectory = join(settings.workDirectory, 'opencode');
       await mkdir(rootDirectory, { recursive: true });

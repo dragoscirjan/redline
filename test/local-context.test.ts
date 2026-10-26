@@ -220,7 +220,9 @@ fs.mkdirSync(process.env.GITNEXUS_STORAGE_PATH,{recursive:true});fs.writeFileSyn
     const f = await fixture();
     const bestEffort = await f.run(['--index-executable', join(f.root, 'missing')]);
     expect(bestEffort.code, bestEffort.stderr).toBe(0);
-    expect((await summary(bestEffort.output)).codeContext.status).toBe('unavailable');
+    expect((await summary(bestEffort.output)).codeContext.status).toBe('partial');
+    expect((await summary(bestEffort.output)).codeContext.diagnosticCodes).toContain('static-head-context');
+    expect(JSON.parse(await readFile(join(bestEffort.output, 'index/status.json'), 'utf8')).status).toBe('unavailable');
     const required = await f.run(['--index-executable', join(f.root, 'missing'), '--indexing', 'required']);
     expect(required.code).toBe(1); expect(required.stderr).toContain('required indexed context');
     expect(await readFile(join(required.output, 'reviews/summary.json'), 'utf8').catch(() => null)).toBeNull();

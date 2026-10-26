@@ -1,0 +1,494 @@
+{
+  "version": 3,
+  "corpusVersion": 2,
+  "modes": [
+    {
+      "mode": "file-only",
+      "fixtures": 4,
+      "expectedIssues": 2,
+      "rootCauseMatches": 1,
+      "creditedIssues": 1,
+      "findings": 2,
+      "falsePositives": 1,
+      "duplicateFindings": 0,
+      "cleanFixtures": 2,
+      "cleanFixturesWithFalsePositives": 1,
+      "claimedMatches": 1,
+      "validEvidenceMatches": 1,
+      "promptBytes": 59237,
+      "promptVolume": {
+        "baselineStrategy": "full-files-v1",
+        "candidateStrategy": "focused-v1",
+        "baselineBytes": 57547,
+        "candidateBytes": 59237,
+        "reductionBytes": -1690,
+        "reductionPercent": -2.94,
+        "baselineEstimatedInputTokens": 14387,
+        "candidateEstimatedInputTokens": 14810,
+        "estimatedInputTokenReduction": -423,
+        "qualityMaintained": true
+      },
+      "medianPromptReductionBytes": -436.5,
+      "medianPromptReductionPercent": -3.05,
+      "reviewDurationMs": 39,
+      "codeContextCoverage": {
+        "disabled": 4,
+        "complete": 0,
+        "partial": 0,
+        "unsupported": 0,
+        "unavailable": 0
+      },
+      "codeContextFilesWithContext": 0,
+      "codeContextRelatedSpans": 0,
+      "codeContextSourceBytes": 0,
+      "indexTimings": null,
+      "cases": [
+        {
+          "fixtureId": "clean-api-extension",
+          "title": "Add an optional name separator",
+          "kind": "clean",
+          "coverage": "complete",
+          "codeContext": {
+            "status": "disabled",
+            "provider": null,
+            "revision": null,
+            "relatedSpans": 0,
+            "sourceBytes": 0,
+            "reason": "not-configured",
+            "filesWithContext": 0,
+            "cache": "not-applicable",
+            "timings": null,
+            "diagnosticCodes": []
+          },
+          "expectedIssues": 0,
+          "rootCauseMatches": 0,
+          "creditedIssues": 0,
+          "unmatchedIssueIds": [],
+          "uncreditedIssueIds": [],
+          "findings": 1,
+          "falsePositives": 1,
+          "duplicateFindings": 0,
+          "claimedMatches": 0,
+          "validEvidenceMatches": 0,
+          "promptBytes": 14836,
+          "reviewDurationMs": 9,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 14373,
+            "candidateBytes": 14836,
+            "reductionBytes": -463,
+            "reductionPercent": -3.22,
+            "baselineEstimatedInputTokens": 3594,
+            "candidateEstimatedInputTokens": 3709,
+            "estimatedInputTokenReduction": -115,
+            "qualityMaintained": true
+          }
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "title": "Rename a local normalization variable",
+          "kind": "clean",
+          "coverage": "complete",
+          "codeContext": {
+            "status": "disabled",
+            "provider": null,
+            "revision": null,
+            "relatedSpans": 0,
+            "sourceBytes": 0,
+            "reason": "not-configured",
+            "filesWithContext": 0,
+            "cache": "not-applicable",
+            "timings": null,
+            "diagnosticCodes": []
+          },
+          "expectedIssues": 0,
+          "rootCauseMatches": 0,
+          "creditedIssues": 0,
+          "unmatchedIssueIds": [],
+          "uncreditedIssueIds": [],
+          "findings": 0,
+          "falsePositives": 0,
+          "duplicateFindings": 0,
+          "claimedMatches": 0,
+          "validEvidenceMatches": 0,
+          "promptBytes": 14790,
+          "reviewDurationMs": 8,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 14362,
+            "candidateBytes": 14790,
+            "reductionBytes": -428,
+            "reductionPercent": -2.98,
+            "baselineEstimatedInputTokens": 3591,
+            "candidateEstimatedInputTokens": 3698,
+            "estimatedInputTokenReduction": -107,
+            "qualityMaintained": true
+          }
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "title": "Keep account identity in user cache keys",
+          "kind": "defect",
+          "coverage": "complete",
+          "codeContext": {
+            "status": "disabled",
+            "provider": null,
+            "revision": null,
+            "relatedSpans": 0,
+            "sourceBytes": 0,
+            "reason": "not-configured",
+            "filesWithContext": 0,
+            "cache": "not-applicable",
+            "timings": null,
+            "diagnosticCodes": []
+          },
+          "expectedIssues": 1,
+          "rootCauseMatches": 0,
+          "creditedIssues": 0,
+          "unmatchedIssueIds": [
+            "cross-account-cache-collision"
+          ],
+          "uncreditedIssueIds": [
+            "cross-account-cache-collision"
+          ],
+          "findings": 0,
+          "falsePositives": 0,
+          "duplicateFindings": 0,
+          "claimedMatches": 0,
+          "validEvidenceMatches": 0,
+          "promptBytes": 14700,
+          "reviewDurationMs": 10,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 14255,
+            "candidateBytes": 14700,
+            "reductionBytes": -445,
+            "reductionPercent": -3.12,
+            "baselineEstimatedInputTokens": 3564,
+            "candidateEstimatedInputTokens": 3675,
+            "estimatedInputTokenReduction": -111,
+            "qualityMaintained": true
+          }
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "title": "Reject non-integer network ports",
+          "kind": "defect",
+          "coverage": "complete",
+          "codeContext": {
+            "status": "disabled",
+            "provider": null,
+            "revision": null,
+            "relatedSpans": 0,
+            "sourceBytes": 0,
+            "reason": "not-configured",
+            "filesWithContext": 0,
+            "cache": "not-applicable",
+            "timings": null,
+            "diagnosticCodes": []
+          },
+          "expectedIssues": 1,
+          "rootCauseMatches": 1,
+          "creditedIssues": 1,
+          "unmatchedIssueIds": [],
+          "uncreditedIssueIds": [],
+          "findings": 1,
+          "falsePositives": 0,
+          "duplicateFindings": 0,
+          "claimedMatches": 1,
+          "validEvidenceMatches": 1,
+          "promptBytes": 14911,
+          "reviewDurationMs": 12,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 14557,
+            "candidateBytes": 14911,
+            "reductionBytes": -354,
+            "reductionPercent": -2.43,
+            "baselineEstimatedInputTokens": 3640,
+            "candidateEstimatedInputTokens": 3728,
+            "estimatedInputTokenReduction": -88,
+            "qualityMaintained": true
+          }
+        }
+      ]
+    },
+    {
+      "mode": "indexed-context",
+      "fixtures": 4,
+      "expectedIssues": 2,
+      "rootCauseMatches": 2,
+      "creditedIssues": 2,
+      "findings": 2,
+      "falsePositives": 0,
+      "duplicateFindings": 0,
+      "cleanFixtures": 2,
+      "cleanFixturesWithFalsePositives": 0,
+      "claimedMatches": 2,
+      "validEvidenceMatches": 2,
+      "promptBytes": 60274,
+      "promptVolume": {
+        "baselineStrategy": "full-files-v1",
+        "candidateStrategy": "focused-v1",
+        "baselineBytes": 58586,
+        "candidateBytes": 60274,
+        "reductionBytes": -1688,
+        "reductionPercent": -2.88,
+        "baselineEstimatedInputTokens": 14647,
+        "candidateEstimatedInputTokens": 15069,
+        "estimatedInputTokenReduction": -422,
+        "qualityMaintained": true
+      },
+      "medianPromptReductionBytes": -436,
+      "medianPromptReductionPercent": -2.99,
+      "reviewDurationMs": 39,
+      "codeContextCoverage": {
+        "disabled": 0,
+        "complete": 4,
+        "partial": 0,
+        "unsupported": 0,
+        "unavailable": 0
+      },
+      "codeContextFilesWithContext": 2,
+      "codeContextRelatedSpans": 2,
+      "codeContextSourceBytes": 216,
+      "indexTimings": {
+        "installationMs": 0,
+        "restoreMs": 0,
+        "validationMs": 0,
+        "indexMs": 0,
+        "queryMs": 0,
+        "saveMs": null
+      },
+      "cases": [
+        {
+          "fixtureId": "clean-api-extension",
+          "title": "Add an optional name separator",
+          "kind": "clean",
+          "coverage": "complete",
+          "codeContext": {
+            "status": "complete",
+            "provider": {
+              "id": "cgc",
+              "version": "0.5.7"
+            },
+            "revision": "2222222222222222222222222222222222222222",
+            "relatedSpans": 1,
+            "sourceBytes": 103,
+            "reason": null,
+            "filesWithContext": 1,
+            "cache": "unknown",
+            "timings": {
+              "installationMs": 0,
+              "restoreMs": 0,
+              "indexMs": 0,
+              "queryMs": 0,
+              "saveMs": null
+            },
+            "diagnosticCodes": [
+              "recorded-benchmark"
+            ]
+          },
+          "expectedIssues": 0,
+          "rootCauseMatches": 0,
+          "creditedIssues": 0,
+          "unmatchedIssueIds": [],
+          "uncreditedIssueIds": [],
+          "findings": 0,
+          "falsePositives": 0,
+          "duplicateFindings": 0,
+          "claimedMatches": 0,
+          "validEvidenceMatches": 0,
+          "promptBytes": 15347,
+          "reviewDurationMs": 9,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 14885,
+            "candidateBytes": 15347,
+            "reductionBytes": -462,
+            "reductionPercent": -3.1,
+            "baselineEstimatedInputTokens": 3722,
+            "candidateEstimatedInputTokens": 3837,
+            "estimatedInputTokenReduction": -115,
+            "qualityMaintained": true
+          }
+        },
+        {
+          "fixtureId": "clean-local-refactor",
+          "title": "Rename a local normalization variable",
+          "kind": "clean",
+          "coverage": "complete",
+          "codeContext": {
+            "status": "complete",
+            "provider": {
+              "id": "cgc",
+              "version": "0.5.7"
+            },
+            "revision": "ffffffffffffffffffffffffffffffffffffffff",
+            "relatedSpans": 0,
+            "sourceBytes": 0,
+            "reason": null,
+            "filesWithContext": 0,
+            "cache": "unknown",
+            "timings": {
+              "installationMs": 0,
+              "restoreMs": 0,
+              "indexMs": 0,
+              "queryMs": 0,
+              "saveMs": null
+            },
+            "diagnosticCodes": [
+              "recorded-benchmark"
+            ]
+          },
+          "expectedIssues": 0,
+          "rootCauseMatches": 0,
+          "creditedIssues": 0,
+          "unmatchedIssueIds": [],
+          "uncreditedIssueIds": [],
+          "findings": 0,
+          "falsePositives": 0,
+          "duplicateFindings": 0,
+          "claimedMatches": 0,
+          "validEvidenceMatches": 0,
+          "promptBytes": 14790,
+          "reviewDurationMs": 8,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 14362,
+            "candidateBytes": 14790,
+            "reductionBytes": -428,
+            "reductionPercent": -2.98,
+            "baselineEstimatedInputTokens": 3591,
+            "candidateEstimatedInputTokens": 3698,
+            "estimatedInputTokenReduction": -107,
+            "qualityMaintained": true
+          }
+        },
+        {
+          "fixtureId": "cross-file-cache-collision",
+          "title": "Keep account identity in user cache keys",
+          "kind": "defect",
+          "coverage": "complete",
+          "codeContext": {
+            "status": "complete",
+            "provider": {
+              "id": "cgc",
+              "version": "0.5.7"
+            },
+            "revision": "dddddddddddddddddddddddddddddddddddddddd",
+            "relatedSpans": 1,
+            "sourceBytes": 113,
+            "reason": null,
+            "filesWithContext": 1,
+            "cache": "unknown",
+            "timings": {
+              "installationMs": 0,
+              "restoreMs": 0,
+              "indexMs": 0,
+              "queryMs": 0,
+              "saveMs": null
+            },
+            "diagnosticCodes": [
+              "recorded-benchmark"
+            ]
+          },
+          "expectedIssues": 1,
+          "rootCauseMatches": 1,
+          "creditedIssues": 1,
+          "unmatchedIssueIds": [],
+          "uncreditedIssueIds": [],
+          "findings": 1,
+          "falsePositives": 0,
+          "duplicateFindings": 0,
+          "claimedMatches": 1,
+          "validEvidenceMatches": 1,
+          "promptBytes": 15226,
+          "reviewDurationMs": 10,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 14782,
+            "candidateBytes": 15226,
+            "reductionBytes": -444,
+            "reductionPercent": -3,
+            "baselineEstimatedInputTokens": 3696,
+            "candidateEstimatedInputTokens": 3807,
+            "estimatedInputTokenReduction": -111,
+            "qualityMaintained": true
+          }
+        },
+        {
+          "fixtureId": "local-port-validation",
+          "title": "Reject non-integer network ports",
+          "kind": "defect",
+          "coverage": "complete",
+          "codeContext": {
+            "status": "complete",
+            "provider": {
+              "id": "cgc",
+              "version": "0.5.7"
+            },
+            "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "relatedSpans": 0,
+            "sourceBytes": 0,
+            "reason": null,
+            "filesWithContext": 0,
+            "cache": "unknown",
+            "timings": {
+              "installationMs": 0,
+              "restoreMs": 0,
+              "indexMs": 0,
+              "queryMs": 0,
+              "saveMs": null
+            },
+            "diagnosticCodes": [
+              "recorded-benchmark"
+            ]
+          },
+          "expectedIssues": 1,
+          "rootCauseMatches": 1,
+          "creditedIssues": 1,
+          "unmatchedIssueIds": [],
+          "uncreditedIssueIds": [],
+          "findings": 1,
+          "falsePositives": 0,
+          "duplicateFindings": 0,
+          "claimedMatches": 1,
+          "validEvidenceMatches": 1,
+          "promptBytes": 14911,
+          "reviewDurationMs": 12,
+          "promptVolume": {
+            "baselineStrategy": "full-files-v1",
+            "candidateStrategy": "focused-v1",
+            "baselineBytes": 14557,
+            "candidateBytes": 14911,
+            "reductionBytes": -354,
+            "reductionPercent": -2.43,
+            "baselineEstimatedInputTokens": 3640,
+            "candidateEstimatedInputTokens": 3728,
+            "estimatedInputTokenReduction": -88,
+            "qualityMaintained": true
+          }
+        }
+      ]
+    }
+  ],
+  "comparison": {
+    "baseline": "file-only",
+    "candidate": "indexed-context",
+    "rootCauseMatchesDelta": 1,
+    "creditedIssuesDelta": 1,
+    "falsePositivesDelta": -1,
+    "duplicateFindingsDelta": 0,
+    "promptBytesDelta": 1037,
+    "reviewDurationMsDelta": 0,
+    "codeContextSourceBytesDelta": 216
+  }
+}

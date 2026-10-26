@@ -49,7 +49,7 @@ describe('scripted candidate verification quality gate', () => {
       activationReady: false,
     });
     expect(report.gate.activationReason).toContain('do not measure independent model recall');
-    expect(JSON.parse(await readFile(resolve(EXTENSION, 'report.json'), 'utf8'))).toEqual(report);
+    expect(JSON.parse(await readFile(resolve('benchmark/policy-v8/verification/report.json'), 'utf8'))).toEqual(report);
   });
 
   it('fails when the scripted verifier rejects a known defect instead of hiding a recall regression', async () => {

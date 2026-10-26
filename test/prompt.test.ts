@@ -24,7 +24,7 @@ describe('buildFileReviewPrompt', () => {
       expect(prompt.system).toContain('# Review policy');
       expect(prompt.system).toContain('## Execution safety');
       expect(prompt.system).toContain('# Trusted run configuration');
-      expect(prompt.system).toContain('"policyId": "redline-file-review/v5"');
+      expect(prompt.system).toContain('"policyId": "redline-file-review/v6"');
       expect(prompt.system).toContain('"contextRequests"');
       expect(prompt.system).toContain('"followUp": "unavailable"');
       expect(prompt.system).toContain('always return `[]`');

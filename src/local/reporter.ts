@@ -97,6 +97,11 @@ export class CliReporter implements ReviewReporter {
         this.finishLine();
         this.stderr(`Indexed context: ${terminalText(event.status)}; ${event.relatedSpans} related spans; ${event.fileOnlyFiles} required ${event.fileOnlyFiles === 1 ? 'file remains' : 'files remain'} file-only.`);
       }
+    } else if (event.kind === 'workload') {
+      this.finishLine();
+      this.stderr(`Workload: ${event.files} uncached files; ${event.workers} workers; ${event.scheduling}; ${Math.floor(event.remainingMs / 1000)}s remaining.`);
+      if (event.staticHeadFiles > 0) this.stderr(`Static head context: ${event.staticHeadFiles} files; bounded import candidates, not verified call paths.`);
+      if (event.mayExceedDeadline) this.stderr(`Deadline warning: all files taking their full per-file allowance would need up to ${Math.ceil(event.maximumExecutionMs / 1000)}s of model execution. This is a worst-case bound, not a latency forecast; limits are unchanged.`);
     } else if (event.kind === 'planned') {
       this.files.clear();
       for (const file of event.files.slice(0, 2_000)) this.files.set(file.fileId, file.reviewed ? 'waiting' : 'inert');
@@ -160,9 +165,11 @@ export class CliReporter implements ReviewReporter {
     this.stdout('Legend: clean (+/green), findings (x/red), inert (-/gray), failed (!/yellow).');
     const completed = result.summary.reviewedFiles - result.summary.omittedFiles;
     this.stdout(`Coverage: ${completed}/${result.summary.reviewedFiles} required files completed; ${result.summary.omittedFiles} failed; ${result.summary.excludedFiles?.length ?? 0} inert`);
+    if (result.summary.reuse?.status === 'enabled') this.stdout(`Reuse: ${result.summary.reuse.reusedFiles} validated files reused; ${result.summary.reuse.executedFiles} executed.`);
     this.stdout(`Verdict: ${result.review.verdict.status}; findings: ${result.review.findings.length}`);
     const context = result.summary.codeContext;
-    this.stdout(`Indexed context: ${context.status}; ${context.filesWithContext} file${context.filesWithContext === 1 ? '' : 's'} with context; ${context.relatedSpans} related span${context.relatedSpans === 1 ? '' : 's'}${context.provider === null ? '' : `; ${safe(context.provider.id)} ${safe(context.provider.version)}`}`);
+    const staticHead = context.diagnosticCodes.includes('static-head-context');
+    this.stdout(`${staticHead ? 'Related context' : 'Indexed context'}: ${context.status}; ${context.filesWithContext} file${context.filesWithContext === 1 ? '' : 's'} with context; ${context.relatedSpans} related span${context.relatedSpans === 1 ? '' : 's'}${context.provider === null ? '' : `; ${staticHead ? 'base-index provider: ' : ''}${safe(context.provider.id)} ${safe(context.provider.version)}`}${staticHead ? '; includes static-head 1 lexical candidates; per-file provenance recorded' : ''}`);
     if (context.diagnosticCodes.length > 0) this.stdout(`Context diagnostics: ${safe(context.diagnosticCodes.join(', '))}`);
     if (result.omissions.length > 0) {
       const failures = new Map<string, number>();

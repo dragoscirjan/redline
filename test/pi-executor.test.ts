@@ -179,6 +179,23 @@ describe('createPiExecutor', () => {
     }
   });
 
+  it('writes explicit OpenRouter request controls and caller-owned strict schema without enabling tools', async () => {
+    const settings = await createSettings({ model: { provider: 'openrouter', endpoint: 'http://127.0.0.1:8787/v1', model: 'test-model' }, credential: undefined, modelProtocol: 'openrouter-json' });
+    try {
+      const spawner = new RecordingSpawner(); const executor = createPiExecutor({ spawner, transientRetries: 0 });
+      const prepared = await executor.prepare(settings); spawner.script('{"type":"session"}\n', 0);
+      const schema = { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'], additionalProperties: false };
+      await executor.execute(prepared, { system: 'SYS', user: 'USER', responseSchema: schema });
+      const request = spawner.requests[0]!;
+      const config = JSON.parse(await readFile(join(request.env!.PI_CODING_AGENT_DIR!, 'models.json'), 'utf8'));
+      expect(config.providers.openrouter.models[0].samplingParams).toEqual({
+        reasoning: { enabled: false }, provider: { require_parameters: true },
+        response_format: { type: 'json_schema', json_schema: { name: 'redline_file_review', strict: true, schema } },
+      });
+      expect(request.args).toContain('--no-tools'); expect(request.args).toContain('off');
+    } finally { await settings.cleanup(); }
+  });
+
   it('uses benchmark-only thinking, output, and structured-output overrides without changing isolation', async () => {
     const settings = await createSettings();
     try {

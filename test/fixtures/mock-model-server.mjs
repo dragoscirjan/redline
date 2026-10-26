@@ -24,7 +24,9 @@ function replyFor(body) {
   if (FIXED_REPLY !== null) return FIXED_REPLY;
   const match = FILE_ID_PATTERN.exec(body);
   const fileId = match === null ? '000000' : match[1];
-  return JSON.stringify({ version: 2, fileId, outcome: 'clean', findings: [] });
+  return process.env.MOCK_EXPECT_REVIEW_PROTOCOL === '1'
+    ? JSON.stringify({ version: 4, fileId, outcome: 'clean', reason: 'No supported defects.', contextRequests: [], findings: [] })
+    : JSON.stringify({ version: 2, fileId, outcome: 'clean', findings: [] });
 }
 
 function chunkString(value, size) {
@@ -58,6 +60,20 @@ const server = http.createServer((request, response) => {
       response.writeHead(400, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ error: { message: 'unexpected output-token limit', type: 'invalid_request_error' } }));
       return;
+    }
+    if (process.env.MOCK_EXPECT_REVIEW_PROTOCOL === '1') {
+      const format = parsed.response_format;
+      if (parsed.reasoning?.enabled !== false || parsed.provider?.require_parameters !== true
+        || format?.type !== 'json_schema' || format.json_schema?.strict !== true
+        || format.json_schema?.schema?.properties?.version?.const !== 4
+        || !format.json_schema?.schema?.required?.includes('contextRequests')
+        || format.json_schema?.schema?.additionalProperties !== false
+        || (parsed.tools?.length ?? 0) !== 0) {
+        process.stderr.write('review protocol request fields missing or incorrect\n');
+        response.writeHead(400, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: { message: 'unexpected review request protocol', type: 'invalid_request_error' } }));
+        return;
+      }
     }
     const reply = replyFor(body);
     if (parsed.stream === true) {

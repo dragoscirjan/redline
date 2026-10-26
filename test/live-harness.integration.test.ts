@@ -32,10 +32,11 @@ interface MockServer {
   stop(): Promise<void>;
 }
 
-async function startMockServer(): Promise<MockServer> {
+async function startMockServer(overrides: Record<string, string> = {}): Promise<MockServer> {
   const script = fileURLToPath(new URL('./fixtures/mock-model-server.mjs', import.meta.url));
   const child = spawn(process.execPath, [script, '0'], {
     stdio: ['ignore', 'pipe', 'inherit'],
+    env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, ...overrides },
   });
   const port = await new Promise<number>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('mock server did not start')), 10_000);
@@ -74,6 +75,19 @@ async function withLiveHarness(harness: 'pi' | 'opencode', test: (port: number) 
 }
 
 describe.skipIf(!ENABLED)('live harness integration', () => {
+  it('sends actual Pi/OpenRouter reasoning, strict v4 generation schema and output-token fields to loopback', async () => {
+    expect(await binaryAvailable('pi')).toBe(true);
+    const server = await startMockServer({ MOCK_EXPECT_REVIEW_PROTOCOL: '1', MOCK_EXPECT_MAX_OUTPUT_TOKENS: '32768' });
+    const fixture = await createBundleFixture();
+    try {
+      const parsed = parseReviewEnvironment({ ...cleanReviewEnvironment(fixture, 'pi'),
+        REDLINE_MODEL_CONFIG: JSON.stringify({ provider: 'openrouter', endpoint: `http://127.0.0.1:${server.port}/v1`, model: 'test-model', auth: 'none' }),
+        REDLINE_MODEL_AUTH: undefined, REDLINE_TIMEOUT: '1m', REDLINE_MAX_OUTPUT_TOKENS: '32768' });
+      const result = await runFileReviews({ environment: { ...parsed.review!, modelProtocol: 'openrouter-json' } });
+      expect(result.records[0]?.outcome, result.records[0]?.reason).toBe('clean');
+    } finally { await server.stop(); await fixture.cleanup(); }
+  }, 90_000);
+
   it.runIf(ENABLED)('pi runs the full review against the mock endpoint', async () => {
     await withLiveHarness('pi', async (port) => {
       const fixture = await createBundleFixture();

@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "kind": "deterministic-synthetic-scheduling",
+  "modelCalls": 0,
+  "samples": [
+    {
+      "manifestIndex": 0,
+      "estimatedPromptBytes": 10000,
+      "durationMs": 240000
+    },
+    {
+      "manifestIndex": 1,
+      "estimatedPromptBytes": 10000,
+      "durationMs": 240000
+    },
+    {
+      "manifestIndex": 2,
+      "estimatedPromptBytes": 10000,
+      "durationMs": 240000
+    },
+    {
+      "manifestIndex": 3,
+      "estimatedPromptBytes": 10000,
+      "durationMs": 240000
+    },
+    {
+      "manifestIndex": 4,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 5,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 6,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 7,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 8,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 9,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 10,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 11,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 12,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 13,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 14,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 15,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 16,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 17,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 18,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    },
+    {
+      "manifestIndex": 19,
+      "estimatedPromptBytes": 100,
+      "durationMs": 30000
+    }
+  ],
+  "results": [
+    {
+      "policy": "largest-first",
+      "files": 20,
+      "workers": 4,
+      "deadlineMs": 180000,
+      "started": 4,
+      "completed": 0,
+      "omitted": 20,
+      "elapsedMs": 180000,
+      "assignedCompletionMs": 240000
+    },
+    {
+      "policy": "mixed",
+      "files": 20,
+      "workers": 4,
+      "deadlineMs": 180000,
+      "started": 7,
+      "completed": 3,
+      "omitted": 17,
+      "elapsedMs": 180000,
+      "assignedCompletionMs": 300000
+    },
+    {
+      "policy": "largest-first",
+      "files": 20,
+      "workers": 4,
+      "deadlineMs": 600000,
+      "started": 20,
+      "completed": 20,
+      "omitted": 0,
+      "elapsedMs": 360000,
+      "assignedCompletionMs": 360000
+    },
+    {
+      "policy": "mixed",
+      "files": 20,
+      "workers": 4,
+      "deadlineMs": 600000,
+      "started": 20,
+      "completed": 20,
+      "omitted": 0,
+      "elapsedMs": 360000,
+      "assignedCompletionMs": 360000
+    }
+  ]
+}

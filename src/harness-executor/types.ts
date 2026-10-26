@@ -34,11 +34,14 @@ export interface HarnessSettings {
   readonly timeoutMs: number;
   /** Optional per-call generation cap. Unset retains the harness's production default. */
   readonly maxOutputTokens?: number | undefined;
+  readonly modelProtocol?: 'compatible' | 'openrouter-json' | undefined;
   /** Caller-managed scratch directory for generated harness configuration. */
   readonly workDirectory: string;
 }
 
 export interface HarnessPrompt {
+  /** Trusted fixed schema supplied by the caller, never derived from repository content. */
+  readonly responseSchema?: Readonly<Record<string, unknown>>;
   readonly system: string;
   readonly user: string;
 }

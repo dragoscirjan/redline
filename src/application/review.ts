@@ -118,7 +118,8 @@ export class ReviewApplication {
         onFileStart: ({ fileId }) => reporter.progress({ kind: 'file-started', fileId }),
         onFileDone: ({ fileId, outcome }) => reporter.progress({ kind: 'file-completed', fileId, outcome }),
       });
-      signal.throwIfAborted();
+      // Execution has persisted authoritative artifacts. Report their actual
+      // coverage before preserving the caller's cancellation/deadline outcome.
       await reporter.complete({
         review: result.review, summary: result.summary, outputDirectory: result.outputDirectory,
         ...(captured.coverage === undefined ? {} : { captureCoverage: captured.coverage }),
@@ -126,6 +127,7 @@ export class ReviewApplication {
           path: record.path, errorKind: record.errorKind ?? 'omitted',
         })),
       });
+      signal.throwIfAborted();
       reporter.progress({ kind: 'completed' });
       return result;
     } catch (error) {

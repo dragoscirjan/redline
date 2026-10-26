@@ -15,7 +15,7 @@ export function parseOutputTokens(value: string | undefined): number | undefined
   return validateOutputTokens(Number(value));
 }
 
-/** Keep default capture unchanged; accommodate larger bounded NDJSON streams. */
+/** Streamed event overhead can exceed generated text. Keep the default and hard byte bounds. */
 export function outputCaptureBytes(tokens: number | undefined): number {
-  return Math.max(8 * 1024 * 1024, (tokens === undefined ? 0 : validateOutputTokens(tokens)) * 256);
+  return Math.min(64 * 1024 * 1024, Math.max(8 * 1024 * 1024, (tokens === undefined ? 0 : validateOutputTokens(tokens)) * 512));
 }

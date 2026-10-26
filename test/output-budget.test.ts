@@ -14,6 +14,8 @@ it('keeps generation tokens separate from deadlines and bounded stream capture',
   expect(parseOutputTokens('32768')).toBe(32768);
   expect(parseOutputTokens('262144')).toBe(262144);
   expect(outputCaptureBytes(undefined)).toBe(8 * 1024 * 1024);
+  expect(outputCaptureBytes(16384)).toBe(8 * 1024 * 1024);
+  expect(outputCaptureBytes(32768)).toBe(16 * 1024 * 1024);
   expect(outputCaptureBytes(262144)).toBe(64 * 1024 * 1024);
 });
 

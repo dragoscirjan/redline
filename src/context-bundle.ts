@@ -45,7 +45,8 @@ export interface BundleArguments {
   readonly output: string;
   readonly sourceDirectory: string | null;
   readonly eligibilityPolicyFile: string | null;
-  /** Local unstaged comparisons use an index baseline but trust the resolved committed policy. */
+  /** Trusted adapter-only override, never repository- or model-selected.
+   * Unstaged comparisons use an index baseline but trust the resolved committed policy. */
   readonly policyBase?: string;
 }
 

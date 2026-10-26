@@ -245,6 +245,28 @@ describe('local Git review CLI', () => {
     expect((await manifest(result.output)).eligibility.source).toBe('built-in');
   });
 
+  it.each(['staged', 'unstaged', 'all'] as const)('ignores staged exclusion policy in %s review and trusts the committed base', async (mode) => {
+    const f = await fixture();
+    await mkdir(join(f.repository, '.redline'));
+    await writeFile(join(f.repository, '.redline/review-eligibility.json'), JSON.stringify({
+      version: 1, include: [], exclude: [{ pattern: 'example.ts', reason: 'attempted staged exclusion' }],
+    }));
+    await writeFile(join(f.repository, 'example.ts'), 'staged change\n'); f.git('add', '.');
+    await writeFile(join(f.repository, 'example.ts'), 'unstaged change\n');
+    const result = await f.run(['--base', f.head, '--worktree', mode]);
+    expect(result.code, result.stderr).toBe(0);
+    const bundle = await manifest(result.output);
+    expect(bundle.eligibility.source).toBe('built-in');
+    expect(bundle.files.find((file: { newPath: string }) => file.newPath === 'example.ts').reviewed).toBe(true);
+    if (mode === 'unstaged') expect(bundle.base).not.toBe(f.head);
+  });
+
+  it('rejects an externally supplied policy-base override before capture', async () => {
+    const f = await fixture(); const result = await f.run(['--policy-base', 'HEAD']);
+    expect(result.code).toBe(2); expect(result.stderr).toContain('invalid arguments');
+    expect(await readFile(join(result.output, 'capture.json'), 'utf8').catch(() => null)).toBeNull();
+  });
+
   it('detects file changes during capture rather than reviewing a mixed snapshot', async () => {
     const f = await fixture(); await writeFile(join(f.repository, 'example.ts'), 'before\n');
     const options = await parseLocalOptions(['--harness', 'echo'], f.env, f.repository);

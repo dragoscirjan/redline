@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { watch } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -198,5 +198,50 @@ fs.mkdirSync(process.env.GITNEXUS_STORAGE_PATH,{recursive:true});fs.writeFileSyn
     const staleOutput = join(f.root, 'stale-output');
     const rejected = await main([...args, '--code-context', stale, '--output', staleOutput], f.env, { cwd: f.root, stdout: () => {}, stderr: () => {} });
     expect(rejected).toBe(1); expect(await readFile(join(staleOutput, 'reviews/summary.json'), 'utf8').catch(() => null)).toBeNull();
+  });
+});
+
+describe('GitHub exporter compatibility entrypoint', () => {
+  async function exporter(source?: string) {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'redline-export-entrypoint-'))); roots.push(root);
+    const wrapper = join(root, 'github/code-index/export.py');
+    await mkdir(join(root, 'github/code-index'), { recursive: true });
+    await copyFile(new URL('../github/code-index/export.py', import.meta.url), wrapper);
+    if (source !== undefined) {
+      await mkdir(join(root, 'src/code-index'), { recursive: true });
+      await writeFile(join(root, 'src/code-index/export.py'), source);
+    }
+    const env = { PATH: process.env.PATH ?? process.env.Path, SystemRoot: process.env.SystemRoot ?? process.env.SYSTEMROOT,
+      HOME: root, TEMP: root, TMP: root };
+    const python = (process.platform === 'win32' ? ['python', 'python3'] : ['python3', 'python']).find((command) =>
+      spawnSync(command, ['-I', '-B', '-c', 'import sys; assert sys.version_info >= (3, 12)'], { env, timeout: 5000 }).status === 0);
+    if (python === undefined) throw new Error('Python 3.12+ is required for code-index entrypoint tests');
+    return (code?: string) => spawnSync(python, code === undefined ? ['-I', '-B', wrapper] : ['-I', '-B', '-c', code, wrapper],
+      { env, cwd: root, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 });
+  }
+
+  it('reports a missing shared module with the existing diagnostic prefix and exit code', async () => {
+    const run = await exporter(); const result = run();
+    expect(result.status, result.stderr).toBe(2);
+    expect(result.stderr).toMatch(/^redline code-index: /u);
+    expect(result.stderr).not.toContain('Traceback'); expect(result.stdout).toBe('');
+  });
+
+  it.each(['ValueError', 'OSError', 'RuntimeError'])('handles %s during shared-module loading and main invocation', async (error) => {
+    for (const source of ['raise ' + error + '("controlled fixture failure")\n',
+      'def main():\n    raise ' + error + '("controlled fixture failure")\n']) {
+      const run = await exporter(source); const result = run();
+      expect(result.status, result.stderr).toBe(2);
+      expect(result.stderr).toBe('redline code-index: controlled fixture failure\n');
+      expect(result.stdout).toBe('');
+    }
+  });
+
+  it('preserves successful CLI execution and delegated imports used by follow-up queries', async () => {
+    const run = await exporter('fixture_value = 7\ndef main():\n    return 0\n');
+    const cli = run(); expect(cli.status, cli.stderr).toBe(0);
+    const imported = run('import importlib.util, sys\nspec = importlib.util.spec_from_file_location("compat", sys.argv[1])\nmodule = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\nassert module.fixture_value == 7\nassert module.main() == 0\n');
+    expect(imported.status, imported.stderr).toBe(0);
+    expect(imported.stdout).toBe('');
   });
 });

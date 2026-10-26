@@ -2,7 +2,48 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { assertNpmVersionAvailable } from '../src/release/npm-check.ts';
 
+/** Inspect this workflow's run values; actionlint owns YAML syntax validation. */
+function assertNoInlineVersionInput(source: string): void {
+  const lines = source.split('\n');
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? '';
+    const run = /^\s*(?:-\s*)?run:\s*(.*)$/u.exec(line);
+    if (run === null) continue;
+    let script = run[1] ?? '';
+    const indent = line.indexOf('run:');
+    if (script === '' || /^[|>]/u.test(script)) {
+      for (index += 1; index < lines.length; index += 1) {
+        const next = lines[index] ?? '';
+        if (next.trim() !== '' && next.length - next.trimStart().length <= indent) { index -= 1; break; }
+        script += '\n' + next;
+      }
+    }
+    expect(script).not.toMatch(/\binputs\s*(?:\.\s*version\b|\[\s*['"]version['"]\s*\])/u);
+  }
+}
+
 describe('npm release boundary', () => {
+  it.each([
+    '${{ inputs.version }}',
+    "'${{ inputs.version }}'",
+    'echo ${{ inputs.version }}',
+    '${{inputs.version}}',
+    '${{ inputs . version }}',
+    "${{ inputs['version'] }}",
+    '${{ inputs["version"] }}',
+  ])('rejects a release version expression regardless of quoting or context: %s', (source) => {
+    for (const script of ['run: ' + source, 'run: |\n  echo ' + source, 'run: >-\n  echo ' + source]) {
+      expect(() => assertNoInlineVersionInput(script)).toThrow();
+    }
+  });
+  it('allows environment handoff while keeping workflow input expressions out of shell scripts', () => {
+    const expression = '${{ inputs.version }}';
+    for (const source of [
+      'env:\n  VERSION: ' + expression + '\nrun: node preflight.ts "$VERSION"',
+      'steps:\n  - run: |\n      echo safe\n    env:\n      VERSION: ' + expression + '\n  - run: echo "$VERSION"',
+    ]) expect(() => assertNoInlineVersionInput(source)).not.toThrow();
+  });
+
   it('requires exact package identity and version before contacting the registry', async () => {
     const request = vi.fn<typeof fetch>();
     await expect(assertNpmVersionAvailable('@dragoscirjan/redline', '1.0.0', '2.0.0', request)).rejects.toThrow('match');
@@ -34,6 +75,6 @@ describe('npm release boundary', () => {
     expect(source).toContain('--commit "$GITHUB_SHA"');
     expect(source).toContain('pnpm test');
     expect(source).toContain('npm publish --ignore-scripts --provenance --access public');
-    expect(source).not.toContain('${{ inputs.version }}"');
+    assertNoInlineVersionInput(source);
   });
 });

@@ -139,7 +139,7 @@ jobs:
         if: matrix.harness == 'pi'
         env:
           REDLINE_LIVE_HARNESS_TESTS: '1'
-        run: mise exec -- pnpm exec vitest run test/live-harness.integration.test.ts -t 'sends actual Pi'
+        run: node test/request-protocol-run.ts
 
       # The per-harness review findings artifact: per-file JSON/Markdown
       # records and the run summary exactly as the review tool wrote them.

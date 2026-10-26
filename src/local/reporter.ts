@@ -78,6 +78,11 @@ export class CliReporter implements ReviewReporter {
   }
   async preflight(): Promise<void> {}
   progress(event: ReviewEvent): void {
+    if (event.kind === 'cleanup-failed') {
+      this.finishLine();
+      this.stderr('Warning: temporary snapshot cleanup failed; the review outcome is unchanged.');
+      return;
+    }
     if (this.reported) return;
     if (event.kind === 'started') {
       if (this.options.terminal === undefined) this.stderr('Reviewing changes…');

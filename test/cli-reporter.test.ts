@@ -106,6 +106,14 @@ describe('terminal progress and finding cards', () => {
     expect(stderr).toEqual(['Reviewing changes…']);
   });
 
+  it.each(['completed', 'failed'] as const)('shows snapshot cleanup warnings after the %s outcome', async (outcome) => {
+    const { report } = await reportFixture(); const stderr: string[] = [];
+    const renderer = new CliReporter(() => {}, (line) => { stderr.push(line); });
+    if (outcome === 'completed') await renderer.complete(report); else renderer.progress({ kind: 'failed' });
+    renderer.progress({ kind: 'cleanup-failed' });
+    expect(stderr).toContain('Warning: temporary snapshot cleanup failed; the review outcome is unchanged.');
+  });
+
   it('keeps incomplete coverage explicit without scrolling per-file failure logs', async () => {
     const { report } = await reportFixture(); const stdout: string[] = []; const stderr: string[] = [];
     const renderer = new CliReporter((line) => { stdout.push(line); }, (line) => { stderr.push(line); });

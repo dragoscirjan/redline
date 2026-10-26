@@ -10,6 +10,7 @@ export type ReviewEvent =
   | { readonly kind: 'planned'; readonly files: readonly { readonly fileId: string; readonly reviewed: boolean }[] }
   | { readonly kind: 'file-started'; readonly fileId: string }
   | { readonly kind: 'file-completed'; readonly fileId: string; readonly outcome: 'clean' | 'findings' | 'omitted' }
+  | { readonly kind: 'cleanup-failed' }
   | { readonly kind: 'completed' }
   | { readonly kind: 'failed' };
 
@@ -131,7 +132,11 @@ export class ReviewApplication {
       reporter.progress({ kind: 'failed' });
       throw error;
     } finally {
-      await captured?.dispose();
+      try { await captured?.dispose(); }
+      catch {
+        // Cleanup diagnostics must not replace a completed review or its original failure.
+        reporter.progress({ kind: 'cleanup-failed' });
+      }
     }
   }
 }

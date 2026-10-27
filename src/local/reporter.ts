@@ -91,6 +91,8 @@ export class CliReporter implements ReviewReporter {
       if (this.options.terminal === undefined) this.stderr(this.phase);
     } else if (event.kind === 'context-ready') {
       this.phase = 'Preparing review…';
+      this.finishLine();
+      if (event.indexCache !== undefined) this.stderr(`Base index: ${event.indexCache}`);
       if (event.fileOnlyFiles > 0) {
         this.finishLine();
         this.stderr(`Indexed context: ${terminalText(event.status)}; ${event.relatedSpans} related spans; ${event.fileOnlyFiles} required ${event.fileOnlyFiles === 1 ? 'file remains' : 'files remain'} file-only.`);

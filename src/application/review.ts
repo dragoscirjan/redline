@@ -6,7 +6,7 @@ import type { ReviewWriter } from '../review/writer.ts';
 export type ReviewEvent =
   | { readonly kind: 'started' }
   | { readonly kind: 'context-started'; readonly provider: string }
-  | { readonly kind: 'context-ready'; readonly status: ReviewRunResult['summary']['codeContext']['status']; readonly relatedSpans: number; readonly fileOnlyFiles: number }
+  | { readonly kind: 'context-ready'; readonly status: ReviewRunResult['summary']['codeContext']['status']; readonly relatedSpans: number; readonly fileOnlyFiles: number; readonly indexCache?: 'reused' | 'rebuilt' | 'uncached' | 'not-needed' | 'unavailable' | 'imported' }
   | { readonly kind: 'planned'; readonly files: readonly { readonly fileId: string; readonly reviewed: boolean }[] }
   | { readonly kind: 'file-started'; readonly fileId: string }
   | { readonly kind: 'file-completed'; readonly fileId: string; readonly outcome: 'clean' | 'findings' | 'omitted' }
@@ -25,7 +25,7 @@ export interface CapturedContextSnapshot {
   readonly repository: string;
   readonly base: string;
   readonly head: string;
-  prepareSources(): Promise<{ readonly baseDirectory: string; readonly headDirectory: string }>;
+  prepareSources(baseDirectory?: string): Promise<{ readonly baseDirectory: string; readonly headDirectory: string }>;
 }
 
 export interface CapturedRevision {
@@ -118,7 +118,8 @@ export class ReviewApplication {
         onFileStart: ({ fileId }) => reporter.progress({ kind: 'file-started', fileId }),
         onFileDone: ({ fileId, outcome }) => reporter.progress({ kind: 'file-completed', fileId, outcome }),
       });
-      signal.throwIfAborted();
+      // Execution has persisted authoritative artifacts. Report their actual
+      // coverage before preserving the caller's cancellation/deadline outcome.
       await reporter.complete({
         review: result.review, summary: result.summary, outputDirectory: result.outputDirectory,
         ...(captured.coverage === undefined ? {} : { captureCoverage: captured.coverage }),
@@ -126,6 +127,7 @@ export class ReviewApplication {
           path: record.path, errorKind: record.errorKind ?? 'omitted',
         })),
       });
+      signal.throwIfAborted();
       reporter.progress({ kind: 'completed' });
       return result;
     } catch (error) {

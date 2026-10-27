@@ -100,6 +100,30 @@ class RecordingSpawner implements ProcessSpawner {
 }
 
 describe('createPiExecutor', () => {
+  it('retains the final answer after a 32k-token invocation emits more than eight MiB of NDJSON', async () => {
+    const settings = await createSettings({ maxOutputTokens: 32768, timeoutMs: 10_000 });
+    try {
+      const update = `${JSON.stringify({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', delta: 'x'.repeat(512) } })}\n`;
+      const final = JSON.stringify({ version: 4, fileId: '000001', outcome: 'clean', findings: [], contextRequests: [] });
+      const stdout = update.repeat(Math.ceil((9 * 1024 * 1024) / Buffer.byteLength(update)))
+        + `${JSON.stringify({ type: 'turn_end', message: { role: 'assistant', content: [{ type: 'text', text: final }], stopReason: 'stop' } })}\n`;
+      const spawner = new SequenceSpawner([{ stdout, code: 0 }]);
+      const executor = createPiExecutor({ spawner });
+      const prepared = await executor.prepare(settings);
+      const run = await executor.execute(prepared, { system: 'policy', user: 'fixture' }, { streamMode: 'off' });
+      expect(run.status).toBe('succeeded'); expect(run.text).toBe(final);
+      expect(run.telemetry?.stdoutBytes).toBeGreaterThan(MAX_OUTPUT_BYTES);
+      expect(run.telemetry?.stdoutTruncated).toBe(false);
+    } finally { await settings.cleanup(); }
+  });
+  it('uses the trusted per-call output-token setting above the old fixed ceiling', async () => {
+    const settings = await createSettings({ maxOutputTokens: 65536 });
+    try {
+      const prepared = await createPiExecutor().prepare(settings);
+      expect(JSON.parse((prepared as import('../src/harness-executor/pi-executor.ts').PreparedPi).agentConfig).providers.mock.models[0].maxTokens).toBe(65536);
+      expect(prepared.description).toContain('max-output-tokens=65536');
+    } finally { await settings.cleanup(); }
+  });
   it('generates models.json without embedding the credential and sets the agent dir env', async () => {
     const settings = await createSettings();
     try {

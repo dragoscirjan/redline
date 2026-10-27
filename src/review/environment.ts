@@ -9,6 +9,7 @@
  */
 
 import { MAX_TIMEOUT_MINUTES, parseDuration, type Duration } from '../duration.ts';
+import { parseOutputTokens } from '../harness-executor/output-budget.ts';
 import { isHarnessName } from '../harness-executor/registry.ts';
 import type { HarnessName } from '../harness-executor/types.ts';
 import type { ReviewCodeContextInput } from './indexed-context.ts';
@@ -27,6 +28,7 @@ export const REDLINE_ENV_KEYS = [
   'REDLINE_TIMEOUT',
   'REDLINE_RUN_TIMEOUT',
   'REDLINE_REVIEW_CONCURRENCY',
+  'REDLINE_MAX_OUTPUT_TOKENS',
   'REDLINE_REUSE_DIR',
   'REDLINE_REUSE_NAMESPACE',
   'REDLINE_PUBLISH_TOKEN',
@@ -118,6 +120,7 @@ export interface ReviewEnvironment {
   readonly runTimeout: Duration;
   /** Trusted maximum number of simultaneous per-file harness calls. */
   readonly reviewConcurrency: number;
+  readonly maxOutputTokens?: number | undefined;
   /** Optional action-owned cross-run record cache; restored contents remain untrusted. */
   readonly reuse?: ReviewReuseEnvironment | undefined;
 }
@@ -407,6 +410,7 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
   const timeout = optionalTimeout(environment.REDLINE_TIMEOUT, DEFAULT_TIMEOUT_INPUT);
   const runTimeout = optionalTimeout(environment.REDLINE_RUN_TIMEOUT, DEFAULT_RUN_TIMEOUT_INPUT);
   const reviewConcurrency = optionalReviewConcurrency(environment.REDLINE_REVIEW_CONCURRENCY);
+  const maxOutputTokens = parseOutputTokens(environment.REDLINE_MAX_OUTPUT_TOKENS);
   const publication = optionalPublication(environment);
   const codeContext = optionalCodeContext(environment);
   const reuse = optionalReviewReuse(environment);
@@ -458,6 +462,7 @@ export function parseReviewEnvironment(environment: NodeJS.ProcessEnv): ParsedRe
     timeout,
     runTimeout,
     reviewConcurrency,
+    ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
     reuse,
   });
   return Object.freeze({ mode: 'review', timeout, runTimeout, verbosity, review, publication });

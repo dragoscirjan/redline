@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { CompositeReporter, ReviewApplication, type ReviewReporter } from '../src/application/review.ts';
+import { CompositeReporter, executePreparedReview, ReviewApplication, type ReviewReporter } from '../src/application/review.ts';
 import { requireCapability } from '../src/application/capabilities.ts';
 import { parseReviewEnvironment } from '../src/review/environment.ts';
 import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
@@ -11,6 +11,33 @@ function reporter(id: string): ReviewReporter {
 }
 
 describe('portable review application', () => {
+  it('reports written incomplete artifacts when cancellation arrives before completion reporting', async () => {
+    const fixture = await createBundleFixture();
+    try {
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo')).review!;
+      const controller = new AbortController(); const observer = reporter('observer');
+      const dispose = vi.fn(async () => {});
+      const application = new ReviewApplication({
+        source: { capture: async () => ({ reviewDirectory: fixture.review, sourceDirectory: fixture.source, dispose }) },
+        reporter: new CompositeReporter([observer]),
+        execute: async (input) => {
+          const result = await executePreparedReview({ ...input, executor: {
+            harness: 'echo',
+            prepare: async (settings) => ({ harness: 'echo', model: settings.model, description: 'scripted incomplete fixture' }),
+            execute: async () => ({ status: 'failed', harness: 'echo', exitCode: 1, text: '', diagnostic: 'fixture failure', durationMs: 0 }),
+          } });
+          controller.abort(); return result;
+        },
+      });
+      await expect(application.run({ environment }, controller.signal)).rejects.toThrow();
+      expect(observer.complete).toHaveBeenCalledOnce();
+      expect(observer.complete).toHaveBeenCalledWith(expect.objectContaining({ summary: expect.objectContaining({ omittedFiles: 1 }) }));
+      expect(observer.progress).toHaveBeenCalledWith({ kind: 'failed' });
+      expect(observer.progress).not.toHaveBeenCalledWith({ kind: 'completed' });
+      expect(dispose).toHaveBeenCalledOnce();
+      expect(JSON.parse(await readFile(join(fixture.output, 'reviews/summary.json'), 'utf8')).omittedFiles).toBe(1);
+    } finally { await fixture.cleanup(); }
+  });
   it('preserves artifacts despite a failed reporter and emits content-free events', async () => {
     const fixture = await createBundleFixture();
     try {

@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { watch } from 'node:fs';
-import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { EOL, tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -63,6 +63,48 @@ if(args[0]==='query') {
 async function summary(output: string) { return JSON.parse(await readFile(join(output, 'reviews/summary.json'), 'utf8')); }
 
 describe('local indexed-context parity', () => {
+  it('reuses the base database across repeated runs, token budgets, and head changes while refreshing head evidence', async () => {
+    const f = await fixture(); const first = await f.run(['--indexing', 'required']); expect(first.code, first.stderr).toBe(0);
+    const second = await f.run(['--indexing', 'required', '--max-output-tokens', '32768']); expect(second.code, second.stderr).toBe(0);
+    expect(second.stderr).toContain('Base index: reused');
+    expect((await summary(second.output)).codeContext.timings.indexMs).toBe(0);
+    const test = join(f.repository, 'test/service.test.ts');
+    await writeFile(test, (await readFile(test, 'utf8')).replace('TEST_CONTRACT_SENTINEL', 'FRESH_HEAD_CONTRACT'));
+    f.git('commit', '--quiet', '-am', 'changed head');
+    const third = await f.run(); expect(third.code, third.stderr).toBe(0); expect(third.stderr).toContain('Base index: reused');
+    const calls = (await readFile(f.calls, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+    expect(calls.filter((args) => args[0] === 'index')).toHaveLength(1);
+    const capture = JSON.parse(await readFile(join(third.output, 'capture.json'), 'utf8'));
+    const bundle = await loadReviewBundle(join(third.output, 'bundle'), join(third.output, 'source'));
+    const indexed = await loadReviewCodeContext(bundle, { path: join(third.output, 'index/code-context.json'), repository: capture.repositoryIdentity });
+    const file = bundle.manifest.files.find((item) => item.newPath === 'src/service.ts')!;
+    expect(codeContextForFile(indexed, file).prompt?.related[0]?.content).toContain('FRESH_HEAD_CONTRACT');
+    expect((await summary(third.output)).codeContext.revision).toBe(f.git('rev-parse', 'HEAD'));
+  });
+
+  it('rebuilds when the base changes or retained database validation fails, but refreshes base source without trusting cached bytes', async () => {
+    const f = await fixture(); expect((await f.run()).code).toBe(0);
+    const root = join(f.root, 'state/redline/indexes/v1'); const key = (await readdir(root)).find((name) => /^[a-f0-9]{64}$/u.test(name))!;
+    await writeFile(join(root, key, 'base/src/service.ts'), 'UNTRUSTED_CACHED_SOURCE\n');
+    const healthy = await f.run(); expect(healthy.code, healthy.stderr).toBe(0); expect(healthy.stderr).toContain('Base index: reused');
+    expect(await readFile(join(root, key, 'base/src/service.ts'), 'utf8')).toContain('return input;');
+    await writeFile(join(root, key, 'cache/database/falkordb.db'), 'corrupted database');
+    const repaired = await f.run(); expect(repaired.code, repaired.stderr).toBe(0);
+    expect((await summary(repaired.output)).codeContext.diagnosticCodes).toContain('cache-restore-invalid');
+    const nextBase = f.git('rev-parse', 'HEAD');
+    await writeFile(join(f.repository, 'src/service.ts'), 'export function normalize(input: string) { return input.toUpperCase(); }\n'); f.git('commit', '--quiet', '-am', 'next head');
+    const changed = await f.run(['--base', nextBase]); expect(changed.code, changed.stderr).toBe(0); expect(changed.stderr).toContain('Base index: rebuilt');
+    const calls = (await readFile(f.calls, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+    expect(calls.filter((args) => args[0] === 'index')).toHaveLength(3);
+  });
+
+  it('serializes concurrent cache users instead of indexing the same base twice', async () => {
+    const f = await fixture(); const results = await Promise.all([f.run(), f.run()]);
+    for (const result of results) expect(result.code, result.stderr).toBe(0);
+    expect(results.some((result) => result.stderr.includes('Base index: reused'))).toBe(true);
+    const calls = (await readFile(f.calls, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+    expect(calls.filter((args) => args[0] === 'index')).toHaveLength(1);
+  });
   it.runIf(process.env.REDLINE_LIVE_LOCAL_CONTEXT_TESTS === '1' && process.platform === 'linux' && process.arch === 'x64')('uses the real separately provisioned pinned CGC on an isolated fixture', async () => {
     const f = await fixture();
     const provider = process.env.REDLINE_LIVE_CGC_EXECUTABLE;
@@ -78,6 +120,10 @@ describe('local indexed-context parity', () => {
     expect(['complete', 'partial']).toContain(report.codeContext.status);
     expect(report.codeContext.provider).toEqual({ id: 'cgc', version: '0.5.7' });
     expect(report.codeContext.relatedSpans).toBeGreaterThan(0);
+    const warm = await f.run(['--indexing', 'required'], true);
+    expect(warm.code, warm.stderr).toBe(0); expect(warm.stderr).toContain('Base index: reused');
+    expect((await summary(warm.output)).codeContext.timings.indexMs).toBe(0);
+    console.log('Real pinned CGC warm reuse: validated base database; indexMs=0');
   }, 180_000);
   it('uses the shared builder and supplies source-validated tests to the same prompt as the action', async () => {
     const f = await fixture(); const result = await f.run(['--indexing', 'required']);
@@ -164,6 +210,9 @@ fs.mkdirSync(process.env.GITNEXUS_STORAGE_PATH,{recursive:true});fs.writeFileSyn
       const pid = Number(await readFile(pidFile, 'utf8')); expect(pid).toBeGreaterThan(0);
       expect(() => process.kill(pid, 0)).toThrow();
       expect(await readFile(join(output, 'reviews/summary.json'), 'utf8').catch(() => null)).toBeNull();
+      await writeFile(f.provider, text);
+      const recovered = await f.run(); expect(recovered.code, recovered.stderr).toBe(0);
+      expect(recovered.stderr).toContain('Base index: rebuilt');
     } finally { clearTimeout(timer); watcher.close(); }
   }, 30_000);
 

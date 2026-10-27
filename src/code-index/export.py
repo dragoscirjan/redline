@@ -357,7 +357,7 @@ def safe_source_file(source_root: Path, relative_path: str) -> Path | None:
     return resolved
 
 
-def provider_environment(provider: str, provider_home: Path, cache_root: Path, *, host_path: str | None = None) -> dict[str, str]:
+def provider_environment(provider: str, provider_home: Path, cache_root: Path, *, host_path: str | None = None, socket_path: str | None = None) -> dict[str, str]:
     environment = {
         "HOME": str(provider_home),
         "PATH": host_path if host_path is not None else "/usr/local/bin:/usr/bin:/bin",
@@ -377,7 +377,7 @@ def provider_environment(provider: str, provider_home: Path, cache_root: Path, *
         })
         return environment
     database_file = cache_root / "database" / "falkordb.db"
-    socket_file = cache_root / "database" / "falkordb.sock"
+    socket_file = Path(socket_path) if socket_path is not None else cache_root / "database" / "falkordb.sock"
     environment.update({
         "CGC_RUNTIME_DB_TYPE": "falkordb",
         "CGC_RUNTIME_DB_PATH": str(database_file),
@@ -1016,7 +1016,7 @@ def build_artifact(args: argparse.Namespace) -> bool:
         raise ValueError("provider query adapter is not a regular file")
 
     if args.prepared_manifest:
-        validate_prepared_source(source_root, workspace)
+        validate_prepared_source(source_root, Path(args.base_workspace).resolve(strict=True) if args.base_workspace else workspace)
         validate_prepared_source(head_source_root, workspace)
     else:
         assert repository_root is not None
@@ -1079,7 +1079,8 @@ def build_artifact(args: argparse.Namespace) -> bool:
     cache_root.mkdir(parents=True, exist_ok=True)
     provider_home.mkdir(parents=True, exist_ok=True)
     environment = provider_environment(provider, provider_home, cache_root,
-                                       host_path=os.environ.get("REDLINE_CONTEXT_HOST_PATH") if args.prepared_manifest else None)
+                                       host_path=os.environ.get("REDLINE_CONTEXT_HOST_PATH") if args.prepared_manifest else None,
+                                       socket_path=args.socket_path if args.prepared_manifest else None)
     state_path = cache_root / "state.json"
     database_path = cache_root / "database"
     restored_material = bool(args.cache_matched_key) or database_has_material(database_path)
@@ -1269,6 +1270,8 @@ def parser() -> argparse.ArgumentParser:
     build_command = commands.add_parser("build")
     build_command.add_argument("--mode", choices=("review", "warmup"), required=True)
     build_command.add_argument("--prepared-manifest")
+    build_command.add_argument("--base-workspace")
+    build_command.add_argument("--socket-path")
     for name in (
         "provider", "provider-version", "base", "head", "repository", "output-directory", "workspace", "source-root", "head-source-root",
         "cache-root", "provider-home", "executable", "runtime-executable", "query-adapter", "configuration-id", "cache-matched-key", "cache-restore-outcome", "result-file",

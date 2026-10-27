@@ -48,7 +48,7 @@ it('installs the packed package offline and runs both CLIs without source checko
     const paths = archive.files.map((entry) => entry.path);
     expect(paths).toContain('prompts/v7/core-policy.md');
     expect(paths).toContain('bin/redline.mjs');
-    for (const file of ['context.ts', 'export.py', 'gitnexus-query.mjs']) expect(paths).toContain(`src/code-index/${file}`);
+    for (const file of ['context.ts', 'cache.ts', 'lock.py', 'export.py', 'gitnexus-query.mjs']) expect(paths).toContain(`src/code-index/${file}`);
     expect(paths.some((path) => /^(?:test|benchmark|src\.old|node_modules|\.agents|\.github|dist)\//u.test(path))).toBe(false);
     const installation = join(root, 'installation'); await mkdir(installation);
     execFileSync(process.execPath, npmArguments(['install', '--prefix', installation, '--ignore-scripts', '--offline', '--no-audit', '--no-fund', '--package-lock=false', join(root, archive.filename)]), { env, encoding: 'utf8' });
@@ -68,8 +68,9 @@ it('installs the packed package offline and runs both CLIs without source checko
     await writeFile(join(repository, 'caller.ts'), 'export const contract = "CALLER_SENTINEL";\n'); git('add', '.'); git('commit', '--quiet', '-m', 'base');
     const base = git('rev-parse', 'HEAD');
     await writeFile(join(repository, 'example.ts'), 'new\n'); git('commit', '--quiet', '-am', 'head');
-    const revisions = run(['review', '--harness', 'echo', '--indexing', 'disabled', '--base', base, '--head', 'HEAD'], repository);
+    const revisions = run(['review', '--harness', 'echo', '--indexing', 'disabled', '--base', base, '--head', 'HEAD', '--max-output-tokens', '32768'], repository);
     expect(revisions.status, revisions.stderr).toBe(0); expect(revisions.stdout).toContain('Artifacts:');
+    expect(revisions.stdout).toContain('Output budget: 32768 tokens per model call');
     const indexer = join(root, 'package-cgc.mjs');
     await writeFile(indexer, `import fs from 'node:fs'; import path from 'node:path'; const a=process.argv.slice(2);
 if(a[0]==='version'){console.error('CodeGraphContext 0.5.7');process.exit(0);}
@@ -78,6 +79,8 @@ if(a[0]==='index'){fs.mkdirSync(path.dirname(db),{recursive:true});fs.writeFileS
 if(a[0]==='query'){const source=fs.readFileSync(db,'utf8');console.log(JSON.stringify(a[1].includes('repository_count')?[{repository_count:1}]:a[1].startsWith('MATCH (related)')?[{changed_path:path.join(source,'example.ts'),related_path:path.join(source,'caller.ts'),start_line:1,end_line:1}]:[]));}else process.exit(1);`);
     const indexed = run(['review', '--harness', 'echo', '--base', base, '--head', 'HEAD', '--indexing', 'required', '--index-executable', indexer], repository);
     expect(indexed.status, indexed.stderr).toBe(0); expect(indexed.stdout).toContain('Indexed context: complete; 1 file with context; 1 related span');
+    const warm = run(['review', '--harness', 'echo', '--base', base, '--head', 'HEAD', '--indexing', 'required', '--index-executable', indexer], repository);
+    expect(warm.status, warm.stderr).toBe(0); expect(warm.stderr).toContain('Base index: reused');
     await writeFile(join(repository, 'example.ts'), 'working\n');
     const working = run(['review', '--harness', 'echo', '--indexing', 'disabled'], repository);
     expect(working.status, working.stderr).toBe(0);

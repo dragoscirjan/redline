@@ -16,6 +16,7 @@
  * work directory when the review run ends.
  */
 
+import { outputCaptureBytes, validateOutputTokens } from './output-budget.ts';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
@@ -73,6 +74,7 @@ export interface PreparedOpenCode extends PreparedHarness {
   readonly rootDirectory: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs: number;
+  readonly maxOutputTokens?: number | undefined;
   readonly modelConfig: {
     readonly provider: string;
     readonly model: string;
@@ -183,6 +185,7 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
   return {
     harness: 'opencode',
     async prepare(settings: HarnessSettings): Promise<PreparedOpenCode> {
+      const maxOutputTokens = settings.maxOutputTokens === undefined ? undefined : validateOutputTokens(settings.maxOutputTokens);
       const rootDirectory = join(settings.workDirectory, 'opencode');
       await mkdir(rootDirectory, { recursive: true });
       const modelOptions: Record<string, string> = { baseURL: settings.model.endpoint };
@@ -207,17 +210,19 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
       const env: Record<string, string | undefined> = {
         PATH: process.env.PATH,
         LANG: process.env.LANG,
+        ...(maxOutputTokens === undefined ? {} : { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: String(maxOutputTokens) }),
       };
       return Object.freeze({
         harness: 'opencode',
         model: settings.model,
-        description: `opencode with isolated per-invocation config and XDG/HOME directories under ${rootDirectory}`,
+        description: `opencode with isolated per-invocation config and XDG/HOME directories under ${rootDirectory}; max-output-tokens=${maxOutputTokens ?? 'provider-default'}`,
         command,
         args,
         cwd: settings.workDirectory,
         rootDirectory,
         env,
         timeoutMs: settings.timeoutMs,
+        ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
         modelConfig,
       });
     },
@@ -254,6 +259,7 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
         env,
         stdin: prompt.user,
         timeoutMs: options?.timeoutMs ?? state.timeoutMs,
+        stdoutLimitBytes: outputCaptureBytes(state.maxOutputTokens),
         // `opencode run --format json` emits model text at the end. Capture
         // first-text latency even when live log streaming is not requested.
         onOutputLine: (stream: 'stdout' | 'stderr', line: string) => {

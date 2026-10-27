@@ -46,7 +46,7 @@ A captured revision can expose a provider-neutral context snapshot: namespace, i
 
 The local composition root resolves only separately installed trusted providers/runtimes. The shared builder indexes sanitized base source with repository/provider configuration excluded, queries bounded relationships, and re-resolves related spans from captured head source. The same artifact loader and prompt builder then serve local and GitHub execution. Model/publication credentials never enter provider environments. Pinned CGC machine output uses a fixed wide terminal width because CGC 0.5.7 otherwise wraps long path strings inside JSON.
 
-Unavailable or invalid context records explicit file-only coverage. Required mode checks every reviewed file after source validation and aborts before model calls on any file-only gap. Local provider state is per-run scratch and removed after preparation; persistent action cache orchestration remains unchanged. An imported artifact bypasses provider execution but not identity, schema, path, or source validation. No verifier is activated.
+Unavailable or invalid context records explicit file-only coverage. Required mode checks every reviewed file after source validation and aborts before model calls on any file-only gap. Local provider state uses a private, bounded exact-base cache behind an OS-backed cross-process lease. A stable base-source pathname preserves CGC graph references, but base bytes are refreshed from captured Git objects before validation. Provider/version, platform, repository, base, and configuration changes invalidate reuse. Head-only changes reuse validated databases, not head evidence or model output. Per-run socket/head/home scratch is removed; persistent action cache orchestration remains unchanged. An imported artifact bypasses provider execution but not identity, schema, path, or source validation. No verifier is activated.
 
 ## Artifacts precede reporters
 
@@ -63,6 +63,10 @@ The GitHub Action continues to invoke `src/review/cli.ts` with its existing `RED
 Local VCS IDs: `git`, `jj`, `mercurial`. Local reporter IDs: `cli`, `github`, `forgejo`, `gitea`, `gitlab`, `bitbucket`. Only Git and the CLI reporter are implemented in the new command. Existing GitHub publication remains available through the legacy action path, not through `--reporter github` yet.
 
 No editor protocol, TypeScript SDK, foreign-VCS semantics, or forge-specific configuration is promised by this epic. #179 defines editor JSON-RPC; the remaining roadmap epics add the other adapters. Thin editor clients must not duplicate review policy.
+
+## Generation limits
+
+The trusted `max-output-tokens` setting is parsed at the CLI/environment boundary and passed through `HarnessSettings`; prompt content and repository policy cannot select it. Pi maps it to isolated model configuration. OpenCode maps it to the runtime output ceiling without replacing catalog context-window metadata. Unset settings preserve existing executor defaults. Explicit budgets invalidate semantic review reuse. Token and byte allowances are independent, bounded resources; reasoning allocation and dollar budgets remain outside this interface.
 
 ## Package runtime
 

@@ -224,6 +224,7 @@ export async function buildReviewSemanticFingerprint(options: {
     },
     findingScope: options.environment.findingScope,
     timeoutMs: options.environment.timeout.milliseconds,
+    ...(options.environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: options.environment.maxOutputTokens }),
     verifyCandidates: options.verifyCandidates,
     followUpAvailable: options.followUpAvailable,
     requirementsDigest: await requirementsDigest(options.bundle),

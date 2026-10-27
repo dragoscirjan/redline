@@ -52,6 +52,13 @@ const server = http.createServer((request, response) => {
     } catch {
       // fall through with defaults
     }
+    const expectedTokens = process.env.MOCK_EXPECT_MAX_OUTPUT_TOKENS;
+    if (expectedTokens !== undefined && (parsed.max_completion_tokens ?? parsed.max_tokens) !== Number(expectedTokens)) {
+      process.stderr.write(`output-token cap mismatch: expected ${Number(expectedTokens)}, received ${Number(parsed.max_completion_tokens ?? parsed.max_tokens)}\n`);
+      response.writeHead(400, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: { message: 'unexpected output-token limit', type: 'invalid_request_error' } }));
+      return;
+    }
     const reply = replyFor(body);
     if (parsed.stream === true) {
       response.writeHead(200, { 'content-type': 'text/event-stream' });

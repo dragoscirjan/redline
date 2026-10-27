@@ -1,11 +1,26 @@
 {
-  "name": "redline",
+  "name": "@dragoscirjan/redline",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
-  "description": "Forge-independent pull request review core and forge-specific actions.",
+  "description": "Local Git code reviews and forge-independent review execution.",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/dragoscirjan/redline.git" },
+  "engines": { "node": ">=24" },
+  "publishConfig": { "access": "public", "provenance": true },
+  "exports": {},
+  "files": [
+    "bin/*.mjs",
+    "src/application/*.ts", "src/local/*.ts", "src/review/*.ts",
+    "src/harness-executor/*.ts", "src/publish/*.ts",
+    "src/code-context/*.ts", "src/code-intelligence/*.ts", "src/change-impact/*.ts",
+    "src/context-bundle.ts", "src/duration.ts", "src/process-runner.ts", "src/review-eligibility.ts",
+    "src/code-index/context.ts", "src/code-index/export.py", "src/code-index/gitnexus-query.mjs",
+    "prompts/v7/*.md", "prompts/verification/v3/*.md",
+    "docs/local-cli.md", "docs/portable-architecture.md"
+  ],
   "bin": {
-    "redline-review": "src/review/cli.ts"
+    "redline": "bin/redline.mjs",
+    "redline-review": "bin/redline-review.mjs"
   },
   "scripts": {
     "benchmark": "node src/benchmark/cli.ts",
@@ -25,7 +40,8 @@
     "docs:preview": "vitepress preview docs",
     "serve": "vitepress dev docs",
     "test": "vitest run && bats test/*.bats",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:package": "vitest run test/package.test.ts"
   },
   "devDependencies": {
     "@types/node": "24.10.1",

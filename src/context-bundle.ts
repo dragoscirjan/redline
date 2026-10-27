@@ -39,12 +39,15 @@ const GENERATED_DIRECTORY_NAMES = new Set([
   'node_modules', 'dist', 'build', 'out', 'vendor', 'coverage',
 ]);
 
-interface Arguments {
+export interface BundleArguments {
   readonly base: string;
   readonly head: string;
   readonly output: string;
   readonly sourceDirectory: string | null;
   readonly eligibilityPolicyFile: string | null;
+  /** Trusted adapter-only override, never repository- or model-selected.
+   * Unstaged comparisons use an index baseline but trust the resolved committed policy. */
+  readonly policyBase?: string;
 }
 
 interface ManifestFile {
@@ -68,7 +71,7 @@ function usage(program: string): string {
   return `Usage: ${program} --base <commit> --head <commit> --output <review-dir> [--source <source-dir>] [--eligibility-policy-file <trusted-json-file>]`;
 }
 
-function parseArguments(values: readonly string[], program: string): Arguments {
+function parseArguments(values: readonly string[], program: string): BundleArguments {
   let base = '';
   let head = '';
   let output = '';
@@ -310,7 +313,7 @@ async function parsePolicyFile(path: string): Promise<{ readonly raw: string; re
 }
 
 async function loadEligibilityPolicy(
-  repo: string,
+  git: BundleGit,
   base: string,
   trustedPolicyFile: string | null,
 ): Promise<LoadedEligibilityPolicy> {
@@ -329,8 +332,7 @@ async function loadEligibilityPolicy(
     };
   }
 
-  const entries = UTF8.decode(await runGit(
-    repo,
+  const entries = UTF8.decode(await git.run(
     ['ls-tree', '-z', base, '--', DEFAULT_REVIEW_ELIGIBILITY_PATH],
   )).split('\0').filter((entry) => entry.length > 0);
   if (entries.length === 0) {
@@ -352,7 +354,7 @@ async function loadEligibilityPolicy(
   if (match === null || match[2] !== DEFAULT_REVIEW_ELIGIBILITY_PATH) {
     throw new Error('trusted base review eligibility policy must be one regular file');
   }
-  const raw = UTF8.decode(await runGit(repo, ['show', `${base}:${DEFAULT_REVIEW_ELIGIBILITY_PATH}`]));
+  const raw = UTF8.decode(await git.run(['show', `${base}:${DEFAULT_REVIEW_ELIGIBILITY_PATH}`]));
   const policy = parseReviewEligibilityPolicy(raw);
   return {
     policy,
@@ -386,7 +388,7 @@ function reviewedFile(
 }
 
 async function buildManifest(
-  repo: string,
+  git: BundleGit,
   base: string,
   head: string,
   output: string,
@@ -436,14 +438,14 @@ async function buildManifest(
     const id = String(files.length + 1).padStart(6, '0');
     const diffFile = `diffs/${id}.diff`;
     const diffPaths = status === 'D' ? [oldPath] : [...new Set([oldPath, newPath])].sort();
-    await runGitToFile(repo, ['diff', '--no-ext-diff', '--find-renames', '--binary', base, head, '--', ...diffPaths], join(output, diffFile));
+    await git.write(['diff', '--no-ext-diff', '--find-renames', '--binary', base, head, '--', ...diffPaths], join(output, diffFile));
 
     const eligibility = reviewedFile(binary, [oldPath, newPath], policy);
     let baseFile: string | null = null;
     if (status === 'D' || status === 'R' || (eligibility.reviewed && status !== 'A')) {
       baseFile = `base-files/${id}`;
       const path = join(output, baseFile);
-      if (!await runGitToFile(repo, ['show', `${base}:${oldPath}`], path, true)) {
+      if (!await git.write(['show', `${base}:${oldPath}`], path, true)) {
         await rm(path, { force: true });
         baseFile = null;
       }
@@ -468,12 +470,24 @@ async function buildManifest(
   return files;
 }
 
-async function buildBundle(args: Arguments, cwd: string): Promise<void> {
-  const repo = UTF8.decode(await run('git', ['rev-parse', '--show-toplevel'], { cwd })).trim();
-  const base = UTF8.decode(await runGit(repo, ['rev-parse', '--verify', `${args.base}^{commit}`])).trim();
-  const head = UTF8.decode(await runGit(repo, ['rev-parse', '--verify', `${args.head}^{commit}`])).trim();
-  await runGit(repo, ['cat-file', '-e', `${base}^{commit}`]);
-  await runGit(repo, ['cat-file', '-e', `${head}^{commit}`]);
+export interface BundleGit {
+  run(args: readonly string[]): Promise<Buffer>;
+  write(args: readonly string[], destination: string, allowFailure?: boolean): Promise<boolean>;
+}
+
+/** The legacy CLI and local revision adapter share one deterministic bundle builder. */
+export async function buildBundle(args: BundleArguments, cwd: string, commands?: BundleGit): Promise<void> {
+  const repo = commands === undefined
+    ? UTF8.decode(await run('git', ['rev-parse', '--show-toplevel'], { cwd })).trim()
+    : cwd;
+  const git: BundleGit = commands ?? {
+    run: (values) => runGit(repo, values),
+    write: (values, destination, allowFailure) => runGitToFile(repo, values, destination, allowFailure),
+  };
+  const base = UTF8.decode(await git.run(['rev-parse', '--verify', `${args.base}^{commit}`])).trim();
+  const head = UTF8.decode(await git.run(['rev-parse', '--verify', `${args.head}^{commit}`])).trim();
+  await git.run(['cat-file', '-e', `${base}^{commit}`]);
+  await git.run(['cat-file', '-e', `${head}^{commit}`]);
 
   await Promise.all([
     mkdir(join(args.output, 'raw'), { recursive: true }),
@@ -485,18 +499,18 @@ async function buildBundle(args: Arguments, cwd: string): Promise<void> {
   if (args.sourceDirectory !== null) await extractSource(repo, head, args.sourceDirectory);
 
   await writeFile(join(args.output, 'revisions.txt'), `base=${base}\nhead=${head}\n`);
-  await runGitToFile(repo, ['diff', '--name-status', '-z', '--find-renames', base, head], join(args.output, 'raw/name-status.z'));
-  await runGitToFile(repo, ['diff', '--numstat', '-z', '--find-renames', base, head], join(args.output, 'raw/numstat.z'));
-  await runGitToFile(repo, ['diff', '--stat', '--find-renames', base, head], join(args.output, 'summary.txt'));
-  await runGitToFile(repo, ['log', '--reverse', '--format=fuller', `${base}..${head}`], join(args.output, 'commits.txt'));
+  await git.write(['diff', '--name-status', '-z', '--find-renames', base, head], join(args.output, 'raw/name-status.z'));
+  await git.write(['diff', '--numstat', '-z', '--find-renames', base, head], join(args.output, 'raw/numstat.z'));
+  await git.write(['diff', '--stat', '--find-renames', base, head], join(args.output, 'summary.txt'));
+  await git.write(['log', '--reverse', '--format=fuller', `${base}..${head}`], join(args.output, 'commits.txt'));
   const commitIds = join(args.output, 'raw/commit-ids.txt');
-  await runGitToFile(repo, ['rev-list', '--reverse', `${base}..${head}`], commitIds);
+  await git.write(['rev-list', '--reverse', `${base}..${head}`], commitIds);
   if ((await stat(commitIds)).size === 0) {
-    await runGitToFile(repo, ['rev-parse', head], commitIds);
+    await git.write(['rev-parse', head], commitIds);
   }
 
-  const eligibility = await loadEligibilityPolicy(repo, base, args.eligibilityPolicyFile);
-  const files = await buildManifest(repo, base, head, args.output, eligibility.policy);
+  const eligibility = await loadEligibilityPolicy(git, args.policyBase ?? base, args.eligibilityPolicyFile);
+  const files = await buildManifest(git, base, head, args.output, eligibility.policy);
   await writeFile(
     join(args.output, 'manifest.json'),
     `${JSON.stringify({ version: 2, base, head, eligibility: eligibility.metadata, files }, null, 2)}\n`,
@@ -504,7 +518,7 @@ async function buildBundle(args: Arguments, cwd: string): Promise<void> {
 
   const commits = UTF8.decode(await readFile(commitIds)).split('\n').filter((commit) => commit.length > 0);
   for (const commit of commits) {
-    await runGitToFile(repo, ['show', '--format=fuller', '--find-renames', '--binary', commit], join(args.output, `commits/${commit}.patch`));
+    await git.write(['show', '--format=fuller', '--find-renames', '--binary', commit], join(args.output, `commits/${commit}.patch`));
   }
 
   await writeFile(join(args.output, 'README.md'), `# Pull request review bundle

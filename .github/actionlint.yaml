@@ -1,5 +1,13 @@
 # actionlint 1.7.12 predates GitHub's official $/ self-repository
 # reference. Keep this exception scoped to the one workflow and exact action.
+# These GitHub-hosted labels are newer than the pinned actionlint catalog.
+# They are verified by the native CLI matrix; no lint category is disabled.
+# https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+self-hosted-runner:
+  labels:
+    - macos-15-intel
+    - windows-11-arm
+
 paths:
   .github/workflows/code-review.yml:
     ignore:

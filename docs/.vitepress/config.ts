@@ -21,6 +21,7 @@ export default defineConfig({
       {
         text: 'Adopt',
         items: [
+          { text: 'Local Git CLI', link: '/local-cli' },
           { text: 'Reusable review workflow', link: '/reusable-review-workflow' },
           { text: 'Dogfood reviews', link: '/dogfood-review' },
         ],
@@ -28,6 +29,7 @@ export default defineConfig({
       {
         text: 'Reference',
         items: [
+          { text: 'Portable application architecture', link: '/portable-architecture' },
           { text: 'GitHub composite action', link: '/github-composite-action' },
           { text: 'Code-index action', link: '/code-index-action' },
           { text: 'Runnable review configuration', link: '/runnable-review-configuration' },

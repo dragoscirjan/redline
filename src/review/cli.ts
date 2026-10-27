@@ -9,6 +9,7 @@
  */
 
 import { pathToFileURL } from 'node:url';
+import { executePreparedReview } from '../application/review.ts';
 import {
   GitHubReviewPublisher,
   PublicationService,
@@ -27,7 +28,6 @@ import {
 } from './environment.ts';
 import { loadPublishedRun } from './run-output.ts';
 import {
-  runFileReviews,
   type FileHarnessOutputEvent,
   type FileReviewIdentity,
   type ReviewRunInput,
@@ -312,7 +312,7 @@ export async function main(
 
       let result;
       try {
-        result = await runFileReviews({ ...progressCallbacks(parsed.verbosity), environment: review, ...dependencies.reviewOptions });
+        result = await executePreparedReview({ ...progressCallbacks(parsed.verbosity), environment: review, ...dependencies.reviewOptions });
       } catch (error) {
         // Defense in depth: the failure text is published, so the
         // publication token must never appear in it.
@@ -349,7 +349,7 @@ export async function main(
       return exitCode;
     }
 
-    const result = await runFileReviews({ ...progressCallbacks(parsed.verbosity), environment: review, ...dependencies.reviewOptions });
+    const result = await executePreparedReview({ ...progressCallbacks(parsed.verbosity), environment: review, ...dependencies.reviewOptions });
     writeLine(process.stdout, JSON.stringify(result.summary));
     return result.exitCode;
   } catch (error) {

@@ -136,7 +136,11 @@ import sys
 
 root = Path(sys.argv[1])
 package = json.loads((root / 'package.json').read_text())
-assert package['bin'] == {'redline-review': 'src/review/cli.ts'}
+assert package['name'] == '@dragoscirjan/redline'
+assert package['bin'] == {'redline': 'bin/redline.mjs', 'redline-review': 'bin/redline-review.mjs'}
+for entry in package['bin'].values():
+    assert (root / entry).is_file()
+    assert os.access(root / entry, os.X_OK)
 assert (root / 'src' / 'review' / 'cli.ts').is_file()
 assert os.access(root / 'src' / 'review' / 'cli.ts', os.X_OK)
 assert (root / 'src' / 'context-bundle.ts').is_file()

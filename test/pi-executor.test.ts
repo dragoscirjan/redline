@@ -141,10 +141,9 @@ describe('createPiExecutor', () => {
       expect(modelsJson.providers.mock.api).toBe('openai-completions');
       expect(modelsJson.providers.mock.apiKey).toBe(`$${PI_CREDENTIAL_ENV_NAME}`);
       expect(modelsJson.providers.mock.models).toEqual([{
-        id: 'test-model', reasoning: false, maxTokens: 16_384,
+        id: 'test-model', maxTokens: 16_384,
       }]);
       expect(JSON.parse(await readFile(join(agentDirectory!, 'settings.json'), 'utf8'))).toEqual({
-        defaultThinkingLevel: 'off',
         retry: { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } },
       });
 
@@ -155,8 +154,6 @@ describe('createPiExecutor', () => {
         'json',
         '--no-session',
         '--no-tools',
-        '--thinking',
-        'off',
         '--provider',
         'mock',
         '--model',
@@ -189,11 +186,16 @@ describe('createPiExecutor', () => {
       const request = spawner.requests[0]!;
       const config = JSON.parse(await readFile(join(request.env!.PI_CODING_AGENT_DIR!, 'models.json'), 'utf8'));
       expect(config.providers.openrouter.models[0].samplingParams).toEqual({
-        reasoning: { enabled: false }, provider: { require_parameters: true },
+        provider: { require_parameters: true },
         response_format: { type: 'json_schema', json_schema: { name: 'redline_file_review', strict: true, schema } },
       });
-      expect(request.args).toContain('--no-tools'); expect(request.args).toContain('off');
+      expect(request.args).toContain('--no-tools'); expect(request.args).not.toContain('--thinking');
+      expect(config.providers.openrouter.models[0]).not.toHaveProperty('reasoning');
     } finally { await settings.cleanup(); }
+  });
+
+  it('never accepts an override that disables reasoning', () => {
+    expect(() => createPiExecutor({ thinkingLevel: 'off' })).toThrow('Never disable model reasoning');
   });
 
   it('uses benchmark-only thinking, output, and structured-output overrides without changing isolation', async () => {
@@ -324,6 +326,7 @@ describe('createPiExecutor', () => {
     [402, 'Insufficient credits', 'run'],
     [404, 'Model not found', 'run'],
     [400, 'Invalid JSON schema for response_format', 'run'],
+    [400, 'Reasoning is mandatory for this endpoint and cannot be disabled.', 'run'],
     [422, 'Unsupported parameter: reasoning', 'run'],
     [400, 'Context length exceeded', 'file'],
     [403, 'Content moderation refusal', 'file'],

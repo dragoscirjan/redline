@@ -74,7 +74,12 @@ const server = http.createServer((request, response) => {
     }
     if (process.env.MOCK_EXPECT_REVIEW_PROTOCOL === '1') {
       const format = parsed.response_format;
-      if (parsed.reasoning?.enabled !== false || parsed.provider?.require_parameters !== true
+      if (parsed.reasoning !== undefined || parsed.reasoning_effort !== undefined || parsed.thinking !== undefined) {
+        response.writeHead(400, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: { code: 400, message: 'Reasoning is mandatory for this endpoint and cannot be disabled.' } }));
+        return;
+      }
+      if (parsed.provider?.require_parameters !== true
         || format?.type !== 'json_schema' || format.json_schema?.strict !== true
         || format.json_schema?.schema?.properties?.version?.const !== 4
         || !format.json_schema?.schema?.required?.includes('contextRequests')

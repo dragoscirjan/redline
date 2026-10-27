@@ -45,9 +45,10 @@ core makes.
   enters a process argument.
 - Assistant text is extracted from the final `turn_end` event of Pi's
   newline-delimited JSON stream.
-- Production Pi runs with explicit `thinking=off` and a 16,384-token output
-  cap. It leaves provider sampling parameters unchanged. Controlled benchmarks
-  can set temperature `0`. Pi's own agent and provider retries are disabled.
+- Production Pi preserves model/provider reasoning defaults and never forces
+  thinking off. The default output cap remains 16,384 tokens, with explicit
+  caller overrides preserved. Provider sampling is unchanged. Controlled benchmarks
+  can set temperature `0`, but cannot disable reasoning. Pi's own agent and provider retries are disabled.
 - Redline permits one retry only for classified transient provider output:
   empty or missing text in the final successful turn, or a bounded 429/500/502/503/504,
   rate-limit, reset, or transport diagnostic. The retry uses a fresh isolated

@@ -193,7 +193,7 @@ Output tokens are not bytes, words, context-window capacity, a whole-run allowan
 
 ## Model request protocol
 
-`--model-protocol compatible|openrouter-json` defaults to `compatible`, preserving existing provider behavior. Pi's `thinking off` metadata alone does not establish that an endpoint disabled reasoning.
+`--model-protocol compatible|openrouter-json` defaults to `compatible`. Both profiles preserve model/provider reasoning behavior; neither disables reasoning or forces a thinking level.
 
 For an explicit Pi/OpenRouter probe:
 
@@ -204,7 +204,7 @@ redline review --base main --head HEAD --harness pi \
   --model-protocol openrouter-json --scheduling mixed
 ```
 
-The profile sends `reasoning: {enabled:false}`, `provider: {require_parameters:true}`, and a strict JSON Schema generation request for the fixed v4 discovery document. Tools remain disabled and sampling remains provider-default. The schema requires a concise reason even on clean results and excludes null optional fields; guidance findings omit proposed replacement text. Core JSON, schema, source/diff and impact-reference validation still runs independently. Other prompts without a supplied schema use JSON-object formatting.
+The profile preserves provider/model reasoning behavior and sends no reasoning-disable override. It sends `provider: {require_parameters:true}` and a strict JSON Schema generation request for the fixed v4 discovery document. Tools remain disabled and sampling remains provider-default. The schema requires a concise reason even on clean results and excludes null optional fields; guidance findings omit proposed replacement text. Core JSON, schema, source/diff and impact-reference validation still runs independently. Other prompts without a supplied schema use JSON-object formatting.
 
 Selecting this profile with another harness/provider fails before model execution; it never silently downgrades. An unsupported endpoint, model, schema feature or upstream provider can reject the request. Loopback tests verify actual wire fields, not that every upstream honors them or that findings are correct. There is no repair model call, silent JSON repair, or retry for rejected/malformed output. Separate reasoning allocation and reserved final-answer tokens remain unimplemented.
 

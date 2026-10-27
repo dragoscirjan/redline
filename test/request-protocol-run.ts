@@ -13,7 +13,7 @@ try {
     REDLINE_MODEL_AUTH: undefined, REDLINE_TIMEOUT: '1m', REDLINE_MAX_OUTPUT_TOKENS: '32768' });
   const result = await runFileReviews({ environment: { ...parsed.review!, modelProtocol: 'openrouter-json' } });
   assert.equal(result.records[0]?.outcome, 'clean', result.records[0]?.reason);
-  console.log('Pi HTTP request verified: reasoning disabled request, strict v4 schema, required parameters, no tools, 32768 output tokens.');
+  console.log('Pi HTTP request verified: provider-default reasoning, strict v4 schema, required parameters, no tools, 32768 output tokens.');
 } finally {
   await server.stop(); await fixture.cleanup();
 }
@@ -42,7 +42,7 @@ for (const [provider, protocol] of [['openrouter', 'openrouter-json'], ['openrou
   }
 }
 
-for (const [status, message] of [[400, 'Invalid JSON schema for response_format'], [401, 'Invalid API key'], [503, 'Provider temporarily unavailable']] as const) {
+for (const [status, message] of [[400, 'Invalid JSON schema for response_format'], [400, 'Reasoning is mandatory for this endpoint and cannot be disabled.'], [401, 'Invalid API key'], [503, 'Provider temporarily unavailable']] as const) {
   const sentinel = 'FIXTURE_NOT_A_REAL_KEY';
   const errorServer = await startErrorServer(status, `${message}; ${sentinel}`);
   const failedFixture = await createBundleFixture();

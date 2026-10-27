@@ -35,7 +35,7 @@ export function readPiFailure(stdout: string, fallback?: string, credential?: st
   const match = /^(?:Error:\s*)?([45][0-9]{2})\b/iu.exec(message)
     ?? /\b(?:HTTP(?: error)?|APIError|(?:status|error)(?: code)?)[\s:=]+([45][0-9]{2})\b/iu.exec(message);
   const status = match === null ? null : Number(match[1]);
-  const parameterFailure = /invalid (?:json )?schema|unsupported (?:request )?parameter|unknown parameter|(?:response_format|json_schema).{0,60}(?:unsupported|not supported|invalid|must be)|(?:does not support|unsupported).{0,60}(?:response_format|json_schema|reasoning)/iu.test(message);
+  const parameterFailure = /reasoning is mandatory.{0,120}cannot be disabled|invalid (?:json )?schema|unsupported (?:request )?parameter|unknown parameter|(?:response_format|json_schema).{0,60}(?:unsupported|not supported|invalid|must be)|(?:does not support|unsupported).{0,60}(?:response_format|json_schema|reasoning)/iu.test(message);
   const authenticationFailure = /invalid.{0,20}api.?key|no api key found|authentication failed|account.{0,20}(?:disabled|suspended)/iu.test(message);
   const shared = status === 401 || status === 402 || status === 404
     || (status === 403 && authenticationFailure)

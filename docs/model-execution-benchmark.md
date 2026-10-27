@@ -19,16 +19,7 @@ Regenerate the report from the checked-in capture:
 mise run benchmark:model-execution
 ```
 
-Run a new paid live capture, then regenerate the report:
-
-```sh
-REDLINE_LIVE_BENCHMARK=1 \
-REDLINE_MODEL_CONFIG='{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}' \
-REDLINE_MODEL_AUTH='{"openrouter":"..."}' \
-mise run benchmark:model-execution-live
-```
-
-The live command uses the checked-in per-token prices. Update the command and explain the source if the provider changes its prices.
+The historical matrix includes reasoning-off profiles. These remain readable for deterministic replay, but the executor now rejects reasoning-off execution. Do not rerun that live matrix unchanged; a new live comparison must preserve the owner's reasoning decisions. Existing captures are not new measurements under the current policy.
 
 ## Recorded result
 
@@ -42,9 +33,9 @@ The live command uses the checked-in per-token prices. Update the command and ex
 
 No mode introduced a validated false positive. The live provider still omitted files in every mode. Therefore, this capture is not an absolute quality pass. It is a relative policy comparison.
 
-`off-16384` had the best repeated completion and expected-issue credit counts. Redline therefore uses:
+`off-16384` had the best repeated completion and expected-issue credit counts in this historical capture. That result does not authorize disabling reasoning. Current production uses:
 
-- thinking `off`;
+- model/provider-default reasoning, without a reasoning-disable override;
 - a 16,384-token default output cap; local CLI users can override it with `--max-output-tokens`, and the review environment accepts `REDLINE_MAX_OUTPUT_TOKENS`. The historical benchmark selected a default, not a universal model limit;
 - provider-default sampling in production (temperature `0` is a benchmark control only);
 - normal JSON text output, not provider-native response formatting.

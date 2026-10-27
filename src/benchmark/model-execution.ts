@@ -317,7 +317,7 @@ async function runFreshProcessProbe(sampleCount = 10): Promise<readonly ModelExe
   const workDirectory = await mkdtemp(join(tmpdir(), 'redline-pi-process-probe-'));
   try {
     const executor = createPiExecutor({
-      thinkingLevel: 'off', maxOutputTokens: 16_384, temperature: 0, transientRetries: 0,
+      maxOutputTokens: 16_384, temperature: 0, transientRetries: 0,
     });
     const prepared = await executor.prepare({
       model: {

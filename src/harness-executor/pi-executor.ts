@@ -50,7 +50,7 @@ const PI_TRANSIENT_RETRY_DELAY_MS = 250;
 export const PI_THINKING_LEVELS = ['off', 'minimal', 'low'] as const;
 export type PiThinkingLevel = (typeof PI_THINKING_LEVELS)[number];
 export type PiStructuredOutput = 'none' | 'json-object';
-export const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel = 'off';
+export const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel | undefined = undefined;
 export const DEFAULT_PI_MAX_OUTPUT_TOKENS = 16_384;
 export const MIN_PI_MAX_OUTPUT_TOKENS = 1_024;
 export const MAX_PI_MAX_OUTPUT_TOKENS = MAX_OUTPUT_TOKENS;
@@ -164,7 +164,7 @@ export interface PreparedPi extends PreparedHarness {
 }
 
 interface PiExecutionPolicy {
-  readonly thinkingLevel: PiThinkingLevel;
+  readonly thinkingLevel: PiThinkingLevel | undefined;
   readonly maxOutputTokens: number;
   readonly temperature: 0 | undefined;
   readonly structuredOutput: PiStructuredOutput;
@@ -173,8 +173,9 @@ interface PiExecutionPolicy {
 
 function validatePolicy(options: PiExecutorOptions): PiExecutionPolicy {
   const thinkingLevel = options.thinkingLevel ?? DEFAULT_PI_THINKING_LEVEL;
-  if (!(PI_THINKING_LEVELS as readonly string[]).includes(thinkingLevel)) {
-    throw new Error('Pi thinking level must be off, minimal, or low');
+  if (thinkingLevel === 'off') throw new Error('Never disable model reasoning; preserve provider/model defaults');
+  if (thinkingLevel !== undefined && !(PI_THINKING_LEVELS as readonly string[]).includes(thinkingLevel)) {
+    throw new Error('Pi thinking level must be provider-default, minimal, or low');
   }
   const maxOutputTokens = options.maxOutputTokens ?? DEFAULT_PI_MAX_OUTPUT_TOKENS;
   if (!Number.isSafeInteger(maxOutputTokens)
@@ -215,13 +216,12 @@ function buildAgentConfig(settings: HarnessSettings, policy: PiExecutionPolicy):
         apiKey,
         models: [{
           id: settings.model.model,
-          reasoning: policy.thinkingLevel !== 'off',
+          ...(policy.thinkingLevel === undefined ? {} : { reasoning: true }),
           maxTokens: policy.maxOutputTokens,
           ...(policy.temperature === undefined && policy.structuredOutput === 'none' && settings.modelProtocol !== 'openrouter-json' ? {} : {
             samplingParams: {
               ...(policy.temperature === undefined ? {} : { temperature: policy.temperature }),
               ...(settings.modelProtocol === 'openrouter-json' ? {
-                reasoning: { enabled: false },
                 provider: { require_parameters: true },
                 response_format: { type: 'json_object' },
               } : {}),
@@ -589,8 +589,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         'json',
         '--no-session',
         '--no-tools',
-        '--thinking',
-        effectivePolicy.thinkingLevel,
+        ...(effectivePolicy.thinkingLevel === undefined ? [] : ['--thinking', effectivePolicy.thinkingLevel]),
         '--provider',
         settings.model.provider,
         '--model',
@@ -608,7 +607,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
       return Object.freeze({
         harness: 'pi',
         model: settings.model,
-        description: `pi with isolated per-invocation agent directories under ${rootDirectory}; thinking=${effectivePolicy.thinkingLevel}, max-output-tokens=${effectivePolicy.maxOutputTokens}, temperature=${effectivePolicy.temperature ?? 'provider-default'}, structured-output=${effectivePolicy.structuredOutput}, model-protocol=${settings.modelProtocol ?? 'compatible'}, transient-retries=${effectivePolicy.transientRetries} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
+        description: `pi with isolated per-invocation agent directories under ${rootDirectory}; thinking=${effectivePolicy.thinkingLevel ?? 'provider-default'}, max-output-tokens=${effectivePolicy.maxOutputTokens}, temperature=${effectivePolicy.temperature ?? 'provider-default'}, structured-output=${effectivePolicy.structuredOutput}, model-protocol=${settings.modelProtocol ?? 'compatible'}, transient-retries=${effectivePolicy.transientRetries} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
         command,
         args,
         cwd: settings.workDirectory,

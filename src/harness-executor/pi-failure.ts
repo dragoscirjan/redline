@@ -26,8 +26,9 @@ export function readPiFailure(stdout: string, fallback?: string, credential?: st
   if (message === undefined || message.trim() === '') return undefined;
   // Redact before classification, control filtering, truncation, and JSON escaping.
   if (credential !== undefined && credential.length > 0) {
-    const variants = [...new Set([credential, JSON.stringify(credential).slice(1, -1), encodeURIComponent(credential)])]
-      .sort((a, b) => b.length - a.length);
+    const forms = new Set([credential, JSON.stringify(credential).slice(1, -1)]);
+    try { forms.add(encodeURIComponent(credential)); } catch { /* Malformed Unicode has no URI encoding. */ }
+    const variants = [...forms].sort((a, b) => b.length - a.length);
     for (const value of variants) message = message.split(value).join('[redacted]');
   }
   message = message.replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ').replace(/\s+/gu, ' ').trim();

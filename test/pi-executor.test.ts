@@ -381,6 +381,18 @@ describe('createPiExecutor', () => {
     } finally { await settings.cleanup(); }
   });
 
+  it('does not let malformed Unicode in a credential crash error redaction', async () => {
+    const key = 'FIXTURE-\ud800-KEY';
+    const settings = await createSettings({ credential: { provider: 'mock', value: key } });
+    try {
+      const stdout = JSON.stringify({ type: 'turn_end', message: { role: 'assistant', stopReason: 'error', content: [], errorMessage: '401 Invalid API key ' + key } }) + '\n';
+      const spawner = new SequenceSpawner([{ stdout, code: 0 }]); const executor = createPiExecutor({ spawner });
+      const run = await executor.execute(await executor.prepare(settings), { system: 'SYS', user: 'USER' });
+      expect(run.status).toBe('failed'); expect(JSON.parse(run.diagnostic).message).toContain('[redacted]');
+      expect(run.diagnostic).not.toContain('FIXTURE');
+    } finally { await settings.cleanup(); }
+  });
+
   it('rejects partial assistant text when the runtime ended in error', async () => {
     const settings = await createSettings();
     try {

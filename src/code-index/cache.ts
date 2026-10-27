@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, open, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname, join, relative, isAbsolute } from 'node:path';
+import { dirname, join, relative, isAbsolute, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const MAX_INDEX_CACHE_BYTES = 2 * 1024 * 1024 * 1024;
@@ -26,7 +26,7 @@ export interface BaseIndexLease {
 }
 function inside(root: string, path: string): boolean {
   const value = relative(root, path);
-  return value === '' || (!value.startsWith('..') && !isAbsolute(value));
+  return value === '' || (value !== '..' && !value.startsWith(`..${sep}`) && !isAbsolute(value));
 }
 async function jsonFile(path: string): Promise<unknown> {
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);

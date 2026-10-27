@@ -67,7 +67,14 @@ redline review --base main --head HEAD --harness pi \
 
 Replace the path and namespace with the artifact's actual values. Without `--code-context-repository`, the expected namespace is `local/<opaque Git-common-directory hash>` from `capture.json`; no GitHub remote is needed. Import checks namespace, head, optional base identity, supported provider/schema, bounded paths/spans, and captured head source. An import is not trusted merely because it was produced earlier. Provider selection flags apply to building; an imported artifact supplies its own validated provider identity.
 
-Local indexing automatically retains validated base databases under `$XDG_STATE_HOME/redline/indexes/v1` (or `$HOME/.local/state/redline/indexes/v1`), separate from review outputs and pinned tools. Identity includes the local repository namespace, base commit, provider/version, platform/architecture, and index configuration. Head-only changes and token-budget changes do not rebuild a healthy matching base index. Missing, corrupt, incompatible, or unsafe state is rebuilt; an unavailable cache falls back to a fresh per-run index rather than trusting it. The terminal reports `Base index: reused`, `rebuilt`, or `uncached`.
+Local indexing automatically retains validated base databases under `$XDG_STATE_HOME/redline/indexes/v1` (or `$HOME/.local/state/redline/indexes/v1`), separate from review outputs and pinned tools. Identity includes the local repository namespace, base commit, provider/version, platform/architecture, and index configuration. Head-only changes and token-budget changes do not rebuild a healthy matching base index. Missing, corrupt, incompatible, or unsafe state is rebuilt; an unavailable cache falls back to a fresh per-run index rather than trusting it. The terminal reports `Base index:` with one of these values:
+
+- `reused`: a matching base index was reused.
+- `rebuilt`: a base index was built with persistent cache storage.
+- `uncached`: fresh per-run indexing was used without persistent cache storage.
+- `not-needed`: preparation skipped building a base index.
+- `unavailable`: provider-built index preparation was unavailable.
+- `imported`: an existing context artifact was selected; its identity, source validation, and coverage are reported separately.
 
 Each run refreshes sanitized base bytes from immutable Git objects at a stable pathname, validates the database through the pinned provider, and queries again. Head evidence and review artifacts are always rebuilt from the new captured head; retaining a graph does not retain model answers. Source export and provider query/startup time therefore remain on warm runs. Per-run head snapshots, socket directories, and provider homes are removed after preparation. The bounded artifact and coverage remain in `index/`.
 

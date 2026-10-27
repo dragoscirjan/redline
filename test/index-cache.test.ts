@@ -64,6 +64,34 @@ it('refuses a cache root redirected into reviewed content before creating direct
   expect(await readdir(f.repository)).toEqual([]);
 });
 
+it.each(['cache', '..cache', '...cache'])('refuses an existing %s repository child before creating cache state', async (name) => {
+  const f = await fixture(); const parent = join(f.repository, name);
+  await mkdir(parent, { mode: 0o700 }); await writeFile(join(parent, 'keep'), 'owned fixture sentinel');
+  await expect(acquireBaseIndex(join(parent, 'indexes/v1'), f.repository, identity, f.python, f.env, new AbortController().signal, 1000)
+    .then(async (lease) => { await lease.release(); })).rejects.toThrow('inside reviewed repository');
+  expect(await readdir(parent)).toEqual(['keep']);
+  expect(await readFile(join(parent, 'keep'), 'utf8')).toBe('owned fixture sentinel');
+});
+
+it.each(['..cache', '...cache'])('reuses an external %s child within its state namespace', async (name) => {
+  const f = await fixture(); const cache = join(f.cache, name, 'v1');
+  for (let run = 0; run < 2; run += 1) {
+    const lease = await acquireBaseIndex(cache, f.repository, identity, f.python, f.env, new AbortController().signal, 1000, f.cache);
+    try {
+      expect(lease.directory).toBe(join(cache, lease.key));
+      expect(lease.restored).toBe(run === 1);
+      await commit(lease);
+    } finally { await lease.release(); }
+  }
+});
+
+it.each(['parent', 'sibling'])('rejects a %s path outside its state namespace before creating directories', async (relation) => {
+  const f = await fixture(); const cache = relation === 'parent' ? f.root : join(f.root, 'sibling');
+  await expect(acquireBaseIndex(cache, f.repository, identity, f.python, f.env, new AbortController().signal, 1000, f.cache)
+    .then(async (lease) => { await lease.release(); })).rejects.toThrow('escaped its state namespace');
+  expect(await readdir(f.root)).toEqual(['repo']);
+});
+
 it('accepts a normal application parent while keeping the cache itself private', async () => {
   const f = await fixture(); await mkdir(f.cache, { mode: 0o755 });
   if (process.platform !== 'win32') await chmod(f.cache, 0o755);

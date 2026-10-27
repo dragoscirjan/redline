@@ -26,10 +26,10 @@ import { FILE_REVIEW_GENERATION_SCHEMA } from './generation-schema.ts';
 import { buildFocusedSourceContext } from './source-context.ts';
 import type { FindingScope } from './types.ts';
 
-export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v6' as const;
-export const FILE_REVIEW_PROMPT_VERSION = 6 as const;
+export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v7' as const;
+export const FILE_REVIEW_PROMPT_VERSION = 7 as const;
 
-export const SOURCE_CONTEXT_STRATEGIES = ['full-files-v1', 'focused-v1'] as const;
+export const SOURCE_CONTEXT_STRATEGIES = ['full-files-v1', 'focused-v1', 'retry-enriched-v1'] as const;
 export type SourceContextStrategy = (typeof SOURCE_CONTEXT_STRATEGIES)[number];
 
 const PROMPT_MODULES = ['core-policy.md', 'review-phases.md', 'file-reporting.md'] as const;
@@ -61,7 +61,7 @@ export interface FileReviewPromptOptions {
   readonly harness: string;
   readonly model: string;
   readonly indexedContext?: PromptCodeContext | undefined;
-  /** Trusted benchmark override; production uses focused-v1. */
+  /** Trusted selection: focused initial context, bounded retry enrichment, or benchmark-only full files. */
   readonly sourceContextStrategy?: SourceContextStrategy | undefined;
   /** Trusted execution capability; repository content must not select this value. */
   readonly followUpAvailable?: boolean;
@@ -177,7 +177,8 @@ export async function buildFileContextPayload(
           revision: bundle.manifest.base,
           side: 'base',
           diff,
-          needed: file.status === 'D' || file.newPath === null,
+          needed: sourceContextStrategy === 'retry-enriched-v1' || file.status === 'D' || file.newPath === null,
+          enrich: sourceContextStrategy === 'retry-enriched-v1',
         }),
         head: await buildFocusedSourceContext({
           root: bundle.sourceRoot,
@@ -187,6 +188,7 @@ export async function buildFileContextPayload(
           side: 'head',
           diff,
           needed: file.newPath !== null,
+          enrich: sourceContextStrategy === 'retry-enriched-v1',
         }),
       },
     };
@@ -208,6 +210,9 @@ export async function buildFileContextPayload(
     ...(contributingIndexedContext === undefined ? {} : { indexedContext: contributingIndexedContext }),
   });
   if (Buffer.byteLength(context, 'utf8') > MAX_UNTRUSTED_CONTEXT_BYTES) {
+    if (sourceContextStrategy === 'retry-enriched-v1') {
+      return buildFileContextPayload(bundle, file, indexedContext, 'focused-v1');
+    }
     throw new Error('untrusted file context exceeds its byte limit');
   }
   return context;

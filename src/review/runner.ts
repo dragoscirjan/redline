@@ -18,6 +18,7 @@ import { performance } from 'node:perf_hooks';
 import { createHarnessExecutor } from '../harness-executor/registry.ts';
 import { augmentHeadContext } from './head-context.ts';
 import { scheduleBySize, workloadBound } from './scheduling.ts';
+import { maximumFileAttemptTimeMs, parseReviewRetries, RETRY_TIMEOUT_INCREMENT_MS, reviewRetryReason, type ReviewRetryReason } from './retries.ts';
 import { FollowUpBudget, type FollowUpRequestBatch } from '../code-context/follow-up.ts';
 import type { HarnessExecutor, HarnessOutputLine, HarnessRun, HarnessStreamMode } from '../harness-executor/types.ts';
 import { loadReviewBundle, type ReviewBundle, type ReviewManifestFile } from './bundle.ts';
@@ -103,6 +104,7 @@ export interface ReviewRunInput {
    * per-file progress narrative in the run log.
    */
   readonly onFileStart?: ((record: FileReviewIdentity) => void) | undefined;
+  readonly onFileRetry?: ((event: FileReviewIdentity & { readonly attempt: number; readonly maximumAttempts: number; readonly timeoutMs: number; readonly reason: ReviewRetryReason }) => void) | undefined;
   /**
    * Called after model output and review validation complete, immediately
    * before the per-file record is written. The bounded projection excludes
@@ -192,6 +194,7 @@ function deadlineOmissionRecord(
 }
 
 interface RunHarnessState {
+  readonly runs: Map<string, { readonly run: HarnessRun; readonly timeoutMs: number }>;
   failure?: { readonly scope: 'file' | 'run'; readonly diagnostic: string };
   fatalReason?: string;
 }
@@ -228,7 +231,7 @@ async function reviewOneFile(
   sourceContextStrategy: SourceContextStrategy = 'focused-v1',
   deadlineAtMs = Number.POSITIVE_INFINITY,
   now: () => number = () => performance.now(),
-  sharedFailure: RunHarnessState = {},
+  sharedFailure: RunHarnessState = { runs: new Map() },
 ): Promise<FileReviewRecord & {
   rawModelOutput?: string | undefined;
   verificationArtifact?: VerificationArtifact | undefined;
@@ -317,6 +320,7 @@ async function reviewOneFile(
     ...(harnessStreamMode === undefined ? {} : { streamMode: harnessStreamMode }),
   });
 
+  sharedFailure.runs.set(file.id, { run, timeoutMs: modelTimeoutMs });
   rememberHarnessFailure(sharedFailure, run, environment);
   if (run.status !== 'succeeded') {
     const runDeadlineExhausted = run.status === 'timed-out' && modelBoundedByRunDeadline;
@@ -757,6 +761,7 @@ async function runBoundedWorkerPool<T>(
  */
 export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunResult> {
   const { environment } = input;
+  const retryLimit = environment.retries === undefined ? 0 : parseReviewRetries(String(environment.retries));
   const now = input.now ?? (() => performance.now());
   const runStartedAtMs = now();
   const runDeadlineAtMs = runStartedAtMs + environment.runTimeout.milliseconds;
@@ -839,7 +844,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
     file.reviewed && !recordsByManifestIndex.has(manifestIndex) ? [manifestIndex] : []));
   const scheduling = environment.scheduling ?? 'largest-first';
   const tasks = await reviewTasks(bundle, concurrency, selectedManifestIndexes, scheduling);
-  input.onWorkload?.({ ...workloadBound(tasks.length, concurrency, environment.timeout.milliseconds, remainingRunMs(runDeadlineAtMs, now)),
+  input.onWorkload?.({ ...workloadBound(tasks.length, concurrency, maximumFileAttemptTimeMs(environment.timeout.milliseconds, retryLimit), remainingRunMs(runDeadlineAtMs, now)),
     scheduling: concurrency === 1 ? 'manifest-order' : scheduling,
     staticHeadFiles: [...indexedContext.files.values()].filter((file) => file.coverage.provider?.id === 'static-head').length });
   let workDirectory: string | undefined;
@@ -851,85 +856,127 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           model: environment.model,
           credential: environment.credential,
           timeoutMs: environment.timeout.milliseconds,
+          ...(environment.retries === undefined ? {} : { retryOwnership: 'caller' as const }),
           ...(environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: environment.maxOutputTokens }),
           ...(environment.modelProtocol === undefined ? {} : { modelProtocol: environment.modelProtocol }),
           workDirectory: workDirectory as string,
         });
 
     const followUpBudget = new FollowUpBudget();
-    const sharedFailure: RunHarnessState = {};
-    await runBoundedWorkerPool(tasks, concurrency, async ({ file, manifestIndex }) => {
-      let record: WritableFileReviewRecord;
-      if (sharedFailure.fatalReason !== undefined) {
-        record = notStartedRecord(environment, indexedContext, file, verifyCandidates, sharedFailure.fatalReason);
-      } else if (file.binary) {
-        record = {
-          version: FILE_REVIEW_RECORD_VERSION,
-          fileId: file.id,
-          path: fileReviewPath(file),
-          status: file.status,
-          harness: environment.harness,
-          model: environment.model.model,
-          codeContext: codeContextForFile(indexedContext, file).coverage,
-          execution: 'executed',
-          outcome: 'omitted',
-          reason: 'binary diff; not reviewable as text',
-          findings: [],
-          rejectedCandidates: [],
-          durationMs: 0,
-        };
-      } else if (remainingRunMs(runDeadlineAtMs, now) === 0) {
-        record = deadlineOmissionRecord(
-          environment, indexedContext, file, verifyCandidates,
-          'whole-review deadline exhausted before this file started',
-        );
-      } else {
-        const identity = { fileId: file.id, path: fileReviewPath(file) };
-        input.onFileStart?.(identity);
-        const onHarnessOutput = input.onHarnessOutput === undefined
-          ? undefined
-          : (output: HarnessOutputLine): void => input.onHarnessOutput?.({ ...identity, ...output });
-        record = await reviewOneFile(
-          executor,
-          prepared as Awaited<ReturnType<HarnessExecutor['prepare']>>,
-          environment,
-          bundle,
-          indexedContext,
-          file,
-          followUpBudget,
-          input.followUpExecutor,
-          onHarnessOutput,
-          input.harnessStreamMode,
-          verifyCandidates,
-          input.sourceContextStrategy,
-          runDeadlineAtMs,
-          now,
-          sharedFailure,
-        );
-        input.onFileValidated?.({
-          ...identity,
-          outcome: record.outcome,
-          durationMs: record.durationMs,
-          findingCount: record.findings.length,
-          rejectedCandidateCount: record.rejectedCandidates.length,
-        });
-      }
-      await writer.writeFileReview(record);
-      recordsByManifestIndex.set(manifestIndex, record);
-      const fingerprint = fingerprintsByManifestIndex.get(manifestIndex);
-      if (reuseCache !== undefined && fingerprint !== undefined) {
-        await reuseCache.write(
-          record.path,
-          fingerprint,
-          bundle.manifest.base,
-          bundle.manifest.head,
-          record,
-          record.durationMs,
-          verifyCandidates,
-        ).catch(() => undefined);
-      }
-      input.onFileDone?.(record);
-    });
+    const sharedFailure: RunHarnessState = { runs: new Map() };
+    const timeoutByFile = new Map<number, number>();
+    const contextByFile = new Map<number, SourceContextStrategy>();
+    const retryReasons = new Map<number, ReviewRetryReason>();
+    let pendingTasks = tasks;
+    for (let round = 0; round <= retryLimit && pendingTasks.length > 0; round += 1) {
+      if (round > 0 && (sharedFailure.fatalReason !== undefined || remainingRunMs(runDeadlineAtMs, now) === 0)) break;
+      const nextRound: ReviewTask[] = [];
+      await runBoundedWorkerPool(pendingTasks, concurrency, async (task) => {
+        const { file, manifestIndex } = task;
+        // A shared fatal failure never replaces a previous executed attempt with
+        // a fictitious not-started record during a later retry round.
+        if (round > 0 && sharedFailure.fatalReason !== undefined) return;
+        const previous = recordsByManifestIndex.get(manifestIndex);
+        const fileTimeoutMs = timeoutByFile.get(manifestIndex) ?? environment.timeout.milliseconds;
+        const sourceContextStrategy = contextByFile.get(manifestIndex) ?? input.sourceContextStrategy ?? 'focused-v1';
+        let record: WritableFileReviewRecord;
+        sharedFailure.runs.delete(file.id);
+        if (sharedFailure.fatalReason !== undefined) {
+          record = notStartedRecord(environment, indexedContext, file, verifyCandidates, sharedFailure.fatalReason);
+        } else if (file.binary) {
+          record = {
+            version: FILE_REVIEW_RECORD_VERSION,
+            fileId: file.id,
+            path: fileReviewPath(file),
+            status: file.status,
+            harness: environment.harness,
+            model: environment.model.model,
+            codeContext: codeContextForFile(indexedContext, file).coverage,
+            execution: 'executed',
+            outcome: 'omitted',
+            reason: 'binary diff; not reviewable as text',
+            findings: [],
+            rejectedCandidates: [],
+            durationMs: 0,
+          };
+        } else if (remainingRunMs(runDeadlineAtMs, now) === 0) {
+          record = deadlineOmissionRecord(
+            environment, indexedContext, file, verifyCandidates,
+            'whole-review deadline exhausted before this file started',
+          );
+        } else {
+          const identity = { fileId: file.id, path: fileReviewPath(file) };
+          input.onFileStart?.(identity);
+          const retryReason = retryReasons.get(manifestIndex);
+          if (round > 0 && retryReason !== undefined) input.onFileRetry?.({ ...identity,
+            attempt: (previous?.attempts?.length ?? 0) + 1, maximumAttempts: retryLimit + 1,
+            timeoutMs: Math.min(fileTimeoutMs, remainingRunMs(runDeadlineAtMs, now)), reason: retryReason });
+          const onHarnessOutput = input.onHarnessOutput === undefined
+            ? undefined
+            : (output: HarnessOutputLine): void => input.onHarnessOutput?.({ ...identity, ...output });
+          record = await reviewOneFile(
+            executor,
+            prepared as Awaited<ReturnType<HarnessExecutor['prepare']>>,
+            { ...environment, timeout: { minutes: fileTimeoutMs / 60_000, milliseconds: fileTimeoutMs } },
+            bundle,
+            indexedContext,
+            file,
+            followUpBudget,
+            input.followUpExecutor,
+            onHarnessOutput,
+            input.harnessStreamMode,
+            verifyCandidates,
+            sourceContextStrategy,
+            runDeadlineAtMs,
+            now,
+            sharedFailure,
+          );
+          input.onFileValidated?.({
+            ...identity,
+            outcome: record.outcome,
+            durationMs: record.durationMs,
+            findingCount: record.findings.length,
+            rejectedCandidateCount: record.rejectedCandidates.length,
+          });
+        }
+        const invocation = sharedFailure.runs.get(file.id);
+        if (environment.retries !== undefined) {
+          const attempts = [...(previous?.attempts ?? []), ...(invocation === undefined ? [] : [{
+            number: (previous?.attempts?.length ?? 0) + 1,
+            timeoutMs: invocation.timeoutMs, sourceContextStrategy,
+            outcome: record.outcome, errorKind: record.errorKind, reason: record.reason,
+            durationMs: record.durationMs,
+          }])];
+          record = { ...record, attempts, durationMs: (previous?.durationMs ?? 0) + record.durationMs };
+        }
+        const retryReason = reviewRetryReason(record, invocation?.run.retryable === true);
+        if (round < retryLimit && retryReason !== undefined && sharedFailure.fatalReason === undefined) {
+          timeoutByFile.set(manifestIndex, fileTimeoutMs + (retryReason === 'file-timeout' ? RETRY_TIMEOUT_INCREMENT_MS : 0));
+          if (retryReason === 'source-excerpt') contextByFile.set(manifestIndex, 'retry-enriched-v1');
+          retryReasons.set(manifestIndex, retryReason);
+          nextRound.push(task);
+        }
+        await writer.writeFileReview(record);
+        recordsByManifestIndex.set(manifestIndex, record);
+        const fingerprint = fingerprintsByManifestIndex.get(manifestIndex);
+        if (reuseCache !== undefined && fingerprint !== undefined) {
+          await reuseCache.write(
+            record.path,
+            fingerprint,
+            bundle.manifest.base,
+            bundle.manifest.head,
+            record,
+            record.durationMs,
+            verifyCandidates,
+          ).catch(() => undefined);
+        }
+        input.onFileDone?.(record);
+      });
+      // Preserve the established scheduling order even when workers complete
+      // nondeterministically. No retry starts until this entire round settles.
+      const nextIndexes = new Set(nextRound.map((task) => task.manifestIndex));
+      pendingTasks = tasks.filter((task) => nextIndexes.has(task.manifestIndex));
+    }
 
     const reviewFinishedAtMs = now();
     const records = bundle.manifest.files.flatMap((file, manifestIndex) => {
@@ -943,6 +990,11 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       path: fileReviewPath(file),
       reason: file.exclusionReason ?? 'excluded by trusted bundle policy',
     }] : []);
+    const finalFailure = environment.retries === undefined || sharedFailure.fatalReason !== undefined
+      ? sharedFailure.failure
+      : records.find((record) => record.errorKind === 'harness-failed');
+    const harnessFailure = finalFailure === undefined ? undefined : 'scope' in finalFailure ? finalFailure
+      : { scope: 'file' as const, diagnostic: finalFailure.reason ?? 'harness failed' };
     const summary: ReviewRunSummary = {
       version: REVIEW_RUN_SUMMARY_VERSION,
       harness: environment.harness,
@@ -957,7 +1009,18 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       excludedFiles,
       findings: records.reduce((total, record) => total + record.findings.length, 0),
       codeContext: indexedContext.coverage,
-      ...(sharedFailure.failure === undefined ? {} : { harnessFailure: sharedFailure.failure }),
+      ...(harnessFailure === undefined ? {} : { harnessFailure }),
+      ...(environment.retries === undefined ? {} : { retries: {
+        limit: retryLimit, timeoutIncrementMs: RETRY_TIMEOUT_INCREMENT_MS,
+        attempts: records.reduce((total, record) => total + (record.attempts?.length ?? 0), 0),
+        retriedFiles: records.filter((record) => (record.attempts?.length ?? 0) > 1).length,
+        recoveredFiles: records.filter((record) => (record.attempts?.length ?? 0) > 1 && record.outcome !== 'omitted').length,
+        exhaustedFiles: records.filter((record) => (record.attempts?.length ?? 0) >= retryLimit + 1
+          && reviewRetryReason(record, sharedFailure.runs.get(record.fileId)?.run.retryable === true) !== undefined).length,
+        deadlineSkippedFiles: records.filter((record) => record.errorKind === 'run-deadline-exhausted'
+          || (reviewFinishedAtMs >= runDeadlineAtMs && (record.attempts?.length ?? 0) < retryLimit + 1
+            && reviewRetryReason(record, sharedFailure.runs.get(record.fileId)?.run.retryable === true) !== undefined)).length,
+      } }),
       executionBudget: {
         version: 1,
         fileTimeoutMs: environment.timeout.milliseconds,

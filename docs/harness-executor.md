@@ -15,7 +15,7 @@ interface HarnessExecutor {
 - `prepare` runs once per review: it validates and retains the bounded model,
   credential, command, and configuration template inside a caller-managed
   work directory.
-- `execute` runs once per file: it creates an invocation-specific configuration,
+- `execute` runs once per file-review attempt: it creates an invocation-specific configuration,
   prompt, home, and state directory, then sends one non-interactive prompt with a fixed
   system policy and the file's untrusted context, under a timeout and
   bounded output limits. The optional `options.timeoutMs` is a positive safe
@@ -49,12 +49,13 @@ core makes.
   thinking off. The default output cap remains 16,384 tokens, with explicit
   caller overrides preserved. Provider sampling is unchanged. Controlled benchmarks
   can set temperature `0`, but cannot disable reasoning. Pi's own agent and provider retries are disabled.
-- Redline permits one retry only for classified transient provider output:
+- Legacy Action execution permits one adapter-managed retry only for classified transient provider output:
   empty or missing text in the final successful turn, or a bounded 429/500/502/503/504,
   rate-limit, reset, or transport diagnostic. The retry uses a fresh isolated
   invocation directory and the same total per-file deadline. Timeouts,
   output-budget exhaustion, malformed streams, capture truncation, parser
   failures, and validation failures are never retried.
+- Local CLI execution supplies `retryOwnership: caller`, disables this adapter retry and lets the review runner own `--retries`. Invalid review documents, per-file timeouts and bounded excerpt retries are handled there. Agent and provider retries remain disabled; reasoning and output-token limits remain unchanged.
 - When Pi exits without usable final assistant text after that policy, the
   file is omitted. Its reason is a bounded `pi-no-text/v1` JSON diagnostic
   that classifies capture truncation, malformed events, a missing `turn_end`,
@@ -81,7 +82,8 @@ core makes.
 - Invocation: `opencode run --pure --format json --agent redline-review
   --model provider/model`, with the bounded user prompt on stdin. The
   generated configuration still supplies the fixed system policy.
-- Assistant text is concatenated from `text` parts of the JSON event stream.
+- Assistant text is concatenated from `text` parts of the JSON event stream. In caller-managed execution, a runtime `error` event rejects partial text, and only its status/message/retryability metadata is classified and credential-redacted. Response bodies and reasoning are not copied into failure diagnostics.
+- Local CLI `--retries` counts complete Redline attempts, not provider requests. OpenCode 1.18.34 hardcodes five native provider retries. There is no supported switch here to disable them; do not invent one. Thus four Redline attempts can issue up to 24 provider requests. Those native retries share the current attempt's timeout, and all attempts share the hard run deadline. Pi instead issues one provider request per caller-managed attempt. Loopback tests verify both counts.
 
 ### Echo
 

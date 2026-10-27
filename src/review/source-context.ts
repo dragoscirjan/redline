@@ -278,6 +278,8 @@ export async function buildFocusedSourceContext(options: {
   readonly side: SourceContextSide;
   readonly diff: string;
   readonly needed: boolean;
+  /** Retry-only source enrichment, within the same file and per-side limits. */
+  readonly enrich?: boolean;
 }): Promise<FocusedSourceContext> {
   const { revision, displayPath, side } = options;
   if (!options.needed) return absentSource(revision, displayPath, side, 'not-needed', 'authoritative diff and selected head source are sufficient');
@@ -320,9 +322,17 @@ export async function buildFocusedSourceContext(options: {
     const selected = braceSymbolRange(lines, line, deltas) ?? pythonSymbolRange(lines, line);
     return selected === undefined ? [] : [selected];
   });
+  if (options.enrich === true && originalBytes <= MAX_SOURCE_CONTEXT_BYTES_PER_SIDE && lines.length > 0) {
+    primary = [{ startLine: 1, endLine: lines.length, selections: new Set(['whole-small-file']) }];
+  }
   let selectedRanges = mergeRanges([...primary, ...symbols]);
   if (selectedRanges.reduce((total, range) => total + rangeBytes(lines, range), 0) > MAX_SOURCE_CONTEXT_BYTES_PER_SIDE) {
     selectedRanges = mergeRanges(primary);
+  }
+  if (options.enrich === true && originalBytes > MAX_SOURCE_CONTEXT_BYTES_PER_SIDE) {
+    const expanded = mergeRanges(selectedRanges.map((range) => ({ ...range,
+      startLine: Math.max(1, range.startLine - 64), endLine: Math.min(lines.length, range.endLine + 64) })));
+    if (expanded.reduce((total, range) => total + rangeBytes(lines, range), 0) <= MAX_SOURCE_CONTEXT_BYTES_PER_SIDE) selectedRanges = expanded;
   }
   const rendered = renderRanges(lines, selectedRanges);
   if (rendered.excerpts.length === 0) {

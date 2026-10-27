@@ -26,6 +26,7 @@ import {
   type BoundedRunResult,
   type ProcessSpawner,
 } from './process-runner.ts';
+import { classifyModelFailure, redactModelFailure } from './model-failure.ts';
 import type {
   HarnessExecuteOptions,
   HarnessExecutor,
@@ -74,6 +75,8 @@ export interface PreparedOpenCode extends PreparedHarness {
   readonly rootDirectory: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs: number;
+  readonly retryOwnership?: 'caller' | undefined;
+  readonly credential?: string | undefined;
   readonly maxOutputTokens?: number | undefined;
   readonly modelConfig: {
     readonly provider: string;
@@ -132,8 +135,33 @@ export function extractOpenCodeAssistantText(stdout: string): string | undefined
   return parts.length > 0 ? parts.join('') : undefined;
 }
 
-function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null): HarnessRun {
-  const text = result.code === 0 ? extractOpenCodeAssistantText(result.stdout) : undefined;
+/** Only runtime error events are read. Response bodies and reasoning are never copied. */
+function openCodeFailure(result: BoundedRunResult, credential?: string) {
+  let message = result.stderr || result.error || '';
+  let nativeRetryable = false;
+  let reported = false;
+  for (const line of result.stdout.split('\n')) {
+    let frame: unknown;
+    try { frame = JSON.parse(line); } catch { continue; }
+    if (!isRecord(frame) || frame['type'] !== 'error' || !isRecord(frame['error'])) continue;
+    reported = true;
+    const error = frame['error'];
+    const data = isRecord(error['data']) ? error['data'] : error;
+    const detail = typeof data['message'] === 'string' ? data['message'] : '';
+    const status = data['statusCode'];
+    message = `${Number.isInteger(status) && Number(status) >= 400 && Number(status) <= 599 ? `HTTP ${status} ` : ''}${detail}`.trim() || message;
+    nativeRetryable = data['isRetryable'] === true;
+  }
+  message = redactModelFailure(message, credential);
+  if (message === '' && !reported) return undefined;
+  const classification = classifyModelFailure(message, true);
+  return { message: message || 'OpenCode reported a runtime error', reported,
+    ...classification, retryable: classification.scope === 'file' && (classification.retryable || nativeRetryable) };
+}
+
+function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null, state: PreparedOpenCode): HarnessRun {
+  const failure = state.retryOwnership === 'caller' ? openCodeFailure(result, state.credential) : undefined;
+  const text = result.code === 0 && failure?.reported !== true ? extractOpenCodeAssistantText(result.stdout) : undefined;
   const telemetry = {
     processStartupMs: result.processStartupMs ?? null,
     timeToFirstTextMs,
@@ -159,8 +187,9 @@ function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null
       harness: 'opencode',
       exitCode: result.code,
       text: '',
+      ...(failure === undefined ? {} : { failureScope: failure.scope, retryable: failure.retryable }),
       diagnostic:
-        result.stderr ||
+        failure?.message || result.stderr ||
         (result.error !== undefined
           ? result.error
           : `opencode exited with code ${result.code ?? 'null'} and produced no assistant text`),
@@ -223,6 +252,8 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
         rootDirectory,
         env,
         timeoutMs: settings.timeoutMs,
+        retryOwnership: settings.retryOwnership,
+        credential: settings.credential?.value,
         ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
         modelConfig,
       });
@@ -270,7 +301,7 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
           if (stream === 'stderr') options?.onOutputLine?.({ stream, kind: 'line', line });
         },
       });
-      return toHarnessRun(result, timeToFirstTextMs);
+      return toHarnessRun(result, timeToFirstTextMs, state);
     },
   };
 }

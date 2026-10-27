@@ -137,11 +137,11 @@ jobs:
           MOCK_EXPECT_MAX_OUTPUT_TOKENS: '32768'
         run: bash test/harness-matrix-run.sh "$HARNESS"
 
-      - name: Verify Pi request protocol at loopback HTTP boundary
-        if: matrix.harness == 'pi'
+      - name: Verify request protocol and retries at loopback HTTP boundary
+        if: matrix.harness == 'pi' || matrix.harness == 'opencode'
         env:
           REDLINE_LIVE_HARNESS_TESTS: '1'
-        run: node test/request-protocol-run.ts
+        run: node test/request-protocol-run.ts "${{ matrix.harness }}"
 
       # The per-harness review findings artifact: per-file JSON/Markdown
       # records and the run summary exactly as the review tool wrote them.

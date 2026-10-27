@@ -10,7 +10,7 @@ import {
 
 const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 const PROVIDER = { id: 'static-head', version: '1' };
-const LIMITS = { files: 512, directories: 256, depth: 12, fileBytes: 128 * 1024, totalBytes: 8 * 1024 * 1024, imports: 32, related: 4, spanBytes: 8 * 1024 };
+const LIMITS = { files: 512, directories: 256, depth: 12, fileBytes: 128 * 1024, totalBytes: 8 * 1024 * 1024, imports: 32, importLineCharacters: 1_024, related: 4, spanBytes: 8 * 1024 };
 interface CapturedText { readonly lines: readonly string[]; readonly imports: readonly { specifier: string; line: number }[] }
 
 async function capturedTexts(bundle: ReviewBundle, stop: () => boolean): Promise<Map<string, CapturedText>> {
@@ -49,6 +49,7 @@ async function capturedTexts(bundle: ReviewBundle, stop: () => boolean): Promise
             if (imports.length >= LIMITS.imports) break;
             // Literal relative ESM imports/re-exports only. Comments, aliases,
             // dynamic imports, package exports and runtime resolution are not inferred.
+            if (line.length > LIMITS.importLineCharacters) continue;
             const match = /^\s*(?:import|export)\s+(?:[^'"\r\n]*?\sfrom\s*)?['"](\.[^'"\r\n]{1,256})['"]/u.exec(line);
             if (match) imports.push({ specifier: match[1]!, line: index + 1 });
           }

@@ -88,7 +88,7 @@ This establishes context-input parity, not equal indexing latency, model output 
 
 Spans carry provider `static-head` version `1`, the captured **head** revision, and an explicit lexical-candidate limitation. They have no graph references and are never proof of reachability. Coverage remains partial. The graph artifact in `index/` still describes only the external provider; review coverage counts the additional source-backed spans and reports `static-head-context`. This fallback does not satisfy `--indexing required`'s provider-context preflight.
 
-Discovery examines at most 512 code files, 256 directories, depth 12, 4,096 entries per directory, 128 KiB per file, 8 MiB total, the first 4,096 lines per file, and 32 literal imports per file. Selection is deterministic; directories exceeding the entry bound are omitted. It selects at most four related files per reviewed file, 40 lines/8 KiB per span, within the existing 24 KiB per-file and 48 KiB run-wide related-source bounds. Missing, unsafe, symlinked, invalid-UTF8 or oversized source is never evidence of absence.
+Discovery examines at most 512 code files, 256 directories, depth 12, 4,096 entries per directory, 128 KiB per file, 8 MiB total, the first 4,096 lines per file, import lines at most 1,024 characters long, and 32 literal imports per file. Selection is deterministic; directories exceeding the entry bound are omitted. It selects at most four related files per reviewed file, 40 lines/8 KiB per span, within the existing 24 KiB per-file and 48 KiB run-wide related-source bounds. Missing, unsafe, symlinked, invalid-UTF8 or oversized source is never evidence of absence.
 
 ## Resume validated work
 
@@ -101,15 +101,15 @@ redline review --base main --head HEAD --harness pi
 redline review --base main --head HEAD --harness pi --reuse disabled
 ```
 
-The private repository-scoped cache lives in `$XDG_STATE_HOME/redline/results/v1` (or `$HOME/.local/state/...`). It stores only validated clean/findings records, not failures. Completed files can therefore survive a partially failed or interrupted run. An exact semantic fingerprint includes model/endpoint/auth mode, protocol, output allowance, policy/schema, diff, captured source, related context and per-file timeout. Current evidence is revalidated, file IDs/revisions are remapped, and each run rebuilds coverage, verdicts, synthesis and artifacts. A cache hit does not authorize stale publication.
+The private repository-scoped cache lives in `$XDG_STATE_HOME/redline/results/v1` (or `$HOME/.local/state/...`). It stores only validated clean/findings records, not failures. Completed files can therefore survive a partially failed or interrupted run. An exact semantic fingerprint includes model/endpoint/auth mode, protocol, output allowance, policy/schema, diff, captured source, related context, initial per-file timeout and retry policy. When retries are enabled, it also hashes the bounded enriched context, even if the first attempt succeeds. A recovered result cannot be reused after relevant source or retry-policy changes. Current evidence is revalidated, file IDs/revisions are remapped, and each run rebuilds coverage, verdicts, synthesis and artifacts. A cache hit does not authorize stale publication.
 
 Readers bound restored entries to 2,000 files, 512 KiB per record, and 32 MiB total. Writers reserve the same quotas per loaded cache; concurrent publication uses atomic replacement, so a collision can lose reuse but cannot become an unvalidated success. Unsafe/private-directory failures disable reuse, not review; cache misses, invalid records and changed fingerprints run normally. Existing state parents are never chmod'ed.
 
-Old run directories are not retroactively imported as trustworthy cache records. Reuse starts with records written by this implementation. The v8 prompt-policy change invalidates earlier fingerprints. Terminal output reports both the configured availability and actual reused/executed counts.
+Old run directories are not retroactively imported as trustworthy cache records. Reuse starts with records written by this implementation. The v8 policy-text and v7 assembler/retry-contract changes invalidate earlier fingerprints. Terminal output reports both the configured availability and actual reused/executed counts.
 
 ## Scheduling and deadlines
 
-After reuse selection, preflight reports uncached file count, worker count, policy, remaining time, and a worst-case bound if every file consumes its full per-file allowance. This is **not** a model-latency or cost forecast. Capture/index time already spent reduces the available review time. Redline never expands timeouts, concurrency or token allowances automatically.
+After reuse selection, preflight reports uncached file count, worker count, policy, remaining time, and a worst-case bound if every file exhausts all configured attempt allowances. This is **not** a model-latency or cost forecast. Capture/index time already spent reduces the available review time. Redline never expands the whole-run deadline, concurrency or token allowances automatically. The local retry policy below explicitly adds two minutes to a file's next attempt after a per-file timeout.
 
 `--scheduling largest-first|mixed` defaults to the existing largest-diff-first policy. `mixed` alternates largest and smallest diffs to start some short work earlier. Both preserve bounded workers and manifest-order artifacts. Serial execution, including gated candidate verification, retains manifest order. Size is only a heuristic; mixed scheduling can improve deadline coverage while increasing makespan. The deterministic experiment in `benchmark/performance/mixed-scheduling/v1/` records that trade-off on one fixed synthetic corpus; it is not live-model evidence.
 
@@ -179,6 +179,27 @@ Other environment names mirror their scalar flags using uppercase and underscore
 
 Repository configuration cannot choose model endpoints, executables, credentials, output paths, or reporters. The only repository policy consumed is the existing strict `.redline/review-eligibility.json` from the resolved committed base. Uncommitted policy cannot hide its own changes. There is no additional project config loader.
 
+## Review retries and timeouts
+
+```bash
+redline review --base main --head HEAD --harness pi \
+  --retries 3 --timeout 4m --run-timeout 20m
+```
+
+`--retries COUNT` defaults to **3 additional file-review attempts**, up to four attempts total. Values are decimal integers from 0 through 10; `0` disables Redline retries. `REDLINE_RETRIES` and the trusted user-config string key `"retries"` use the same validation. Flags override environment, which overrides user config. These local defaults do not change legacy GitHub Action execution.
+
+Retryable failures are classified transient HTTP/transport errors, Pi's successful-stop zero-token empty provider responses, invalid review documents including JSON/schema, wrong target, evidence or finding-scope failures, per-file timeouts, and model-declared source/excerpt/context omissions. Unknown harness failures, authentication/credit/model/request-configuration failures, token exhaustion, malformed harness streams, capture truncation, cancellation and the whole-run deadline are not retryable. Every new answer is validated independently; retries do not repair JSON or weaken evidence checks. A file still omitted after retries remains incomplete.
+
+The first pass gives every uncached file an initial attempt before retry rounds start. Each file shares one retry counter across all retryable failure types; switching failure types does not reset it. Worker limits and manifest-order final artifacts stay unchanged. Valid completed results are reused rather than rerun.
+
+`--timeout` is the **initial per-attempt** limit, default `4m`, separate from `--run-timeout`. Only a per-file timeout adds `2m` to that file's next limit. Four consecutive timeouts therefore use limits of `4m`, `6m`, `8m`, `10m`. Invalid output or upstream errors leave the current limit unchanged. `--run-timeout` stays a hard total budget including capture, indexing and all attempts. Each invocation is clamped to remaining time, so not every allowed retry is guaranteed to fit. For example, the four timeout allowances total 28 minutes for one file and cannot all fit into a 20-minute run.
+
+Excerpt retries can include additional base/head source only from the same immutable capture. Small files can become complete within the existing 64 KiB per-side limit; larger files may receive wider surrounding excerpts if they fit. The 128 KiB file-read and 512 KiB complete prompt-payload limits do not grow. If enrichment cannot fit, the original context is retained. Source omissions and truncation remain explicit; repository code is never executed.
+
+The retry count measures **Redline review attempts, not HTTP requests**. Pi's adapter and native provider retries are disabled in caller-managed mode. OpenCode 1.18.34 retains five hardcoded native provider retries inside each Redline attempt, so four attempts can issue up to 24 provider requests. OpenCode has no supported disable switch in this integration. Its native requests share the per-attempt timeout and hard whole-run deadline. The CLI warns about this distinction; loopback fixtures verify both harness counts without a paid model.
+
+Per-file JSON records include bounded redacted `attempts` metadata with effective timeouts, source strategy, outcome, error kind and duration. Prior raw answers are not included in that history. File duration totals all attempts. The terminal and run summary report attempts, retried/recovered files, exhausted counters and files lacking time for remaining retries. These counters do not establish finding correctness or live-provider quality.
+
 ## Output-token budget
 
 `--max-output-tokens COUNT` sets the maximum output tokens for each model invocation. Its environment equivalent is `REDLINE_MAX_OUTPUT_TOKENS`; the trusted user-config key is `"max-output-tokens"` with a string value. Precedence remains CLI → environment → user config. Values must be decimal integers from 1,024 through 262,144; larger explicit values such as `32768` or `65536` are supported. This safety ceiling is not a claim about any model's capacity. Providers can reject requests above their supported limits; Redline does not retry token exhaustion automatically.
@@ -206,7 +227,7 @@ redline review --base main --head HEAD --harness pi \
 
 The profile preserves provider/model reasoning behavior and sends no reasoning-disable override. It sends `provider: {require_parameters:true}` and a strict JSON Schema generation request for the fixed v4 discovery document. Tools remain disabled and sampling remains provider-default. The schema requires a concise reason even on clean results and excludes null optional fields; guidance findings omit proposed replacement text. Core JSON, schema, source/diff and impact-reference validation still runs independently. Other prompts without a supplied schema use JSON-object formatting.
 
-Selecting this profile with another harness/provider fails before model execution; it never silently downgrades. An unsupported endpoint, model, schema feature or upstream provider can reject the request. Loopback tests verify actual wire fields, not that every upstream honors them or that findings are correct. There is no repair model call, silent JSON repair, or retry for rejected/malformed output. Separate reasoning allocation and reserved final-answer tokens remain unimplemented.
+Selecting this profile with another harness/provider fails before model execution; it never silently downgrades. An unsupported endpoint, model, schema feature or upstream provider can reject the request. Loopback tests verify actual wire fields, not that every upstream honors them or that findings are correct. There is no separate repair model call or silent JSON repair. Rejected/malformed review documents can receive a fresh attempt under the local retry policy above. Separate reasoning allocation and reserved final-answer tokens remain unimplemented.
 
 The new local flags have corresponding `REDLINE_REUSE`, `REDLINE_HEAD_CONTEXT`, `REDLINE_SCHEDULING` and `REDLINE_MODEL_PROTOCOL` settings and same-named string keys in trusted user configuration. They do not change the legacy GitHub Action environment contract.
 
@@ -234,7 +255,8 @@ Run `redline review --help` for the complete contract.
 - `--scheduling largest-first|mixed`: default `largest-first`.
 - `--model-protocol compatible|openrouter-json`: default `compatible`; explicit Pi/OpenRouter wire controls.
 - `--max-output-tokens COUNT`: optional per-call generation cap, `1024`–`262144`; Pi defaults to `16384` when unset.
-- `--timeout`: per-file deadline, default `4m`.
+- `--timeout`: initial per-file attempt deadline, default `4m`.
+- `--retries`: additional review attempts per file, default `3`, range `0`–`10`. Per-file timeouts add `2m` to the next attempt.
 - `--run-timeout`: whole-run deadline including capture, indexing, and review, default `10m`. Local context preparation has an additional five-minute ceiling within that budget.
 - `--concurrency`: integer `1`–`8`, default `4`.
 - `--finding-scope defects|defects-and-risks`: default `defects`.
@@ -281,7 +303,7 @@ Pi runtime errors are retained as `pi-error/v1` diagnostics, capped at 500 chara
 
 Recognized shared authentication, credit, model/endpoint, and request-parameter failures stop new harness calls. Already-active calls settle within their existing budgets. Remaining files are recorded as omitted with `execution: not-started`, zero duration, and the shared reason; they are not counted as executed or reused. A shared fatal failure makes the run unsuccessful even if some in-flight files completed. Valid completed reviews can still be reused later.
 
-Unknown errors, context-length errors, and content refusals remain file-local. An error stop is not retried merely because it has no text. The existing one-retry cap applies only to explicit transient HTTP/transport failures or a zero-output-token empty response with a successful stop. Token exhaustion, malformed streams, and rejected review documents do not trigger repair calls or retries.
+Unknown errors, context-length errors, and content refusals remain file-local. An error stop is not retried merely because it has no text. Local execution uses the shared retry policy above. The legacy Action's one-retry cap applies only to explicit transient HTTP/transport failures or a zero-output-token empty response with a successful stop. Token exhaustion and malformed streams do not trigger Redline retries. Rejected review documents can be retried locally, but never silently repaired.
 
 Loopback success/error tests establish request and failure handling, not live-provider acceptance. Validate a controlled one-file review against the selected live profile before another full batch; no silent protocol downgrade or larger budget is applied.
 

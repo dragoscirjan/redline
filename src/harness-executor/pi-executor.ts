@@ -160,6 +160,7 @@ export interface PreparedPi extends PreparedHarness {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs: number;
   readonly transientRetries: 0 | 1;
+  readonly retryOwnership?: 'caller' | undefined;
   readonly maxOutputTokens: number;
 }
 
@@ -476,6 +477,7 @@ function toHarnessRun(
   timeToFirstTextMs: number | null,
   retryCount = 0,
   credential?: string,
+  callerManaged = false,
 ): HarnessRun {
   const inspection = result.code === 0 ? inspectPiAssistantOutput(result.stdout, result.stdoutTruncated) : undefined;
   const text = inspection?.text;
@@ -511,7 +513,7 @@ function toHarnessRun(
   }
   if (text === undefined) {
     const failure = result.stdoutTruncated ? undefined : readPiFailure(result.stdout,
-      result.code === 0 ? undefined : result.stderr || result.error, credential);
+      result.code === 0 ? undefined : result.stderr || result.error, credential, callerManaged);
     const diagnostic = failure !== undefined ? piFailureDiagnostic(failure) : result.code === 0 && inspection !== undefined
       ? noAssistantTextDiagnostic(result, inspection, timeToFirstTextMs)
       : result.stderr || result.error || `pi exited with code ${result.code ?? 'null'} and produced no assistant text`;
@@ -522,6 +524,7 @@ function toHarnessRun(
       text: '',
       diagnostic,
       ...(failure === undefined ? {} : { failureScope: failure.scope }),
+      retryable: failure?.retryable ?? isTransientProviderFailure(result, credential),
       durationMs: result.durationMs,
       telemetry,
     };
@@ -580,7 +583,9 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
       if (settings.modelProtocol === 'openrouter-json' && settings.model.provider !== 'openrouter') {
         throw new Error('openrouter-json requires the openrouter provider');
       }
-      const effectivePolicy = settings.maxOutputTokens === undefined ? policy : validatePolicy({ ...options, maxOutputTokens: settings.maxOutputTokens });
+      const effectivePolicy = validatePolicy({ ...options,
+        maxOutputTokens: settings.maxOutputTokens ?? policy.maxOutputTokens,
+        transientRetries: settings.retryOwnership === 'caller' ? 0 : policy.transientRetries });
       const rootDirectory = join(settings.workDirectory, 'pi-agent');
       await mkdir(rootDirectory, { recursive: true });
       const args = [
@@ -618,6 +623,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         env,
         timeoutMs: settings.timeoutMs,
         transientRetries: effectivePolicy.transientRetries,
+        retryOwnership: settings.retryOwnership,
         maxOutputTokens: effectivePolicy.maxOutputTokens,
       });
     },
@@ -707,7 +713,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
             }
           },
         });
-        const run = toHarnessRun(result, timeToFirstTextMs, retryCount, credential);
+        const run = toHarnessRun(result, timeToFirstTextMs, retryCount, credential, state.retryOwnership === 'caller');
         accumulatedUsage = mergeUsage(accumulatedUsage, run.telemetry?.usage);
         const elapsedMs = Math.max(0, Math.ceil(performance.now() - invocationStartedAt));
         if (run.status === 'succeeded'

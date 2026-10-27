@@ -109,6 +109,28 @@ describe('local Git review CLI', () => {
     expect(result.code).toBe(1); expect(result.stderr).toContain('requires the Pi harness');
   });
 
+  it('defaults to three additional retries and honors flag, environment and trusted config precedence', async () => {
+    const f = await fixture();
+    expect((await parseLocalOptions(['--harness', 'echo'], f.env, f.repository)).environment.retries).toBe(3);
+    const config = join(f.root, 'retry-config.json');
+    await writeFile(config, JSON.stringify({ retries: '2' }));
+    const parse = (args: string[], env: NodeJS.ProcessEnv = {}) => parseLocalOptions(['--harness', 'echo', '--config', config, ...args], { ...f.env, ...env }, f.repository);
+    expect((await parse([])).environment.retries).toBe(2);
+    expect((await parse([], { REDLINE_RETRIES: '1' })).environment.retries).toBe(1);
+    expect((await parse(['--retries', '0'], { REDLINE_RETRIES: '1' })).environment.retries).toBe(0);
+    const result = await f.run(['--base', f.base, '--head', 'HEAD', '--retries', '0', '--timeout', '2m', '--run-timeout', '8m']);
+    expect(result.code, result.stderr).toBe(0);
+    const report = JSON.parse(await readFile(join(result.output, 'reviews/summary.json'), 'utf8'));
+    expect(report.retries).toMatchObject({ limit: 0, attempts: 1 });
+    expect(report.executionBudget).toMatchObject({ fileTimeoutMs: 120_000 });
+  });
+
+  it.each(['-1', '11', '1.5', 'Infinity', '', ' 3', '03'])('rejects invalid retry count %s before creating output', async (value) => {
+    const f = await fixture(); const result = await f.run([`--retries=${value}`]);
+    expect(result.code).toBe(2);
+    expect(await readFile(join(result.output, 'status.json'), 'utf8').catch(() => null)).toBeNull();
+  });
+
   it('applies output-token budget precedence and records the explicit allowance', async () => {
     const f = await fixture(); const config = join(f.root, 'user.json');
     await writeFile(config, JSON.stringify({ 'max-output-tokens': '32768' }));

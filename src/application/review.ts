@@ -10,6 +10,7 @@ export type ReviewEvent =
   | { readonly kind: 'context-ready'; readonly status: ReviewRunResult['summary']['codeContext']['status']; readonly relatedSpans: number; readonly fileOnlyFiles: number; readonly indexCache?: 'reused' | 'rebuilt' | 'uncached' | 'not-needed' | 'unavailable' | 'imported' }
   | { readonly kind: 'planned'; readonly files: readonly { readonly fileId: string; readonly reviewed: boolean }[] }
   | { readonly kind: 'file-started'; readonly fileId: string }
+  | { readonly kind: 'file-retry'; readonly fileId: string; readonly attempt: number; readonly maximumAttempts: number; readonly timeoutMs: number; readonly reason: string }
   | { readonly kind: 'file-completed'; readonly fileId: string; readonly outcome: 'clean' | 'findings' | 'omitted' }
   | { readonly kind: 'cleanup-failed' }
   | { readonly kind: 'completed' }
@@ -118,6 +119,7 @@ export class ReviewApplication {
         onWorkload: (value) => reporter.progress({ kind: 'workload', ...value }),
         onReviewPlan: (files) => reporter.progress({ kind: 'planned', files }),
         onFileStart: ({ fileId }) => reporter.progress({ kind: 'file-started', fileId }),
+        onFileRetry: ({ fileId, attempt, maximumAttempts, timeoutMs, reason }) => reporter.progress({ kind: 'file-retry', fileId, attempt, maximumAttempts, timeoutMs, reason }),
         onFileDone: ({ fileId, outcome }) => reporter.progress({ kind: 'file-completed', fileId, outcome }),
       });
       // Execution has persisted authoritative artifacts. Report their actual

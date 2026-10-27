@@ -5,11 +5,12 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { requireCapability } from '../application/capabilities.ts';
 import { parseOutputTokens } from '../harness-executor/output-budget.ts';
+import { DEFAULT_REVIEW_RETRIES, parseReviewRetries } from '../review/retries.ts';
 import { parseReviewEnvironment, type ReviewEnvironment } from '../review/environment.ts';
 import { executable, GitCommand, gitEnvironment, inside, repositoryBoundary } from './process.ts';
 
 const KEYS = ['repository', 'output', 'vcs', 'base', 'head', 'worktree', 'comparison', 'untracked', 'harness',
-  'provider', 'endpoint', 'model', 'auth', 'reuse', 'scheduling', 'head-context', 'model-protocol', 'max-output-tokens', 'timeout', 'run-timeout', 'concurrency', 'finding-scope', 'fail-on', 'color', 'indexing', 'indexing-provider', 'index-executable', 'index-runtime', 'code-context', 'code-context-repository'] as const;
+  'provider', 'endpoint', 'model', 'auth', 'reuse', 'scheduling', 'head-context', 'model-protocol', 'max-output-tokens', 'timeout', 'run-timeout', 'retries', 'concurrency', 'finding-scope', 'fail-on', 'color', 'indexing', 'indexing-provider', 'index-executable', 'index-runtime', 'code-context', 'code-context-repository'] as const;
 type Key = (typeof KEYS)[number];
 export interface LocalOptions {
   readonly repository: string;
@@ -65,7 +66,9 @@ No target: review staged and unstaged tracked changes against HEAD.
   --head-context enabled|disabled    Default enabled; bounded static head import candidates
   --model-protocol compatible|openrouter-json  Default compatible; explicit Pi/OpenRouter request controls
   --max-output-tokens COUNT           Per model call; Pi default 16384; range 1024..262144
-  --timeout DURATION                 Per file; default 4m
+  --timeout DURATION                 Initial per-file attempt; default 4m
+  --retries COUNT                    Additional attempts, 0–10; default 3
+                                     Timeouts add 2m; total deadline never grows
   --run-timeout DURATION             Whole review; default 10m
   --concurrency 1..8                 Default 4
   --finding-scope defects|defects-and-risks
@@ -201,6 +204,9 @@ export async function parseLocalOptions(args: readonly string[], env: NodeJS.Pro
   let maxOutputTokens: number | undefined;
   try { maxOutputTokens = parseOutputTokens(tokenInput === undefined ? undefined : String(tokenInput)); }
   catch (error) { throw new UsageError(error instanceof Error ? error.message : 'invalid max-output-tokens'); }
+  let retries: number;
+  try { retries = parseReviewRetries(get('retries', String(DEFAULT_REVIEW_RETRIES))); }
+  catch (error) { throw new UsageError(error instanceof Error ? error.message : 'invalid retries'); }
   const parsed = parseReviewEnvironment({
     REDLINE_HARNESS: harness, REDLINE_REVIEW_DIR: '/prepared/bundle', REDLINE_SOURCE_DIR: '/prepared/source',
     REDLINE_OUTPUT_DIR: output === undefined ? stateDirectory : resolve(cwd, String(output)),
@@ -233,6 +239,7 @@ export async function parseLocalOptions(args: readonly string[], env: NodeJS.Pro
       executable: indexExecutable === undefined ? undefined : resolve(cwd, indexExecutable),
       runtime: indexRuntime === undefined ? undefined : resolve(cwd, indexRuntime), repository: contextRepository },
     reporters, color: choice(get('color', 'auto'), ['auto', 'always', 'never'], 'color'), failOn: choice(get('fail-on', 'none'), ['none', 'findings', 'high', 'critical'], 'fail-on'), environment: { ...parsed.review,
+      retries,
       scheduling: choice(get('scheduling', 'largest-first'), ['largest-first', 'mixed'] as const, 'scheduling'),
       headContext: choice(get('head-context', 'enabled'), ['enabled', 'disabled'], 'head-context') === 'enabled',
       modelProtocol: choice(get('model-protocol', 'compatible'), ['compatible', 'openrouter-json'] as const, 'model-protocol'),

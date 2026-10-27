@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { CODE_CONTEXT_VERSION, codeContextGraphFactDigest } from '../code-context/artifact.ts';
 import { assertOnlyKeys, isRecord, type ReviewBundle, type ReviewManifestFile } from './bundle.ts';
 import type { ReviewEnvironment, ReviewReuseEnvironment } from './environment.ts';
+import { RETRY_TIMEOUT_INCREMENT_MS } from './retries.ts';
 import {
   codeContextForFile,
   type FileReviewCodeContext,
@@ -228,6 +229,16 @@ export async function buildReviewSemanticFingerprint(options: {
     ...(options.environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: options.environment.maxOutputTokens }),
     modelProtocol: options.environment.modelProtocol ?? 'compatible',
     reasoningPolicy: 'provider-default-v1',
+    ...(options.environment.retries === undefined ? {} : { retryPolicy: {
+      version: 1,
+      limit: options.environment.retries,
+      timeoutIncrementMs: RETRY_TIMEOUT_INCREMENT_MS,
+      // Both allowed prompt contexts are hashed, even when discovery succeeds
+      // without enrichment. Recovered answers never match a file-only source key.
+      enrichedContext: options.environment.retries === 0 ? null : normalizedSemanticValue(JSON.parse(
+        await buildFileContextPayload(options.bundle, options.file, fileContext.prompt, 'retry-enriched-v1'),
+      ) as unknown, options.bundle),
+    } }),
     verifyCandidates: options.verifyCandidates,
     followUpAvailable: options.followUpAvailable,
     requirementsDigest: await requirementsDigest(options.bundle),

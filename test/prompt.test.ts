@@ -1,13 +1,24 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { loadReviewBundle } from '../src/review/bundle.ts';
 import {
   buildFileContextPayload,
   buildFileReviewPrompt,
   loadReviewPolicy,
+  FILE_REVIEW_PROMPT_ID,
 } from '../src/review/prompt.ts';
 import { createBundleFixture } from './helpers/bundle.ts';
 
 describe('buildFileReviewPrompt', () => {
+  it('documents the actual assembler ID and fixed policy modules as separate version counters', async () => {
+    const documentation = await readFile(new URL('../prompts/README.md', import.meta.url), 'utf8');
+    expect(documentation).toContain('`' + FILE_REVIEW_PROMPT_ID + '`');
+    expect(documentation).toContain('loads `v8/`');
+    expect(documentation).toContain('numeric suffix need not equal the directory number');
+    const policy = await loadReviewPolicy();
+    const modules = await Promise.all(['core-policy.md', 'review-phases.md', 'file-reporting.md'].map((name) => readFile(new URL('../prompts/v8/' + name, import.meta.url), 'utf8')));
+    for (const text of modules) expect(policy.text).toContain(text.replaceAll('\r\n', '\n').trimEnd());
+  });
   it('embeds the file context inside a generated untrusted boundary', async () => {
     const fixture = await createBundleFixture();
     try {
@@ -24,7 +35,7 @@ describe('buildFileReviewPrompt', () => {
       expect(prompt.system).toContain('# Review policy');
       expect(prompt.system).toContain('## Execution safety');
       expect(prompt.system).toContain('# Trusted run configuration');
-      expect(prompt.system).toContain('"policyId": "redline-file-review/v6"');
+      expect(prompt.system).toContain('"policyId": "redline-file-review/v7"');
       expect(prompt.system).toContain('"contextRequests"');
       expect(prompt.system).toContain('"followUp": "unavailable"');
       expect(prompt.system).toContain('always return `[]`');

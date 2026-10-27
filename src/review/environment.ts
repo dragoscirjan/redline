@@ -123,6 +123,8 @@ export interface ReviewEnvironment {
   readonly maxOutputTokens?: number | undefined;
   readonly modelProtocol?: 'compatible' | 'openrouter-json' | undefined;
   readonly scheduling?: 'largest-first' | 'mixed' | undefined;
+  /** Local CLI opt-in. Unset preserves legacy Action retry behavior; zero disables retries. */
+  readonly retries?: number | undefined;
   readonly headContext?: boolean | undefined;
   /** Optional action-owned cross-run record cache; restored contents remain untrusted. */
   readonly reuse?: ReviewReuseEnvironment | undefined;

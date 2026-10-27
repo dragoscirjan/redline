@@ -260,12 +260,26 @@ describe('createPiExecutor', () => {
     }
   });
 
-  it('retries one allowlisted transient provider transport failure', async () => {
+  it('leaves all retry attempts to the caller without changing reasoning or token limits', async () => {
+    const settings = await createSettings({ retryOwnership: 'caller' });
+    try {
+      const spawner = new SequenceSpawner([{ stdout: '', code: 1, stderr: 'HTTP 503 provider unavailable' }]);
+      const executor = createPiExecutor({ spawner }); const prepared = await executor.prepare(settings);
+      const run = await executor.execute(prepared, { system: 'policy', user: 'fixture' });
+      expect(spawner.requests).toHaveLength(1);
+      expect(run).toMatchObject({ status: 'failed', retryable: true });
+      expect(run.telemetry?.retryCount).toBe(0);
+      expect(prepared.description).toContain('thinking=provider-default');
+      expect(prepared.description).toContain('transient-retries=0');
+    } finally { await settings.cleanup(); }
+  });
+
+  it.each(['provider returned HTTP 503', 'HTTP 429', 'HTTP 500', 'HTTP 502', 'HTTP 504', 'ECONNRESET', 'ETIMEDOUT', 'fetch failed', 'socket hang up'])('retries an allowlisted transient diagnostic: %s', async (diagnostic) => {
     const settings = await createSettings();
     try {
       const complete = '{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"complete"}],"stopReason":"stop","usage":{"input":3,"output":1}}}\n';
       const spawner = new SequenceSpawner([
-        { stdout: '', code: 1, stderr: 'provider returned HTTP 503' },
+        { stdout: '', code: 1, stderr: diagnostic },
         { stdout: complete, code: 0 },
       ]);
       const executor = createPiExecutor({ command: 'pi-fake', spawner });

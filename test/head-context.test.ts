@@ -44,6 +44,19 @@ describe('bounded captured-head discovery', () => {
     } finally { await f.cleanup(); }
   });
 
+  it('skips overlong import lines while retaining later bounded imports', async () => {
+    const f = await createBundleFixture({ headContent: `import ${' '.repeat(1_024)}'./too-long';\nimport './normal';\n` });
+    try {
+      await writeFile(join(f.source, 'src/too-long.ts'), 'export const skipped = true;\n');
+      await writeFile(join(f.source, 'src/normal.ts'), 'export const kept = true;\n');
+      const bundle = await loadReviewBundle(f.review, f.source);
+      const loaded = await augmentHeadContext(bundle, await loadReviewCodeContext(bundle, undefined));
+      const file = bundle.manifest.files[0];
+      if (file === undefined) throw new Error('fixture file missing');
+      expect(codeContextForFile(loaded, file).prompt?.related.map((span) => span.path)).toEqual(['src/normal.ts']);
+    } finally { await f.cleanup(); }
+  });
+
   it('stops before reading when the run budget is exhausted', async () => {
     const f = await createBundleFixture();
     try {

@@ -6,7 +6,9 @@ The trusted per-file assembler in `src/review/prompt.ts` loads `v8/` in this ord
 2. `review-phases.md`
 3. `file-reporting.md`
 
-The policy ID is `redline-file-review/v6`. Models return one version-4 JSON document per file. Version 8 adds concise protocol checks, valid clean/omitted examples, bounded static-head provenance rules, and explicit checks of outer guards, fallbacks, callers and tests before claiming end-to-end impact. This does not prove semantic correctness or activate independent verification.
+The assembler contract ID is `redline-file-review/v7`. Contract v7 adds the bounded `retry-enriched-v1` source mode; the fixed policy text remains in `v8/`. Models return one version-4 JSON document per file. Version 8 adds concise protocol checks, valid clean/omitted examples, bounded static-head provenance rules, and explicit checks of outer guards, fallbacks, callers and tests before claiming end-to-end impact. This does not prove semantic correctness or activate independent verification.
+
+Directory numbers identify fixed policy-text revisions. The assembler contract ID versions prompt assembly separately; its numeric suffix need not equal the directory number. Contract tests check the documented ID against the assembler and the loaded modules, not by deriving a directory name from that suffix.
 
 Earlier version directories remain historical references and are not loaded by the production assembler. Prompt policy is immutable after release; behavior-changing wording requires a new directory, a new policy ID/version, and updated contract tests.
 

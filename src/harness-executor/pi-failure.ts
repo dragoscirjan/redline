@@ -1,3 +1,5 @@
+import { classifyModelFailure, redactModelFailure } from './model-failure.ts';
+
 /** Pi runtime errors only: never extract prompt, response, reasoning, or agent history. */
 export interface PiFailure {
   readonly message: string;
@@ -6,7 +8,7 @@ export interface PiFailure {
   readonly retryable: boolean;
 }
 
-export function readPiFailure(stdout: string, fallback?: string, credential?: string): PiFailure | undefined {
+export function readPiFailure(stdout: string, fallback?: string, credential?: string, callerManaged = false): PiFailure | undefined {
   let message: string | undefined;
   for (const line of stdout.split(/\r?\n/u)) {
     let event: unknown;
@@ -22,28 +24,11 @@ export function readPiFailure(stdout: string, fallback?: string, credential?: st
     message = assistant['stopReason'] === 'error' && typeof assistant['errorMessage'] === 'string'
       ? assistant['errorMessage'] : undefined;
   }
-  message ??= fallback;
+  if (message === undefined || message.trim() === '') message = fallback;
   if (message === undefined || message.trim() === '') return undefined;
   // Redact before classification, control filtering, truncation, and JSON escaping.
-  if (credential !== undefined && credential.length > 0) {
-    const forms = new Set([credential, JSON.stringify(credential).slice(1, -1)]);
-    try { forms.add(encodeURIComponent(credential)); } catch { /* Malformed Unicode has no URI encoding. */ }
-    const variants = [...forms].sort((a, b) => b.length - a.length);
-    for (const value of variants) message = message.split(value).join('[redacted]');
-  }
-  message = message.replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ').replace(/\s+/gu, ' ').trim();
-  const match = /^(?:Error:\s*)?([45][0-9]{2})\b/iu.exec(message)
-    ?? /\b(?:HTTP(?: error)?|APIError|(?:status|error)(?: code)?)[\s:=]+([45][0-9]{2})\b/iu.exec(message);
-  const status = match === null ? null : Number(match[1]);
-  const parameterFailure = /reasoning is mandatory.{0,120}cannot be disabled|invalid (?:json )?schema|unsupported (?:request )?parameter|unknown parameter|(?:response_format|json_schema).{0,60}(?:unsupported|not supported|invalid|must be)|(?:does not support|unsupported).{0,60}(?:response_format|json_schema|reasoning)/iu.test(message);
-  const authenticationFailure = /invalid.{0,20}api.?key|no api key found|authentication failed|account.{0,20}(?:disabled|suspended)/iu.test(message);
-  const shared = status === 401 || status === 402 || status === 404
-    || (status === 403 && authenticationFailure)
-    || ((status === null || status === 400 || status === 422) && parameterFailure)
-    || (status === null && authenticationFailure);
-  const retryable = !shared && ((status !== null && [429, 500, 502, 503, 504].includes(status))
-    || (status === null && /\bECONNRESET\b|\bETIMEDOUT\b|fetch failed|socket hang up/iu.test(message)));
-  return { message, status, scope: shared ? 'run' : 'file', retryable };
+  message = redactModelFailure(message, credential);
+  return { message, ...classifyModelFailure(message, callerManaged) };
 }
 
 /** Valid JSON under the existing 500-character persisted-reason bound. */

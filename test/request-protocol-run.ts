@@ -21,6 +21,7 @@ try {
 for (const [provider, protocol] of [['openrouter', 'openrouter-json'], ['openrouter', 'compatible'], ['mock', 'compatible']] as const) {
   for (const authenticated of [true, false]) {
     const sentinel = 'FIXTURE_BEARER_SENTINEL';
+    const model = provider === 'openrouter' ? 'z-ai/glm-5.3-flash' : 'test-model';
     const authServer = await startMockServer({
       MOCK_EXPECT_AUTHORIZATION: authenticated ? `Bearer ${sentinel}` : 'credential-less',
       ...(protocol === 'openrouter-json' ? { MOCK_EXPECT_REVIEW_PROTOCOL: '1' } : {}),
@@ -28,7 +29,7 @@ for (const [provider, protocol] of [['openrouter', 'openrouter-json'], ['openrou
     const authFixture = await createBundleFixture();
     try {
       const parsed = parseReviewEnvironment({ ...cleanReviewEnvironment(authFixture, 'pi'),
-        REDLINE_MODEL_CONFIG: JSON.stringify({ provider, endpoint: `http://127.0.0.1:${authServer.port}/v1`, model: 'test-model',
+        REDLINE_MODEL_CONFIG: JSON.stringify({ provider, endpoint: `http://127.0.0.1:${authServer.port}/v1`, model,
           ...(authenticated ? {} : { auth: 'none' }) }),
         REDLINE_MODEL_AUTH: authenticated ? JSON.stringify({ [provider]: sentinel }) : undefined,
         REDLINE_TIMEOUT: '1m',

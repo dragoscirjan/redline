@@ -5,7 +5,7 @@ import { runFileReviews } from '../src/review/runner.ts';
 import { createBundleFixture, cleanReviewEnvironment } from './helpers/bundle.ts';
 import { startErrorServer, startMockServer } from './helpers/model-server.ts';
 
-const server = await startMockServer({ MOCK_EXPECT_REVIEW_PROTOCOL: '1', MOCK_EXPECT_MAX_OUTPUT_TOKENS: '32768' });
+const server = await startMockServer({ MOCK_EXPECT_REVIEW_PROTOCOL: '1', MOCK_EXPECT_MAX_OUTPUT_TOKENS: '32768', MOCK_EXPECT_AUTHORIZATION: 'credential-less' });
 const fixture = await createBundleFixture();
 try {
   const parsed = parseReviewEnvironment({ ...cleanReviewEnvironment(fixture, 'pi'),
@@ -16,6 +16,29 @@ try {
   console.log('Pi HTTP request verified: reasoning disabled request, strict v4 schema, required parameters, no tools, 32768 output tokens.');
 } finally {
   await server.stop(); await fixture.cleanup();
+}
+
+for (const [provider, protocol] of [['openrouter', 'openrouter-json'], ['openrouter', 'compatible'], ['mock', 'compatible']] as const) {
+  for (const authenticated of [true, false]) {
+    const sentinel = 'FIXTURE_BEARER_SENTINEL';
+    const authServer = await startMockServer({
+      MOCK_EXPECT_AUTHORIZATION: authenticated ? `Bearer ${sentinel}` : 'credential-less',
+      ...(protocol === 'openrouter-json' ? { MOCK_EXPECT_REVIEW_PROTOCOL: '1' } : {}),
+    });
+    const authFixture = await createBundleFixture();
+    try {
+      const parsed = parseReviewEnvironment({ ...cleanReviewEnvironment(authFixture, 'pi'),
+        REDLINE_MODEL_CONFIG: JSON.stringify({ provider, endpoint: `http://127.0.0.1:${authServer.port}/v1`, model: 'test-model',
+          ...(authenticated ? {} : { auth: 'none' }) }),
+        REDLINE_MODEL_AUTH: authenticated ? JSON.stringify({ [provider]: sentinel }) : undefined,
+        REDLINE_TIMEOUT: '1m',
+      });
+      const result = await runFileReviews({ environment: { ...parsed.review!, modelProtocol: protocol } });
+      assert.equal(result.records[0]?.outcome, 'clean', result.records[0]?.reason);
+      assert.ok(!JSON.stringify(result).includes(sentinel));
+      console.log(`Pi auth verified: ${provider}/${protocol}, ${authenticated ? 'selected bearer credential' : 'no real credential'}.`);
+    } finally { await authServer.stop(); await authFixture.cleanup(); }
+  }
 }
 
 for (const [status, message] of [[400, 'Invalid JSON schema for response_format'], [401, 'Invalid API key'], [503, 'Provider temporarily unavailable']] as const) {

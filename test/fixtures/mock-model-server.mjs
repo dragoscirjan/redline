@@ -43,6 +43,17 @@ const server = http.createServer((request, response) => {
     body += chunk;
   });
   request.on('end', () => {
+    // Test-only expectation: never print supplied header values, even on failure.
+    const expectedAuth = process.env.MOCK_EXPECT_AUTHORIZATION;
+    const actualAuth = request.headers.authorization;
+    const matchesAuth = expectedAuth === 'credential-less' ? actualAuth === undefined || actualAuth === 'Bearer redline-unauthenticated'
+      : expectedAuth === 'absent' ? actualAuth === undefined : actualAuth === expectedAuth;
+    if (expectedAuth !== undefined && !matchesAuth) {
+      response.writeHead(401, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: { code: 401, message: actualAuth === undefined
+        ? 'Missing Authentication header' : 'Incorrect Authentication header' } }));
+      return;
+    }
     if ((request.url ?? '').includes('/models')) {
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ object: 'list', data: [{ id: 'test-model' }] }));

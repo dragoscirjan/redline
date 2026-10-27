@@ -166,6 +166,8 @@ export class CliReporter implements ReviewReporter {
     const completed = result.summary.reviewedFiles - result.summary.omittedFiles;
     this.stdout(`Coverage: ${completed}/${result.summary.reviewedFiles} required files completed; ${result.summary.omittedFiles} failed; ${result.summary.excludedFiles?.length ?? 0} inert`);
     if (result.summary.reuse?.status === 'enabled') this.stdout(`Reuse: ${result.summary.reuse.reusedFiles} validated files reused; ${result.summary.reuse.executedFiles} executed.`);
+    const notStarted = result.summary.files.filter(file => file.execution === 'not-started').length;
+    if (notStarted > 0) this.stdout(`Not started: ${notStarted} file${notStarted === 1 ? '' : 's'} after shared harness failure.`);
     this.stdout(`Verdict: ${result.review.verdict.status}; findings: ${result.review.findings.length}`);
     const context = result.summary.codeContext;
     const staticHead = context.diagnosticCodes.includes('static-head-context');
@@ -175,6 +177,18 @@ export class CliReporter implements ReviewReporter {
       const failures = new Map<string, number>();
       for (const file of result.omissions) failures.set(file.errorKind, (failures.get(file.errorKind) ?? 0) + 1);
       this.stderr(`Failed reviews: ${safe([...failures].slice(0, 8).map(([kind, count]) => `${count} ${kind}`).join('; '))}. File details are in the artifacts.`);
+    }
+    const harnessFailure = result.summary.harnessFailure;
+    if (harnessFailure !== undefined) {
+      let message = harnessFailure.diagnostic;
+      try {
+        const value: unknown = JSON.parse(message);
+        if (value !== null && typeof value === 'object' && 'schema' in value && value.schema === 'pi-error/v1'
+          && 'message' in value && typeof value.message === 'string') {
+          message = ('status' in value && typeof value.status === 'number' ? `HTTP ${value.status}: ` : '') + value.message;
+        }
+      } catch { /* Non-JSON harness diagnostics are still bounded and redacted. */ }
+      this.stderr(`Harness error${harnessFailure.scope === 'run' ? ' (stopped queued work)' : ''}: ${safe(message)}`);
     }
     const groups = new Map<string, PullRequestFinding[]>();
     for (const finding of result.review.findings.slice(0, 100)) {

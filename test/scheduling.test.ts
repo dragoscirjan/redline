@@ -21,6 +21,7 @@ describe('bounded deterministic scheduling', () => {
   });
   it('keeps serial traversal, deterministic ties, all tasks exactly once, and handles empty queues', () => {
     expect(scheduleBySize(tasks, 1, 'mixed')).toEqual(tasks);
+    expect(scheduleBySize(tasks, 1, 'largest-first')).toEqual(tasks);
     const ids = scheduleBySize(tasks, 4, 'mixed').map((task) => task.manifestIndex);
     expect(new Set(ids).size).toBe(tasks.length);
     expect(ids.slice(0, 4)).toEqual([0, 19, 1, 18]);

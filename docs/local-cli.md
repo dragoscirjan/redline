@@ -253,7 +253,7 @@ Default artifact location: `$XDG_STATE_HOME/redline/reviews/run-*`, or `$HOME/.l
 - `reviews/`: existing validated file records, summary, and consolidated review as JSON and Markdown.
 - `status.json`: local completion, failure, cancellation, or deadline classification and exit code.
 
-Review schemas remain unchanged. Synthetic working-copy commit IDs and the index digest identify captured states, not user commits. Bundle/evidence selection is deterministic; existing operational durations and telemetry still vary between runs.
+Model review documents remain unchanged. Operational file records additionally distinguish `not-started` after a shared harness failure; run summaries can carry the first bounded, redacted diagnostic in `harnessFailure`. Synthetic working-copy commit IDs and the index digest identify captured states, not user commits. Bundle/evidence selection is deterministic; existing operational durations and telemetry still vary between runs.
 
 Interactive stderr uses one updating, width-bounded dot strip in manifest order, with completed/total and running counts. Green means a validated clean file; red means findings; gray means intentionally inert/excluded; yellow `!` means a failed or omitted review. Waiting/running files use outlined dots. Failures never appear as inert or clean. Without colors, distinct symbols (`+`, `x`, `-`, `!`, `o`, `.`) retain these meanings. Redirected output has no animation or automatic ANSI colors and does not emit per-file start/completion lines.
 
@@ -274,6 +274,16 @@ Terminal data is control-character filtered, bounded, and credential-redacted be
 `--fail-on high` includes high and critical findings. Incomplete reviews fail regardless of the finding threshold. Reporter failure cannot erase review artifacts or stop other reporters. Preflight configuration failure stops before review execution.
 
 SIGINT and SIGTERM cancel capture, active indexers, and active harness processes. Unix uses process-group termination; Windows uses the OS process-tree termination tool for the spawned process IDs. No shell is used to launch a harness. Node-based npm harness shims are resolved to their installed JavaScript entrypoints rather than executing Windows command scripts. Temporary Git/harness scratch cleanup is attempted on handled exit paths. If revision-snapshot disposal fails, the CLI prints a content-free warning without replacing the completed review result or the original execution/cancellation error; cleanup is not claimed to have succeeded. Interrupted runs can retain partial artifacts and `status.json`; they are never presented as complete reviews. Force-killing the Redline process cannot guarantee cleanup.
+
+## Harness errors
+
+Pi runtime errors are retained as `pi-error/v1` diagnostics, capped at 500 characters. The selected credential is redacted before control filtering, truncation, and JSON escaping. Only the runtime error message (or a failed process's stderr) is used, not prompt, response, reasoning, or agent-history fields. The terminal shows the first bounded diagnostic as well as failure counts. Errors discarded by older runs cannot be recovered from their artifacts.
+
+Recognized shared authentication, credit, model/endpoint, and request-parameter failures stop new harness calls. Already-active calls settle within their existing budgets. Remaining files are recorded as omitted with `execution: not-started`, zero duration, and the shared reason; they are not counted as executed or reused. A shared fatal failure makes the run unsuccessful even if some in-flight files completed. Valid completed reviews can still be reused later.
+
+Unknown errors, context-length errors, and content refusals remain file-local. An error stop is not retried merely because it has no text. The existing one-retry cap applies only to explicit transient HTTP/transport failures or a zero-output-token empty response with a successful stop. Token exhaustion, malformed streams, and rejected review documents do not trigger repair calls or retries.
+
+Loopback success/error tests establish request and failure handling, not live-provider acceptance. Validate a controlled one-file review against the selected live profile before another full batch; no silent protocol downgrade or larger budget is applied.
 
 ## Bounds and trust
 

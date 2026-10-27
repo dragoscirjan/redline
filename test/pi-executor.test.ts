@@ -319,6 +319,92 @@ describe('createPiExecutor', () => {
     }
   });
 
+  it.each([
+    [401, 'Invalid API key', 'run'],
+    [402, 'Insufficient credits', 'run'],
+    [404, 'Model not found', 'run'],
+    [400, 'Invalid JSON schema for response_format', 'run'],
+    [422, 'Unsupported parameter: reasoning', 'run'],
+    [400, 'Context length exceeded', 'file'],
+    [403, 'Content moderation refusal', 'file'],
+    [0, 'Unexpected SDK failure', 'file'],
+    [0, 'Invalid JSON schema for response_format', 'run'],
+  ] as const)('preserves a redacted Pi error without retrying: %s %s', async (status, message, scope) => {
+    const settings = await createSettings();
+    try {
+      const stdout = JSON.stringify({ type: 'turn_end', message: {
+        role: 'assistant', stopReason: 'error', content: [], usage: { input: 0, output: 0 },
+        errorMessage: `${status || ''} ${message}; test-key`,
+        privatePayload: 'PRIVATE_PROMPT_MARKER',
+      } }) + '\n';
+      const spawner = new SequenceSpawner([{ stdout, code: 0 }]);
+      const executor = createPiExecutor({ command: 'pi-fake', spawner });
+      const run = await executor.execute(await executor.prepare(settings), { system: 'SYS', user: 'USER' });
+      expect(run.status).toBe('failed');
+      expect(run.failureScope).toBe(scope);
+      expect(run.telemetry?.retryCount).toBe(0);
+      expect(spawner.requests).toHaveLength(1);
+      expect(JSON.parse(run.diagnostic)).toMatchObject({ schema: 'pi-error/v1', scope, message: expect.stringContaining(message) });
+      expect(run.diagnostic).toContain('[redacted]');
+      expect(run.diagnostic).not.toMatch(/test-key|PRIVATE_PROMPT_MARKER/u);
+      expect(run.diagnostic.length).toBeLessThanOrEqual(500);
+    } finally { await settings.cleanup(); }
+  });
+
+  it.each([429, 503])('retries one explicit exit-zero Pi HTTP %s error', async (status) => {
+    const settings = await createSettings();
+    try {
+      const spawner = new SequenceSpawner([
+        { stdout: JSON.stringify({ type: 'turn_end', message: { role: 'assistant', stopReason: 'error', content: [], errorMessage: `HTTP ${status}: provider unavailable` } }) + '\n', code: 0 },
+        { stdout: '{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"complete"}],"stopReason":"stop"}}\n', code: 0 },
+      ]);
+      const executor = createPiExecutor({ command: 'pi-fake', spawner });
+      const run = await executor.execute(await executor.prepare(settings), { system: 'SYS', user: 'USER' });
+      expect(run.status).toBe('succeeded'); expect(run.telemetry?.retryCount).toBe(1);
+      expect(spawner.requests).toHaveLength(2);
+    } finally { await settings.cleanup(); }
+  });
+
+  it('keeps long escaped SDK errors valid, bounded, redacted and separate from prompts', async () => {
+    const settings = await createSettings({ credential: { provider: 'mock', value: 'secret"key' } });
+    try {
+      const stdout = JSON.stringify({ type: 'turn_end', message: {
+        role: 'assistant', stopReason: 'error', content: [{ type: 'thinking', thinking: 'PRIVATE_REASONING' }],
+        errorMessage: '401 Invalid API key secret"key ' + JSON.stringify({ key: 'secret"key' }) + ' ' + encodeURIComponent('secret"key') + '\\'.repeat(1000),
+      } }) + '\n';
+      const spawner = new SequenceSpawner([{ stdout, code: 0 }]);
+      const executor = createPiExecutor({ spawner });
+      const run = await executor.execute(await executor.prepare(settings), { system: 'PRIVATE_SYSTEM', user: 'PRIVATE_SOURCE' });
+      expect(JSON.parse(run.diagnostic).message).toContain('[redacted]');
+      expect(run.diagnostic.length).toBeLessThanOrEqual(500);
+      expect(run.diagnostic).not.toMatch(/PRIVATE_|secret/u);
+    } finally { await settings.cleanup(); }
+  });
+
+  it('rejects partial assistant text when the runtime ended in error', async () => {
+    const settings = await createSettings();
+    try {
+      const stdout = JSON.stringify({ type: 'turn_end', message: { role: 'assistant', stopReason: 'error',
+        content: [{ type: 'text', text: 'PRIVATE_PARTIAL_RESPONSE' }], errorMessage: '400 Invalid JSON schema' } }) + '\n';
+      const spawner = new SequenceSpawner([{ stdout, code: 0 }]);
+      const executor = createPiExecutor({ spawner });
+      const run = await executor.execute(await executor.prepare(settings), { system: 'SYS', user: 'USER' });
+      expect(run.status).toBe('failed'); expect(run.text).toBe('');
+      expect(run.diagnostic).not.toContain('PRIVATE_PARTIAL_RESPONSE');
+      expect(run.failureScope).toBe('run');
+    } finally { await settings.cleanup(); }
+  });
+
+  it('does not retry a Pi error with no error message', async () => {
+    const settings = await createSettings();
+    try {
+      const spawner = new SequenceSpawner([{ stdout: '{"type":"turn_end","message":{"role":"assistant","content":[],"stopReason":"error","usage":{"output":0}}}\n', code: 0 }]);
+      const executor = createPiExecutor({ spawner });
+      const run = await executor.execute(await executor.prepare(settings), { system: 'SYS', user: 'USER' });
+      expect(run.status).toBe('failed'); expect(run.telemetry?.retryCount).toBe(0); expect(spawner.requests).toHaveLength(1);
+    } finally { await settings.cleanup(); }
+  });
+
   it('isolates configuration and system prompts across concurrent invocations', async () => {
     const settings = await createSettings();
     try {

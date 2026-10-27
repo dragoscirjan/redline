@@ -276,6 +276,71 @@ describe('runFileReviews', () => {
     }
   });
 
+  it('stops queued work after a shared fatal harness error and writes honest redacted omissions', async () => {
+    const fixture = await createMultiFileFixture([10, 20, 30, 40, 50, 60]);
+    try {
+      const parsed = parseReviewEnvironment({ ...cleanReviewEnvironment(fixture, 'echo'), REDLINE_REVIEW_CONCURRENCY: '1' });
+      const executor = new ScriptedExecutor();
+      executor.script(Array.from({ length: 6 }, () => ({ status: 'failed', text: '', failureScope: 'run', diagnostic: '401 Invalid API key FATAL_FIXTURE_KEY' })));
+      const result = await runFileReviews({ environment: { ...parsed.review!, credential: { provider: 'mock', value: 'FATAL_FIXTURE_KEY' } }, executor });
+      expect(executor.prompts).toHaveLength(1);
+      expect(result.records.map(r => r.execution)).toEqual(['executed', ...Array(5).fill('not-started')]);
+      expect(result.summary.reuse).toMatchObject({ executedFiles: 1, reusedFiles: 0 });
+      expect(result.summary.omittedFiles).toBe(6); expect(result.exitCode).toBe(1);
+      expect(result.review.coverage.files.status).toBe('incomplete');
+      for (const r of result.records) {
+        expect(r.errorKind).toBe('harness-failed'); expect(r.reason).toContain('[redacted]');
+        const saved = await readFile(join(fixture.output, 'reviews', r.fileId + '.json'), 'utf8');
+        expect(saved).not.toContain('FATAL_FIXTURE_KEY');
+        if (r.execution === 'not-started') { expect(r.durationMs).toBe(0); expect(r.reason).toContain('not started'); }
+      }
+    } finally { await fixture.cleanup(); }
+  });
+
+  it('settles in-flight reviews after fatal failure without launching the next wave', async () => {
+    const fixture = await createMultiFileFixture(Array(12).fill(10));
+    try {
+      const parsed = parseReviewEnvironment(cleanReviewEnvironment(fixture, 'echo'));
+      let calls = 0; let release!: () => void;
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      const executor: HarnessExecutor = {
+        harness: 'echo', prepare: async () => ({ harness: 'echo', model: parsed.review!.model, description: 'fatal barrier fixture' }),
+        execute: async (_prepared, _prompt, options) => {
+          const first = ++calls === 1;
+          if (calls === 4) release();
+          await gate;
+          return first ? { status: 'failed', harness: 'echo', exitCode: 0, text: '', diagnostic: '401 Invalid API key', durationMs: 1, failureScope: 'run' }
+            : { status: 'succeeded', harness: 'echo', exitCode: 0, diagnostic: '', durationMs: 1,
+                text: reviewDocument({ version: 4, fileId: options!.invocation!.fileId, outcome: 'clean', reason: 'No defects.', contextRequests: [], findings: [] }) };
+        },
+      };
+      const result = await runFileReviews({ environment: parsed.review!, executor });
+      expect(calls).toBe(4);
+      expect(result.records.filter(r => r.execution === 'not-started')).toHaveLength(8);
+      expect(result.records.filter(r => r.outcome === 'clean')).toHaveLength(3);
+      expect(result.summary.reuse?.executedFiles).toBe(4);
+      expect(result.records.map(r => r.fileId)).toEqual(Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(6, '0')));
+      expect(result.summary.omittedFiles).toBe(9); expect(result.exitCode).toBe(1);
+    } finally { await fixture.cleanup(); }
+  });
+
+  it('keeps independent file errors local rather than stopping the run', async () => {
+    const fixture = await createMultiFileFixture([10, 20, 30]);
+    try {
+      const parsed = parseReviewEnvironment({ ...cleanReviewEnvironment(fixture, 'echo'), REDLINE_REVIEW_CONCURRENCY: '1' });
+      const executor = new ScriptedExecutor();
+      executor.script([
+        { status: 'failed', text: '', failureScope: 'file', diagnostic: '400 Context length exceeded' },
+        ...['000002', '000003'].map(fileId => ({ text: reviewDocument({ version: 4, fileId, outcome: 'clean', contextRequests: [], findings: [] }) })),
+      ]);
+      const result = await runFileReviews({ environment: parsed.review!, executor });
+      expect(executor.prompts).toHaveLength(3);
+      expect(result.records.map(r => r.outcome)).toEqual(['omitted', 'clean', 'clean']);
+      expect(result.records.some(r => r.execution === 'not-started')).toBe(false);
+      expect(result.summary.harnessFailure?.scope).toBe('file');
+    } finally { await fixture.cleanup(); }
+  });
+
   it('bounds active model calls, starts largest diffs first, and restores manifest order', async () => {
     const fixture = await createMultiFileFixture([10, 600, 100, 500, 200, 400]);
     try {

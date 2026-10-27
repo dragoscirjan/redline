@@ -39,8 +39,8 @@ async function withLiveHarness(harness: 'pi' | 'opencode', test: (port: number) 
 }
 
 describe.skipIf(!ENABLED)('live harness integration', () => {
-  it('sends actual Pi/OpenRouter reasoning, strict v4 generation schema and output-token fields to loopback', async () => {
-    expect(await binaryAvailable('pi')).toBe(true);
+  it('sends actual Pi/OpenRouter reasoning, strict v4 generation schema and output-token fields to loopback', async ({ skip }) => {
+    if (!(await binaryAvailable('pi'))) { skip(); return; }
     const server = await startMockServer({ MOCK_EXPECT_REVIEW_PROTOCOL: '1', MOCK_EXPECT_MAX_OUTPUT_TOKENS: '32768' });
     const fixture = await createBundleFixture();
     try {

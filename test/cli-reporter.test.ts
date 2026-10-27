@@ -25,6 +25,20 @@ async function reportFixture() {
 }
 
 describe('terminal progress and finding cards', () => {
+  it('shows a bounded redacted harness error and states when queued work stopped', async () => {
+    const { report } = await reportFixture(); const stderr: string[] = []; const stdout: string[] = [];
+    const reporter = new CliReporter(line => stdout.push(line), line => stderr.push(line), 'FIXTURE_KEY');
+    await reporter.complete({ ...report, summary: { ...report.summary, omittedFiles: 1,
+      files: [{ ...report.summary.files[0]!, outcome: 'omitted', execution: 'not-started' }], harnessFailure: {
+      scope: 'run', diagnostic: JSON.stringify({ schema: 'pi-error/v1', status: 400, message: 'Invalid schema FIXTURE_KEY\n\u001b[2J' }),
+    } } });
+    expect(stderr.join('\n')).toContain('Harness error (stopped queued work): HTTP 400: Invalid schema [redacted]');
+    expect(stderr.join('\n')).not.toContain('FIXTURE_KEY');
+    expect(stderr.join('\n')).not.toContain('\u001b');
+    expect(stderr.at(-1)!.length).toBeLessThan(600);
+    expect(stdout.join('\n')).toContain('Not started: 1 file after shared harness failure.');
+  });
+
   it('updates one manifest-ordered dot strip and distinguishes inert from failures', () => {
     const frames: string[] = []; const logs: string[] = [];
     const reporter = new CliReporter(() => {}, (line) => { logs.push(line); }, undefined, {

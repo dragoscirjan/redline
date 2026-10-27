@@ -12,6 +12,7 @@
  */
 
 import { MAX_OUTPUT_TOKENS, outputCaptureBytes } from './output-budget.ts';
+import { piFailureDiagnostic, readPiFailure } from './pi-failure.ts';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -379,7 +380,7 @@ export function inspectPiAssistantOutput(stdout: string, stdoutTruncated = false
     : [];
   const text = textParts.map((part) => (part as Record<string, unknown>)['text'] as string).join('');
 
-  if (text.length > 0 && (!stdoutTruncated || settledAfterLastTurnEnd)) {
+  if (text.length > 0 && stopReason !== 'error' && (!stdoutTruncated || settledAfterLastTurnEnd)) {
     return {
       text,
       classification: undefined,
@@ -474,6 +475,7 @@ function toHarnessRun(
   result: BoundedRunResult,
   timeToFirstTextMs: number | null,
   retryCount = 0,
+  credential?: string,
 ): HarnessRun {
   const inspection = result.code === 0 ? inspectPiAssistantOutput(result.stdout, result.stdoutTruncated) : undefined;
   const text = inspection?.text;
@@ -508,7 +510,9 @@ function toHarnessRun(
     };
   }
   if (text === undefined) {
-    const diagnostic = result.code === 0 && inspection !== undefined
+    const failure = result.stdoutTruncated ? undefined : readPiFailure(result.stdout,
+      result.code === 0 ? undefined : result.stderr || result.error, credential);
+    const diagnostic = failure !== undefined ? piFailureDiagnostic(failure) : result.code === 0 && inspection !== undefined
       ? noAssistantTextDiagnostic(result, inspection, timeToFirstTextMs)
       : result.stderr || result.error || `pi exited with code ${result.code ?? 'null'} and produced no assistant text`;
     return {
@@ -517,6 +521,7 @@ function toHarnessRun(
       exitCode: result.code,
       text: '',
       diagnostic,
+      ...(failure === undefined ? {} : { failureScope: failure.scope }),
       durationMs: result.durationMs,
       telemetry,
     };
@@ -550,14 +555,15 @@ function mergeUsage(
   };
 }
 
-function isTransientProviderFailure(result: BoundedRunResult): boolean {
-  if (result.timedOut) return false;
-  if (result.code === 0) {
-    const classification = inspectPiAssistantOutput(result.stdout, result.stdoutTruncated).classification;
-    return classification === 'missing-text-parts' || classification === 'empty-text';
-  }
-  const diagnostic = `${result.stderr}\n${result.error}`;
-  return /(?:\b429\b|rate[ -]?limit|\b50[0234]\b|ECONNRESET|ETIMEDOUT|fetch failed|socket hang up)/iu.test(diagnostic);
+function isTransientProviderFailure(result: BoundedRunResult, credential?: string): boolean {
+  if (result.timedOut || result.stdoutTruncated) return false;
+  const failure = readPiFailure(result.stdout, result.code === 0 ? undefined : result.stderr || result.error, credential);
+  if (failure !== undefined) return failure.retryable;
+  if (result.code !== 0) return false;
+  const inspection = inspectPiAssistantOutput(result.stdout);
+  return inspection.stopReason === 'stop' && inspection.outputTokens === 0
+    && inspection.contentPartTypes.every((part) => part === 'text')
+    && (inspection.classification === 'missing-text-parts' || inspection.classification === 'empty-text');
 }
 
 function delay(milliseconds: number): Promise<void> {
@@ -702,12 +708,12 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
             }
           },
         });
-        const run = toHarnessRun(result, timeToFirstTextMs, retryCount);
+        const run = toHarnessRun(result, timeToFirstTextMs, retryCount, credential);
         accumulatedUsage = mergeUsage(accumulatedUsage, run.telemetry?.usage);
         const elapsedMs = Math.max(0, Math.ceil(performance.now() - invocationStartedAt));
         if (run.status === 'succeeded'
           || attempt >= state.transientRetries
-          || !isTransientProviderFailure(result)
+          || !isTransientProviderFailure(result, credential)
           || elapsedMs + PI_TRANSIENT_RETRY_DELAY_MS >= totalTimeoutMs) {
           return {
             ...run,

@@ -17,7 +17,10 @@ describe('model-protocol reuse identity', () => {
       const compatible = await buildReviewSemanticFingerprint({ ...common, environment: { ...environment, modelProtocol: 'compatible' } });
       const schema = await buildReviewSemanticFingerprint({ ...common, environment: { ...environment, modelProtocol: 'openrouter-json' } });
       const mixed = await buildReviewSemanticFingerprint({ ...common, environment: { ...environment, scheduling: 'mixed' } });
+      const rotated = await buildReviewSemanticFingerprint({ ...common, environment: { ...environment,
+        credential: { provider: environment.model.provider, value: 'ROTATED_FIXTURE_KEY' } } });
       expect(initial).toBe(compatible); expect(schema).not.toBe(initial); expect(mixed).toBe(initial);
+      expect(rotated).toBe(initial); expect(rotated).not.toContain('ROTATED_FIXTURE_KEY');
     } finally { await f.cleanup(); }
   });
 });

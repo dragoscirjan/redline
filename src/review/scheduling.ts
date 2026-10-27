@@ -1,6 +1,7 @@
 /** Size is a heuristic, not a model latency or cost prediction. */
 export type ReviewScheduling = 'largest-first' | 'mixed';
 
+/** Size policy applies to parallel runs; one worker deliberately retains manifest order. */
 export function scheduleBySize<T extends { readonly estimatedPromptBytes: number; readonly manifestIndex: number }>(
   tasks: readonly T[], concurrency: number, policy: ReviewScheduling = 'largest-first',
 ): T[] {

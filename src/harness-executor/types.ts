@@ -81,6 +81,8 @@ export interface HarnessRun {
   readonly text: string;
   /** Bounded diagnostic (stderr and similar) for failure reporting. */
   readonly diagnostic: string;
+  /** Run scope is reserved for confirmed shared credentials/model/request-configuration failures. */
+  readonly failureScope?: 'file' | 'run' | undefined;
   readonly durationMs: number;
   /** Bounded operational measurements; never contains prompt, output, or credential text. */
   readonly telemetry?: HarnessRunTelemetry | undefined;

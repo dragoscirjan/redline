@@ -4,11 +4,11 @@
  * document against the authoritative diff, and persists per-file records
  * plus a run summary.
  *
- * A per-file failure never aborts the run: the file is recorded as omitted
+ * A per-file failure never aborts the run; a confirmed shared harness failure
+ * stops new harness calls while in-flight work settles. Each failed file is recorded as omitted
  * with a bounded reason and the remaining files are still reviewed. The
- * run exits non-zero only when no reviewed file produced a validated
- * review (total harness or output failure) or when the bundle itself
- * cannot be loaded.
+ * run exits non-zero on a shared fatal harness failure, when no reviewed
+ * file produced a validated review, or when the bundle itself cannot be loaded.
  */
 
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
@@ -19,7 +19,7 @@ import { createHarnessExecutor } from '../harness-executor/registry.ts';
 import { augmentHeadContext } from './head-context.ts';
 import { scheduleBySize, workloadBound } from './scheduling.ts';
 import { FollowUpBudget, type FollowUpRequestBatch } from '../code-context/follow-up.ts';
-import type { HarnessExecutor, HarnessOutputLine, HarnessStreamMode } from '../harness-executor/types.ts';
+import type { HarnessExecutor, HarnessOutputLine, HarnessRun, HarnessStreamMode } from '../harness-executor/types.ts';
 import { loadReviewBundle, type ReviewBundle, type ReviewManifestFile } from './bundle.ts';
 import type { ReviewEnvironment } from './environment.ts';
 import { followUpSourcesByCandidate, resolveFollowUpResults, type ResolvedFollowUp } from './follow-up.ts';
@@ -191,6 +191,28 @@ function deadlineOmissionRecord(
   };
 }
 
+interface RunHarnessState {
+  failure?: { readonly scope: 'file' | 'run'; readonly diagnostic: string };
+  fatalReason?: string;
+}
+
+function rememberHarnessFailure(state: RunHarnessState, run: HarnessRun, environment: ReviewEnvironment): void {
+  if (run.status === 'succeeded') return;
+  const diagnostic = boundedReason(redactCredential(run.diagnostic || run.status, environment.credential));
+  state.failure ??= { scope: run.failureScope ?? 'file', diagnostic };
+  if (run.failureScope === 'run') {
+    state.fatalReason ??= diagnostic;
+    state.failure = { scope: 'run', diagnostic: state.fatalReason };
+  }
+}
+
+function notStartedRecord(environment: ReviewEnvironment, context: LoadedReviewCodeContext,
+  file: ReviewManifestFile, verifyCandidates: boolean, diagnostic: string): WritableFileReviewRecord {
+  return { ...deadlineOmissionRecord(environment, context, file, verifyCandidates,
+    boundedReason(`not started after shared harness failure: ${diagnostic}`)),
+    errorKind: 'harness-failed', execution: 'not-started' };
+}
+
 async function reviewOneFile(
   executor: HarnessExecutor,
   prepared: Awaited<ReturnType<HarnessExecutor['prepare']>>,
@@ -206,6 +228,7 @@ async function reviewOneFile(
   sourceContextStrategy: SourceContextStrategy = 'focused-v1',
   deadlineAtMs = Number.POSITIVE_INFINITY,
   now: () => number = () => performance.now(),
+  sharedFailure: RunHarnessState = {},
 ): Promise<FileReviewRecord & {
   rawModelOutput?: string | undefined;
   verificationArtifact?: VerificationArtifact | undefined;
@@ -282,6 +305,9 @@ async function reviewOneFile(
       'whole-review deadline exhausted during file preparation',
     );
   }
+  if (sharedFailure.fatalReason !== undefined) {
+    return notStartedRecord(environment, indexedContext, file, verifyCandidates, sharedFailure.fatalReason);
+  }
   const modelTimeoutMs = Math.min(environment.timeout.milliseconds, remainingBeforeModelMs);
   const modelBoundedByRunDeadline = remainingBeforeModelMs <= environment.timeout.milliseconds;
   const run = await executor.execute(prepared, prompt, {
@@ -291,6 +317,7 @@ async function reviewOneFile(
     ...(harnessStreamMode === undefined ? {} : { streamMode: harnessStreamMode }),
   });
 
+  rememberHarnessFailure(sharedFailure, run, environment);
   if (run.status !== 'succeeded') {
     const runDeadlineExhausted = run.status === 'timed-out' && modelBoundedByRunDeadline;
     return {
@@ -524,6 +551,7 @@ async function reviewOneFile(
         ...(onHarnessOutput === undefined ? {} : { onOutputLine: onHarnessOutput }),
         ...(harnessStreamMode === undefined ? {} : { streamMode: harnessStreamMode }),
       });
+      rememberHarnessFailure(sharedFailure, verifiedRun, environment);
       verificationDurationMs = verifiedRun.durationMs;
       verifierOutput = redact(verifiedRun.text);
       if (verifiedRun.status !== 'succeeded') {
@@ -829,9 +857,12 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
         });
 
     const followUpBudget = new FollowUpBudget();
+    const sharedFailure: RunHarnessState = {};
     await runBoundedWorkerPool(tasks, concurrency, async ({ file, manifestIndex }) => {
       let record: WritableFileReviewRecord;
-      if (file.binary) {
+      if (sharedFailure.fatalReason !== undefined) {
+        record = notStartedRecord(environment, indexedContext, file, verifyCandidates, sharedFailure.fatalReason);
+      } else if (file.binary) {
         record = {
           version: FILE_REVIEW_RECORD_VERSION,
           fileId: file.id,
@@ -873,6 +904,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           input.sourceContextStrategy,
           runDeadlineAtMs,
           now,
+          sharedFailure,
         );
         input.onFileValidated?.({
           ...identity,
@@ -925,6 +957,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       excludedFiles,
       findings: records.reduce((total, record) => total + record.findings.length, 0),
       codeContext: indexedContext.coverage,
+      ...(sharedFailure.failure === undefined ? {} : { harnessFailure: sharedFailure.failure }),
       executionBudget: {
         version: 1,
         fileTimeoutMs: environment.timeout.milliseconds,
@@ -942,7 +975,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
         restoredEntries: reuseCache?.stats.restoredEntries ?? 0,
         invalidEntries: (reuseCache?.stats.invalidEntries ?? 0) + rejectedReuseCandidates,
         reusedFiles: records.filter((record) => record.execution === 'reused').length,
-        executedFiles: records.filter((record) => record.execution !== 'reused').length,
+        executedFiles: records.filter((record) => record.execution !== 'reused' && record.execution !== 'not-started').length,
         savedDurationMs: records.reduce((total, record) => total + (record.savedDurationMs ?? 0), 0),
       },
       files: records.map((record): ReviewRunSummaryFile => ({
@@ -971,7 +1004,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       summary,
       records,
       outputDirectory: environment.outputDirectory,
-      exitCode: validatedReviews > 0 || records.length === 0 ? 0 : 1,
+      exitCode: sharedFailure.fatalReason === undefined && (validatedReviews > 0 || records.length === 0) ? 0 : 1,
     };
   } finally {
     if (workDirectory !== undefined) await rm(workDirectory, { recursive: true, force: true });

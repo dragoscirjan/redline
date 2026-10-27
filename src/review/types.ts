@@ -118,7 +118,7 @@ export const MAX_REVIEW_REASON_CHARS = 500;
 export const MAX_PERSISTED_REVIEW_REASON_CHARS = MAX_REVIEW_REASON_CHARS + 1;
 
 export type FileReviewOutcome = 'clean' | 'findings' | 'omitted';
-export type FileReviewExecution = 'executed' | 'reused';
+export type FileReviewExecution = 'executed' | 'reused' | 'not-started';
 export type FileReviewErrorKind =
   | 'harness-failed'
   | 'harness-timeout'
@@ -198,7 +198,7 @@ export interface FileReviewRecord {
   readonly findings: readonly PublishedFinding[];
   readonly rejectedCandidates: readonly RejectedCandidate[];
   readonly durationMs: number;
-  /** Whether this run executed the harness or restored a validated semantic match. */
+  /** Executed, restored a validated semantic match, or not started after a shared harness failure. */
   readonly execution?: FileReviewExecution | undefined;
   /** Prior validated model time avoided by a reused record. */
   readonly savedDurationMs?: number | undefined;
@@ -259,6 +259,8 @@ export interface ReviewRunSummary {
   readonly excludedFiles?: readonly ReviewExcludedFile[];
   readonly findings: number;
   readonly codeContext: ReviewCodeContextRunCoverage;
+  /** First bounded, credential-redacted harness failure; run scope stops unscheduled work. */
+  readonly harnessFailure?: { readonly scope: 'file' | 'run'; readonly diagnostic: string } | undefined;
   readonly executionBudget?: ReviewExecutionBudgetTelemetry | undefined;
   readonly reuse?: ReviewReuseTelemetry | undefined;
   readonly files: readonly ReviewRunSummaryFile[];

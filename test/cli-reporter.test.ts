@@ -24,7 +24,101 @@ async function reportFixture() {
   return { fixture, report };
 }
 
+function terminalLines(writes: readonly string[]) {
+  const completed: string[] = []; let current = '';
+  for (const write of writes) {
+    if (write.includes('\r')) current = '';
+    const parts = stripVTControlCharacters(write).replaceAll('\r', '').split('\n');
+    for (const [index, part] of parts.entries()) {
+      current += part;
+      if (index < parts.length - 1) { completed.push(current); current = ''; }
+    }
+  }
+  return { completed, current };
+}
+
 describe('terminal progress and finding cards', () => {
+  it('keeps one physical review line through workload logging and retry rounds', async () => {
+    const { report } = await reportFixture(); const writes: string[] = [];
+    const reporter = new CliReporter(line => writes.push(line + '\n'), line => writes.push(line + '\n'), undefined, {
+      terminal: { write: text => writes.push(text), columns: () => 100, color: false },
+    });
+    reporter.progress({ kind: 'started' });
+    reporter.progress({ kind: 'context-started', provider: 'cgc' });
+    reporter.progress({ kind: 'context-ready', status: 'partial', relatedSpans: 1, fileOnlyFiles: 1, indexCache: 'reused' });
+    reporter.progress({ kind: 'planned', files: [{ fileId: '000001', reviewed: true }] });
+    reporter.progress({ kind: 'workload', files: 1, workers: 1, remainingMs: 600_000, maximumExecutionMs: 1_680_000,
+      mayExceedDeadline: true, scheduling: 'manifest-order', staticHeadFiles: 1 });
+    for (const attempt of [2, 3, 4]) {
+      reporter.progress({ kind: 'file-completed', fileId: '000001', outcome: 'omitted' });
+      reporter.progress({ kind: 'file-started', fileId: '000001' });
+      reporter.progress({ kind: 'file-retry', fileId: '000001', attempt, maximumAttempts: 4, timeoutMs: 240_000, reason: 'invalid-output' });
+      expect(terminalLines(writes).completed.filter(line => /^Review \d+\/\d+/u.test(line))).toHaveLength(0);
+    }
+    expect(writes.join('')).not.toMatch(/Retry 000001|attempt [234]\/4/u);
+    reporter.progress({ kind: 'file-completed', fileId: '000001', outcome: 'clean' });
+    await reporter.complete({ ...report, summary: { ...report.summary, retries: {
+      limit: 3, timeoutIncrementMs: 120_000, attempts: 4, retriedFiles: 1, recoveredFiles: 1, exhaustedFiles: 0, deadlineSkippedFiles: 0,
+    } } });
+    expect(terminalLines(writes).completed.filter(line => /^Review \d+\/\d+/u.test(line))).toHaveLength(1);
+    expect(writes.join('')).toMatch(/Retries:\s+4 review attempts; 1 file retried; 1 recovered/u);
+    expect(writes.join('')).not.toContain('Status:');
+    expect(writes.join('')).not.toContain('[]');
+  });
+
+  it('keeps redirected output quiet during retries and reports totals only at completion', async () => {
+    const { report } = await reportFixture(); const output: string[] = []; const errors: string[] = [];
+    const reporter = new CliReporter(line => output.push(line), line => errors.push(line));
+    reporter.progress({ kind: 'planned', files: [{ fileId: '000001', reviewed: true }] });
+    reporter.progress({ kind: 'file-retry', fileId: '000001', attempt: 2, maximumAttempts: 4, timeoutMs: 360_000, reason: 'file-timeout' });
+    expect(output).toEqual([]); expect(errors).toEqual([]);
+    await reporter.complete({ ...report, summary: { ...report.summary, retries: {
+      limit: 3, timeoutIncrementMs: 120_000, attempts: 2, retriedFiles: 1, recoveredFiles: 1, exhaustedFiles: 0, deadlineSkippedFiles: 0,
+    } } });
+    expect(output.join('\n')).toMatch(/Retries:\s+2 review attempts/u);
+    expect(errors).toEqual([]);
+  });
+
+  it('renders an unframed report with distinct summary sections and finding classifications', async () => {
+    const { report } = await reportFixture(); const output: string[] = [];
+    const renderer = new CliReporter(line => output.push(line), () => {});
+    await renderer.complete({ ...report, review: { ...report.review, findings: [finding({ classification: 'question', confidence: 0.45,
+      uncertainty: 'The caller implementation was not supplied.' })] } });
+    const text = output.join('\n');
+    expect(text).toContain('\n\nExecution\n');
+    expect(text).toContain('\n\nContext\n');
+    expect(text).toContain('\n\nFindings\n');
+    expect(text).toMatch(/Coverage:\s+1\/1/u);
+    expect(text).toContain('MEDIUM question');
+    expect(text).toContain('45% model confidence');
+    expect(text).toContain('Uncertainty');
+    expect(text).toContain('The caller implementation was not supplied.');
+    expect(text).not.toMatch(/[┌┐└┘─│]/u);
+    expect(text).not.toContain('Legend:');
+    expect(text).not.toContain('\u001b');
+  });
+
+  it('does not split Unicode surrogate pairs when wrapping finding text', async () => {
+    const { report } = await reportFixture(); const output: string[] = [];
+    const renderer = new CliReporter(line => output.push(line), () => {}, undefined, {
+      terminal: { write: () => {}, columns: () => 45, color: false },
+    });
+    await renderer.complete({ ...report, review: { ...report.review, findings: [finding({ title: '😀'.repeat(60) })] } });
+    expect(output.join('\n')).not.toMatch(/[\uD800-\uDFFF]/u);
+    expect(output.join('\n')).toContain('😀');
+  });
+
+  it('shows a readable output-limit diagnostic without dumping transport JSON', async () => {
+    const { report } = await reportFixture(); const errors: string[] = [];
+    const renderer = new CliReporter(() => {}, line => errors.push(line));
+    await renderer.complete({ ...report, summary: { ...report.summary, harnessFailure: { scope: 'file', diagnostic: JSON.stringify({
+      schema: 'pi-no-text/v1', class: 'model-output-budget-exhausted', stop: 'length', outputTokens: 32768, parts: ['thinking'],
+    }) } } });
+    expect(errors.join('\n')).toContain('32768 output tokens');
+    expect(errors.join('\n')).toContain('no usable final answer');
+    expect(errors.join('\n')).not.toContain('pi-no-text/v1');
+    expect(errors.join('\n')).not.toContain('"parts"');
+  });
   it('shows a bounded redacted harness error and states when queued work stopped', async () => {
     const { report } = await reportFixture(); const stderr: string[] = []; const stdout: string[] = [];
     const reporter = new CliReporter(line => stdout.push(line), line => stderr.push(line), 'FIXTURE_KEY');
@@ -36,7 +130,7 @@ describe('terminal progress and finding cards', () => {
     expect(stderr.join('\n')).not.toContain('FIXTURE_KEY');
     expect(stderr.join('\n')).not.toContain('\u001b');
     expect(stderr.at(-1)!.length).toBeLessThan(600);
-    expect(stdout.join('\n')).toContain('Not started: 1 file after shared harness failure.');
+    expect(stdout.join('\n')).toMatch(/Not started:\s+1 file after shared harness failure\./u);
   });
 
   it('updates one manifest-ordered dot strip and distinguishes inert from failures', () => {
@@ -56,7 +150,7 @@ describe('terminal progress and finding cards', () => {
     const final = frames.at(-1)!;
     expect(final).toContain('4/4');
     expect(final).toContain('\u001b[32m●\u001b[0m\u001b[33m!\u001b[0m\u001b[90m●\u001b[0m\u001b[31m●\u001b[0m');
-    expect(frames.join('')).not.toContain('000004'); expect(logs).toEqual([]);
+    expect(frames.join('')).not.toContain('000004'); expect(logs).toEqual(['Capturing changes…']);
     expect(frames.every((frame) => !frame.includes('\n'))).toBe(true);
     reporter.progress({ kind: 'completed' }); expect(frames.at(-1)).toBe('\n');
   });
@@ -112,7 +206,7 @@ describe('terminal progress and finding cards', () => {
     });
     renderer.progress({ kind: 'completed' });
     const text = stdout.join('\n');
-    expect(text).toContain('src/example.ts\n  MEDIUM 1-1 [RIGHT]');
+    expect(text).toContain('src/example.ts\n  MEDIUM defect, 1-1 [RIGHT]');
     expect(text).toContain('Reviewed change'); expect(text).toContain('@@ -1 +1 @@');
     expect(text).toContain('+new'); expect(text).toContain('-old');
     expect(text).toContain('Proposed fix (not applied or test-verified)'); expect(text).toContain('+corrected');
@@ -159,7 +253,8 @@ describe('terminal progress and finding cards', () => {
       summary: { ...report.summary, findings: 2, files: [{ ...report.summary.files[0]!, outcome: 'findings', findingCount: 2 }] },
     });
     expect(stdout.filter((line) => line === 'src/example.ts')).toHaveLength(1);
-    expect(stdout).toContain('Status: x');
+    expect(stdout.join('\n')).toMatch(/Findings:\s+2/u);
+    expect(stdout.join('\n')).not.toContain('Status:');
     expect(stdout.join('\n')).toContain('… truncated; full text is in the artifacts.');
     expect(stdout.join('\n')).toContain('[redacted]');
     expect(stdout.join('\n')).not.toContain('secret-token');

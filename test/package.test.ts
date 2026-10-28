@@ -78,7 +78,9 @@ const db=process.env.CGC_RUNTIME_DB_PATH;
 if(a[0]==='index'){fs.mkdirSync(path.dirname(db),{recursive:true});fs.writeFileSync(db,a[1]);process.exit(0);}
 if(a[0]==='query'){const source=fs.readFileSync(db,'utf8');console.log(JSON.stringify(a[1].includes('repository_count')?[{repository_count:1}]:a[1].startsWith('MATCH (related)')?[{changed_path:path.join(source,'example.ts'),related_path:path.join(source,'caller.ts'),start_line:1,end_line:1}]:[]));}else process.exit(1);`);
     const indexed = run(['review', '--harness', 'echo', '--base', base, '--head', 'HEAD', '--indexing', 'required', '--index-executable', indexer], repository);
-    expect(indexed.status, indexed.stderr).toBe(0); expect(indexed.stdout).toContain('Indexed context: complete; 1 file with context; 1 related span');
+    expect(indexed.status, indexed.stderr).toBe(0);
+    expect(indexed.stdout).toMatch(/Indexed context:\s+complete/u);
+    expect(indexed.stdout).toMatch(/Related source:\s+1 file with context; 1 related span/u);
     const warm = run(['review', '--harness', 'echo', '--base', base, '--head', 'HEAD', '--indexing', 'required', '--index-executable', indexer], repository);
     expect(warm.status, warm.stderr).toBe(0); expect(warm.stderr).toContain('Base index: reused');
     await writeFile(join(repository, 'example.ts'), 'working\n');

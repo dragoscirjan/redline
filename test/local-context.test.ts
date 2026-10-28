@@ -130,7 +130,9 @@ describe('local indexed-context parity', () => {
     expect(result.code, result.stderr).toBe(0);
     const report = await summary(result.output);
     expect(report.codeContext.status).toBe('complete'); expect(report.codeContext.relatedSpans).toBe(1);
-    expect(result.stdout).toContain('Indexed context: complete; 1 file with context; 1 related span; cgc 0.5.7');
+    expect(result.stdout).toMatch(/Indexed context:\s+complete/u);
+    expect(result.stdout).toMatch(/Related source:\s+1 file with context; 1 related span/u);
+    expect(result.stdout).toMatch(/Provider:\s+cgc 0\.5\.7/u);
     const capture = JSON.parse(await readFile(join(result.output, 'capture.json'), 'utf8'));
     expect(capture.repositoryIdentity).toMatch(/^local\/[a-f0-9]{64}$/u);
     const path = join(result.output, 'index/code-context.json');

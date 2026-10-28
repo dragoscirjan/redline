@@ -317,8 +317,20 @@ This is a trusted-host CLI, not a sandbox for arbitrary untrusted runners. Docke
 
 ## Release operations
 
-`Release npm CLI` is a manual workflow on `main`. Before its first run, the owner must configure the `npm-release` GitHub environment with required reviewers and register this repository/workflow/environment as the npm trusted publisher for `@dragoscirjan/redline`. First-package registration or initial publication can require a separate owner bootstrap in npm; the workflow does not bypass npm account policy.
+`Release npm CLI` is a manual workflow on `main`. It uses the SHA-pinned Tempel release action and the project-installed Changesets 3 CLI. It never publishes merely because a pull request merges.
 
-The requested version must match `package.json` and must not already exist in npm. Registry/network errors fail closed. The exact main commit must have successful CI, including all harness jobs. The workflow re-runs type checking, tests (including offline tarball installation), and docs before publishing with OIDC provenance. There is no installer hook, runtime dependency installation, or emitted-JavaScript build step.
+Before the first release, the owner must:
 
-`mise run validate` includes packed-package installation tests. No package has been published merely because those tests pass. Publication and merges require separate owner approval.
+1. Configure the `npm-release` GitHub environment with required reviewers and restrict deployments to `main`.
+2. Create an npm publishing token authorized to create or publish `@dragoscirjan/redline`, subject to the account's npm access and two-factor policy.
+3. Make `NPM_TOKEN` available to the protected job, preferably as an environment secret. An existing repository secret also works and does not need to be copied locally. Do not put the token in repository files, command arguments, logs or chat messages.
+
+The token reaches only the shared release action as `NODE_AUTH_TOKEN`, after validation. This integration uses token authentication, not npm trusted publishing. The job retains `id-token: write` for npm provenance attestations, which are separate from registry authentication. Tempel does not currently support npm trusted-publisher authentication.
+
+Request a release by dispatching `Release npm CLI` on `main` with the exact version in `package.json`, then approve the protected environment. The version must not already exist in npm. Registry and network errors fail closed. The exact main commit must have successful CI, including all harness and native CLI jobs. The workflow re-runs type checking, tests with offline tarball installation, and docs. It repeats the immutable-version check immediately before Changesets publishes with public access, provenance and lifecycle scripts disabled.
+
+This workflow is publish-only. For future version changes, use `pnpm exec changeset` and `pnpm exec changeset version` in a development branch, then review and merge the resulting version and changelog changes. Pending Changeset notes, prerelease state and unexpected files in `.changeset/` block publication. The shared action cannot create version pull requests through this workflow, and it has no Contents or Pull requests write permission. Remote Git tags and GitHub releases are disabled in `.github/tempel-release.json`; the separate GitHub Action release policy is unchanged.
+
+After publication, the workflow requires a successful publish result, installs the exact registry version with scripts disabled in a temporary directory, and checks help plus committed-revision and working-tree reviews against an inert fixture using `echo` and disabled indexing. These checks use no live model or reviewed-code execution. Verification can fail after npm accepted the immutable version. Such a failure does not roll back publication; inspect the registry and repeat verification rather than attempting to overwrite that version.
+
+There is no installer hook, runtime dependency installation, or emitted-JavaScript build step. Changesets is a development dependency only. `mise run validate` includes packed-package installation tests, but passing them is not evidence of npm publication. Publication and merges require separate owner approval.

@@ -41,9 +41,11 @@
     "serve": "vitepress dev docs",
     "test": "vitest run && bats test/*.bats",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test:package": "vitest run test/package.test.ts"
+    "test:package": "vitest run test/package.test.ts",
+    "release:preflight": "node src/release/npm-check.ts"
   },
   "devDependencies": {
+    "@changesets/cli": "3.0.3",
     "@types/node": "24.10.1",
     "bats": "^1.12.0",
     "typescript": "5.9.3",

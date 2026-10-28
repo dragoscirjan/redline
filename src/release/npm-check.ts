@@ -1,5 +1,5 @@
 /** Trusted release preflight. A registry failure never means a version is available. */
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 export async function assertNpmVersionAvailable(
@@ -18,12 +18,22 @@ export async function assertNpmVersionAvailable(
   if (response.status !== 404) throw new Error('npm version availability could not be established');
 }
 
+/** The shared action must only publish the reviewed version, never create a version PR. */
+export async function assertPublishOnlyChangesets(directory: string | URL): Promise<void> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  if (!entries.some(entry => entry.name === 'config.json' && entry.isFile())
+    || entries.some(entry => !entry.isFile() || !['config.json', 'README.md'].includes(entry.name))) {
+    throw new Error('consume pending Changesets in a reviewed version change before publishing');
+  }
+}
+
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const metadata: { name: string; version: string } = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
-    await assertNpmVersionAvailable(metadata.name, metadata.version, process.argv[2] ?? '');
+    await assertPublishOnlyChangesets(new URL('../../.changeset/', import.meta.url));
+    await assertNpmVersionAvailable(metadata.name, metadata.version, process.argv[2] ?? process.env.VERSION ?? '');
   } catch {
-    process.stderr.write('release preflight failed: version mismatch, existing version, or registry unavailable\n');
+    process.stderr.write('release preflight failed: version mismatch, pending Changesets, existing version, or registry unavailable\n');
     process.exitCode = 1;
   }
 }

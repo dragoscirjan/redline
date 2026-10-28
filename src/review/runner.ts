@@ -15,10 +15,11 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { createHarnessExecutor } from '../harness-executor/registry.ts';
 import { augmentHeadContext } from './head-context.ts';
 import { scheduleBySize, workloadBound } from './scheduling.ts';
-import { maximumFileAttemptTimeMs, parseReviewRetries, RETRY_TIMEOUT_INCREMENT_MS, reviewRetryReason, type ReviewRetryReason } from './retries.ts';
+import { maximumFileAttemptTimeMs, parseReviewRetries, RETRY_TIMEOUT_INCREMENT_MS, reviewRetryReason, upstreamRetryDelayMs, type ReviewRetryReason } from './retries.ts';
 import { FollowUpBudget, type FollowUpRequestBatch } from '../code-context/follow-up.ts';
 import type { HarnessExecutor, HarnessOutputLine, HarnessRun, HarnessStreamMode } from '../harness-executor/types.ts';
 import { loadReviewBundle, type ReviewBundle, type ReviewManifestFile } from './bundle.ts';
@@ -121,6 +122,8 @@ export interface ReviewRunInput {
   readonly harnessStreamMode?: HarnessStreamMode | undefined;
   /** Monotonic clock override for deterministic deadline tests. */
   readonly now?: (() => number) | undefined;
+  /** Trusted timer port; local callers bind cancellation, tests advance their injected clock. */
+  readonly sleep?: ((milliseconds: number) => Promise<void>) | undefined;
 }
 
 export interface ReviewRunResult {
@@ -868,8 +871,17 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
     const contextByFile = new Map<number, SourceContextStrategy>();
     const retryReasons = new Map<number, ReviewRetryReason>();
     let pendingTasks = tasks;
+    let interruptedWait: { readonly error: unknown } | undefined;
     for (let round = 0; round <= retryLimit && pendingTasks.length > 0; round += 1) {
       if (round > 0 && (sharedFailure.fatalReason !== undefined || remainingRunMs(runDeadlineAtMs, now) === 0)) break;
+      if (round > 0 && pendingTasks.some((task) => retryReasons.get(task.manifestIndex) === 'upstream-failure')) {
+        const delayMs = Math.min(upstreamRetryDelayMs(round), remainingRunMs(runDeadlineAtMs, now));
+        if (delayMs > 0) {
+          try { await (input.sleep ?? sleep)(delayMs); }
+          catch (error) { interruptedWait = { error }; break; }
+        }
+        if (sharedFailure.fatalReason !== undefined || remainingRunMs(runDeadlineAtMs, now) === 0) break;
+      }
       const nextRound: ReviewTask[] = [];
       await runBoundedWorkerPool(pendingTasks, concurrency, async (task) => {
         const { file, manifestIndex } = task;
@@ -1058,6 +1070,9 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       bundle, environment, records, indexedContext, synthesize: verifyCandidates,
     });
     await writer.writePullRequestReview(review);
+    // All round participants have settled. Persist their actual coverage before
+    // preserving cancellation or a timer-port error; no new calls follow it.
+    if (interruptedWait !== undefined) throw interruptedWait.error;
 
     const validatedReviews = records.filter(
       (record) => record.outcome === 'clean' || record.outcome === 'findings',

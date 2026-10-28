@@ -26,6 +26,11 @@ export function reviewRetryReason(record: Pick<FileReviewRecord, 'outcome' | 'ex
   return undefined;
 }
 
+/** Retry-round index is trusted and bounded by MAX_REVIEW_RETRIES. */
+export function upstreamRetryDelayMs(round: number): number {
+  return Math.min(5_000, 1_000 * 2 ** (round - 1));
+}
+
 export function maximumFileAttemptTimeMs(timeoutMs: number, retries: number): number {
   return (retries + 1) * timeoutMs + RETRY_TIMEOUT_INCREMENT_MS * retries * (retries + 1) / 2;
 }

@@ -47,6 +47,58 @@ async function addSecondFile(fixture: BundleFixture): Promise<void> {
 }
 
 describe('local caller-managed review retries', () => {
+  it('waits with capped exponential backoff for upstream retry rounds', async () => {
+    const f = await createBundleFixture(); const delays: number[] = []; let now = 0;
+    try {
+      const executor = new RetryExecutor(() => ({ status: 'failed', text: '', retryable: true, diagnostic: 'HTTP 429' }));
+      const result = await runFileReviews({ environment: environment(f, 10), executor, now: () => now,
+        sleep: async (milliseconds) => { delays.push(milliseconds); now += milliseconds; } });
+      expect(delays).toEqual([1_000, 2_000, 4_000, 5_000, 5_000, 5_000, 5_000, 5_000, 5_000, 5_000]);
+      expect(executor.calls).toHaveLength(11);
+      expect(result.summary.executionBudget?.elapsedMs).toBe(42_000);
+    } finally { await f.cleanup(); }
+  });
+
+  it('caps backoff at the hard deadline and sends no request after waiting exhausts it', async () => {
+    const f = await createBundleFixture(); const delays: number[] = []; let now = 0;
+    try {
+      const executor = new RetryExecutor(() => ({ status: 'failed', text: '', retryable: true, diagnostic: 'HTTP 503' }));
+      const result = await runFileReviews({ environment: { ...environment(f), runTimeout: { minutes: 0.025, milliseconds: 1_500 } },
+        executor, now: () => now, sleep: async (milliseconds) => { delays.push(milliseconds); now += milliseconds; } });
+      expect(delays).toEqual([1_000, 500]);
+      expect(executor.calls).toHaveLength(2);
+      expect(executor.calls[1]?.timeoutMs).toBe(500);
+      expect(result.summary.executionBudget?.deadlineExhausted).toBe(true);
+      expect(result.summary.retries?.deadlineSkippedFiles).toBe(1);
+    } finally { await f.cleanup(); }
+  });
+
+  it('propagates cancellation during backoff without starting another attempt', async () => {
+    const f = await createBundleFixture();
+    try {
+      const executor = new RetryExecutor(() => ({ status: 'failed', text: '', retryable: true, diagnostic: 'HTTP 503' }));
+      await expect(runFileReviews({ environment: environment(f), executor,
+        sleep: async () => { throw new DOMException('cancelled', 'AbortError'); } })).rejects.toMatchObject({ name: 'AbortError' });
+      expect(executor.calls).toHaveLength(1);
+      const summary = JSON.parse(await readFile(join(f.output, 'reviews/summary.json'), 'utf8'));
+      expect(summary.retries.attempts).toBe(1); expect(summary.omittedFiles).toBe(1);
+    } finally { await f.cleanup(); }
+  });
+
+  it.each([
+    ['invalid output', { text: 'bad' }],
+    ['per-file timeout', { status: 'timed-out', text: '' }],
+    ['source excerpt', { text: omitted() }],
+    ['shared fatal error', { status: 'failed', failureScope: 'run', retryable: false, text: '', diagnostic: 'HTTP 401' }],
+  ] satisfies [string, Partial<HarnessRun>][])('does not back off for %s', async (_name, first) => {
+    const f = await createBundleFixture();
+    try {
+      const executor = new RetryExecutor((index) => index === 0 ? first : {});
+      await runFileReviews({ environment: environment(f), executor,
+        sleep: async () => { throw new Error('unexpected upstream delay'); } });
+      expect(executor.calls.length).toBe('failureScope' in first && first.failureScope === 'run' ? 1 : 2);
+    } finally { await f.cleanup(); }
+  });
   it.each([
     ['invalid JSON', { text: 'not JSON' }],
     ['wrong target', { text: clean('000999') }],

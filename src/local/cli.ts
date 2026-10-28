@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { CapabilityError } from '../application/capabilities.ts';
 import { CompositeReporter, ReviewApplication, executePreparedReview } from '../application/review.ts';
 import { createHarnessExecutor } from '../harness-executor/registry.ts';
@@ -144,6 +145,7 @@ export async function main(
         signal.throwIfAborted();
         const remaining = Math.max(1, Math.floor(options.environment.runTimeout.milliseconds - (performance.now() - start)));
         return executePreparedReview({ ...input,
+          sleep: milliseconds => sleep(milliseconds, undefined, { signal }),
           environment: { ...input.environment, reuse, runTimeout: { minutes: remaining / 60_000, milliseconds: remaining } },
           executor: {
             harness: executor.harness,

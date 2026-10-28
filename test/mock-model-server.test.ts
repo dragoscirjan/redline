@@ -49,6 +49,94 @@ it('accepts a fragmented bounded handshake and removes its startup timer', async
   expect(server.port).toBe(8787); expect(kill).not.toHaveBeenCalled();
   expect(vi.getTimerCount()).toBe(0);
   await server.stop(); await server.stop();
+  expect(kill).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0);
+});
+
+it('escalates an ignored SIGTERM and shares one bounded stop operation', async () => {
+  vi.useFakeTimers();
+  const { child, output, kill } = fakeChild();
+  kill.mockImplementation((signal) => { if (signal === 'SIGKILL') child.emit('close', null, 'SIGKILL'); return true; });
+  const started = startMockServer({}, { spawn: () => child });
+  output.write('{"port":8787}\n');
+  const server = await started;
+  const stopping = server.stop(); const again = server.stop();
+  try {
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(kill).toHaveBeenCalledWith('SIGKILL');
+    await stopping; await again;
+    expect(kill).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { child.emit('close', null, 'SIGKILL'); await Promise.allSettled([stopping, again]); }
+});
+
+it('rejects teardown when even SIGKILL produces no close event', async () => {
+  vi.useFakeTimers();
+  const { child, output, kill } = fakeChild(); kill.mockImplementation(() => true);
+  const started = startMockServer({}, { spawn: () => child }); output.write('{"port":8787}\n');
+  const server = await started; const stopping = server.stop();
+  let settled = false;
+  const watched = stopping.then(() => { settled = true; }, () => { settled = true; });
+  try {
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(settled).toBe(true);
+    await expect(stopping).rejects.toThrow('mock server did not exit after SIGKILL');
+    expect(kill).toHaveBeenCalledTimes(2); expect(vi.getTimerCount()).toBe(0);
+  } finally { child.emit('close', null, 'SIGKILL'); await Promise.allSettled([stopping, watched]); }
+});
+
+it('does not confuse a post-startup signal error with process exit', async () => {
+  vi.useFakeTimers();
+  const { child, output, kill } = fakeChild();
+  Object.defineProperty(child, 'pid', { value: 123456 });
+  kill.mockImplementation((signal) => {
+    if (signal === 'SIGKILL') child.emit('close', null, 'SIGKILL');
+    else child.emit('error', new Error('fixture signal failed'));
+    return false;
+  });
+  const started = startMockServer({}, { spawn: () => child }); output.write('{"port":8787}\n');
+  const server = await started; const stopping = server.stop();
+  try {
+    await vi.advanceTimersByTimeAsync(1_000); await stopping;
+    expect(kill).toHaveBeenCalledWith('SIGKILL'); expect(kill).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { child.emit('close', null, 'SIGKILL'); await Promise.allSettled([stopping]); }
+});
+
+it('bounds forced cleanup after startup fails and preserves both errors', async () => {
+  vi.useFakeTimers();
+  const { child, output, kill } = fakeChild(); kill.mockImplementation(() => true);
+  const started = startMockServer({}, { spawn: () => child });
+  let settled = false;
+  const watched = started.then(() => { settled = true; }, () => { settled = true; });
+  output.write('not JSON\n');
+  try {
+    await vi.advanceTimersByTimeAsync(1_000); expect(settled).toBe(true);
+    await expect(started).rejects.toMatchObject({ message: 'mock server startup and cleanup failed', errors: [
+      expect.objectContaining({ message: 'mock server printed invalid startup metadata' }),
+      expect.objectContaining({ message: 'mock server did not exit after SIGKILL' }),
+    ] });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { child.emit('close', null, 'SIGKILL'); await Promise.allSettled([started, watched]); }
+});
+
+it('terminates an owned real fixture that ignores SIGTERM', async () => {
+  let child: ChildProcess | undefined;
+  const server = await startMockServer({}, { spawn: () => {
+    child = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); console.log(JSON.stringify({port:8787})); setInterval(() => {}, 1000)'], {
+      stdio: ['ignore', 'pipe', 'ignore'], env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
+    }); return child;
+  } });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([server.stop(), new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error('fixture shutdown exceeded its bound')), 3_000);
+    })]);
+    if (child === undefined) throw new Error('child not created');
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+    if (process.platform !== 'win32') expect(child.signalCode).toBe('SIGKILL');
+  } finally {
+    clearTimeout(timer); child?.kill('SIGKILL'); await server.stop().catch(() => undefined);
+  }
 });
 
 it('can stop a fixture again after its process has already closed', async () => {

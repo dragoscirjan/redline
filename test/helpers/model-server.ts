@@ -19,7 +19,28 @@ export async function startMockServer(overrides: Record<string, string> = {}, op
     stdio: ['ignore', 'pipe', 'inherit'],
     env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, ...overrides },
   });
-  const closed = new Promise<void>((resolve) => { child.once('close', () => resolve()); child.once('error', () => resolve()); });
+  const closed = new Promise<void>((resolve) => {
+    const onError = (): void => { if (child.pid === undefined) resolve(); };
+    child.on('error', onError);
+    child.once('close', () => { child.off('error', onError); resolve(); });
+  });
+  const waitForClosed = async (milliseconds: number): Promise<boolean> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        closed.then(() => true),
+        new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), milliseconds); }),
+      ]);
+    } finally { clearTimeout(timer); }
+  };
+  const terminate = async (graceful: boolean): Promise<void> => {
+    if (graceful) {
+      child.kill();
+      if (await waitForClosed(1_000)) return;
+    }
+    child.kill('SIGKILL');
+    if (!await waitForClosed(1_000)) throw new Error('mock server did not exit after SIGKILL');
+  };
   let port: number;
   try {
     port = await new Promise<number>((resolve, reject) => {
@@ -54,11 +75,12 @@ export async function startMockServer(overrides: Record<string, string> = {}, op
       else { child.stdout.on('data', onData); child.stdout.once('error', onError); }
     });
   } catch (error) {
-    child.kill('SIGKILL');
-    await closed;
+    try { await terminate(false); }
+    catch (cleanupError) { throw new AggregateError([error, cleanupError], 'mock server startup and cleanup failed'); }
     throw error;
   }
-  return { port, stop: async () => { child.kill(); await closed; } };
+  let stopping: Promise<void> | undefined;
+  return { port, stop: () => stopping ??= terminate(true) };
 }
 
 /** Real SDK failure boundary; counts requests without recording bodies or headers. */

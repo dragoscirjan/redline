@@ -74,7 +74,7 @@ jobs:
         id: release
         uses: dragoscirjan/tempel-javascript/.github/actions/release@71e3379b37d477ae0e7915f6463b0a3921d28f8d
         with:
-          config: .github/tempel-release.json
+          config: .github/release.json
         env:
           VERSION: ${{ inputs.version }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

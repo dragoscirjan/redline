@@ -156,7 +156,7 @@ describe('npm release boundary', () => {
     expect(source).toContain('npm install --prefix "$SMOKE/installation" --ignore-scripts');
     expect(source).not.toContain('contents: write');
     expect(source).not.toContain('pull-requests: write');
-    const config = JSON.parse(await readFile(new URL('../.github/tempel-release.json', import.meta.url), 'utf8'));
+    const config = JSON.parse(await readFile(new URL('../.github/release.json', import.meta.url), 'utf8'));
     expect(config).toMatchObject({ version: 1, engine: 'changesets', publishing: {
       before: ['release:preflight'], create_github_releases: false, push_git_tags: false,
     } });

@@ -12,6 +12,7 @@
  */
 
 import { MAX_OUTPUT_TOKENS, outputCaptureBytes } from './output-budget.ts';
+import { piFailureDiagnostic, readPiFailure } from './pi-failure.ts';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -49,7 +50,7 @@ const PI_TRANSIENT_RETRY_DELAY_MS = 250;
 export const PI_THINKING_LEVELS = ['off', 'minimal', 'low'] as const;
 export type PiThinkingLevel = (typeof PI_THINKING_LEVELS)[number];
 export type PiStructuredOutput = 'none' | 'json-object';
-export const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel = 'off';
+export const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel | undefined = undefined;
 export const DEFAULT_PI_MAX_OUTPUT_TOKENS = 16_384;
 export const MIN_PI_MAX_OUTPUT_TOKENS = 1_024;
 export const MAX_PI_MAX_OUTPUT_TOKENS = MAX_OUTPUT_TOKENS;
@@ -154,15 +155,17 @@ export interface PreparedPi extends PreparedHarness {
   readonly cwd: string;
   readonly rootDirectory: string;
   readonly agentConfig: string;
+  readonly modelProtocol: 'compatible' | 'openrouter-json';
   readonly settingsConfig: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs: number;
   readonly transientRetries: 0 | 1;
+  readonly retryOwnership?: 'caller' | undefined;
   readonly maxOutputTokens: number;
 }
 
 interface PiExecutionPolicy {
-  readonly thinkingLevel: PiThinkingLevel;
+  readonly thinkingLevel: PiThinkingLevel | undefined;
   readonly maxOutputTokens: number;
   readonly temperature: 0 | undefined;
   readonly structuredOutput: PiStructuredOutput;
@@ -171,8 +174,9 @@ interface PiExecutionPolicy {
 
 function validatePolicy(options: PiExecutorOptions): PiExecutionPolicy {
   const thinkingLevel = options.thinkingLevel ?? DEFAULT_PI_THINKING_LEVEL;
-  if (!(PI_THINKING_LEVELS as readonly string[]).includes(thinkingLevel)) {
-    throw new Error('Pi thinking level must be off, minimal, or low');
+  if (thinkingLevel === 'off') throw new Error('Never disable model reasoning; preserve provider/model defaults');
+  if (thinkingLevel !== undefined && !(PI_THINKING_LEVELS as readonly string[]).includes(thinkingLevel)) {
+    throw new Error('Pi thinking level must be provider-default, minimal, or low');
   }
   const maxOutputTokens = options.maxOutputTokens ?? DEFAULT_PI_MAX_OUTPUT_TOKENS;
   if (!Number.isSafeInteger(maxOutputTokens)
@@ -213,11 +217,15 @@ function buildAgentConfig(settings: HarnessSettings, policy: PiExecutionPolicy):
         apiKey,
         models: [{
           id: settings.model.model,
-          reasoning: policy.thinkingLevel !== 'off',
+          ...(policy.thinkingLevel === undefined ? {} : { reasoning: true }),
           maxTokens: policy.maxOutputTokens,
-          ...(policy.temperature === undefined && policy.structuredOutput === 'none' ? {} : {
+          ...(policy.temperature === undefined && policy.structuredOutput === 'none' && settings.modelProtocol !== 'openrouter-json' ? {} : {
             samplingParams: {
               ...(policy.temperature === undefined ? {} : { temperature: policy.temperature }),
+              ...(settings.modelProtocol === 'openrouter-json' ? {
+                provider: { require_parameters: true },
+                response_format: { type: 'json_object' },
+              } : {}),
               ...(policy.structuredOutput === 'json-object'
                 ? { response_format: { type: 'json_object' } }
                 : {}),
@@ -228,6 +236,15 @@ function buildAgentConfig(settings: HarnessSettings, policy: PiExecutionPolicy):
     },
   };
   return `${JSON.stringify(config, null, 2)}\n`;
+}
+
+function invocationAgentConfig(state: PreparedPi, prompt: HarnessPrompt): string {
+  if (state.modelProtocol !== 'openrouter-json' || prompt.responseSchema === undefined) return state.agentConfig;
+  const config = JSON.parse(state.agentConfig) as { providers: Record<string, { models: { samplingParams: Record<string, unknown> }[] }> };
+  config.providers[state.model.provider]!.models[0]!.samplingParams['response_format'] = {
+    type: 'json_schema', json_schema: { name: 'redline_file_review', strict: true, schema: prompt.responseSchema },
+  };
+  return JSON.stringify(config);
 }
 
 function buildSettingsConfig(policy: PiExecutionPolicy): string {
@@ -364,7 +381,7 @@ export function inspectPiAssistantOutput(stdout: string, stdoutTruncated = false
     : [];
   const text = textParts.map((part) => (part as Record<string, unknown>)['text'] as string).join('');
 
-  if (text.length > 0 && (!stdoutTruncated || settledAfterLastTurnEnd)) {
+  if (text.length > 0 && stopReason !== 'error' && (!stdoutTruncated || settledAfterLastTurnEnd)) {
     return {
       text,
       classification: undefined,
@@ -459,6 +476,8 @@ function toHarnessRun(
   result: BoundedRunResult,
   timeToFirstTextMs: number | null,
   retryCount = 0,
+  credential?: string,
+  callerManaged = false,
 ): HarnessRun {
   const inspection = result.code === 0 ? inspectPiAssistantOutput(result.stdout, result.stdoutTruncated) : undefined;
   const text = inspection?.text;
@@ -493,7 +512,9 @@ function toHarnessRun(
     };
   }
   if (text === undefined) {
-    const diagnostic = result.code === 0 && inspection !== undefined
+    const failure = result.stdoutTruncated ? undefined : readPiFailure(result.stdout,
+      result.code === 0 ? undefined : result.stderr || result.error, credential, callerManaged);
+    const diagnostic = failure !== undefined ? piFailureDiagnostic(failure) : result.code === 0 && inspection !== undefined
       ? noAssistantTextDiagnostic(result, inspection, timeToFirstTextMs)
       : result.stderr || result.error || `pi exited with code ${result.code ?? 'null'} and produced no assistant text`;
     return {
@@ -502,6 +523,8 @@ function toHarnessRun(
       exitCode: result.code,
       text: '',
       diagnostic,
+      ...(failure === undefined ? {} : { failureScope: failure.scope }),
+      retryable: failure?.retryable ?? isTransientProviderFailure(result, credential),
       durationMs: result.durationMs,
       telemetry,
     };
@@ -535,14 +558,15 @@ function mergeUsage(
   };
 }
 
-function isTransientProviderFailure(result: BoundedRunResult): boolean {
-  if (result.timedOut) return false;
-  if (result.code === 0) {
-    const classification = inspectPiAssistantOutput(result.stdout, result.stdoutTruncated).classification;
-    return classification === 'missing-text-parts' || classification === 'empty-text';
-  }
-  const diagnostic = `${result.stderr}\n${result.error}`;
-  return /(?:\b429\b|rate[ -]?limit|\b50[0234]\b|ECONNRESET|ETIMEDOUT|fetch failed|socket hang up)/iu.test(diagnostic);
+function isTransientProviderFailure(result: BoundedRunResult, credential?: string): boolean {
+  if (result.timedOut || result.stdoutTruncated) return false;
+  const failure = readPiFailure(result.stdout, result.code === 0 ? undefined : result.stderr || result.error, credential);
+  if (failure !== undefined) return failure.retryable;
+  if (result.code !== 0) return false;
+  const inspection = inspectPiAssistantOutput(result.stdout);
+  return inspection.stopReason === 'stop' && inspection.outputTokens === 0
+    && inspection.contentPartTypes.every((part) => part === 'text')
+    && (inspection.classification === 'missing-text-parts' || inspection.classification === 'empty-text');
 }
 
 function delay(milliseconds: number): Promise<void> {
@@ -556,7 +580,12 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
   return {
     harness: 'pi',
     async prepare(settings: HarnessSettings): Promise<PreparedPi> {
-      const effectivePolicy = settings.maxOutputTokens === undefined ? policy : validatePolicy({ ...options, maxOutputTokens: settings.maxOutputTokens });
+      if (settings.modelProtocol === 'openrouter-json' && settings.model.provider !== 'openrouter') {
+        throw new Error('openrouter-json requires the openrouter provider');
+      }
+      const effectivePolicy = validatePolicy({ ...options,
+        maxOutputTokens: settings.maxOutputTokens ?? policy.maxOutputTokens,
+        transientRetries: settings.retryOwnership === 'caller' ? 0 : policy.transientRetries });
       const rootDirectory = join(settings.workDirectory, 'pi-agent');
       await mkdir(rootDirectory, { recursive: true });
       const args = [
@@ -565,8 +594,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         'json',
         '--no-session',
         '--no-tools',
-        '--thinking',
-        effectivePolicy.thinkingLevel,
+        ...(effectivePolicy.thinkingLevel === undefined ? [] : ['--thinking', effectivePolicy.thinkingLevel]),
         '--provider',
         settings.model.provider,
         '--model',
@@ -584,16 +612,18 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
       return Object.freeze({
         harness: 'pi',
         model: settings.model,
-        description: `pi with isolated per-invocation agent directories under ${rootDirectory}; thinking=${effectivePolicy.thinkingLevel}, max-output-tokens=${effectivePolicy.maxOutputTokens}, temperature=${effectivePolicy.temperature ?? 'provider-default'}, structured-output=${effectivePolicy.structuredOutput}, transient-retries=${effectivePolicy.transientRetries} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
+        description: `pi with isolated per-invocation agent directories under ${rootDirectory}; thinking=${effectivePolicy.thinkingLevel ?? 'provider-default'}, max-output-tokens=${effectivePolicy.maxOutputTokens}, temperature=${effectivePolicy.temperature ?? 'provider-default'}, structured-output=${effectivePolicy.structuredOutput}, model-protocol=${settings.modelProtocol ?? 'compatible'}, transient-retries=${effectivePolicy.transientRetries} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
         command,
         args,
         cwd: settings.workDirectory,
         rootDirectory,
         agentConfig: buildAgentConfig(settings, effectivePolicy),
+        modelProtocol: settings.modelProtocol ?? 'compatible',
         settingsConfig: buildSettingsConfig(effectivePolicy),
         env,
         timeoutMs: settings.timeoutMs,
         transientRetries: effectivePolicy.transientRetries,
+        retryOwnership: settings.retryOwnership,
         maxOutputTokens: effectivePolicy.maxOutputTokens,
       });
     },
@@ -648,7 +678,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         const invocationDirectory = await mkdtemp(join(state.rootDirectory, 'invocation-'));
         const systemPromptFile = join(invocationDirectory, 'system-prompt.md');
         await Promise.all([
-          writeFile(join(invocationDirectory, 'models.json'), state.agentConfig, { mode: 0o600 }),
+          writeFile(join(invocationDirectory, 'models.json'), invocationAgentConfig(state, prompt), { mode: 0o600 }),
           writeFile(join(invocationDirectory, 'settings.json'), state.settingsConfig, { mode: 0o600 }),
           writeFile(systemPromptFile, prompt.system, { mode: 0o600 }),
         ]);
@@ -683,12 +713,12 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
             }
           },
         });
-        const run = toHarnessRun(result, timeToFirstTextMs, retryCount);
+        const run = toHarnessRun(result, timeToFirstTextMs, retryCount, credential, state.retryOwnership === 'caller');
         accumulatedUsage = mergeUsage(accumulatedUsage, run.telemetry?.usage);
         const elapsedMs = Math.max(0, Math.ceil(performance.now() - invocationStartedAt));
         if (run.status === 'succeeded'
           || attempt >= state.transientRetries
-          || !isTransientProviderFailure(result)
+          || !isTransientProviderFailure(result, credential)
           || elapsedMs + PI_TRANSIENT_RETRY_DELAY_MS >= totalTimeoutMs) {
           return {
             ...run,

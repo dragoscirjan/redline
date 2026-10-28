@@ -10,7 +10,7 @@
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { startMockServer } from './helpers/model-server.ts';
 import { describe, expect, it } from 'vitest';
 import { createHarnessExecutor } from '../src/harness-executor/registry.ts';
 import { parseReviewEnvironment } from '../src/review/environment.ts';
@@ -27,41 +27,6 @@ async function binaryAvailable(command: string): Promise<boolean> {
   });
 }
 
-interface MockServer {
-  readonly port: number;
-  stop(): Promise<void>;
-}
-
-async function startMockServer(): Promise<MockServer> {
-  const script = fileURLToPath(new URL('./fixtures/mock-model-server.mjs', import.meta.url));
-  const child = spawn(process.execPath, [script, '0'], {
-    stdio: ['ignore', 'pipe', 'inherit'],
-  });
-  const port = await new Promise<number>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('mock server did not start')), 10_000);
-    child.stdout!.once('data', (chunk: Buffer) => {
-      clearTimeout(timeout);
-      try {
-        resolve(JSON.parse(chunk.toString()).port);
-      } catch (error) {
-        reject(error instanceof Error ? error : new Error('mock server printed garbage'));
-      }
-    });
-    child.once('error', (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-  });
-  return {
-    port,
-    stop: () =>
-      new Promise<void>((resolve) => {
-        child.kill();
-        child.once('close', () => resolve());
-      }),
-  };
-}
-
 async function withLiveHarness(harness: 'pi' | 'opencode', test: (port: number) => Promise<void>): Promise<void> {
   if (!ENABLED) return;
   if (!(await binaryAvailable(harness))) return;
@@ -74,6 +39,19 @@ async function withLiveHarness(harness: 'pi' | 'opencode', test: (port: number) 
 }
 
 describe.skipIf(!ENABLED)('live harness integration', () => {
+  it('sends actual Pi/OpenRouter reasoning, strict v4 generation schema and output-token fields to loopback', async ({ skip }) => {
+    if (!(await binaryAvailable('pi'))) { skip(); return; }
+    const server = await startMockServer({ MOCK_EXPECT_REVIEW_PROTOCOL: '1', MOCK_EXPECT_MAX_OUTPUT_TOKENS: '32768' });
+    const fixture = await createBundleFixture();
+    try {
+      const parsed = parseReviewEnvironment({ ...cleanReviewEnvironment(fixture, 'pi'),
+        REDLINE_MODEL_CONFIG: JSON.stringify({ provider: 'openrouter', endpoint: `http://127.0.0.1:${server.port}/v1`, model: 'test-model', auth: 'none' }),
+        REDLINE_MODEL_AUTH: undefined, REDLINE_TIMEOUT: '1m', REDLINE_MAX_OUTPUT_TOKENS: '32768' });
+      const result = await runFileReviews({ environment: { ...parsed.review!, modelProtocol: 'openrouter-json' } });
+      expect(result.records[0]?.outcome, result.records[0]?.reason).toBe('clean');
+    } finally { await server.stop(); await fixture.cleanup(); }
+  }, 90_000);
+
   it.runIf(ENABLED)('pi runs the full review against the mock endpoint', async () => {
     await withLiveHarness('pi', async (port) => {
       const fixture = await createBundleFixture();

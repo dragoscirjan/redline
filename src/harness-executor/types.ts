@@ -32,13 +32,18 @@ export interface HarnessSettings {
    */
   readonly credential: HarnessCredential | undefined;
   readonly timeoutMs: number;
+  /** The caller owns Redline retry loops. Native runtime retries may remain, as documented by the adapter. */
+  readonly retryOwnership?: 'caller' | undefined;
   /** Optional per-call generation cap. Unset retains the harness's production default. */
   readonly maxOutputTokens?: number | undefined;
+  readonly modelProtocol?: 'compatible' | 'openrouter-json' | undefined;
   /** Caller-managed scratch directory for generated harness configuration. */
   readonly workDirectory: string;
 }
 
 export interface HarnessPrompt {
+  /** Trusted fixed schema supplied by the caller, never derived from repository content. */
+  readonly responseSchema?: Readonly<Record<string, unknown>>;
   readonly system: string;
   readonly user: string;
 }
@@ -78,6 +83,10 @@ export interface HarnessRun {
   readonly text: string;
   /** Bounded diagnostic (stderr and similar) for failure reporting. */
   readonly diagnostic: string;
+  /** Run scope is reserved for confirmed shared credentials/model/request-configuration failures. */
+  readonly failureScope?: 'file' | 'run' | undefined;
+  /** Explicit runtime/transport classification, never inferred by the review core from model prose. */
+  readonly retryable?: boolean | undefined;
   readonly durationMs: number;
   /** Bounded operational measurements; never contains prompt, output, or credential text. */
   readonly telemetry?: HarnessRunTelemetry | undefined;

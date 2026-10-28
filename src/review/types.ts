@@ -118,7 +118,7 @@ export const MAX_REVIEW_REASON_CHARS = 500;
 export const MAX_PERSISTED_REVIEW_REASON_CHARS = MAX_REVIEW_REASON_CHARS + 1;
 
 export type FileReviewOutcome = 'clean' | 'findings' | 'omitted';
-export type FileReviewExecution = 'executed' | 'reused';
+export type FileReviewExecution = 'executed' | 'reused' | 'not-started';
 export type FileReviewErrorKind =
   | 'harness-failed'
   | 'harness-timeout'
@@ -182,6 +182,28 @@ export interface FileFollowUpCoverage {
   readonly reason?: string | undefined;
 }
 
+export interface FileReviewAttempt {
+  readonly number: number;
+  /** Effective invocation limit after clamping to the remaining run budget. */
+  readonly timeoutMs: number;
+  /** Selected bounded strategy; enrichment may retain focused input when byte limits prevent expansion. */
+  readonly sourceContextStrategy: string;
+  readonly outcome: FileReviewOutcome;
+  readonly errorKind?: FileReviewErrorKind | undefined;
+  readonly reason?: string | undefined;
+  readonly durationMs: number;
+}
+
+export interface ReviewRetryTelemetry {
+  readonly limit: number;
+  readonly timeoutIncrementMs: number;
+  readonly attempts: number;
+  readonly retriedFiles: number;
+  readonly recoveredFiles: number;
+  readonly exhaustedFiles: number;
+  readonly deadlineSkippedFiles: number;
+}
+
 export interface FileReviewRecord {
   readonly version: typeof FILE_REVIEW_RECORD_VERSION;
   readonly fileId: string;
@@ -198,7 +220,9 @@ export interface FileReviewRecord {
   readonly findings: readonly PublishedFinding[];
   readonly rejectedCandidates: readonly RejectedCandidate[];
   readonly durationMs: number;
-  /** Whether this run executed the harness or restored a validated semantic match. */
+  /** Current-run invocation history only. Prior raw answers are not retained here. */
+  readonly attempts?: readonly FileReviewAttempt[] | undefined;
+  /** Executed, restored a validated semantic match, or not started after a shared harness failure. */
   readonly execution?: FileReviewExecution | undefined;
   /** Prior validated model time avoided by a reused record. */
   readonly savedDurationMs?: number | undefined;
@@ -259,6 +283,9 @@ export interface ReviewRunSummary {
   readonly excludedFiles?: readonly ReviewExcludedFile[];
   readonly findings: number;
   readonly codeContext: ReviewCodeContextRunCoverage;
+  /** First bounded, credential-redacted harness failure; run scope stops unscheduled work. */
+  readonly harnessFailure?: { readonly scope: 'file' | 'run'; readonly diagnostic: string } | undefined;
+  readonly retries?: ReviewRetryTelemetry | undefined;
   readonly executionBudget?: ReviewExecutionBudgetTelemetry | undefined;
   readonly reuse?: ReviewReuseTelemetry | undefined;
   readonly files: readonly ReviewRunSummaryFile[];

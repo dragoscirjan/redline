@@ -55,6 +55,7 @@ jobs:
           pnpm run benchmark:checkout
           evidence_changes="$(git status --porcelain --untracked-files=all -- \
             benchmark/performance/v1/baseline \
+            benchmark/policy-v8/performance \
             benchmark/model-execution/v1/live-glm-5.3-flash/report.json \
             benchmark/model-execution/v1/live-glm-5.3-flash/report.md \
             benchmark/review-eligibility/v1/report.json \
@@ -66,6 +67,7 @@ jobs:
             printf 'performance evidence changed:\n%s\n' "$evidence_changes" >&2
             git diff -- \
               benchmark/performance/v1/baseline \
+              benchmark/policy-v8/performance \
               benchmark/model-execution/v1/live-glm-5.3-flash/report.json \
               benchmark/model-execution/v1/live-glm-5.3-flash/report.md \
               benchmark/review-eligibility/v1/report.json \
@@ -134,6 +136,12 @@ jobs:
           REDLINE_MAX_OUTPUT_TOKENS: '32768'
           MOCK_EXPECT_MAX_OUTPUT_TOKENS: '32768'
         run: bash test/harness-matrix-run.sh "$HARNESS"
+
+      - name: Verify request protocol and retries at loopback HTTP boundary
+        if: matrix.harness == 'pi' || matrix.harness == 'opencode'
+        env:
+          REDLINE_LIVE_HARNESS_TESTS: '1'
+        run: node test/request-protocol-run.ts "${{ matrix.harness }}"
 
       # The per-harness review findings artifact: per-file JSON/Markdown
       # records and the run summary exactly as the review tool wrote them.
@@ -226,7 +234,7 @@ jobs:
         run: corepack pnpm@10.33.0 run typecheck
 
       - name: Exercise local capture, reporting, cancellation, and offline npm installation
-        run: corepack pnpm@10.33.0 exec vitest run test/application.test.ts test/local-cli.test.ts test/package.test.ts test/npm-release.test.ts test/cli-reporter.test.ts test/local-context.test.ts test/index-cache.test.ts test/output-budget.test.ts
+        run: corepack pnpm@10.33.0 exec vitest run test/application.test.ts test/local-cli.test.ts test/package.test.ts test/npm-release.test.ts test/cli-reporter.test.ts test/local-context.test.ts test/index-cache.test.ts test/output-budget.test.ts test/head-context.test.ts test/local-tool-discovery.test.ts test/scheduling.test.ts
 
   source-runtime:
     name: Source runtime (${{ matrix.runtime }})

@@ -15,7 +15,7 @@
     "src/code-context/*.ts", "src/code-intelligence/*.ts", "src/change-impact/*.ts",
     "src/context-bundle.ts", "src/duration.ts", "src/process-runner.ts", "src/review-eligibility.ts",
     "src/code-index/context.ts", "src/code-index/cache.ts", "src/code-index/lock.py", "src/code-index/export.py", "src/code-index/gitnexus-query.mjs",
-    "prompts/v7/*.md", "prompts/verification/v3/*.md",
+    "prompts/v8/*.md", "prompts/verification/v3/*.md",
     "docs/local-cli.md", "docs/portable-architecture.md"
   ],
   "bin": {

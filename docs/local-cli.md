@@ -41,7 +41,7 @@ Tags, object IDs, detached HEADs, and remote-tracking refs work as local Git rev
 
 ## Indexed cross-file context
 
-Indexing is enabled by default, with CGC 0.5.7 as the default provider. Like the GitHub action, Redline indexes the captured **base** snapshot and resolves bounded related callers, tests, and contracts from captured **head** source. Working-tree reviews use their synthetic revision IDs; later live edits cannot alter these inputs. Newly added or unsupported files can remain file-only because they have no supported base-graph anchor.
+Indexing is enabled by default, with CGC 0.5.7 as the default provider. Like the GitHub action, Redline indexes the captured **base** snapshot and resolves bounded related callers, tests, and contracts from captured **head** source. Working-tree reviews use their synthetic revision IDs; later live edits cannot alter these inputs. Newly added or unsupported files have no supported base-graph anchor. The local CLI additionally attempts bounded static-head discovery described below; remaining gaps stay explicit.
 
 ```bash
 redline review --base main --head HEAD --harness pi
@@ -81,6 +81,37 @@ Each run refreshes sanitized base bytes from immutable Git objects at a stable p
 The private cache retains at most eight completed entries and 2 GiB of managed state, with least-recently-used eviction. Oversized or unsafe entries are not retained. An OS-backed lock serializes local index preparation, so overlapping runs do not publish partial databases or index the same base concurrently. Lock ownership releases on normal completion or process exit; cancelled incomplete builds are discarded. Unknown files are not deleted by cache cleanup. These controls do not establish arbitrary-runner sandboxing.
 
 This establishes context-input parity, not equal indexing latency, model output validity, or finding quality. The default local finding scope remains `defects`; use `--finding-scope defects-and-risks` to match the dogfood workflow's broader scope. Candidate verification remains disabled in both paths.
+
+## Static captured-head context
+
+`--head-context enabled|disabled` defaults to enabled locally, independent of whether an indexer runs. For reviewed text files with no usable base-graph spans, it finds literal relative ESM imports/re-exports and their importing files in captured JavaScript/TypeScript source. This includes test files when they import the changed module. It never runs a resolver, interpreter, test, or repository configuration. Package aliases, dynamic imports, Python imports, runtime resolution, and exhaustive test discovery are not implemented.
+
+Spans carry provider `static-head` version `1`, the captured **head** revision, and an explicit lexical-candidate limitation. They have no graph references and are never proof of reachability. Coverage remains partial. The graph artifact in `index/` still describes only the external provider; review coverage counts the additional source-backed spans and reports `static-head-context`. This fallback does not satisfy `--indexing required`'s provider-context preflight.
+
+Discovery examines at most 512 code files, 256 directories, depth 12, 4,096 entries per directory, 128 KiB per file, 8 MiB total, the first 4,096 lines per file, import lines at most 1,024 characters long, and 32 literal imports per file. Selection is deterministic; directories exceeding the entry bound are omitted. It selects at most four related files per reviewed file, 40 lines/8 KiB per span, within the existing 24 KiB per-file and 48 KiB run-wide related-source bounds. Missing, unsafe, symlinked, invalid-UTF8 or oversized source is never evidence of absence.
+
+## Resume validated work
+
+Local result reuse defaults to enabled. Repeat the same review command; no previous run path is required:
+
+```bash
+redline review --base main --head HEAD --harness pi
+redline review --base main --head HEAD --harness pi
+# Explicitly bypass result reuse:
+redline review --base main --head HEAD --harness pi --reuse disabled
+```
+
+The private repository-scoped cache lives in `$XDG_STATE_HOME/redline/results/v1` (or `$HOME/.local/state/...`). It stores only validated clean/findings records, not failures. Completed files can therefore survive a partially failed or interrupted run. An exact semantic fingerprint includes model/endpoint/auth mode, protocol, output allowance, policy/schema, diff, captured source, related context, initial per-file timeout and retry policy. When retries are enabled, it also hashes the bounded enriched context, even if the first attempt succeeds. A recovered result cannot be reused after relevant source or retry-policy changes. Current evidence is revalidated, file IDs/revisions are remapped, and each run rebuilds coverage, verdicts, synthesis and artifacts. A cache hit does not authorize stale publication.
+
+Readers bound restored entries to 2,000 files, 512 KiB per record, and 32 MiB total. Writers reserve the same quotas per loaded cache; concurrent publication uses atomic replacement, so a collision can lose reuse but cannot become an unvalidated success. Unsafe/private-directory failures disable reuse, not review; cache misses, invalid records and changed fingerprints run normally. Existing state parents are never chmod'ed.
+
+Old run directories are not retroactively imported as trustworthy cache records. Reuse starts with records written by this implementation. The v8 policy-text and v7 assembler/retry-contract changes invalidate earlier fingerprints. Terminal output reports both the configured availability and actual reused/executed counts.
+
+## Scheduling and deadlines
+
+After reuse selection, preflight reports uncached file count, worker count, policy, remaining time, and a worst-case bound if every file exhausts all configured attempt allowances. This is **not** a model-latency or cost forecast. Capture/index time already spent reduces the available review time. Redline never expands the whole-run deadline, concurrency or token allowances automatically. The local retry policy below explicitly adds two minutes to a file's next attempt after a per-file timeout.
+
+`--scheduling largest-first|mixed` defaults to the existing largest-diff-first policy. `mixed` alternates largest and smallest diffs to start some short work earlier. Both preserve bounded workers and manifest-order artifacts. Serial execution, including gated candidate verification, retains manifest order. Size is only a heuristic; mixed scheduling can improve deadline coverage while increasing makespan. The deterministic experiment in `benchmark/performance/mixed-scheduling/v1/` records that trade-off on one fixed synthetic corpus; it is not live-model evidence.
 
 ## Review uncommitted changes
 
@@ -148,6 +179,27 @@ Other environment names mirror their scalar flags using uppercase and underscore
 
 Repository configuration cannot choose model endpoints, executables, credentials, output paths, or reporters. The only repository policy consumed is the existing strict `.redline/review-eligibility.json` from the resolved committed base. Uncommitted policy cannot hide its own changes. There is no additional project config loader.
 
+## Review retries and timeouts
+
+```bash
+redline review --base main --head HEAD --harness pi \
+  --retries 3 --timeout 4m --run-timeout 20m
+```
+
+`--retries COUNT` defaults to **3 additional file-review attempts**, up to four attempts total. Values are decimal integers from 0 through 10; `0` disables Redline retries. `REDLINE_RETRIES` and the trusted user-config string key `"retries"` use the same validation. Flags override environment, which overrides user config. These local defaults do not change legacy GitHub Action execution.
+
+Retryable failures are classified transient HTTP/transport errors, Pi's successful-stop zero-token empty provider responses, invalid review documents including JSON/schema, wrong target, evidence or finding-scope failures, per-file timeouts, and model-declared source/excerpt/context omissions. Unknown harness failures, authentication/credit/model/request-configuration failures, token exhaustion, malformed harness streams, capture truncation, cancellation and the whole-run deadline are not retryable. Every new answer is validated independently; retries do not repair JSON or weaken evidence checks. A file still omitted after retries remains incomplete.
+
+The first pass gives every uncached file an initial attempt before retry rounds start. Rounds containing classified upstream failures wait 1s, 2s, 4s, then at most 5s before retrying. The wait is clamped to remaining run time; no request starts if that wait exhausts the deadline. Invalid-output, file-timeout and source-excerpt rounds do not add this delay unless the same round also contains an upstream failure. Local cancellation interrupts the wait. Backoff consumes the existing run budget and never extends it. Each file shares one retry counter across all retryable failure types; switching failure types does not reset it. Worker limits and manifest-order final artifacts stay unchanged. Valid completed results are reused rather than rerun.
+
+`--timeout` is the **initial per-attempt** limit, default `4m`, separate from `--run-timeout`. Only a per-file timeout adds `2m` to that file's next limit. Four consecutive timeouts therefore use limits of `4m`, `6m`, `8m`, `10m`. Invalid output or upstream errors leave the current limit unchanged. `--run-timeout` stays a hard total budget including capture, indexing and all attempts. Each invocation is clamped to remaining time, so not every allowed retry is guaranteed to fit. For example, the four timeout allowances total 28 minutes for one file and cannot all fit into a 20-minute run.
+
+Excerpt retries can include additional base/head source only from the same immutable capture. Small files can become complete within the existing 64 KiB per-side limit; larger files may receive wider surrounding excerpts if they fit. The 128 KiB file-read and 512 KiB complete prompt-payload limits do not grow. If enrichment cannot fit, the original context is retained. Source omissions and truncation remain explicit; repository code is never executed.
+
+The retry count measures **Redline review attempts, not HTTP requests**. Pi's adapter and native provider retries are disabled in caller-managed mode. OpenCode 1.18.34 retains five hardcoded native provider retries inside each Redline attempt, so four attempts can issue up to 24 provider requests. OpenCode has no supported disable switch in this integration. Its native requests share the per-attempt timeout and hard whole-run deadline. The CLI warns about this distinction; loopback fixtures verify both harness counts without a paid model.
+
+Per-file JSON records include bounded redacted `attempts` metadata with effective timeouts, source strategy, outcome, error kind and duration. Prior raw answers are not included in that history. File duration totals all attempts. The terminal and run summary report attempts, retried/recovered files, exhausted counters and files lacking time for remaining retries. These counters do not establish finding correctness or live-provider quality.
+
 ## Output-token budget
 
 `--max-output-tokens COUNT` sets the maximum output tokens for each model invocation. Its environment equivalent is `REDLINE_MAX_OUTPUT_TOKENS`; the trusted user-config key is `"max-output-tokens"` with a string value. Precedence remains CLI → environment → user config. Values must be decimal integers from 1,024 through 262,144; larger explicit values such as `32768` or `65536` are supported. This safety ceiling is not a claim about any model's capacity. Providers can reject requests above their supported limits; Redline does not retry token exhaustion automatically.
@@ -159,6 +211,25 @@ redline review --base main --head HEAD --harness pi --max-output-tokens 32768
 When unset, Pi retains its benchmark-derived 16,384-token default; OpenCode retains its existing model/provider defaults. An explicit setting configures Pi's isolated model `maxTokens` and OpenCode's runtime output ceiling, without changing OpenCode's model context-window metadata. OpenCode's catalog/provider may impose a lower model limit. Echo makes no model call; it validates and records the selection for integration tests.
 
 Output tokens are not bytes, words, context-window capacity, a whole-run allowance, or a dollar budget. Reasoning can consume this allowance depending on the provider. This setting does not allocate separate reasoning tokens or reserve tokens for final JSON, and does not promise syntactically valid output. Timeouts remain independent. Higher token allowances can increase cost and memory use: retained harness stdout remains separately bounded at 8–64 MiB (16 MiB for a 32,768-token allowance); persisted diagnostics and prompt bounds remain unchanged. An explicit token allowance participates in semantic review-cache fingerprints and is recorded in local `status.json` and terminal output.
+
+## Model request protocol
+
+`--model-protocol compatible|openrouter-json` defaults to `compatible`. Both profiles preserve model/provider reasoning behavior; neither disables reasoning or forces a thinking level.
+
+For an explicit Pi/OpenRouter probe:
+
+```bash
+redline review --base main --head HEAD --harness pi \
+  --provider openrouter --endpoint https://openrouter.ai/api/v1 \
+  --model z-ai/glm-5.3-flash --max-output-tokens 32768 \
+  --model-protocol openrouter-json --scheduling mixed
+```
+
+The profile preserves provider/model reasoning behavior and sends no reasoning-disable override. It sends `provider: {require_parameters:true}` and a strict JSON Schema generation request for the fixed v4 discovery document. Tools remain disabled and sampling remains provider-default. The schema requires a concise reason even on clean results and excludes null optional fields; guidance findings omit proposed replacement text. Core JSON, schema, source/diff and impact-reference validation still runs independently. Other prompts without a supplied schema use JSON-object formatting.
+
+Selecting this profile with another harness/provider fails before model execution; it never silently downgrades. An unsupported endpoint, model, schema feature or upstream provider can reject the request. Loopback tests verify actual wire fields, not that every upstream honors them or that findings are correct. There is no separate repair model call or silent JSON repair. Rejected/malformed review documents can receive a fresh attempt under the local retry policy above. Separate reasoning allocation and reserved final-answer tokens remain unimplemented.
+
+The new local flags have corresponding `REDLINE_REUSE`, `REDLINE_HEAD_CONTEXT`, `REDLINE_SCHEDULING` and `REDLINE_MODEL_PROTOCOL` settings and same-named string keys in trusted user configuration. They do not change the legacy GitHub Action environment contract.
 
 ## Arguments
 
@@ -179,8 +250,13 @@ Run `redline review --help` for the complete contract.
 - `--code-context PATH`, `--code-context-repository ID`: optional artifact import and expected namespace.
 - `--harness pi|opencode|echo`: default `pi`.
 - `--provider`, `--endpoint`, `--model`, `--auth none`: trusted model selection.
+- `--reuse enabled|disabled`: default `enabled`; exact validated-result reuse.
+- `--head-context enabled|disabled`: default `enabled`; bounded static-head source candidates.
+- `--scheduling largest-first|mixed`: default `largest-first`.
+- `--model-protocol compatible|openrouter-json`: default `compatible`; explicit Pi/OpenRouter wire controls.
 - `--max-output-tokens COUNT`: optional per-call generation cap, `1024`–`262144`; Pi defaults to `16384` when unset.
-- `--timeout`: per-file deadline, default `4m`.
+- `--timeout`: initial per-file attempt deadline, default `4m`.
+- `--retries`: additional review attempts per file, default `3`, range `0`–`10`. Per-file timeouts add `2m` to the next attempt.
 - `--run-timeout`: whole-run deadline including capture, indexing, and review, default `10m`. Local context preparation has an additional five-minute ceiling within that budget.
 - `--concurrency`: integer `1`–`8`, default `4`.
 - `--finding-scope defects|defects-and-risks`: default `defects`.
@@ -199,11 +275,11 @@ Default artifact location: `$XDG_STATE_HOME/redline/reviews/run-*`, or `$HOME/.l
 - `reviews/`: existing validated file records, summary, and consolidated review as JSON and Markdown.
 - `status.json`: local completion, failure, cancellation, or deadline classification and exit code.
 
-Review schemas remain unchanged. Synthetic working-copy commit IDs and the index digest identify captured states, not user commits. Bundle/evidence selection is deterministic; existing operational durations and telemetry still vary between runs.
+Model review documents remain unchanged. Operational file records additionally distinguish `not-started` after a shared harness failure; run summaries can carry the first bounded, redacted diagnostic in `harnessFailure`. Synthetic working-copy commit IDs and the index digest identify captured states, not user commits. Bundle/evidence selection is deterministic; existing operational durations and telemetry still vary between runs.
 
-Interactive stderr uses one updating, width-bounded dot strip in manifest order, with completed/total and running counts. Green means a validated clean file; red means findings; gray means intentionally inert/excluded; yellow `!` means a failed or omitted review. Waiting/running files use outlined dots. Failures never appear as inert or clean. Without colors, distinct symbols (`+`, `x`, `-`, `!`, `o`, `.`) retain these meanings. Redirected output has no animation or automatic ANSI colors and does not emit per-file start/completion lines.
+Interactive stderr uses one updating, width-bounded dot strip in manifest order, with completed/total and running counts. Green means a validated clean file; red means findings; gray means intentionally inert/excluded; yellow `!` means a failed or omitted review. Waiting/running files use outlined dots. Failures never appear as inert or clean. Without colors, distinct symbols (`+`, `x`, `-`, `!`, `o`, `.`) retain these meanings. Retry rounds update that same live line without printing individual retry messages. Preflight messages erase the transient line instead of leaving a frozen progress bar behind. Capture and context preparation use ordinary status lines. Retry totals appear only in the final report, and there is no second final dot strip. Redirected output has no animation or automatic ANSI colors and does not emit per-file start, completion, or retry lines.
 
-Final output states complete/incomplete review coverage, indexed-context status/provider/usable span counts, verdict, grouped failure counts, and the artifact path. File-only fallbacks are reported before model review; they are not labeled as indexed coverage. Findings are grouped by filename, with severity, side, line span, explanation, and an excerpt from the authoritative captured diff. Old/new line numbers are preserved and `>` marks cited changed lines. Each excerpt is capped at 20 lines and clearly marked when clipped or unavailable. The reader revalidates the bundle revisions, file identity, evidence, and span endpoints; it never substitutes model text for missing diff context. Existing proposed fixes are shown separately, capped at 20 lines, and labeled as not applied or test-verified. A missing fix is reported explicitly, not invented.
+Final output uses plain headings and aligned counts, without frames or boxes. Coverage, execution and retry totals, context, incomplete reviews, findings, and capture limitations are grouped into separate sections. It states complete/incomplete review coverage, indexed-context status/provider/usable span counts, verdict, grouped failure counts, and the artifact path. Recognized harness errors use a readable explanation, including output-token exhaustion; the full transport diagnostic remains unchanged in the artifacts. File-only fallbacks are reported before model review; they are not labeled as indexed coverage. Findings are grouped by filename, with severity, classification, side, line span, model confidence, uncertainty, explanation, and an excerpt from the authoritative captured diff. Titles and explanations wrap separately from source excerpts. Model confidence is reported as supplied, not as proof of correctness. Old/new line numbers are preserved and `>` marks cited changed lines. Each excerpt is capped at 20 lines and clearly marked when clipped or unavailable. The reader revalidates the bundle revisions, file identity, evidence, and span endpoints; it never substitutes model text for missing diff context. Existing proposed fixes are shown separately, capped at 20 lines, and labeled as not applied or test-verified. A missing fix is reported explicitly, not invented.
 
 Terminal data is control-character filtered, bounded, and credential-redacted before coloring. Tabs are displayed as four spaces; authoritative source and diff bytes remain unchanged. Only these bounded reviewed-diff excerpts and proposed-fix blocks are displayed—not full source payloads, prompts, raw model output, reasoning, or publication tokens. Source and bounded redacted model artifacts remain on disk under the existing artifact contract; protect the output directory accordingly.
 
@@ -220,6 +296,16 @@ Terminal data is control-character filtered, bounded, and credential-redacted be
 `--fail-on high` includes high and critical findings. Incomplete reviews fail regardless of the finding threshold. Reporter failure cannot erase review artifacts or stop other reporters. Preflight configuration failure stops before review execution.
 
 SIGINT and SIGTERM cancel capture, active indexers, and active harness processes. Unix uses process-group termination; Windows uses the OS process-tree termination tool for the spawned process IDs. No shell is used to launch a harness. Node-based npm harness shims are resolved to their installed JavaScript entrypoints rather than executing Windows command scripts. Temporary Git/harness scratch cleanup is attempted on handled exit paths. If revision-snapshot disposal fails, the CLI prints a content-free warning without replacing the completed review result or the original execution/cancellation error; cleanup is not claimed to have succeeded. Interrupted runs can retain partial artifacts and `status.json`; they are never presented as complete reviews. Force-killing the Redline process cannot guarantee cleanup.
+
+## Harness errors
+
+Pi runtime errors are retained as `pi-error/v1` diagnostics, capped at 500 characters. The selected credential is redacted before control filtering, truncation, and JSON escaping. Matching covers the literal and JSON-escaped credential plus URI-component, strict RFC 3986 and form encodings through two layers, including mixed percent-escape hex case. Matching preserves unrelated diagnostic text and never recursively decodes the error message or builds a regex from the credential. This bounded set is not a guarantee for arbitrary encodings such as Base64. Only the runtime error message (or a failed process's stderr) is used, not prompt, response, reasoning, or agent-history fields. The terminal shows the first bounded diagnostic as well as failure counts. Errors discarded by older runs cannot be recovered from their artifacts.
+
+Recognized shared authentication, credit, model/endpoint, and request-parameter failures stop new harness calls. Already-active calls settle within their existing budgets. Remaining files are recorded as omitted with `execution: not-started`, zero duration, and the shared reason; they are not counted as executed or reused. A shared fatal failure makes the run unsuccessful even if some in-flight files completed. Valid completed reviews can still be reused later.
+
+Unknown errors, context-length errors, and content refusals remain file-local. An error stop is not retried merely because it has no text. Local execution uses the shared retry policy above. The legacy Action's one-retry cap applies only to explicit transient HTTP/transport failures or a zero-output-token empty response with a successful stop. Token exhaustion and malformed streams do not trigger Redline retries. Rejected review documents can be retried locally, but never silently repaired.
+
+Loopback success/error tests establish request and failure handling, not live-provider acceptance. Validate a controlled one-file review against the selected live profile before another full batch; no silent protocol downgrade or larger budget is applied.
 
 ## Bounds and trust
 

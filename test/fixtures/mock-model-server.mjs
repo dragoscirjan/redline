@@ -24,7 +24,9 @@ function replyFor(body) {
   if (FIXED_REPLY !== null) return FIXED_REPLY;
   const match = FILE_ID_PATTERN.exec(body);
   const fileId = match === null ? '000000' : match[1];
-  return JSON.stringify({ version: 2, fileId, outcome: 'clean', findings: [] });
+  return process.env.MOCK_EXPECT_REVIEW_PROTOCOL === '1'
+    ? JSON.stringify({ version: 4, fileId, outcome: 'clean', reason: 'No supported defects.', contextRequests: [], findings: [] })
+    : JSON.stringify({ version: 2, fileId, outcome: 'clean', findings: [] });
 }
 
 function chunkString(value, size) {
@@ -41,6 +43,17 @@ const server = http.createServer((request, response) => {
     body += chunk;
   });
   request.on('end', () => {
+    // Test-only expectation: never print supplied header values, even on failure.
+    const expectedAuth = process.env.MOCK_EXPECT_AUTHORIZATION;
+    const actualAuth = request.headers.authorization;
+    const matchesAuth = expectedAuth === 'credential-less' ? actualAuth === undefined || actualAuth === 'Bearer redline-unauthenticated'
+      : expectedAuth === 'absent' ? actualAuth === undefined : actualAuth === expectedAuth;
+    if (expectedAuth !== undefined && !matchesAuth) {
+      response.writeHead(401, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: { code: 401, message: actualAuth === undefined
+        ? 'Missing Authentication header' : 'Incorrect Authentication header' } }));
+      return;
+    }
     if ((request.url ?? '').includes('/models')) {
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ object: 'list', data: [{ id: 'test-model' }] }));
@@ -58,6 +71,25 @@ const server = http.createServer((request, response) => {
       response.writeHead(400, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ error: { message: 'unexpected output-token limit', type: 'invalid_request_error' } }));
       return;
+    }
+    if (process.env.MOCK_EXPECT_REVIEW_PROTOCOL === '1') {
+      const format = parsed.response_format;
+      if (parsed.reasoning !== undefined || parsed.reasoning_effort !== undefined || parsed.thinking !== undefined) {
+        response.writeHead(400, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: { code: 400, message: 'Reasoning is mandatory for this endpoint and cannot be disabled.' } }));
+        return;
+      }
+      if (parsed.provider?.require_parameters !== true
+        || format?.type !== 'json_schema' || format.json_schema?.strict !== true
+        || format.json_schema?.schema?.properties?.version?.const !== 4
+        || !format.json_schema?.schema?.required?.includes('contextRequests')
+        || format.json_schema?.schema?.additionalProperties !== false
+        || (parsed.tools?.length ?? 0) !== 0) {
+        process.stderr.write('review protocol request fields missing or incorrect\n');
+        response.writeHead(400, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: { message: 'unexpected review request protocol', type: 'invalid_request_error' } }));
+        return;
+      }
     }
     const reply = replyFor(body);
     if (parsed.stream === true) {

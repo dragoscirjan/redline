@@ -132,6 +132,10 @@ function renderRecordMarkdown(record: FileReviewRecord): string {
   }
   if (record.reason !== undefined) lines.push(`- **Reason:** ${record.reason}`);
   if (record.errorKind !== undefined) lines.push(`- **Error kind:** ${record.errorKind}`);
+  if (record.attempts !== undefined) {
+    lines.push(`- **Review attempts:** ${record.attempts.length}`);
+    for (const attempt of record.attempts) lines.push(`- Attempt ${attempt.number}: ${attempt.outcome}; ${attempt.timeoutMs} ms effective timeout; ${attempt.durationMs} ms elapsed; ${attempt.sourceContextStrategy}${attempt.errorKind === undefined ? '' : `; ${attempt.errorKind}`}`);
+  }
   lines.push(`- **Rejected candidates:** ${record.rejectedCandidates.length}`);
   lines.push('', '');
   if (record.findings.length === 0) {
@@ -169,6 +173,10 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
     ...(summary.executionBudget === undefined ? [] : [
       `- **Execution deadlines:** ${summary.executionBudget.fileTimeoutMs} ms per file, ${summary.executionBudget.runTimeoutMs} ms whole run`,
       `- **Deadline result:** ${summary.executionBudget.deadlineExhausted ? 'exhausted' : 'completed within budget'}; ${summary.executionBudget.deadlineOmittedFiles} files omitted, ${summary.executionBudget.elapsedMs} ms elapsed`,
+    ]),
+    ...(summary.retries === undefined ? [] : [
+      `- **Review retries:** ${summary.retries.limit} additional attempts per file; ${summary.retries.attempts} total review attempts; ${summary.retries.retriedFiles} files retried; ${summary.retries.recoveredFiles} recovered`,
+      `- **Retry limits:** ${summary.retries.exhaustedFiles} files exhausted attempts; ${summary.retries.deadlineSkippedFiles} files lacked time for remaining attempts; timeout increment ${summary.retries.timeoutIncrementMs} ms`,
     ]),
     ...(summary.reuse === undefined ? [] : [
       `- **Review reuse:** ${summary.reuse.status}; ${summary.reuse.reusedFiles} reused, ${summary.reuse.executedFiles} executed, ${summary.reuse.savedDurationMs} ms estimated saved`,

@@ -7,6 +7,8 @@ import { runVerificationBenchmark, type RecordedDecision } from '../src/benchmar
 const ORIGINAL = resolve('benchmark/review-quality/v2');
 const EXTENSION = resolve('benchmark/review-quality/verification-v1');
 const DECISIONS = resolve(EXTENSION, 'dispositions.json');
+// The benchmark returns a report; these input corpus directories do not select its reference snapshot.
+const REFERENCE_REPORT = resolve('benchmark/policy-v8/verification/report.json');
 
 async function recordedDecisions(): Promise<readonly RecordedDecision[]> {
   const parsed = JSON.parse(await readFile(DECISIONS, 'utf8')) as { decisions: RecordedDecision[] };
@@ -49,7 +51,7 @@ describe('scripted candidate verification quality gate', () => {
       activationReady: false,
     });
     expect(report.gate.activationReason).toContain('do not measure independent model recall');
-    expect(JSON.parse(await readFile(resolve(EXTENSION, 'report.json'), 'utf8'))).toEqual(report);
+    expect(JSON.parse(await readFile(REFERENCE_REPORT, 'utf8'))).toEqual(report);
   });
 
   it('fails when the scripted verifier rejects a known defect instead of hiding a recall regression', async () => {

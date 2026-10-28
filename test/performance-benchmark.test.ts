@@ -14,7 +14,7 @@ import { parseDuration } from '../src/duration.ts';
 
 const CORPUS = resolve('benchmark/performance/v1/corpus.json');
 const PROFILE = resolve('benchmark/performance/v1/profile.json');
-const BASELINE = resolve('benchmark/performance/v1/baseline');
+const BASELINE = resolve('benchmark/policy-v8/performance');
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {

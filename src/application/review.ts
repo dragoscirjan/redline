@@ -5,10 +5,12 @@ import type { ReviewWriter } from '../review/writer.ts';
 
 export type ReviewEvent =
   | { readonly kind: 'started' }
+  | { readonly kind: 'workload'; readonly files: number; readonly workers: number; readonly maximumExecutionMs: number; readonly remainingMs: number; readonly mayExceedDeadline: boolean; readonly scheduling: string; readonly staticHeadFiles: number }
   | { readonly kind: 'context-started'; readonly provider: string }
   | { readonly kind: 'context-ready'; readonly status: ReviewRunResult['summary']['codeContext']['status']; readonly relatedSpans: number; readonly fileOnlyFiles: number; readonly indexCache?: 'reused' | 'rebuilt' | 'uncached' | 'not-needed' | 'unavailable' | 'imported' }
   | { readonly kind: 'planned'; readonly files: readonly { readonly fileId: string; readonly reviewed: boolean }[] }
   | { readonly kind: 'file-started'; readonly fileId: string }
+  | { readonly kind: 'file-retry'; readonly fileId: string; readonly attempt: number; readonly maximumAttempts: number; readonly timeoutMs: number; readonly reason: string }
   | { readonly kind: 'file-completed'; readonly fileId: string; readonly outcome: 'clean' | 'findings' | 'omitted' }
   | { readonly kind: 'cleanup-failed' }
   | { readonly kind: 'completed' }
@@ -114,8 +116,10 @@ export class ReviewApplication {
       const result = await (this.dependencies.execute ?? executePreparedReview)({
         environment: { ...command.environment, reviewDirectory: captured.reviewDirectory, sourceDirectory: captured.sourceDirectory, codeContext },
         ...(this.dependencies.artifacts === undefined ? {} : { writer: this.dependencies.artifacts }),
+        onWorkload: (value) => reporter.progress({ kind: 'workload', ...value }),
         onReviewPlan: (files) => reporter.progress({ kind: 'planned', files }),
         onFileStart: ({ fileId }) => reporter.progress({ kind: 'file-started', fileId }),
+        onFileRetry: ({ fileId, attempt, maximumAttempts, timeoutMs, reason }) => reporter.progress({ kind: 'file-retry', fileId, attempt, maximumAttempts, timeoutMs, reason }),
         onFileDone: ({ fileId, outcome }) => reporter.progress({ kind: 'file-completed', fileId, outcome }),
       });
       // Execution has persisted authoritative artifacts. Report their actual

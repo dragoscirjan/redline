@@ -56,6 +56,22 @@ class RecordingSpawner implements ProcessSpawner {
 }
 
 describe('createOpenCodeExecutor', () => {
+  it.each([[503, true, 'file'], [401, false, 'run']] as const)('classifies caller-managed runtime HTTP %s errors without accepting partial text', async (statusCode, retryable, scope) => {
+    const workDirectory = await mkdtemp(join(tmpdir(), 'redline-oc-failure-'));
+    try {
+      const spawner = new RecordingSpawner();
+      spawner.script(JSON.stringify({ type: 'text', part: { type: 'text', text: 'PRIVATE_PARTIAL_RESPONSE' } }) + '\n'
+        + JSON.stringify({ type: 'error', error: { name: 'APIError', data: { statusCode, message: 'provider failure test-key', isRetryable: retryable, responseBody: 'PRIVATE_RESPONSE_BODY' } } }), 0);
+      const executor = createOpenCodeExecutor({ spawner });
+      const prepared = await executor.prepare({ ...SETTINGS, workDirectory, retryOwnership: 'caller' });
+      const run = await executor.execute(prepared, { system: 'policy', user: 'fixture' });
+      expect(run).toMatchObject({ status: 'failed', failureScope: scope, retryable, text: '' });
+      expect(run.diagnostic).toContain('[redacted]');
+      expect(run.diagnostic).not.toContain('test-key');
+      expect(run.diagnostic).not.toContain('PRIVATE_');
+      expect(spawner.requests).toHaveLength(1);
+    } finally { await rm(workDirectory, { recursive: true, force: true }); }
+  });
   it('sets the runtime output ceiling without replacing model context-window metadata', async () => {
     const workDirectory = await mkdtemp(join(tmpdir(), 'redline-oc-budget-'));
     try {

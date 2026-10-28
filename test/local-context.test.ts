@@ -130,7 +130,9 @@ describe('local indexed-context parity', () => {
     expect(result.code, result.stderr).toBe(0);
     const report = await summary(result.output);
     expect(report.codeContext.status).toBe('complete'); expect(report.codeContext.relatedSpans).toBe(1);
-    expect(result.stdout).toContain('Indexed context: complete; 1 file with context; 1 related span; cgc 0.5.7');
+    expect(result.stdout).toMatch(/Indexed context:\s+complete/u);
+    expect(result.stdout).toMatch(/Related source:\s+1 file with context; 1 related span/u);
+    expect(result.stdout).toMatch(/Provider:\s+cgc 0\.5\.7/u);
     const capture = JSON.parse(await readFile(join(result.output, 'capture.json'), 'utf8'));
     expect(capture.repositoryIdentity).toMatch(/^local\/[a-f0-9]{64}$/u);
     const path = join(result.output, 'index/code-context.json');
@@ -220,7 +222,9 @@ fs.mkdirSync(process.env.GITNEXUS_STORAGE_PATH,{recursive:true});fs.writeFileSyn
     const f = await fixture();
     const bestEffort = await f.run(['--index-executable', join(f.root, 'missing')]);
     expect(bestEffort.code, bestEffort.stderr).toBe(0);
-    expect((await summary(bestEffort.output)).codeContext.status).toBe('unavailable');
+    expect((await summary(bestEffort.output)).codeContext.status).toBe('partial');
+    expect((await summary(bestEffort.output)).codeContext.diagnosticCodes).toContain('static-head-context');
+    expect(JSON.parse(await readFile(join(bestEffort.output, 'index/status.json'), 'utf8')).status).toBe('unavailable');
     const required = await f.run(['--index-executable', join(f.root, 'missing'), '--indexing', 'required']);
     expect(required.code).toBe(1); expect(required.stderr).toContain('required indexed context');
     expect(await readFile(join(required.output, 'reviews/summary.json'), 'utf8').catch(() => null)).toBeNull();

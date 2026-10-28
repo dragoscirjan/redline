@@ -57,12 +57,25 @@ it('can stop a fixture again after its process has already closed', async () => 
   await server.stop();
 }, 2000);
 
-it('serves controlled HTTP errors without recording request bodies or headers', async () => {
+it('serves fixed errors without exposing request content through responses, logs or its public API', async () => {
+  const logs = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) =>
+    vi.spyOn(console, method).mockImplementation(() => {}));
   const server = await startErrorServer(401, 'Invalid fixture key');
+  const body = 'FIXTURE_REQUEST_BODY_SENTINEL';
+  const authorization = 'FIXTURE_REQUEST_HEADER_SENTINEL';
   try {
-    const result = await fetch(`http://127.0.0.1:${server.port}/v1/chat/completions`, { method: 'POST', body: 'fixture data' });
+    const result = await fetch(`http://127.0.0.1:${server.port}/v1/chat/completions`, {
+      method: 'POST', body, headers: { authorization },
+    });
     expect(result.status).toBe(401);
-    expect(await result.json()).toMatchObject({ error: { message: 'Invalid fixture key' } });
+    const response = await result.text();
+    expect(JSON.parse(response)).toMatchObject({ error: { code: 401, message: 'Invalid fixture key' } });
+    expect(response).not.toContain(body); expect(response).not.toContain(authorization);
+    expect(Object.keys(server).sort()).toEqual(['port', 'requests', 'stop']);
     expect(server.requests()).toBe(1);
+    for (const log of logs) {
+      const output = JSON.stringify(log.mock.calls);
+      expect(output).not.toContain(body); expect(output).not.toContain(authorization);
+    }
   } finally { await server.stop(); }
 });

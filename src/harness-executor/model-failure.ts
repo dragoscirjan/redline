@@ -5,11 +5,49 @@ export interface ModelFailureClassification {
   readonly retryable: boolean;
 }
 
+function percentHexCase(value: string): string {
+  return value.replace(/%(?:25)?[0-9a-f]{2}/giu, (escape) => escape.toUpperCase());
+}
+
+/** Equal-length normalization permits matching without rewriting unrelated diagnostic text. */
+function redactEncoded(message: string, encoded: string): string {
+  if (encoded.length > message.length) return message;
+  const normalized = percentHexCase(message);
+  const needle = percentHexCase(encoded);
+  const parts: string[] = [];
+  let cursor = 0;
+  let index = normalized.indexOf(needle);
+  if (index === -1) return message;
+  while (index !== -1) {
+    parts.push(message.slice(cursor, index), '[redacted]');
+    cursor = index + needle.length;
+    index = normalized.indexOf(needle, cursor);
+  }
+  parts.push(message.slice(cursor));
+  return parts.join('');
+}
+
 export function redactModelFailure(message: string, credential?: string): string {
   if (credential !== undefined && credential.length > 0) {
-    const forms = new Set([credential, JSON.stringify(credential).slice(1, -1)]);
-    try { forms.add(encodeURIComponent(credential)); } catch { /* Malformed Unicode has no URI encoding. */ }
-    for (const value of [...forms].sort((a, b) => b.length - a.length)) message = message.split(value).join('[redacted]');
+    const forms = new Map([[credential, false], [JSON.stringify(credential).slice(1, -1), false]]);
+    let layer = [credential];
+    // At most six encoded forms across two URI/form layers. Never recursively
+    // decode untrusted messages or build a regular expression from a secret.
+    for (let depth = 0; depth < 2; depth += 1) {
+      const next = new Set<string>();
+      for (const value of layer) {
+        try {
+          for (const encoded of [encodeURIComponent(value), new URLSearchParams({ key: value }).toString().slice(4)]) {
+            next.add(encoded);
+            if (!forms.has(encoded)) forms.set(encoded, true);
+          }
+        } catch { /* Malformed Unicode retains literal and JSON-escaped redaction. */ }
+      }
+      layer = [...next];
+    }
+    for (const [value, encoded] of [...forms].sort(([a], [b]) => b.length - a.length)) {
+      message = encoded ? redactEncoded(message, value) : message.split(value).join('[redacted]');
+    }
   }
   return message.replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ').replace(/\s+/gu, ' ').trim();
 }

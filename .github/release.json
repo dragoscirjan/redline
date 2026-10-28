@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "engine": "changesets",
+  "project": {
+    "path": ".",
+    "executor": "pnpm",
+    "package_manager": "pnpm",
+    "use_mise": false
+  },
+  "publishing": {
+    "before": [
+      "release:preflight"
+    ],
+    "create_github_releases": false,
+    "push_git_tags": false
+  }
+}

@@ -1,6 +1,18 @@
-import { readFile } from 'node:fs/promises';
-import { describe, expect, it, vi } from 'vitest';
-import { assertNpmVersionAvailable } from '../src/release/npm-check.ts';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { assertNpmVersionAvailable, assertPublishOnlyChangesets } from '../src/release/npm-check.ts';
+
+const roots: string[] = [];
+afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+async function releaseDirectory(): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), 'redline-release-')); roots.push(directory);
+  await writeFile(join(directory, 'config.json'), '{}');
+  return directory;
+}
 
 /** Inspect this workflow's run values; actionlint owns YAML syntax validation. */
 function assertNoInlineVersionInput(source: string): void {
@@ -44,6 +56,63 @@ describe('npm release boundary', () => {
     ]) expect(() => assertNoInlineVersionInput(source)).not.toThrow();
   });
 
+  it('accepts only the consumed Changesets configuration and optional README', async () => {
+    const directory = await releaseDirectory();
+    await expect(assertPublishOnlyChangesets(directory)).resolves.toBeUndefined();
+    await writeFile(join(directory, 'README.md'), '# Release notes');
+    await expect(assertPublishOnlyChangesets(directory)).resolves.toBeUndefined();
+  });
+  it.each(['pending.md', 'pre.json', 'unexpected.json'])('blocks publication with %s present', async (name) => {
+    const directory = await releaseDirectory(); await writeFile(join(directory, name), 'fixture');
+    await expect(assertPublishOnlyChangesets(directory)).rejects.toThrow('consume pending Changesets');
+  });
+  it('rejects missing configuration and directories disguised as allowed files', async () => {
+    const directory = await releaseDirectory(); await rm(join(directory, 'config.json'));
+    await expect(assertPublishOnlyChangesets(directory)).rejects.toThrow();
+    await mkdir(join(directory, 'config.json'));
+    await expect(assertPublishOnlyChangesets(directory)).rejects.toThrow();
+    await expect(assertPublishOnlyChangesets(join(directory, 'absent'))).rejects.toThrow();
+  });
+
+  it('accepts the real Changesets 3 configuration on a clean committed main fixture', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'redline-changesets-')); roots.push(root);
+    await mkdir(join(root, '.changeset'));
+    await writeFile(join(root, '.changeset/config.json'), await readFile(new URL('../.changeset/config.json', import.meta.url)));
+    await writeFile(join(root, '.changeset/README.md'), await readFile(new URL('../.changeset/README.md', import.meta.url)));
+    await writeFile(join(root, 'pnpm-workspace.yaml'), await readFile(new URL('../pnpm-workspace.yaml', import.meta.url)));
+    await writeFile(join(root, 'package.json'), JSON.stringify({ name: '@dragoscirjan/redline', version: '1.0.0' }));
+    await writeFile(join(root, '.gitignore'), 'node_modules\n');
+    await symlink(fileURLToPath(new URL('../node_modules', import.meta.url)), join(root, 'node_modules'), 'junction');
+    const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: root,
+      GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: join(root, 'missing-config') };
+    for (const args of [
+      ['init', '--initial-branch', 'main'], ['add', 'package.json', '.changeset', 'pnpm-workspace.yaml', '.gitignore'],
+      ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'core.hooksPath=/dev/null',
+        '-c', 'commit.gpgSign=false', 'commit', '-m', 'test: seed main'],
+    ]) {
+      const result = spawnSync('git', args, { cwd: root, env, encoding: 'utf8', timeout: 10_000 });
+      expect(result.status, result.stderr).toBe(0);
+    }
+    const cli = fileURLToPath(new URL('../node_modules/@changesets/cli/bin.js', import.meta.url));
+    const result = spawnSync(process.execPath, [cli, 'status'], { cwd: root, env, encoding: 'utf8', timeout: 10_000 });
+    expect(result.status, result.stderr + result.stdout).toBe(0);
+  });
+
+  it('passes the selected workflow version to the real preflight CLI without registry access', async () => {
+    const file = new URL('../src/release/npm-check.ts', import.meta.url);
+    const metadata = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    for (const explicit of [false, true]) {
+      const script = `globalThis.fetch = async () => new Response('', { status: 404 });
+        process.argv = [process.execPath, ${JSON.stringify(fileURLToPath(file))}${explicit ? ', ' + JSON.stringify(metadata.version) : ''}];
+        await import(${JSON.stringify(file.href)});`;
+      const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
+        env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, VERSION: explicit ? 'invalid' : metadata.version },
+        encoding: 'utf8', timeout: 10_000,
+      });
+      expect(result.status, result.stderr).toBe(0);
+    }
+  });
+
   it('requires exact package identity and version before contacting the registry', async () => {
     const request = vi.fn<typeof fetch>();
     await expect(assertNpmVersionAvailable('@dragoscirjan/redline', '1.0.0', '2.0.0', request)).rejects.toThrow('match');
@@ -74,7 +143,25 @@ describe('npm release boundary', () => {
     expect(source).toContain('id-token: write');
     expect(source).toContain('--commit "$GITHUB_SHA"');
     expect(source).toContain('pnpm test');
-    expect(source).toContain('npm publish --ignore-scripts --provenance --access public');
+    expect(source).toContain('dragoscirjan/tempel-javascript/.github/actions/release@71e3379b37d477ae0e7915f6463b0a3921d28f8d');
+    expect(source).toContain('fetch-depth: 0');
+    expect(source).toContain('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}');
+    expect(source.match(/secrets\.NPM_TOKEN/gu)).toHaveLength(1);
+    expect(source.indexOf('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}')).toBeGreaterThan(source.indexOf('- name: Validate source'));
+    expect(source).toContain("NODE_AUTH_TOKEN: ''");
+    expect(source).toContain("npm_config_ignore_scripts: 'true'");
+    expect(source).toContain("npm_config_provenance: 'true'");
+    expect(source).toContain("npm_config_access: public");
+    expect(source).toContain('test "$PUBLISHED" = true');
+    expect(source).toContain('npm install --prefix "$SMOKE/installation" --ignore-scripts');
+    expect(source).not.toContain('contents: write');
+    expect(source).not.toContain('pull-requests: write');
+    const config = JSON.parse(await readFile(new URL('../.github/release.json', import.meta.url), 'utf8'));
+    expect(config).toMatchObject({ version: 1, engine: 'changesets', publishing: {
+      before: ['release:preflight'], create_github_releases: false, push_git_tags: false,
+    } });
+    const changesets = JSON.parse(await readFile(new URL('../.changeset/config.json', import.meta.url), 'utf8'));
+    expect(changesets).toMatchObject({ access: 'public', baseBranch: 'main', commit: false });
     assertNoInlineVersionInput(source);
   });
 });

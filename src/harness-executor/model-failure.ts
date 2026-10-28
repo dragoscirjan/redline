@@ -31,13 +31,15 @@ export function redactModelFailure(message: string, credential?: string): string
   if (credential !== undefined && credential.length > 0) {
     const forms = new Map([[credential, false], [JSON.stringify(credential).slice(1, -1), false]]);
     let layer = [credential];
-    // At most six encoded forms across two URI/form layers. Never recursively
+    // At most twelve encoded forms across two URI/strict-URI/form layers. Never recursively
     // decode untrusted messages or build a regular expression from a secret.
     for (let depth = 0; depth < 2; depth += 1) {
       const next = new Set<string>();
       for (const value of layer) {
         try {
-          for (const encoded of [encodeURIComponent(value), new URLSearchParams({ key: value }).toString().slice(4)]) {
+          const component = encodeURIComponent(value);
+          const strict = component.replace(/[!'()*]/gu, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+          for (const encoded of [component, strict, new URLSearchParams({ key: value }).toString().slice(4)]) {
             next.add(encoded);
             if (!forms.has(encoded)) forms.set(encoded, true);
           }

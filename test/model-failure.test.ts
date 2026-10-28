@@ -6,11 +6,20 @@ import { parseReviewRetries, reviewRetryReason } from '../src/review/retries.ts'
 const frame = (errorMessage: string) => JSON.stringify({ type: 'turn_end', message: { role: 'assistant', stopReason: 'error', errorMessage } });
 
 const formEncoded = (value: string): string => new URLSearchParams({ key: value }).toString().slice(4);
+const strictEncoded = (value: string): string => encodeURIComponent(value).replace(/[!'()*]/gu,
+  (character) => '%' + character.charCodeAt(0).toString(16).toUpperCase());
 const lowerHex = (value: string): string => value.replace(/%(?:25)?[0-9A-F]{2}/gu, (match) => match.toLowerCase());
 
 describe('runtime retry classification', () => {
   it.each([
     ['URL component', encodeURIComponent],
+    ['strict RFC 3986', strictEncoded],
+    ['lowercase strict escapes', (value: string) => lowerHex(strictEncoded(value))],
+    ['double strict encoding', (value: string) => strictEncoded(strictEncoded(value))],
+    ['strict over URL encoding', (value: string) => strictEncoded(encodeURIComponent(value))],
+    ['URL over strict encoding', (value: string) => encodeURIComponent(strictEncoded(value))],
+    ['strict over form encoding', (value: string) => strictEncoded(formEncoded(value))],
+    ['form over strict encoding', (value: string) => formEncoded(strictEncoded(value))],
     ['lowercase URL escapes', (value: string) => lowerHex(encodeURIComponent(value))],
     ['form encoding', formEncoded],
     ['lowercase form escapes', (value: string) => lowerHex(formEncoded(value))],
@@ -21,7 +30,7 @@ describe('runtime retry classification', () => {
     ['lowercase inner double escapes', (value: string) => encodeURIComponent(lowerHex(encodeURIComponent(value)))],
     ['mixed percent-escape case', (value: string) => encodeURIComponent(value).replace('%2F', '%2f')],
   ] satisfies [string, (value: string) => string][])('redacts %s without changing unrelated diagnostics', (_label, encode) => {
-    const credential = 'Fixture key+/é"';
+    const credential = 'Fixture key+/é"' + "!'()*";
     const encoded = encode(credential);
     expect(redactModelFailure(`unchanged %2f ${encoded} tail %252f`, credential)).toBe('unchanged %2f [redacted] tail %252f');
     const failure = readPiFailure(frame(`HTTP 503 ${encoded}`), undefined, credential, true);
@@ -29,6 +38,11 @@ describe('runtime retry classification', () => {
     const persisted = piFailureDiagnostic(failure);
     expect(JSON.parse(persisted)).toMatchObject({ status: 503, scope: 'file', retryable: true, message: 'HTTP 503 [redacted]' });
     expect(persisted.length).toBeLessThanOrEqual(500);
+  });
+
+  it('covers the literal RFC example without dropping the legacy mixed encoding', () => {
+    expect(redactModelFailure('abc%21def%2Aghi', 'abc!def*ghi')).toBe('[redacted]');
+    expect(redactModelFailure('!%2F', '!/')).toBe('[redacted]');
   });
 
   it('preserves case-sensitive key characters outside percent escapes', () => {

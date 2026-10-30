@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { assertNpmVersionAvailable, assertPublishOnlyChangesets } from '../src/release/npm-check.ts';
 
 const roots: string[] = [];
+const lineEndings = [['LF', '\n'], ['CRLF', '\r\n']] as const;
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function releaseDirectory(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'redline-release-')); roots.push(directory);
@@ -14,9 +15,14 @@ async function releaseDirectory(): Promise<string> {
   return directory;
 }
 
+/** Keep workflow checks independent of Git's checkout line endings. */
+function workflowText(source: string): string {
+  return source.replace(/\r\n?/gu, '\n');
+}
+
 /** Inspect this workflow's run values; actionlint owns YAML syntax validation. */
 function assertNoInlineVersionInput(source: string): void {
-  const lines = source.split('\n');
+  const lines = workflowText(source).split('\n');
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? '';
     const run = /^\s*(?:-\s*)?run:\s*(.*)$/u.exec(line);
@@ -45,7 +51,9 @@ describe('npm release boundary', () => {
     '${{ inputs["version"] }}',
   ])('rejects a release version expression regardless of quoting or context: %s', (source) => {
     for (const script of ['run: ' + source, 'run: |\n  echo ' + source, 'run: >-\n  echo ' + source]) {
-      expect(() => assertNoInlineVersionInput(script)).toThrow();
+      for (const [, newline] of lineEndings) {
+        expect(() => assertNoInlineVersionInput(script.replace(/\n/gu, newline))).toThrow();
+      }
     }
   });
   it('allows environment handoff while keeping workflow input expressions out of shell scripts', () => {
@@ -53,7 +61,11 @@ describe('npm release boundary', () => {
     for (const source of [
       'env:\n  VERSION: ' + expression + '\nrun: node preflight.ts "$VERSION"',
       'steps:\n  - run: |\n      echo safe\n    env:\n      VERSION: ' + expression + '\n  - run: echo "$VERSION"',
-    ]) expect(() => assertNoInlineVersionInput(source)).not.toThrow();
+    ]) {
+      for (const [, newline] of lineEndings) {
+        expect(() => assertNoInlineVersionInput(source.replace(/\n/gu, newline))).not.toThrow();
+      }
+    }
   });
 
   it('accepts only the consumed Changesets configuration and optional README', async () => {
@@ -135,7 +147,7 @@ describe('npm release boundary', () => {
     await expect(assertNpmVersionAvailable('@dragoscirjan/redline', '1.0.0', '1.0.0', vi.fn<typeof fetch>().mockRejectedValue(new Error('network')))).rejects.toThrow('network');
   });
   it('requires execution on all six native OS and architecture targets', async () => {
-    const source = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+    const source = workflowText(await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
     for (const target of ['linux-x64', 'linux-arm64', 'macos-x64', 'macos-arm64', 'windows-x64', 'windows-arm64']) {
       expect(source).toContain(`target: ${target}`);
     }
@@ -143,8 +155,8 @@ describe('npm release boundary', () => {
     expect(source).toContain('test/local-cli.test.ts test/package.test.ts');
   });
 
-  it('runs release automatically after every required main CI check, never on PRs or dispatches', async () => {
-    const source = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  it.each(lineEndings)('runs release after every required main CI check, never on PRs or dispatches (%s)', async (_label, newline) => {
+    const source = workflowText((await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')).replace(/\r?\n/gu, newline));
     const release = source.split('\n  release:\n')[1]?.split(/\n  [a-z][a-z-]*:\n/u)[0] ?? '';
     expect(release).toContain('needs: [validate, harness-matrix, source-runtime, local-cli]');
     expect(release).toContain("github.event_name == 'push' && github.ref == 'refs/heads/main'");
@@ -158,8 +170,8 @@ describe('npm release boundary', () => {
     expect(source.split('\njobs:')[0]).toContain('permissions:\n  contents: read');
   });
 
-  it('supports Changesets version, publish and no-op modes with isolated publication credentials', async () => {
-    const source = await readFile(new URL('../.github/workflows/npm.release.yml', import.meta.url), 'utf8');
+  it.each(lineEndings)('supports version, publish and no-op modes with isolated credentials (%s)', async (_label, newline) => {
+    const source = workflowText((await readFile(new URL('../.github/workflows/npm.release.yml', import.meta.url), 'utf8')).replace(/\r?\n/gu, newline));
     expect(source).toContain("github.ref == 'refs/heads/main'");
     expect(source).toContain('environment: npm-release');
     expect(source).toContain('id-token: write');

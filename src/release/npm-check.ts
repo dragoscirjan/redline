@@ -18,7 +18,7 @@ export async function assertNpmVersionAvailable(
   if (response.status !== 404) throw new Error('npm version availability could not be established');
 }
 
-/** The shared action must only publish the reviewed version, never create a version PR. */
+/** Only the publication hook requires consumed notes; version PRs run before this hook. */
 export async function assertPublishOnlyChangesets(directory: string | URL): Promise<void> {
   const entries = await readdir(directory, { withFileTypes: true });
   if (!entries.some(entry => entry.name === 'config.json' && entry.isFile())
@@ -31,7 +31,7 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
   try {
     const metadata: { name: string; version: string } = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
     await assertPublishOnlyChangesets(new URL('../../.changeset/', import.meta.url));
-    await assertNpmVersionAvailable(metadata.name, metadata.version, process.argv[2] ?? process.env.VERSION ?? '');
+    await assertNpmVersionAvailable(metadata.name, metadata.version, process.argv[2] ?? metadata.version);
   } catch {
     process.stderr.write('release preflight failed: version mismatch, pending Changesets, existing version, or registry unavailable\n');
     process.exitCode = 1;

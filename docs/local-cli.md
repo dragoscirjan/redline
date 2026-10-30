@@ -6,14 +6,14 @@ The local CLI reviews Git changes without a forge, pull request, remote URL, or 
 
 Requires Node.js 24 and Git on the trusted host. Release compatibility requires native execution tests on Linux, macOS, and Windows, each on x64 and ARM64. The CI matrix verifies the actual Node platform/architecture and runs local capture, context-builder contracts, reporting, cancellation, and installed-package tests on all six targets. External indexer compatibility is separate from these CLI tests. A target is not considered verified until its job passes. npm publishing requires successful CI for the exact main commit.
 
-After an approved npm release:
+Install a published version:
 
 ```bash
 npm install --global --ignore-scripts @dragoscirjan/redline@VERSION
 redline --help
 ```
 
-Replace `VERSION` with an existing immutable package version. Package publication is manual; adding the package and release workflow does not publish it. For a source-checkout trial, use `node bin/redline.mjs` instead of `redline`.
+Replace `VERSION` with an existing immutable package version. Eligible versions are published by main CI; passing local tests alone does not publish a package. For a source-checkout trial, use `node bin/redline.mjs` instead of `redline`.
 
 Pi or OpenCode must be installed separately on a trusted PATH outside the reviewed repository. Redline never installs a harness or project dependency. The `echo` harness needs neither a model service nor a credential and always returns a clean review; use it only to check integration, not review quality.
 
@@ -317,20 +317,22 @@ This is a trusted-host CLI, not a sandbox for arbitrary untrusted runners. Docke
 
 ## Release operations
 
-`Release npm CLI` is a manual workflow on `main`. It uses the SHA-pinned Tempel release action and the project-installed Changesets 3 CLI. It never publishes merely because a pull request merges.
+Releases are part of CI. A push to `main` runs the reusable `Release npm CLI` workflow after validation, every harness and runtime job, and all six native CLI jobs succeed. Pull requests and manually dispatched validation runs cannot publish. No separate release dispatch or version input is required.
 
-Before the first release, the owner must:
+The SHA-pinned Tempel action and Changesets 3 choose one of three outcomes:
 
-1. Configure the `npm-release` GitHub environment with required reviewers and restrict deployments to `main`.
-2. Create an npm publishing token authorized to create or publish `@dragoscirjan/redline`, subject to the account's npm access and two-factor policy.
-3. Make `NPM_TOKEN` available to the protected job, preferably as an environment secret. An existing repository secret also works and does not need to be copied locally. Do not put the token in repository files, command arguments, logs or chat messages.
+- Pending Changesets open or update a version pull request. For user-visible changes, run `pnpm exec changeset` on the development branch and commit the note. The version PR applies the notes and updates package versions and the changelog.
+- A reviewed manifest version that is not yet published is published automatically after successful main CI. This also handles the first publication. Review and merge the version PR to release later versions; the workflow never approves or merges it.
+- An already-published version with no pending notes does nothing. Unrelated main commits do not fail CI or overwrite npm versions.
 
-The token reaches only the shared release action as `NODE_AUTH_TOKEN`, after validation. This integration uses token authentication, not npm trusted publishing. The job retains `id-token: write` for npm provenance attestations, which are separate from registry authentication. Tempel does not currently support npm trusted-publisher authentication.
+The release job dispatches CI for version PRs created with `GITHUB_TOKEN`, since those PRs do not start normal pull-request workflows automatically. Only the release job has Actions, Contents and Pull requests write permission. Repository-wide workflow permissions remain read-only; GitHub's setting allowing Actions to create pull requests must be enabled. Remote Git tags and GitHub releases remain disabled in `.github/release.json`; the separate GitHub Action release policy is unchanged.
 
-Request a release by dispatching `Release npm CLI` on `main` with the exact version in `package.json`, then approve the protected environment. The version must not already exist in npm. Registry and network errors fail closed. The exact main commit must have successful CI, including all harness and native CLI jobs. The workflow re-runs type checking, tests with offline tarball installation, and docs. It repeats the immutable-version check immediately before Changesets publishes with public access, provenance and lifecycle scripts disabled.
+Provide an npm publishing token authorized to create or publish `@dragoscirjan/redline`, subject to the account's npm access and two-factor policy, as `NPM_TOKEN`. The existing repository secret works; an environment secret can also be used. The job references the `npm-release` environment and honors any protection rules the owner configures there. Do not put the token in repository files, command arguments, logs or chat messages.
 
-This workflow is publish-only. For future version changes, use `pnpm exec changeset` and `pnpm exec changeset version` in a development branch, then review and merge the resulting version and changelog changes. Pending Changeset notes, prerelease state and unexpected files in `.changeset/` block publication. The shared action cannot create version pull requests through this workflow, and it has no Contents or Pull requests write permission. Remote Git tags and GitHub releases are disabled in `.github/release.json`; the separate GitHub Action release policy is unchanged.
+The npm token reaches only the shared release action as `NODE_AUTH_TOKEN`, after all prerequisite checks. This is token authentication, not npm trusted publishing. `id-token: write` supplies npm provenance attestations, which are separate from registry authentication. Ordinary validation jobs do not receive npm credentials.
+
+The publication hook reads the version from `package.json`, rejects unconsumed notes or prerelease state, and requires an authoritative registry 404 for that exact immutable version immediately before publishing. Existing versions, registry errors and network errors fail that publication attempt rather than permitting an overwrite. This check does not run in version-PR or no-op mode. Publication retains public access, provenance and disabled lifecycle scripts.
 
 After publication, the workflow requires a successful publish result, installs the exact registry version with scripts disabled in a temporary directory, and checks help plus committed-revision and working-tree reviews against an inert fixture using `echo` and disabled indexing. These checks use no live model or reviewed-code execution. Verification can fail after npm accepted the immutable version. Such a failure does not roll back publication; inspect the registry and repeat verification rather than attempting to overwrite that version.
 
-There is no installer hook, runtime dependency installation, or emitted-JavaScript build step. Changesets is a development dependency only. `mise run validate` includes packed-package installation tests, but passing them is not evidence of npm publication. Publication and merges require separate owner approval.
+There is no installer hook, runtime dependency installation, or emitted-JavaScript build step. Changesets is a development dependency only. `mise run validate` includes packed-package installation tests, but passing them is not evidence of npm publication. Merging the automatic-release configuration enables this CI behavior; no agent merge or manual publication is implied.

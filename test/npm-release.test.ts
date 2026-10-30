@@ -74,7 +74,7 @@ describe('npm release boundary', () => {
     await expect(assertPublishOnlyChangesets(join(directory, 'absent'))).rejects.toThrow();
   });
 
-  it('accepts the real Changesets 3 configuration on a clean committed main fixture', async () => {
+  it('handles clean main and consumes version notes with the real Changesets 3 CLI', async () => {
     const root = await mkdtemp(join(tmpdir(), 'redline-changesets-')); roots.push(root);
     await mkdir(join(root, '.changeset'));
     await writeFile(join(root, '.changeset/config.json'), await readFile(new URL('../.changeset/config.json', import.meta.url)));
@@ -96,9 +96,16 @@ describe('npm release boundary', () => {
     const cli = fileURLToPath(new URL('../node_modules/@changesets/cli/bin.js', import.meta.url));
     const result = spawnSync(process.execPath, [cli, 'status'], { cwd: root, env, encoding: 'utf8', timeout: 10_000 });
     expect(result.status, result.stderr + result.stdout).toBe(0);
+    await writeFile(join(root, '.changeset/release-test.md'), '---\n"@dragoscirjan/redline": patch\n---\nFixture automated release.\n');
+    await expect(assertPublishOnlyChangesets(join(root, '.changeset'))).rejects.toThrow('consume pending Changesets');
+    const versioned = spawnSync(process.execPath, [cli, 'version'], { cwd: root, env, encoding: 'utf8', timeout: 10_000 });
+    expect(versioned.status, versioned.stderr + versioned.stdout).toBe(0);
+    expect(JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version).toBe('1.0.1');
+    expect(await readFile(join(root, 'CHANGELOG.md'), 'utf8')).toContain('Fixture automated release.');
+    await expect(assertPublishOnlyChangesets(join(root, '.changeset'))).resolves.toBeUndefined();
   });
 
-  it('passes the selected workflow version to the real preflight CLI without registry access', async () => {
+  it('uses the reviewed manifest version by default and ignores ambient VERSION without registry access', async () => {
     const file = new URL('../src/release/npm-check.ts', import.meta.url);
     const metadata = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
     for (const explicit of [false, true]) {
@@ -106,7 +113,7 @@ describe('npm release boundary', () => {
         process.argv = [process.execPath, ${JSON.stringify(fileURLToPath(file))}${explicit ? ', ' + JSON.stringify(metadata.version) : ''}];
         await import(${JSON.stringify(file.href)});`;
       const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
-        env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, VERSION: explicit ? 'invalid' : metadata.version },
+        env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, VERSION: 'invalid' },
         encoding: 'utf8', timeout: 10_000,
       });
       expect(result.status, result.stderr).toBe(0);
@@ -136,30 +143,53 @@ describe('npm release boundary', () => {
     expect(source).toContain('test/local-cli.test.ts test/package.test.ts');
   });
 
-  it('gates publishing on main, environment approval, exact-head CI, and offline package verification', async () => {
+  it('runs release automatically after every required main CI check, never on PRs or dispatches', async () => {
+    const source = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+    const release = source.split('\n  release:\n')[1]?.split(/\n  [a-z][a-z-]*:\n/u)[0] ?? '';
+    expect(release).toContain('needs: [validate, harness-matrix, source-runtime, local-cli]');
+    expect(release).toContain("github.event_name == 'push' && github.ref == 'refs/heads/main'");
+    expect(release).toContain("github.repository == 'dragoscirjan/redline'");
+    expect(release).toContain('uses: ./.github/workflows/npm.release.yml');
+    expect(release).toContain('NPM_TOKEN: ${{ secrets.NPM_TOKEN }}');
+    expect(release).not.toContain('secrets: inherit');
+    for (const permission of ['actions: write', 'contents: write', 'pull-requests: write', 'id-token: write']) {
+      expect(release).toContain(permission);
+    }
+    expect(source.split('\njobs:')[0]).toContain('permissions:\n  contents: read');
+  });
+
+  it('supports Changesets version, publish and no-op modes with isolated publication credentials', async () => {
     const source = await readFile(new URL('../.github/workflows/npm.release.yml', import.meta.url), 'utf8');
     expect(source).toContain("github.ref == 'refs/heads/main'");
     expect(source).toContain('environment: npm-release');
     expect(source).toContain('id-token: write');
-    expect(source).toContain('--commit "$GITHUB_SHA"');
-    expect(source).toContain('pnpm test');
+    expect(source).toContain('workflow_call:');
+    expect(source).toContain('NPM_TOKEN:\n        required: true');
+    expect(source).toContain("github.event_name == 'push'");
+    expect(source).not.toContain('workflow_dispatch:');
+    expect(source).not.toContain('gh run list');
+    expect(source).not.toContain('inputs.version');
+    expect(source).not.toContain('run: node src/release/npm-check.ts');
     expect(source).toContain('dragoscirjan/tempel-javascript/.github/actions/release@71e3379b37d477ae0e7915f6463b0a3921d28f8d');
     expect(source).toContain('fetch-depth: 0');
     expect(source).toContain('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}');
     expect(source.match(/secrets\.NPM_TOKEN/gu)).toHaveLength(1);
-    expect(source.indexOf('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}')).toBeGreaterThan(source.indexOf('- name: Validate source'));
+    expect(source.indexOf('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}')).toBeGreaterThan(source.indexOf('- name: Install development dependencies'));
     expect(source).toContain("NODE_AUTH_TOKEN: ''");
     expect(source).toContain("npm_config_ignore_scripts: 'true'");
     expect(source).toContain("npm_config_provenance: 'true'");
     expect(source).toContain("npm_config_access: public");
     expect(source).toContain('test "$PUBLISHED" = true');
     expect(source).toContain('npm install --prefix "$SMOKE/installation" --ignore-scripts');
-    expect(source).not.toContain('contents: write');
-    expect(source).not.toContain('pull-requests: write');
+    expect(source).toContain("if: steps.release.outputs.published == 'true'");
+    expect(source).toContain("if: steps.release.outputs.pr-number != ''");
+    expect(source).toContain('gh workflow run ci.yml --ref "$head_ref"');
+    expect(source).not.toContain('gh pr merge');
+    expect(source).not.toContain('gh pr review');
     const config = JSON.parse(await readFile(new URL('../.github/release.json', import.meta.url), 'utf8'));
     expect(config).toMatchObject({ version: 1, engine: 'changesets', publishing: {
       before: ['release:preflight'], create_github_releases: false, push_git_tags: false,
-    } });
+    }, pull_request: { title: 'chore(release): version package', commit_message: 'chore(release): version package', base_branch: 'main' } });
     const changesets = JSON.parse(await readFile(new URL('../.changeset/config.json', import.meta.url), 'utf8'));
     expect(changesets).toMatchObject({ access: 'public', baseBranch: 'main', commit: false });
     assertNoInlineVersionInput(source);

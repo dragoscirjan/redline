@@ -339,6 +339,18 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  release:
+    needs: [validate, harness-matrix, source-runtime, local-cli]
+    if: github.repository == 'dragoscirjan/redline' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      id-token: write
+    uses: ./.github/workflows/npm.release.yml
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
   docs:
     needs: [validate, harness-matrix, source-runtime]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

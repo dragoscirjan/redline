@@ -76,6 +76,17 @@ describe('RPC session state', () => {
     expect(h.call('review.get', { runId: job.runId }).error.code).toBe(CODES.initialize);
     expect(h.sent.find(v => v.method === 'redline/v1/finished')?.params.run).toMatchObject({ state: 'cancelled' });
   });
+  it('preserves the engine outcome when completion wins a cancellation race', async () => {
+    let settle!: (value: Completion) => void;
+    const h = harness(async () => new Promise<Completion>(resolve => { settle = resolve; })); h.init();
+    const job = h.call('review.start', { repository: '/repo' }).result;
+    await new Promise(resolve => setImmediate(resolve));
+    expect(h.call('review.cancel', { runId: job.runId }).result.state).toBe('running');
+    settle(done); await new Promise(resolve => setImmediate(resolve));
+    expect(h.call('review.get', { runId: job.runId }).result).toMatchObject({ state: 'completed', exitCode: 0, error: null });
+    expect(h.sent.filter(value => value.method === 'redline/v1/finished')).toHaveLength(1);
+    await h.session.end();
+  });
   it('bounds terminal history and safely reports evicted IDs', async () => {
     const h = harness(); h.init(); const ids: string[] = [];
     for (let i = 0; i < LIMITS.historyRuns + 1; i++) {

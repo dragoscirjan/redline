@@ -27,7 +27,8 @@ function redactEncoded(message: string, encoded: string): string {
   return parts.join('');
 }
 
-export function redactModelFailure(message: string, credential?: string): string {
+/** Redact literal and encoded credentials without changing authoritative source whitespace. */
+export function redactCredentialText(message: string, credential?: string): string {
   if (credential !== undefined && credential.length > 0) {
     const forms = new Map([[credential, false], [JSON.stringify(credential).slice(1, -1), false]]);
     let layer = [credential];
@@ -51,7 +52,11 @@ export function redactModelFailure(message: string, credential?: string): string
       message = encoded ? redactEncoded(message, value) : message.split(value).join('[redacted]');
     }
   }
-  return message.replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ').replace(/\s+/gu, ' ').trim();
+  return message;
+}
+
+export function redactModelFailure(message: string, credential?: string): string {
+  return redactCredentialText(message, credential).replace(/[\u0000-\u001f\u007f-\u009f]/gu, ' ').replace(/\s+/gu, ' ').trim();
 }
 
 export function classifyModelFailure(message: string, callerManaged = false): ModelFailureClassification {

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
 import { npmArguments } from './helpers/npm.ts';
+import { RpcClient } from './helpers/rpc-client.ts';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
 
@@ -48,6 +49,9 @@ it('installs the packed package offline and runs both CLIs without source checko
     const paths = archive.files.map((entry) => entry.path);
     expect(paths).toContain('prompts/v8/core-policy.md');
     expect(paths).toContain('bin/redline.mjs');
+    expect(paths).toContain('src/rpc/main.ts');
+    expect(paths).toContain('schemas/rpc/v1/protocol.schema.json');
+    expect(paths).toContain('docs/stdio-protocol.md');
     for (const file of ['context.ts', 'cache.ts', 'lock.py', 'export.py', 'gitnexus-query.mjs']) expect(paths).toContain(`src/code-index/${file}`);
     expect(paths.some((path) => /^(?:test|benchmark|src\.old|node_modules|\.agents|\.github|dist)\//u.test(path))).toBe(false);
     const installation = join(root, 'installation'); await mkdir(installation);
@@ -86,6 +90,19 @@ if(a[0]==='query'){const source=fs.readFileSync(db,'utf8');console.log(JSON.stri
     await writeFile(join(repository, 'example.ts'), 'working\n');
     const working = run(['review', '--harness', 'echo', '--indexing', 'disabled'], repository);
     expect(working.status, working.stderr).toBe(0);
+    const corpus: { method: string; params: Record<string, unknown>; code: number }[] = JSON.parse(await readFile(new URL('./fixtures/rpc/conformance.json', import.meta.url), 'utf8'));
+    for (const once of [true, false]) {
+      const client = new RpcClient(binary, [...(once ? ['--once'] : []), '--harness', 'echo', '--indexing', 'disabled', '--reuse', 'disabled'], env, root);
+      try {
+        expect((await client.call('initialize', { protocolVersion: '1.0' })).protocolVersion).toBe('1.0');
+        for (const entry of corpus) await expect(client.call(entry.method, entry.params)).rejects.toMatchObject({ code: entry.code });
+        const job = await client.call('review.start', { repository, base, head: 'HEAD' });
+        expect((await client.wait(String(job.runId))).state).toBe('completed');
+        const result = await client.call('review.result', { runId: job.runId, section: 'files' });
+        expect(result.items).toMatchObject([{ path: 'example.ts', outcome: 'clean' }]);
+        await client.call('shutdown'); client.eof(); expect((await client.exit).code).toBe(0);
+      } finally { await client.close(); }
+    }
     const old = spawnSync(process.execPath, [legacy], { env: { ...env, ...cleanReviewEnvironment(fixture, 'echo') }, cwd: root, encoding: 'utf8' });
     expect(old.status, old.stderr).toBe(0); expect(JSON.parse(old.stdout).harness).toBe('echo');
     const installed = JSON.parse(await readFile(join(installation, 'node_modules/@dragoscirjan/redline/package.json'), 'utf8'));

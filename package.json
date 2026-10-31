@@ -11,6 +11,7 @@
   "files": [
     "bin/*.mjs",
     "src/application/*.ts", "src/local/*.ts", "src/review/*.ts",
+    "src/rpc/*.ts", "schemas/rpc/v1/*.json", "docs/stdio-protocol.md",
     "src/harness-executor/*.ts", "src/publish/*.ts",
     "src/code-context/*.ts", "src/code-intelligence/*.ts", "src/change-impact/*.ts",
     "src/context-bundle.ts", "src/duration.ts", "src/process-runner.ts", "src/review-eligibility.ts",

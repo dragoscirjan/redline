@@ -13,6 +13,7 @@ Redline reviews Git changes with Pi or OpenCode. Run it locally or in GitHub Act
 | Connect Pi or OpenCode to a model | [Model setup](docs/get-started/configuration.md) |
 | Find the command for staged changes, branches, or commits | [Common commands](docs/commands.md) |
 | Understand findings and saved files | [Read the results](docs/results.md) |
+| Integrate a client over stdio | [JSON-RPC protocol](docs/stdio-protocol.md) |
 | Add GitHub pull-request reviews | [GitHub Actions setup](docs/get-started/github-actions.md) |
 | Fix a setup or run failure | [Troubleshooting](docs/troubleshooting.md) |
 

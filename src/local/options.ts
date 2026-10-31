@@ -37,6 +37,7 @@ export interface LocalOptions {
 export class UsageError extends Error {}
 
 export const HELP = `Usage: redline review [options]
+       redline rpc [--once] [trusted settings]  See redline rpc --help
 
 No target: review staged and unstaged tracked changes against HEAD.
   --repository PATH                  Current directory by default

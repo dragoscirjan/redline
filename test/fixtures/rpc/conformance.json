@@ -1,0 +1,54 @@
+[
+  {
+    "method": "unknown",
+    "params": {},
+    "code": -32601
+  },
+  {
+    "method": "review.start",
+    "params": {
+      "repository": "/unused",
+      "model-auth": "forbidden"
+    },
+    "code": -32602
+  },
+  {
+    "method": "review.start",
+    "params": {
+      "repository": "/unused",
+      "head": "HEAD",
+      "worktree": "all"
+    },
+    "code": -32602
+  },
+  {
+    "method": "review.start",
+    "params": {
+      "repository": "/unused",
+      "comparison": "direct"
+    },
+    "code": -32602
+  },
+  {
+    "method": "review.get",
+    "params": {
+      "runId": "not-a-run"
+    },
+    "code": -32602
+  },
+  {
+    "method": "review.get",
+    "params": {
+      "runId": "00000000-0000-0000-0000-000000000000"
+    },
+    "code": -32003
+  },
+  {
+    "method": "review.result",
+    "params": {
+      "runId": "00000000-0000-0000-0000-000000000000",
+      "limit": 51
+    },
+    "code": -32602
+  }
+]

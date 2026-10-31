@@ -13,5 +13,10 @@
     ],
     "create_github_releases": false,
     "push_git_tags": false
+  },
+  "pull_request": {
+    "title": "chore(release): version package",
+    "commit_message": "chore(release): version package",
+    "base_branch": "main"
   }
 }

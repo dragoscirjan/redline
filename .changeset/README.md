@@ -1,7 +1,9 @@
 # Versioning
 
-The protected npm workflow publishes the reviewed version in `package.json`. It does not create version pull requests or publish automatically after a merge.
+Releases run automatically after successful main CI. No separate release workflow dispatch is required.
 
-For a future release, use `pnpm exec changeset` and `pnpm exec changeset version` on a development branch. Commit the resulting manifest and changelog changes for review. Consume every pending Changeset before requesting publication. The release preflight rejects pending notes, prerelease state and unexpected files here, so the shared action cannot enter version mode.
+For a user-visible change, run `pnpm exec changeset` on the development branch and commit the generated note. After that change merges, Tempel opens or updates a version pull request. Review and merge that PR to publish the new version after CI passes. Do not edit package versions by hand or merge the version PR automatically.
 
-See [release operations](../docs/local-cli.md#release-operations) for approval, token setup and verification.
+The first unpublished manifest version can publish without a version PR. If the version is already published and no notes remain, release is a no-op. The publication hook still requires consumed notes and an available immutable version.
+
+See [release operations](../docs/local-cli.md#release-operations) for token setup and verification.

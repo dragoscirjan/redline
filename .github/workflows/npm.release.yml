@@ -1,29 +1,27 @@
 name: Release npm CLI
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Exact package.json version (immutable)
+  workflow_call:
+    secrets:
+      NPM_TOKEN:
         required: true
-        type: string
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: npm-cli-release
   cancel-in-progress: false
 
 jobs:
-  publish:
-    if: github.repository == 'dragoscirjan/redline' && github.ref == 'refs/heads/main'
+  release:
+    if: github.repository == 'dragoscirjan/redline' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: npm-release
     permissions:
-      contents: read
-      actions: read
+      contents: write
+      actions: write
+      pull-requests: write
       id-token: write
     steps:
       - name: Check out trusted source
@@ -38,54 +36,38 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
-      - name: Require successful CI for this exact main commit
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh run list --workflow ci.yml --branch main --commit "$GITHUB_SHA" --limit 1 \
-            --json status,conclusion > "$RUNNER_TEMP/release-ci.json"
-          node --input-type=module - "$RUNNER_TEMP/release-ci.json" <<'NODE'
-          import { readFileSync } from 'node:fs';
-          const runs = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-          if (runs.length !== 1 || runs[0].status !== 'completed' || runs[0].conclusion !== 'success') {
-            throw new Error('the exact main commit must pass CI, including all harness jobs');
-          }
-          NODE
-
-      - name: Check immutable npm version
-        env:
-          VERSION: ${{ inputs.version }}
-        run: node src/release/npm-check.ts "$VERSION"
-
       - name: Install development dependencies
         uses: ./.github/actions/install-dependencies
         with:
           telemetry-label: npm-release
 
-      - name: Validate source and installed package
-        run: |
-          pnpm run typecheck
-          pnpm test
-          pnpm run docs
-
-      - name: Publish the reviewed version with Tempel
+      # The caller waits for validation, every harness/runtime and all native CLI jobs.
+      - name: Create a version PR or publish the reviewed version with Tempel
         id: release
         uses: dragoscirjan/tempel-javascript/.github/actions/release@71e3379b37d477ae0e7915f6463b0a3921d28f8d
         with:
           config: .github/release.json
         env:
-          VERSION: ${{ inputs.version }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           npm_config_ignore_scripts: 'true'
           npm_config_provenance: 'true'
           npm_config_access: public
 
-      - name: Verify the published package outside the source checkout
+      - name: Validate the version pull request
+        if: steps.release.outputs.pr-number != ''
         shell: bash
         env:
-          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.release.outputs.pr-number }}
+        run: |
+          set -euo pipefail
+          head_ref="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefName --jq .headRefName)"
+          gh workflow run ci.yml --ref "$head_ref"
+
+      - name: Verify the published package outside the source checkout
+        if: steps.release.outputs.published == 'true'
+        shell: bash
+        env:
           RELEASE_MODE: ${{ steps.release.outputs.mode }}
           PUBLISHED: ${{ steps.release.outputs.published }}
           NODE_AUTH_TOKEN: ''
@@ -93,6 +75,7 @@ jobs:
           set -euo pipefail
           test "$RELEASE_MODE" = publish
           test "$PUBLISHED" = true
+          VERSION="$(node -p "require('./package.json').version")"
           SMOKE="$(mktemp -d "$RUNNER_TEMP/redline-npm.XXXXXX")"
           export NPM_CONFIG_USERCONFIG="$SMOKE/npmrc"
           printf 'registry=https://registry.npmjs.org/\n' > "$NPM_CONFIG_USERCONFIG"

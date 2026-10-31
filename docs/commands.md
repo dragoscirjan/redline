@@ -1,6 +1,6 @@
 # Common commands
 
-Run these from the Git repository you want to review. [Configure a model](/get-started/configuration) first. These commands perform real model review unless you explicitly select `echo`.
+Run these from the Git repository you want to review. [Configure a model](/get-started/configuration) before a model-based review. The `echo` harness needs no model service or credentials. These commands perform model-based review unless you explicitly select `echo`.
 
 For a source checkout, replace `redline` with `node /path/to/redline/bin/redline.mjs`. Keep the current directory set to the target repository, or select it with `--repository`.
 

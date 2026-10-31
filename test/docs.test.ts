@@ -49,6 +49,37 @@ const recipes = [
 ] satisfies [string, string[]][];
 
 describe('task-first documentation', () => {
+  it('exempts echo from the opening model-configuration prerequisite', async () => {
+    const opening = (await doc('commands.md')).split('\n\n')[1] ?? '';
+    expect(opening).toContain('before a model-based review');
+    expect(opening).toContain('`echo` harness needs no model service or credentials');
+  });
+
+  it('makes the disposable setup commit without inherited signing', async () => {
+    expect(await doc('get-started/first-review.md')).toContain('git commit --no-gpg-sign -m "Add demo file"');
+    const f = await fixture();
+    const git = (...args: string[]): string => execFileSync('git', ['-C', f.repository,
+      '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args],
+    { env: f.env, encoding: 'utf8', timeout: 10_000 }).trim();
+    git('config', 'commit.gpgSign', 'true');
+    git('config', 'gpg.format', 'openpgp');
+    git('config', 'gpg.program', join(f.root, 'missing-signing-program'));
+    git('commit', '--no-gpg-sign', '-m', 'Add demo file');
+    expect(git('log', '-1', '--format=%s')).toBe('Add demo file');
+    expect(git('cat-file', 'commit', 'HEAD')).not.toContain('\ngpgsig ');
+    expect(git('config', '--get', 'commit.gpgSign')).toBe('true');
+  });
+
+  it('lists every exit code reported by CLI help', async () => {
+    const output: string[] = [];
+    expect(await main(['--help'], {}, { stdout: line => output.push(line), stderr: line => output.push(line) })).toBe(0);
+    const help = output.join('\n');
+    const codes = [...help.slice(help.indexOf('Exit:')).matchAll(/\b(\d+) [a-z]/gu)].map(match => match[1]);
+    expect(codes).toEqual(['0', '1', '2', '3', '4', '5', '130']);
+    const results = await doc('results.md');
+    for (const code of codes) expect(results).toContain('| `' + code + '` |');
+  });
+
   it.each(recipes)('keeps the documented recipe executable without live models: %s', async (suffix, args) => {
     const command = 'redline review' + (suffix === '' ? '' : ' ' + suffix);
     expect(await doc('commands.md')).toContain('```sh\n' + command + '\n```');

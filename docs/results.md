@@ -45,8 +45,10 @@ Every run gets a new directory. To choose a path, see [Save output](/commands#sa
 | `1` | An operational problem or incomplete required review |
 | `2` | An invalid argument or configuration |
 | `3` | Findings met the selected `--fail-on` threshold |
+| `4` | The selected capability is not implemented |
+| `5` | A reporter failed |
 | `130` | Cancellation |
 
 For example, `--fail-on high` fails on high or critical findings. Incomplete required coverage fails regardless of that threshold.
 
-For capability and reporter exit codes, see the [complete exit-status reference](/local-cli#output-and-exit-status). For JSON fields and publication records, see the [output schema](/review-reporting).
+For more detail, see the [complete exit-status reference](/local-cli#output-and-exit-status). For JSON fields and publication records, see the [output schema](/review-reporting).

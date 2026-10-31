@@ -14,10 +14,10 @@ git config user.name "Redline demo"
 git config user.email "redline-demo@example.invalid"
 node -e "require('node:fs').writeFileSync('example.ts', 'export const value = 1;\n')"
 git add example.ts
-git commit -m "Add demo file"
+git commit --no-gpg-sign -m "Add demo file"
 ```
 
-The identity settings apply only to this disposable repository.
+The identity settings apply only to this disposable repository. `--no-gpg-sign` disables signing for this demo commit even if your Git configuration enables it. It does not change your signing settings.
 
 ## 2. Change the tracked file
 

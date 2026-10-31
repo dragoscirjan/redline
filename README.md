@@ -1,49 +1,49 @@
 # redline
 
-Redline reviews Git changes locally or through its GitHub Action. It uses a fixed review policy, validates findings against the diff, and writes JSON and Markdown artifacts. When publication credentials are supplied, the GitHub integration can also publish a managed summary and bounded inline comments.
+Redline reviews Git changes with Pi or OpenCode. Run it locally or in GitHub Actions, then read the findings in your terminal or saved JSON and Markdown files.
 
-## How it works
+[Browse the documentation](https://lunaticthinker.me/projects/redline/).
 
-The review fetches the pull request's base and head commits as Git data, builds a bounded context bundle, and runs Pi or OpenCode with tools disabled and isolated generated configuration. Findings are schema-validated, mapped to the reviewed diff, and published through a host-side GitHub client. Pull request code is never checked out or executed.
+## Start here
 
-## Local Git reviews
+| What you want to do | Guide |
+| --- | --- |
+| Install Redline or use the source checkout | [Get started](docs/get-started/index.md) |
+| Try a review without an API key | [First review](docs/get-started/first-review.md) |
+| Connect Pi or OpenCode to a model | [Model setup](docs/get-started/configuration.md) |
+| Find the command for staged changes, branches, or commits | [Common commands](docs/commands.md) |
+| Understand findings and saved files | [Read the results](docs/results.md) |
+| Add GitHub pull-request reviews | [GitHub Actions setup](docs/get-started/github-actions.md) |
+| Fix a setup or run failure | [Troubleshooting](docs/troubleshooting.md) |
 
-The `redline review` CLI needs no GitHub repository, pull request, remote URL, or publication token. It supports branch comparisons and staged/unstaged changes, with a terminal reporter and deterministic review artifacts.
+## A safe source-checkout trial
 
-```bash
-# Source-checkout smoke tests; echo does not perform model-based review.
-node bin/redline.mjs review --base main --head HEAD --harness echo --indexing disabled
-node bin/redline.mjs review --worktree all --harness echo --indexing disabled
+Requires Node.js 24 and Git. From the Redline checkout:
+
+```sh
+node bin/redline.mjs --help
+node bin/redline.mjs review --repository /path/to/your/repository --harness echo --indexing disabled
 ```
 
-The npm distribution is `@dragoscirjan/redline` for Node.js 24, released through Changesets after successful main CI. Pi/OpenCode binaries are installed separately. Indexed cross-file context is enabled by default through separately installed pinned CGC; unavailable context is reported as file-only. `--indexing required` rejects those gaps before model review. See [Local CLI](docs/local-cli.md) for configuration, credentials, output bounds, and exit statuses, and [Portable architecture](docs/portable-architecture.md) for adapter boundaries. Future VCS/reporter values are recognized but fail explicitly until implemented.
+Replace the path with a Git repository that has a commit and tracked changes. `echo` checks capture and output without a model, API key, or indexer. It always returns a clean answer, so it does not judge code quality.
 
-## Adoption
+The npm package is `@dragoscirjan/redline`. Installation requires a published version; the [getting-started guide](docs/get-started/index.md) includes both npm and source-checkout paths. Pi/OpenCode and optional indexers are installed separately.
 
-Call the reusable review workflow from a `pull_request_target` workflow in your repository. See [docs/reusable-review-workflow.md](docs/reusable-review-workflow.md) for the caller pattern, secret mapping, and version pinning.
+## How review works
 
-Product documentation:
+Redline captures the selected change, runs a fixed prompt per eligible file, validates findings against the diff, and saves JSON and Markdown output. The reviewed code, tests and installers are never executed. Model findings still need human judgment.
 
-- [Local Git CLI](docs/local-cli.md)
-- [Portable application architecture](docs/portable-architecture.md)
+GitHub Actions can also publish reviews and a managed summary when publication credentials are configured. The [setup guide](docs/get-started/github-actions.md) starts with downloadable artifacts and a pinned workflow.
 
-- [GitHub composite action contract](docs/github-composite-action.md)
-- [Reusable review workflow](docs/reusable-review-workflow.md)
-- [Dogfood reviews](docs/dogfood-review.md)
-- [Runnable review configuration](docs/runnable-review-configuration.md)
-- [Review eligibility](docs/review-eligibility.md)
-- [Review reporting](docs/review-reporting.md)
-- [Review performance benchmark](docs/performance-benchmark.md)
-- [Checkout and exact-revision benchmark](docs/checkout-benchmark.md)
-- [Model execution benchmark](docs/model-execution-benchmark.md)
+For details, use the [CLI reference](docs/local-cli.md), [GitHub action reference](docs/github-composite-action.md), or [architecture](docs/portable-architecture.md). Benchmarks and other engineering references remain in the documentation site's sidebar.
 
 ## Product direction
 
 The current GitHub product is the first integration, not the intended boundary of the review engine. The longer-term direction is one validated review core that can review a local change, publish to different forges, and present the same findings in different editors.
 
-The architecture separates three integration layers:
+Git and GitHub are available now. The other forge, VCS and editor integrations below are planned. The architecture separates three integration layers:
 
-| Layer | Planned integrations | Responsibility |
+| Layer | Integrations | Responsibility |
 | --- | --- | --- |
 | Revision source | Git, Jujutsu, Mercurial | Resolve an exact change and build the bounded authoritative review bundle. |
 | Forge | GitHub, Forgejo, Gitea, GitLab, Bitbucket Cloud | Resolve pull or merge request metadata and publish validated results. |
@@ -57,7 +57,7 @@ Priorities 1–4 are the next intended product work. The remaining epics are ope
 
 ### Near term
 
-1. [Local Git review CLI](https://github.com/dragoscirjan/redline/issues/178) — publish `@dragoscirjan/redline`; review explicit revision ranges plus staged and unstaged working-tree changes without requiring a forge.
+1. [Local Git review CLI](https://github.com/dragoscirjan/redline/issues/178) — complete npm delivery and source-independent installation verification. Revision-range and staged/unstaged reviews are already implemented without requiring a forge.
 2. [Stable editor-facing JSON-RPC protocol](https://github.com/dragoscirjan/redline/issues/179) — versioned schemas, capabilities, progress, cancellation, diagnostics, evidence, and results over standard input and output.
 3. [GitHub integration over the shared engine](https://github.com/dragoscirjan/redline/issues/180) — make GitHub a thin metadata and publication adapter. The composite action remains the execution primitive; the reusable workflow remains an optional secure adoption wrapper.
 4. [Forgejo and Gitea integrations](https://github.com/dragoscirjan/redline/issues/181) — one shared adapter where the APIs are compatible, with separately tested workflow templates for each forge.
@@ -90,4 +90,4 @@ Docker or Podman sandboxing remains a separate future hardening milestone. It is
 
 ## Development
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing the repository. Work happens on focused branches in dedicated worktrees; releases publish immutable `vMAJOR.MINOR.PATCH` tags through the guarded release workflow.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing the repository. Work happens on focused branches in dedicated worktrees. See [release operations](docs/local-cli.md#release-operations) for the npm CI flow and its verification requirements.

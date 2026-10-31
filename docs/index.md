@@ -1,30 +1,44 @@
 ---
+layout: home
 title: Redline
-description: Automated pull request review for GitHub
+description: Review Git changes locally or in GitHub Actions with Pi or OpenCode.
+hero:
+  name: Redline
+  text: Review Git changes with Pi or OpenCode
+  tagline: Run a local review or review pull requests in GitHub Actions. Read the findings and keep the JSON and Markdown results.
+  actions:
+    - theme: brand
+      text: Get started
+      link: /get-started/
+    - theme: alt
+      text: Find a command
+      link: /commands
 ---
 
-# Redline
+## What do you want to do?
 
-Automated pull request review, smaller and self-hosted. A GitHub Action reviews a pull request's changed files with a fixed review policy through a harness executor (Pi or OpenCode), validates every finding against the diff, and publishes the review output as artifacts — or as GitHub reviews and comments when a publication token is supplied.
+| Goal | Start here |
+| --- | --- |
+| Install Redline or try the source checkout | [Get started](/get-started/) |
+| Check the workflow without an API key | [Run your first review](/get-started/first-review) |
+| Review with a real model | [Connect a model](/get-started/configuration) |
+| Review staged changes, a branch, or two commits | [Common commands](/commands) |
+| Understand findings, coverage, and output files | [Read the results](/results) |
+| Review GitHub pull requests | [Set up GitHub Actions](/get-started/github-actions) |
+| Fix a setup or review failure | [Troubleshooting](/troubleshooting) |
 
-## How a review runs
+## The shortest safe trial
 
-The action fetches the pull request's base and head commits as Git data, builds a bounded context bundle, and runs one fixed review prompt per eligible changed file through the selected harness. Lock files, vendored and generated directories (for example `node_modules/` or `dist/`), and binary files are excluded from review and recorded as unreviewed, so their changes stay identifiable in the manifest. The harness runs with every tool disabled and isolated generated configuration; no ambient credentials reach it. Each model finding must map its span (`file:x-y`) to changed lines of the authoritative diff with matching evidence, or it is rejected; validated findings carry a change suggestion and a fix prompt for coding agents. Pull request code is never executed.
+From a Git repository with a committed `HEAD` and tracked changes:
 
-## Start here
+```sh
+redline review --harness echo --indexing disabled
+```
 
-- [Reusable review workflow](/reusable-review-workflow) — call Redline from your repository's `pull_request_target` workflow.
-- [Dogfood reviews](/dogfood-review) — how Redline reviews and publishes results on its own pull requests.
-- [GitHub composite action](/github-composite-action) — the full input contract, secrets, pipeline, and boundaries.
+`echo` checks the review workflow without a model, API key, or indexer. It always produces a clean answer, so it does not tell you whether the code has defects. The [first-review guide](/get-started/first-review) includes a disposable example and the source-checkout command.
 
-## How it works under the hood
+## What Redline does
 
-- [Runnable review configuration](/runnable-review-configuration) — the environment contract, `model-config`, and `model-auth`.
-- [Harness executor](/harness-executor) — how Pi and OpenCode are configured and driven, and how to add a harness.
-- [Review output](/review-reporting) — per-file review records, validation, and the run summary.
-- [Performance benchmark](/performance-benchmark) — the fixed 20-file latency baseline, telemetry, and live SLO capture.
-- [Model execution benchmark](/model-execution-benchmark) — Pi thinking, output-token, structured-output, deadline, retry, cost, and process-isolation evidence.
+Redline captures the selected Git change, reviews eligible files, validates the structure and diff evidence of findings, and writes review artifacts. It does not apply fixes or execute the reviewed repository's code, tests, or installers. Model findings still need human review.
 
-## Status
-
-The GitHub entry point with artifact output and per-file GitHub publication is complete. The container sandbox, managed local model runtimes, and Forgejo/Gitea entry points are planned sequenced milestones. See [CONTRIBUTING.md](https://github.com/dragoscirjan/redline/blob/main/CONTRIBUTING.md) for the development workflow and the GitHub issue tracker for open work.
+GitHub Actions can also publish validated findings and a managed summary when publication credentials are configured. Other forges, editor integrations, a container sandbox, and managed local model runtimes are not implemented. See the [architecture reference](/portable-architecture) for those boundaries.

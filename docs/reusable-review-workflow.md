@@ -1,5 +1,7 @@
 # Reusable review workflow
 
+For a short, artifact-first setup, start with [GitHub Actions setup](/get-started/github-actions). This page describes the full caller contract.
+
 `.github/workflows/code-review.yml` is the reusable workflow for other repositories. Call it from a `pull_request_target` workflow so the review secrets are available:
 
 ```yaml
@@ -12,15 +14,15 @@ permissions: {}
 
 jobs:
   review:
-    uses: dragoscirjan/redline/.github/workflows/code-review.yml@v1
+    permissions:
+      contents: read
+    uses: dragoscirjan/redline/.github/workflows/code-review.yml@b42f53206aeeccb44d6c429a6130a729b6f46d4a
     with:
       backend: pi
       model-config: '{"provider":"openrouter","endpoint":"https://openrouter.ai/api/v1","model":"z-ai/glm-5.3-flash"}'
       finding-scope: defects
       indexing: enabled # default; set disabled for file-only review
       indexing-provider: cgc # default; or gitnexus
-      credential-isolation: direct
-      container-engine: docker
       timeout: 4m # per file
       run-timeout: 10m # whole review
       review-concurrency: 4 # default; valid range 1-8
@@ -66,7 +68,7 @@ In context-only mode the workflow does not index and uploads only the `<artifact
 
 - `model-auth` — the provider-keyed credential map, normally bound to repository secret `MODEL_CREDENTIALS`. Only the selected provider's credential reaches the harness; it never appears in prompts, logs, or persisted output.
 - `github-token` — bound to `secrets.GH_TOKEN`. The current action uses it for publication (one review per file with findings plus a managed summary); supply it whenever reviews should be published, not only as artifacts. Publication never uses the Actions `GITHUB_TOKEN`.
-- App publication — for a GitHub App instead of a PAT, pass the App id and private key (PEM) as `github-app-id`/`github-app-private-key`; the action generates the installation token and prefers it over the fallback. Redline's own auto-review does exactly this.
+- App publication — the direct composite action accepts `github-app-id`/`github-app-key` and mints installation tokens, as Redline's own auto-review does. This reusable wrapper does not expose those App inputs. Use the [direct action publication contract](/github-composite-action#publication) when you need that setup.
 
 ## What the run produces
 

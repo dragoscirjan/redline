@@ -1,5 +1,7 @@
 # Local Git review CLI
 
+This is the detailed reference. For a short setup path, start with [Get started](/get-started/). For copyable recipes, use [Common commands](/commands).
+
 The local CLI reviews Git changes without a forge, pull request, remote URL, or publication token. It uses the same fixed prompts, harness isolation, diff evidence validation, and JSON/Markdown artifacts as the GitHub integration. It does not apply fixes or execute repository code.
 
 ## Install

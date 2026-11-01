@@ -1,21 +1,12 @@
 # Portable review application
 
-The local CLI and existing GitHub integration share the review runner, bundle builder, prompt policy, validation, artifact schemas, and harness executors. Revision capture and presentation remain outside the review core.
+The local CLI, stdio RPC and existing GitHub integration share the review runner, bundle builder, prompt policy, validation, artifact schemas, and harness executors. Revision capture and presentation remain outside the review core.
 
-```text
-redline review -> validated LocalOptions -> ReviewApplication
-                                             |
-                         +-------------------+--------------------+
-                         |                   |                    |
-                    RevisionSource      runFileReviews      CompositeReporter
-                         |                   |                    |
-                   GitRevisionSource    ReviewWriter          CliReporter
-                    isolated objects    JSON + Markdown      bounded terminal
+[![The local CLI and RPC adapter call one shared review application, which captures Git data, invokes a harness and writes review artifacts.](/diagrams/local-review.svg)](/diagrams/local-review.html)
 
-redline-review -> existing environment/publication modes
-                         |
-                 executePreparedReview -> same runFileReviews
-```
+[Explore the interactive local architecture](/diagrams/local-review.html), or read the [RPC protocol and lifecycle](/stdio-protocol). Both local entrypoints use `src/local/run.ts`; transport code does not own review policy. The diagram groups internal capture, context and reporting adapters into Shared review.
+
+The existing `redline-review` GitHub entrypoint still calls `executePreparedReview()` and the same `runFileReviews()` runner. It keeps its existing publication path, which this local diagram does not show.
 
 ## Responsibility boundaries
 
@@ -24,7 +15,7 @@ redline-review -> existing environment/publication modes
 | Ports and Adapters | `RevisionSource`, `ReviewReporter`, `ReviewWriter`, and the existing `HarnessExecutor` separate source capture, output, persistence, and model execution. |
 | Application Service / Facade | `ReviewApplication.run()` orders preflight, capture, optional context preparation, review, reporting, and disposal. `executePreparedReview()` preserves the prepared-bundle compatibility path. |
 | Command | A validated `ReviewCommand` supplies explicit review configuration; the application does not read argv or ambient environment. |
-| Strategy / Adapter | `GitRevisionSource` captures Git states; `CliReporter` presents validated results. The existing harness registry selects Pi, OpenCode, or echo. |
+| Strategy / Adapter | `GitRevisionSource` captures Git states; `CliReporter` presents terminal results; the RPC adapter projects validated results and progress. The existing harness registry selects Pi, OpenCode, or echo. |
 | Factory / capability registry | The local composition root chooses adapters after `requireCapability()` checks known IDs. Planned values fail explicitly rather than loading arbitrary plugins. |
 | Composite | `CompositeReporter` preflights all children, isolates runtime failures, and records adapter IDs that failed. |
 | Observer | Discriminated `ReviewEvent` values carry content-free lifecycle progress. The review-plan event exposes only bounded file IDs and review eligibility in manifest order; per-file events expose only identity and outcome. Events contain neither source paths nor model payloads. |
@@ -62,7 +53,7 @@ The GitHub Action continues to invoke `src/review/cli.ts` with its existing `RED
 
 Local VCS IDs: `git`, `jj`, `mercurial`. Local reporter IDs: `cli`, `github`, `forgejo`, `gitea`, `gitlab`, `bitbucket`. Only Git and the CLI reporter are implemented in the new command. Existing GitHub publication remains available through the legacy action path, not through `--reporter github` yet.
 
-No editor protocol, TypeScript SDK, foreign-VCS semantics, or forge-specific configuration is promised by this epic. #179 defines editor JSON-RPC; the remaining roadmap epics add the other adapters. Thin editor clients must not duplicate review policy.
+`redline rpc` implements the versioned stdio protocol from #179. Editor extensions, a public TypeScript SDK, foreign-VCS semantics and additional forge adapters remain future work. Thin editor clients must not duplicate review policy.
 
 ## Generation limits
 

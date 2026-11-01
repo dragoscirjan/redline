@@ -1,0 +1,199 @@
+{
+  "schema_version": 3,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "RPC run lifecycle",
+    "locale": "en",
+    "output": "docs/public/diagrams/rpc-lifecycle.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "git@github.com:dragoscirjan/redline.git",
+      "revision": "60ea6f5083fab4ddc8592f27e898be7410b23bb0",
+      "link_mode": "local-only"
+    }
+  },
+  "mainPath": [
+    "running",
+    "completed"
+  ],
+  "states": [
+    {
+      "id": "running",
+      "type": "start",
+      "label": "running",
+      "sublabel": "Accepted run",
+      "tag": "one active",
+      "sources": [
+        {
+          "path": "src/rpc/session.ts",
+          "line": 111,
+          "end_line": 136
+        }
+      ]
+    },
+    {
+      "id": "completed",
+      "type": "success",
+      "label": "completed",
+      "sublabel": "Findings may remain",
+      "tag": "exit 0 or 3",
+      "sources": [
+        {
+          "path": "src/local/run.ts",
+          "line": 131,
+          "end_line": 141
+        },
+        {
+          "path": "src/rpc/session.ts",
+          "line": 160,
+          "end_line": 174
+        }
+      ]
+    },
+    {
+      "id": "incomplete",
+      "type": "failure",
+      "label": "incomplete",
+      "sublabel": "Coverage or reporting gap",
+      "tag": "inspect artifacts",
+      "sources": [
+        {
+          "path": "src/local/run.ts",
+          "line": 133,
+          "end_line": 141
+        },
+        {
+          "path": "src/rpc/local.ts",
+          "line": 107,
+          "end_line": 113
+        }
+      ]
+    },
+    {
+      "id": "failed",
+      "type": "failure",
+      "label": "failed",
+      "sublabel": "Setup or execution error",
+      "tag": "structured error",
+      "sources": [
+        {
+          "path": "src/rpc/session.ts",
+          "line": 120,
+          "end_line": 135
+        },
+        {
+          "path": "src/local/run.ts",
+          "line": 142,
+          "end_line": 148
+        }
+      ]
+    },
+    {
+      "id": "cancelled",
+      "type": "neutral",
+      "label": "cancelled",
+      "sublabel": "Cleanup has settled",
+      "tag": "exit 130",
+      "sources": [
+        {
+          "path": "src/rpc/session.ts",
+          "line": 96,
+          "end_line": 98
+        },
+        {
+          "path": "src/rpc/server.ts",
+          "line": 55,
+          "end_line": 65
+        },
+        {
+          "path": "src/local/run.ts",
+          "line": 142,
+          "end_line": 148
+        }
+      ]
+    },
+    {
+      "id": "timed-out",
+      "type": "failure",
+      "label": "timed-out",
+      "sublabel": "Whole-run deadline",
+      "tag": "not file timeout",
+      "sources": [
+        {
+          "path": "src/local/run.ts",
+          "line": 93,
+          "end_line": 93
+        },
+        {
+          "path": "src/local/run.ts",
+          "line": 142,
+          "end_line": 148
+        },
+        {
+          "path": "src/rpc/local.ts",
+          "line": 107,
+          "end_line": 113
+        }
+      ]
+    }
+  ],
+  "transitions": [
+    {
+      "id": "complete",
+      "from": "running",
+      "to": "completed",
+      "label": "complete"
+    },
+    {
+      "id": "coverage-gap",
+      "from": "running",
+      "to": "incomplete",
+      "label": "incomplete"
+    },
+    {
+      "id": "execution-error",
+      "from": "running",
+      "to": "failed",
+      "label": "error"
+    },
+    {
+      "id": "cancel",
+      "from": "running",
+      "to": "cancelled",
+      "label": "cancelled"
+    },
+    {
+      "id": "deadline",
+      "from": "running",
+      "to": "timed-out",
+      "label": "run deadline",
+      "note": "A per-file timeout can yield incomplete coverage instead."
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Read the final outcome",
+      "items": [
+        "completed does not mean no findings or semantic proof.",
+        "Each accepted run emits one finished event while output remains writable."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "running to cancelled",
+      "items": [
+        "Cancellation signals pending work. The acknowledgement may still say running until children stop and artifacts settle.",
+        "If completion wins the cancellation race, the completed outcome is preserved."
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "EOF and recovery",
+      "items": [
+        "Persistent stdin EOF cancels pending work; --once EOF drains its accepted run.",
+        "A broken connection is not a terminal success. Inspect the saved status.json."
+      ]
+    }
+  ]
+}

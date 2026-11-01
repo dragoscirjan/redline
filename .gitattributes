@@ -1,0 +1,3 @@
+# Generated documentation hashes and SVG exports use canonical LF bytes on every host.
+docs/diagrams/*.json text eol=lf
+docs/public/diagrams/* text eol=lf

@@ -80,4 +80,5 @@ Only a push to this repository's `main` can publish the shared multi-architectur
 as `ghcr.io/dragoscirjan/redline-harnesses`, tagged `main` and with its source commit.
 Use the digest printed by the build when you need an immutable external reference.
 The workflow uses standard Docker actions. npm publishing remains independent and
-unchanged. No image has been published by this implementation session.
+unchanged. If GHCR creates the package as private, the owner must make it public
+before anonymous pulls can work. No image has been published by this implementation session.

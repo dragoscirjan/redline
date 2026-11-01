@@ -159,6 +159,27 @@ describe.runIf(enabled)('real isolated Pi/OpenCode workers', () => {
       } finally { await client.close(); }
     }, 120_000);
   }
+  it('starts all installed MCP servers with no network or writable root', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'redline-mcp-test-')); roots.push(root);
+    const command = await executable('docker', process.env.PATH ?? '', root);
+    const client = await DockerClient.create(command, root, root, {});
+    const signal = AbortSignal.timeout(40_000); const job = randomUUID(); let id: string | undefined;
+    try {
+      const image = await client.preflight(imageName(), signal);
+      const args = containerArguments(image, client.owner, job, 40_000, DEFAULT_CONTAINER_LIMITS);
+      args[args.indexOf('--network') + 1] = 'none';
+      args.splice(args.length - 1, 0, '--entrypoint', 'node');
+      args.push('--input-type=module', '-e', await readFile(new URL('./fixtures/container-mcp.mjs', import.meta.url), 'utf8'));
+      id = await client.run(args, signal);
+      const results = JSON.parse(await client.run(['start', '--attach', id], signal, 30_000, 256 * 1024));
+      expect(results, JSON.stringify(results)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: 'cgc', tools: expect.arrayContaining(['find_code']) }),
+        expect.objectContaining({ name: 'gitnexus', tools: expect.arrayContaining(['query', 'context', 'impact']) }),
+        expect.objectContaining({ name: 'context-mode', tools: expect.arrayContaining(['ctx_index', 'ctx_search']) }),
+        expect.objectContaining({ name: 'sequential-thinking', tools: ['sequentialthinking'] }),
+      ]));
+    } finally { if (id !== undefined) await client.remove(id, job); await client.close(); }
+  }, 50_000);
   it('enforces the same kernel, filesystem, environment and network profile without host mounts', async () => {
     const f = await fixture(); const marker = join(f.root, 'host-only-marker'); await writeFile(marker, 'host-only');
     const command = await executable('docker', process.env.PATH ?? '', f.repository);

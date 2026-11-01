@@ -9,9 +9,12 @@ RUN ln -s bun /usr/local/bin/bunx \
 
 WORKDIR /opt/harness
 COPY containers/package.json containers/pnpm-lock.yaml ./
+# Prepare vendor binaries now so runtime node_modules can remain read-only.
 RUN npm install --global --ignore-scripts pnpm@10.33.0 \
     && pnpm install --frozen-lockfile --prod --ignore-scripts \
-    && node node_modules/opencode-ai/postinstall.mjs
+    && node node_modules/opencode-ai/postinstall.mjs \
+    && HOME=/tmp/gitnexus-build GITNEXUS_HOME=/tmp/gitnexus-build node_modules/.bin/gitnexus mcp </dev/null \
+    && rm -rf /tmp/gitnexus-build
 
 COPY containers/requirements.txt ./
 RUN python3 -m venv /opt/cgc \

@@ -4,13 +4,13 @@ Use `redline rpc` when a program needs to start, query or cancel a local Git rev
 
 ## Visual overview
 
-[![A client program sends stdio requests to the RPC adapter. The RPC adapter and terminal CLI share capture, review, validation and artifact writing.](/diagrams/local-review.svg)](/diagrams/local-review.html)
+[![A client program sends stdio requests to the RPC adapter. The RPC adapter and terminal CLI share capture, review, validation and artifact writing.](/diagrams/local-review.svg)](./diagrams/local-review.html){target="_self"}
 
-[Explore the shared review architecture](/diagrams/local-review.html). Open the interactive view to zoom, select components and inspect source references. Editor extensions remain planned; the reference client is implemented.
+[Explore the shared review architecture](./diagrams/local-review.html){target="_self"}. Open the interactive view to zoom, select components and inspect source references. Editor extensions remain planned; the reference client is implemented.
 
-[![An accepted run starts as running and ends as completed, incomplete, failed, cancelled or timed-out.](/diagrams/rpc-lifecycle.svg)](/diagrams/rpc-lifecycle.html)
+[![An accepted run starts as running and ends as completed, incomplete, failed, cancelled or timed-out.](/diagrams/rpc-lifecycle.svg)](./diagrams/rpc-lifecycle.html){target="_self"}
 
-[Explore the RPC run lifecycle](/diagrams/rpc-lifecycle.html). A completed run can contain findings. Only a whole-run deadline produces `timed-out`; a file timeout can leave incomplete coverage. Cancellation remains cooperative, and completion can win the race.
+[Explore the RPC run lifecycle](./diagrams/rpc-lifecycle.html){target="_self"}. A completed run can contain findings. Only a whole-run deadline produces `timed-out`; a file timeout can leave incomplete coverage. Cancellation remains cooperative, and completion can win the race.
 
 These local diagrams use [Archify](https://tt-a1i.github.io/archify/). Their [sources and regeneration instructions](/diagrams/README) pin the generator and the reviewed code revision. The written contract below remains the reference.
 

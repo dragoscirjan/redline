@@ -2,9 +2,9 @@
 
 The local CLI, stdio RPC and existing GitHub integration share the review runner, bundle builder, prompt policy, validation, artifact schemas, and harness executors. Revision capture and presentation remain outside the review core.
 
-[![The local CLI and RPC adapter call one shared review application, which captures Git data, invokes a harness and writes review artifacts.](/diagrams/local-review.svg)](/diagrams/local-review.html)
+[![The local CLI and RPC adapter call one shared review application, which captures Git data, invokes a harness and writes review artifacts.](/diagrams/local-review.svg)](./diagrams/local-review.html){target="_self"}
 
-[Explore the interactive local architecture](/diagrams/local-review.html), or read the [RPC protocol and lifecycle](/stdio-protocol). Both local entrypoints use `src/local/run.ts`; transport code does not own review policy. The diagram groups internal capture, context and reporting adapters into Shared review.
+[Explore the interactive local architecture](./diagrams/local-review.html){target="_self"}, or read the [RPC protocol and lifecycle](/stdio-protocol). Both local entrypoints use `src/local/run.ts`; transport code does not own review policy. The diagram groups internal capture, context and reporting adapters into Shared review.
 
 The existing `redline-review` GitHub entrypoint still calls `executePreparedReview()` and the same `runFileReviews()` runner. It keeps its existing publication path, which this local diagram does not show.
 

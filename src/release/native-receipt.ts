@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fileDigest } from '../harness-worker/build.ts';
-import { record } from '../harness-worker/contract.ts';
+import { isRecord as record } from '../process-runner.ts';
 import { inspectCandidate } from './oci.ts';
 
 export async function checkNativeTests(path: string): Promise<number> {
@@ -17,7 +17,7 @@ export async function checkNativeTests(path: string): Promise<number> {
       names.push(assertion.fullName);
     }
   }
-  for (const h of ['pi', 'opencode']) for (const operation of ['reviews through the host broker', 'uses the same isolated executor through RPC',
+  for (const h of ['pi', 'opencode']) for (const operation of ['reviews through the Docker-wrapped binary', 'uses the same isolated executor through RPC',
     'preserves native retry ownership', 'treats authentication failure as nonretryable', 'cancels an active isolated model stream']) {
     if (!names.some(n => n.includes(h + ' ' + operation))) throw new Error('Required actual worker tests are missing');
   }

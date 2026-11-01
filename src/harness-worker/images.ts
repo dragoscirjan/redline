@@ -1,7 +1,11 @@
 import { constants } from 'node:fs';
 import { open, readFile, realpath } from 'node:fs/promises';
 import { inside } from '../local/process.ts';
-import { identityValid, record, type Identity, type WorkerHarness, WorkerFault } from './contract.ts';
+import { isRecord as record } from '../process-runner.ts';
+import type { HarnessName } from '../harness-executor/types.ts';
+export type WorkerHarness = Exclude<HarnessName, 'echo'>;
+export interface Identity { readonly harness: WorkerHarness; readonly release: string; readonly revision: string; readonly harnessVersion: string }
+export class WorkerFault extends Error {}
 
 export interface WorkerImage {
   readonly reference: string;
@@ -52,7 +56,6 @@ export async function loadWorkerImage(harness: WorkerHarness, repository: string
     const manifest = parseWorkerManifest(JSON.parse(await handle.readFile('utf8')), pkg.version, override !== undefined);
     const image = manifest.images[harness];
     const identity = { harness, release: manifest.release, revision: manifest.revision, harnessVersion: image.harnessVersion };
-    if (!identityValid(identity)) throw new WorkerFault('Invalid worker identity');
     return { reference: image.reference, platforms: image.platforms, identity, development: manifest.development };
   } finally { await handle.close(); }
 }

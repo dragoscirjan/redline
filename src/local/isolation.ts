@@ -26,7 +26,7 @@ export async function isolatedRuntime(harness: HarnessName, options: IsolationOp
     await client.preflight(image, signal);
     const owned = client;
     return { executor: createDockerExecutor(harness, client, image, options.limits, signal, warning),
-      identity: 'redline-worker/v1:' + image.reference, close: () => owned.close() };
+      identity: 'docker:' + image.reference, close: () => owned.close() };
   } catch {
     await client?.close();
     if (signal.aborted) signal.throwIfAborted();

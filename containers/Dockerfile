@@ -20,15 +20,9 @@ ARG SOURCE_DATE_EPOCH
 ARG REDLINE_SOURCE_KIND=development
 WORKDIR /opt/redline
 COPY package.json LICENSE ./
-COPY bin/runtime.mjs bin/redline-worker.mjs ./bin/
-COPY src/process-runner.ts ./src/
-COPY src/local/process.ts ./src/local/
-COPY src/harness-executor/ ./src/harness-executor/
-COPY src/harness-worker/ ./src/harness-worker/
-COPY src/transport/ ./src/transport/
+COPY --chmod=0555 containers/run-harness.sh /usr/local/bin/redline-harness
 COPY containers/pins.json containers/metadata.mjs /build/
-ENV HOME=/tmp/redline TMPDIR=/tmp/redline LANG=C.UTF-8 \
-    DO_NOT_TRACK=1 PI_SKIP_VERSION_CHECK=1 \
+ENV LANG=C.UTF-8 DO_NOT_TRACK=1 PI_SKIP_VERSION_CHECK=1 \
     OPENCODE_DISABLE_AUTOUPDATE=1 OPENCODE_DISABLE_MODELS_FETCH=1 \
     OPENCODE_DISABLE_DEFAULT_PLUGINS=1 OPENCODE_DISABLE_TELEMETRY=1
 LABEL org.opencontainers.image.source="https://github.com/dragoscirjan/redline" \
@@ -38,15 +32,17 @@ LABEL org.opencontainers.image.source="https://github.com/dragoscirjan/redline" 
 FROM worker AS pi
 ARG REDLINE_REVISION
 ARG REDLINE_SOURCE_KIND
+ENV REDLINE_CONTAINER_HARNESS=pi
 COPY --from=pi-dependencies /opt/harness/ /opt/harness/
 RUN REDLINE_REVISION="$REDLINE_REVISION" REDLINE_SOURCE_KIND="$REDLINE_SOURCE_KIND" node /build/metadata.mjs pi
 USER 10001:10001
-ENTRYPOINT ["node", "/opt/redline/bin/redline-worker.mjs"]
+ENTRYPOINT ["/usr/local/bin/redline-harness"]
 
 FROM worker AS opencode
 ARG REDLINE_REVISION
 ARG REDLINE_SOURCE_KIND
+ENV REDLINE_CONTAINER_HARNESS=opencode
 COPY --from=opencode-dependencies /opt/harness/ /opt/harness/
 RUN REDLINE_REVISION="$REDLINE_REVISION" REDLINE_SOURCE_KIND="$REDLINE_SOURCE_KIND" node /build/metadata.mjs opencode
 USER 10001:10001
-ENTRYPOINT ["node", "/opt/redline/bin/redline-worker.mjs"]
+ENTRYPOINT ["/usr/local/bin/redline-harness"]

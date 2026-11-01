@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { responseBytes } from './http.ts';
-import { record } from '../harness-worker/contract.ts';
+import { isRecord as record } from '../process-runner.ts';
 import { recordFromBody, recordIdentity, releaseBody, releaseTag, type ReleaseRecord } from './coordinator.ts';
 
 export interface ManagedRelease { readonly id: number; readonly draft: boolean; readonly record: ReleaseRecord; readonly npmAttempted: boolean }

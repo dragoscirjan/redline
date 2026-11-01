@@ -13,7 +13,7 @@ describe('fixed isolation policy', () => {
   it('has no mounts, ambient environment, host networking, privilege or unbounded resource flags', () => {
     const args = containerArguments(image, 'owner', job, 1000, DEFAULT_CONTAINER_LIMITS);
     for (const flag of ['--read-only', '--init', '--cap-drop', '--security-opt', '--memory', '--memory-swap', '--cpus', '--pids-limit', '--ulimit']) expect(args).toContain(flag);
-    expect(args[args.indexOf('--user') + 1]).toBe('10001:10001'); expect(args[args.indexOf('--network') + 1]).toBe('none');
+    expect(args[args.indexOf('--user') + 1]).toBe('10001:10001'); expect(args[args.indexOf('--network') + 1]).toBe('bridge');
     expect(args[args.indexOf('--cap-drop') + 1]).toBe('ALL'); expect(args[args.indexOf('--security-opt') + 1]).toBe('no-new-privileges=true');
     expect(args[args.indexOf('--tmpfs') + 1]).toContain('noexec,nosuid,nodev');
     expect(args.some(a => /^(?:--privileged|--volume|--mount|--env|--publish|--device|--pid)$/u.test(a))).toBe(false);
@@ -58,7 +58,7 @@ describe.runIf(process.platform === 'linux')('private Docker controller', () => 
     const c = await client(); let kind = 'development'; let enforcement = true;
     const run = vi.spyOn(c, 'run').mockImplementation(async args => args[0] === 'info'
       ? JSON.stringify({ os: 'linux', arch: 'amd64', security: ['name=seccomp,profile=builtin'], memory: enforcement, swap: true, pids: true, cpu: true })
-      : args.includes('{{.Id}}') ? 'sha256:' + 'a'.repeat(64) : JSON.stringify({ user: '10001:10001', entrypoint: ['node', '/opt/redline/bin/redline-worker.mjs'], revision: image.identity.revision, kind }));
+      : args.includes('{{.Id}}') ? 'sha256:' + 'a'.repeat(64) : JSON.stringify({ user: '10001:10001', entrypoint: ['/usr/local/bin/redline-harness'], revision: image.identity.revision, kind }));
     try {
       await expect(c.preflight(image, AbortSignal.timeout(5000))).rejects.toThrow('metadata'); kind = 'release'; enforcement = false;
       await expect(c.preflight(image, AbortSignal.timeout(5000))).rejects.toThrow('enforce'); expect(run.mock.calls.some(([args]) => args[0] === 'create')).toBe(false);
@@ -68,7 +68,7 @@ describe.runIf(process.platform === 'linux')('private Docker controller', () => 
     const c = await client(); const gone = 'a'.repeat(64); const stuck = 'b'.repeat(64);
     const run = vi.spyOn(c, 'run').mockImplementation(async args => {
       if (args[0] === 'info') return JSON.stringify({ os: 'linux', arch: 'amd64', security: ['name=seccomp,profile=builtin'], memory: true, swap: true, pids: true, cpu: true });
-      if (args[0] === 'image') return args.includes('{{.Id}}') ? 'sha256:' + 'a'.repeat(64) : JSON.stringify({ user: '10001:10001', entrypoint: ['node', '/opt/redline/bin/redline-worker.mjs'], revision: image.identity.revision, kind: 'release' });
+      if (args[0] === 'image') return args.includes('{{.Id}}') ? 'sha256:' + 'a'.repeat(64) : JSON.stringify({ user: '10001:10001', entrypoint: ['/usr/local/bin/redline-harness'], revision: image.identity.revision, kind: 'release' });
       if (args[1] === 'ls') return gone + '\n' + stuck;
       if (args[0] === 'container' && args[2] === stuck) return JSON.stringify({ [MANAGED]: 'worker/v1', [OWNER]: c.owner, [JOB]: job, 'io.redline.expires': String(Date.now() - 1) });
       throw new Error('Concurrent removal or unavailable cleanup');
@@ -83,7 +83,7 @@ describe.runIf(process.platform === 'linux')('private Docker controller', () => 
     const c = await client(); const controller = new AbortController(); const reason = new Error('Original cancellation');
     vi.spyOn(c, 'run').mockImplementation(async args => {
       if (args[0] === 'info') return JSON.stringify({ os: 'linux', arch: 'amd64', security: ['name=seccomp,profile=builtin'], memory: true, swap: true, pids: true, cpu: true });
-      if (args[0] === 'image') return args.includes('{{.Id}}') ? 'sha256:' + 'a'.repeat(64) : JSON.stringify({ user: '10001:10001', entrypoint: ['node', '/opt/redline/bin/redline-worker.mjs'], revision: image.identity.revision, kind: 'release' });
+      if (args[0] === 'image') return args.includes('{{.Id}}') ? 'sha256:' + 'a'.repeat(64) : JSON.stringify({ user: '10001:10001', entrypoint: ['/usr/local/bin/redline-harness'], revision: image.identity.revision, kind: 'release' });
       controller.abort(reason); throw new Error('Cleanup interrupted');
     });
     try { await expect(c.preflight(image, controller.signal)).rejects.toBe(reason); } finally { await c.close(); }

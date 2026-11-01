@@ -34,8 +34,10 @@ node bin/redline.mjs review \
 
 Use `--harness opencode` for the other variant. Model configuration and authentication
 use the existing [trusted configuration](https://dragoscirjan.github.io/redline/get-started/configuration).
-An endpoint on `127.0.0.1` still means the **host**, not the container: the host broker
-opens the upstream connection.
+The SDK connects to the configured provider through Docker bridge networking. An endpoint
+on `127.0.0.1` means the **container**, not the host. For a host-local model, use
+`host.docker.internal` and bind the service to a trusted interface reachable from Docker;
+host firewall rules must permit that connection. Redline does not enable host networking.
 
 For OCI archives as well as locally loaded images, add `--oci`. Release builds also
 use `--release`, which requires an exact clean source commit:
@@ -60,7 +62,8 @@ docker build --file containers/Dockerfile --target opencode \
 
 These tags are local conveniences, not accepted runtime identities. Prefer the build
 helper: it creates a manifest containing immutable image IDs. The image entrypoint is
-an internal framed worker, not an interactive `pi` or `opencode` command.
+a small script that prepares private writable SDK state and execs the existing binary.
+Redline supplies the same non-interactive arguments and parses the same SDK output.
 
 ## Use a released package
 
@@ -116,11 +119,17 @@ no capabilities, no-new-privileges and Docker's built-in seccomp profile. They h
 bounded CPU, memory, PIDs and a noexec/nosuid/nodev writable tmpfs; swap is disabled.
 Unsupported enforcement fails preflight rather than silently reducing protection.
 
-There are no host bind mounts, repository checkout mounts, Docker socket, SSH agent,
-ambient credentials or host HOME in a worker. External networking is disabled. The
-SDK can reach only its job-local loopback relay. Framed stdio carries bounded model
-requests to the host broker; the worker never chooses the real URL or receives the
-real provider credential. Reflected credentials are redacted before SDK delivery.
+The only host bind mount is a read-only staging directory containing that invocation's
+generated configuration and fixed policy. It never contains a repository checkout,
+Docker socket, SSH agent, ambient credentials or host HOME. The SDK receives only the
+selected model-provider credential: Pi uses its existing environment interpolation;
+OpenCode uses its existing generated configuration. No GitHub token or unrelated
+provider credential is forwarded. The Docker daemon can inspect this selected key.
+
+Bridge networking permits the SDK's provider connection; it is not an endpoint allowlist.
+There is no custom worker protocol, model relay or host credential broker. Bounded stdin
+and stdout carry the existing harness input/output. Existing host redaction protects
+persisted diagnostics and artifacts, not the SDK's access to its own selected key.
 
 The SDK's tools remain disabled. Untrusted source stays prompt data; it does not
 select executables, permissions, prompts or publication policy. The host validator
@@ -134,12 +143,12 @@ there unless a later compatibility milestone certifies that environment.
 
 ## Cleanup and evidence
 
-Normal completion, cancellation and failure revoke the broker lease and remove the
-owned container. Later preflight reconciles only expired containers with the matching
+Normal completion, cancellation and failure stop and remove the owned container. Later preflight reconciles only expired containers with the matching
 Redline marker and owner labels. Redline never runs a global prune or deletes unrelated
 resources. A dead controller cannot guarantee immediate deletion.
 
-The native container suite uses real pinned SDKs and synthetic loopback models. It
+The opt-in native container suite uses real pinned SDKs and a synthetic model container
+on the Docker bridge, with no published host port or paid provider. It
 covers CLI/RPC findings, request-controlled isolation rejection, retry ownership,
 fatal authentication, reflected-key redaction, cancellation and the actual kernel,
 network, mount and cgroup profile. Native arm64 CI is required separately; amd64 success

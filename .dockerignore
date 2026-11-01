@@ -1,11 +1,6 @@
 **
 !containers/
 !containers/**
-!bin/
-!bin/runtime.mjs
-!bin/redline-worker.mjs
-!src/
-!src/**
 !package.json
 !LICENSE
 containers/**/node_modules

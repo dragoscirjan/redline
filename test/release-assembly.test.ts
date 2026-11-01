@@ -20,7 +20,7 @@ it.runIf(process.platform === 'linux')('assembles a complete immutable release f
   const pkg = JSON.parse(await readFile(join(project, 'package.json'), 'utf8')); pkg.version = '1.2.0';
   await writeFile(join(source, 'package.json'), JSON.stringify(pkg, null, 2));
   for (const name of ['README.md', 'LICENSE']) await cp(join(project, name), join(source, name));
-  for (const name of ['local-cli.md', 'portable-architecture.md', 'internal-worker-protocol.md', 'stdio-protocol.md', 'docker-workers.md', 'coordinated-releases.md']) await cp(join(project, 'docs', name), join(source, 'docs', name));
+  for (const name of ['local-cli.md', 'portable-architecture.md', 'stdio-protocol.md', 'docker-workers.md', 'coordinated-releases.md']) await cp(join(project, 'docs', name), join(source, 'docs', name));
   for (const name of ['pins.json', 'pnpm-lock.yaml']) await cp(join(project, 'containers', name), join(source, 'containers', name));
   await writeFile(join(source, '.changeset/config.json'), '{}');
   const env = { PATH: process.env.PATH, HOME: root, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };

@@ -1,5 +1,4 @@
 import { spawn, execFileSync } from 'node:child_process';
-import { createServer, type Server } from 'node:http';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -14,7 +13,7 @@ import { RpcClient } from './helpers/rpc-client.ts';
 const enabled = process.env.REDLINE_CONTAINER_TESTS === '1';
 const manifest = process.env.REDLINE_WORKER_MANIFEST;
 const binary = process.env.REDLINE_CONTAINER_CLI ?? fileURLToPath(new URL('../bin/redline.mjs', import.meta.url));
-const roots: string[] = []; const servers: Server[] = [];
+const roots: string[] = []; const cleanups: (() => Promise<void>)[] = [];
 const key = 'synthetic-container-model-key-do-not-persist';
 function deferred() {
   let done: (() => void) | undefined; let fail: ((error: Error) => void) | undefined;
@@ -23,9 +22,18 @@ function deferred() {
     reject(error: Error) { if (fail === undefined) throw new Error('Uninitialized deferred'); fail(error); } };
 }
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map(s => new Promise<void>(resolve => { s.closeAllConnections(); s.close(() => resolve()); })));
+  await Promise.all(cleanups.splice(0).map(cleanup => cleanup()));
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
+async function testImage(repository: string): Promise<WorkerImage> {
+  if (manifest === undefined && process.env.REDLINE_CONTAINER_CLI !== undefined) {
+    const packageRoot = dirname(dirname(binary));
+    const pkg = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'));
+    const data = parseWorkerManifest(JSON.parse(await readFile(join(packageRoot, 'src/harness-worker/worker-images.json'), 'utf8')), pkg.version, false);
+    return { ...data.images.pi, development: false, identity: { harness: 'pi', release: data.release, revision: data.revision, harnessVersion: data.images.pi.harnessVersion } };
+  }
+  return loadWorkerImage('pi', repository, manifest);
+}
 async function fixture(mode: 'finding' | 'busy' | 'unauthorized' | 'hang' = 'finding') {
   const firstRequest = deferred();
   const root = await mkdtemp(join(tmpdir(), 'redline-container-test-')); roots.push(root);
@@ -37,41 +45,39 @@ async function fixture(mode: 'finding' | 'busy' | 'unauthorized' | 'hang' = 'fin
   await writeFile(join(repository, 'src/example.ts'), 'old\n'); git('add', '.'); git('commit', '--quiet', '-m', 'base'); const base = git('rev-parse', 'HEAD');
   await writeFile(join(repository, 'src/example.ts'), 'new\n'); git('commit', '--quiet', '-am', 'head');
   const requests: { path: string; authorization: string | undefined; body: Record<string, unknown> }[] = [];
-  const server = createServer(async (req, res) => {
-    let raw = ''; for await (const part of req) raw += String(part);
-    const body: Record<string, unknown> = JSON.parse(raw || '{}');
-    requests.push({ path: req.url ?? '', authorization: req.headers.authorization, body }); firstRequest.resolve();
-    if (mode === 'hang') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write(': waiting for cancellation\n\n'); return; }
-    if (mode === 'busy' || mode === 'unauthorized') {
-      res.writeHead(mode === 'busy' ? 503 : 401, { 'content-type': 'application/json', 'retry-after-ms': '1', 'retry-after': '0' });
-      const text = JSON.stringify({ error: { message: mode === 'busy' ? 'Service temporarily unavailable' : 'Invalid API key ' + key, type: mode === 'busy' ? 'server_error' : 'authentication_error' } });
-      for (let offset = 0; offset < text.length; offset += 8) res.write(text.slice(offset, offset + 8)); res.end(); return;
+  const command = await executable('docker', process.env.PATH ?? '', repository);
+  const image = await testImage(repository);
+  const client = await DockerClient.create(command, repository, root, env);
+  const job = randomUUID(); const name = 'redline-' + job;
+  const controller = new AbortController(); const ready = deferred();
+  const args = containerArguments(image, client.owner, job, 120_000, DEFAULT_CONTAINER_LIMITS);
+  args[0] = 'run'; args.splice(args.length - 1, 0, '--entrypoint', 'node', '--env', 'REDLINE_MOCK_MODE');
+  args.push('--input-type=module', '-e', await readFile(new URL('./fixtures/container-model.mjs', import.meta.url), 'utf8'));
+  const child = client.spawn(args, undefined, { REDLINE_MOCK_MODE: mode }, controller.signal);
+  let stderr = '';
+  const errors = (async () => { for await (const chunk of child.stderr) { stderr += Buffer.from(chunk).toString(); if (stderr.length > 8192) throw new Error('Mock stderr exceeds bound'); } })();
+  const reader = (async () => {
+    let pending = ''; let bytes = 0;
+    for await (const chunk of child.stdout) {
+      bytes += chunk.length; if (bytes > 2 * 1024 * 1024) throw new Error('Mock request logs exceed bound');
+      pending += Buffer.from(chunk).toString();
+      for (;;) {
+        const newline = pending.indexOf('\n'); if (newline < 0) break;
+        const event = JSON.parse(pending.slice(0, newline)); pending = pending.slice(newline + 1);
+        if (event.type === 'ready') ready.resolve();
+        else if (event.type === 'request') { requests.push(event); firstRequest.resolve(); }
+      }
     }
-    const fileId = /\\?"fileId\\?"\s*:\s*\\?"(\d{6})\\?"/u.exec(raw)?.[1] ?? '000001';
-    const reply = JSON.stringify({ version: 4, fileId, outcome: 'findings', reason: 'Scripted supported defect.', contextRequests: [], findings: [{
-      title: 'Fixture contract changed', dimensions: ['correctness'],
-      category: 'correctness', classification: 'defect', severity: 'high', confidence: 0.9, side: 'RIGHT', startLine: 1, endLine: 1,
-      evidence: 'new', supportingEvidence: [], graphReferences: [],
-      impactPath: { status: 'partial', steps: [], limitation: 'This deterministic fixture uses file-only evidence.' },
-      behavioralContract: 'The fixture requires old.', failureScenario: 'The changed value is new.', reachability: 'The changed line is the fixture entry.',
-      rootCause: 'The changed value no longer matches the contract.', impact: 'The new line violates the fixture contract.', blastRadius: 'One fixture line.',
-      reversibility: 'reversible', assumptions: [], counterEvidence: [], uncertainty: 'No extra context is available in this fixture.',
-      fix: 'Restore old.', regressionTest: 'Assert the fixture retains old.', verification: { status: 'unverified', reason: 'Scripted integration fixture.' },
-      remediationStatus: 'proposed', suggestedChange: 'old',
-    }] });
-    if (body.stream === true) {
-      res.writeHead(200, { 'content-type': 'text/event-stream' });
-      for (let i = 0; i < reply.length; i += 32) res.write('data: ' + JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', model: 'test-model',
-        choices: [{ index: 0, delta: { content: reply.slice(i, i + 32) }, finish_reason: null }] }) + '\n\n');
-      res.end('data: ' + JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', model: 'test-model', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n');
-    } else {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ id: 'fixture', object: 'chat.completion', model: 'test-model', choices: [{ index: 0, message: { role: 'assistant', content: reply }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }));
-    }
-  });
-  servers.push(server); await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-  const address = server.address(); if (address === null || typeof address === 'string') throw new Error('Fixture address unavailable');
-  return { root, repository, env, git, base, requests, firstRequest: firstRequest.promise, endpoint: `http://127.0.0.1:${address.port}/v1` };
+    ready.reject(new Error('Mock container exited before readiness: ' + stderr));
+  })();
+  void reader.catch(error => ready.reject(error instanceof Error ? error : new Error('Mock output failed')));
+  void errors.catch(error => ready.reject(error instanceof Error ? error : new Error('Mock errors failed')));
+  cleanups.push(async () => { await client.remove(name, job); controller.abort(); child.kill(); await child.wait(); await Promise.allSettled([reader, errors]); await client.close(); });
+  const timer = setTimeout(() => ready.reject(new Error('Mock container did not start')), 10_000);
+  try { await ready.promise; } finally { clearTimeout(timer); }
+  const address = await client.run(['inspect', '--format', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', name], AbortSignal.timeout(10_000));
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/u.test(address)) throw new Error('Mock bridge address unavailable');
+  return { root, repository, env, git, base, requests, firstRequest: firstRequest.promise, endpoint: `http://${address}:3000/v1` };
 }
 function cli(args: string[], env: NodeJS.ProcessEnv): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
@@ -80,7 +86,7 @@ function cli(args: string[], env: NodeJS.ProcessEnv): Promise<{ code: number | n
     for (const [stream, collect] of [[child.stdout, (s: string) => { stdout += s; }], [child.stderr, (s: string) => { stderr += s; }]] as const) {
       stream.on('data', (part: Buffer) => { bytes += part.length; if (bytes > 8 * 1024 * 1024) child.kill('SIGKILL'); else collect(part.toString()); });
     }
-    const timer = setTimeout(() => child.kill('SIGKILL'), 90_000);
+    const timer = setTimeout(() => child.kill('SIGKILL'), 30_000);
     child.once('error', error => { clearTimeout(timer); reject(error); });
     child.once('close', code => { clearTimeout(timer); resolve({ code, stdout, stderr }); });
   });
@@ -88,7 +94,7 @@ function cli(args: string[], env: NodeJS.ProcessEnv): Promise<{ code: number | n
 
 describe.runIf(enabled)('real isolated Pi/OpenCode workers', () => {
   for (const harness of ['pi', 'opencode'] as const) {
-    it(`${harness} reviews through the host broker without changing Git state or persisting its real credential`, async () => {
+    it(`${harness} reviews through the Docker-wrapped binary without changing Git state or persisting its real credential`, async () => {
       const f = await fixture(); const output = join(f.root, 'output');
       const before = f.git('status', '--porcelain=v1');
       const result = await cli(['review', '--repository', f.repository, '--base', f.base, '--head', 'HEAD', '--indexing', 'disabled', '--reuse', 'disabled',
@@ -135,7 +141,7 @@ describe.runIf(enabled)('real isolated Pi/OpenCode workers', () => {
       expect(f.requests).toHaveLength(harness === 'pi' ? 2 : 12);
       expect(result.stdout + result.stderr).not.toContain(key);
     }, 120_000);
-    it(`${harness} treats authentication failure as nonretryable and redacts reflected credentials before worker output`, async () => {
+    it(`${harness} treats authentication failure as nonretryable and redacts reflected credentials from diagnostics`, async () => {
       const f = await fixture('unauthorized');
       const result = await cli(['review', '--repository', f.repository, '--base', f.base, '--head', 'HEAD', '--indexing', 'disabled', '--reuse', 'disabled',
         '--harness', harness, '--isolation', 'docker', ...(manifest === undefined ? [] : ['--worker-manifest', manifest]), '--provider', 'mock', '--endpoint', f.endpoint,
@@ -162,24 +168,18 @@ describe.runIf(enabled)('real isolated Pi/OpenCode workers', () => {
   it('enforces the same kernel, filesystem, environment and network profile without host mounts', async () => {
     const f = await fixture(); const marker = join(f.root, 'host-only-marker'); await writeFile(marker, 'host-only');
     const command = await executable('docker', process.env.PATH ?? '', f.repository);
-    let image: WorkerImage;
-    if (manifest === undefined && process.env.REDLINE_CONTAINER_CLI !== undefined) {
-      const packageRoot = dirname(dirname(binary));
-      const pkg = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'));
-      const data = parseWorkerManifest(JSON.parse(await readFile(join(packageRoot, 'src/harness-worker/worker-images.json'), 'utf8')), pkg.version, false);
-      image = { ...data.images.pi, development: false, identity: { harness: 'pi', release: data.release, revision: data.revision, harnessVersion: data.images.pi.harnessVersion } };
-    } else image = await loadWorkerImage('pi', f.repository, manifest);
+    const image = await testImage(f.repository);
     const client = await DockerClient.create(command, f.repository, f.root, f.env);
     const jobId = randomUUID(); const signal = AbortSignal.timeout(30_000); let id: string | undefined;
     try {
       await client.preflight(image, signal);
       const args = containerArguments(image, client.owner, jobId, 30_000, DEFAULT_CONTAINER_LIMITS);
       args.splice(args.length - 1, 0, '--entrypoint', 'node');
-      args.push('-e', `const fs=require('node:fs'),os=require('node:os');const root=fs.readFileSync('/proc/self/mountinfo','utf8').split('\\n').find(l=>l.split(' ')[4]==='/');console.log(JSON.stringify({uid:process.getuid(),status:fs.readFileSync('/proc/self/status','utf8'),root,interfaces:Object.keys(os.networkInterfaces()),socket:fs.existsSync('/var/run/docker.sock'),marker:fs.existsSync(${JSON.stringify(marker)}),credential:process.env.REDLINE_MODEL_AUTH??null,memory:fs.readFileSync('/sys/fs/cgroup/memory.max','utf8').trim(),pids:fs.readFileSync('/sys/fs/cgroup/pids.max','utf8').trim()}));`);
+      args.push('-e', `const fs=require('node:fs'),os=require('node:os');const root=fs.readFileSync('/proc/self/mountinfo','utf8').split('\\n').find(l=>l.split(' ')[4]==='/');console.log(JSON.stringify({uid:process.getuid(),status:fs.readFileSync('/proc/self/status','utf8'),root,interfaces:Object.keys(os.networkInterfaces()),socket:fs.existsSync('/var/run/docker.sock'),marker:fs.existsSync(${JSON.stringify(marker)}),controller:fs.existsSync('/opt/redline/src'),customWorker:fs.existsSync('/opt/redline/bin/redline-worker.mjs'),credential:process.env.REDLINE_MODEL_AUTH??null,memory:fs.readFileSync('/sys/fs/cgroup/memory.max','utf8').trim(),pids:fs.readFileSync('/sys/fs/cgroup/pids.max','utf8').trim()}));`);
       id = await client.run(args, signal); const data = JSON.parse(await client.run(['start', '--attach', id], signal));
       expect(data.uid).toBe(10001); expect(data.status).toMatch(/NoNewPrivs:\s+1/u); expect(data.status).toMatch(/Seccomp:\s+2/u); expect(data.status).toMatch(/CapEff:\s+0+\n/u);
-      expect(data.root.split(' ')[5].split(',')).toContain('ro'); expect(data.interfaces).toEqual(['lo']);
-      expect(data.socket).toBe(false); expect(data.marker).toBe(false); expect(data.credential).toBeNull();
+      expect(data.root.split(' ')[5].split(',')).toContain('ro'); expect(data.interfaces).toContain('eth0');
+      expect(data.socket).toBe(false); expect(data.marker).toBe(false); expect(data.controller).toBe(false); expect(data.customWorker).toBe(false); expect(data.credential).toBeNull();
       expect(data.memory).toBe(String(1024 * 1024 * 1024)); expect(data.pids).toBe('128');
     } finally { if (id !== undefined) await client.remove(id, jobId); await client.close(); }
   }, 60_000);

@@ -52,9 +52,9 @@ it('installs the packed package offline and runs both CLIs without source checko
     expect(paths).toContain('src/rpc/main.ts');
     expect(paths).toContain('schemas/rpc/v1/protocol.schema.json');
     expect(paths).toContain('docs/stdio-protocol.md');
-    for (const path of ['src/transport/framing.ts', 'src/harness-worker/contract.ts', 'src/harness-worker/broker.ts',
-      'src/harness-worker/host.ts', 'src/harness-worker/redaction.ts', 'src/harness-executor/docker-executor.ts',
-      'src/harness-worker/worker-images.json', 'docs/internal-worker-protocol.md', 'docs/docker-workers.md', 'docs/coordinated-releases.md']) expect(paths).toContain(path);
+    for (const path of ['src/harness-executor/docker-executor.ts', 'src/harness-worker/docker-client.ts', 'src/harness-worker/images.ts',
+      'src/harness-worker/worker-images.json', 'docs/docker-workers.md', 'docs/coordinated-releases.md']) expect(paths).toContain(path);
+    expect(paths).not.toContain('bin/redline-worker.mjs'); expect(paths).not.toContain('src/harness-worker/broker.ts');
     for (const file of ['context.ts', 'cache.ts', 'lock.py', 'export.py', 'gitnexus-query.mjs']) expect(paths).toContain(`src/code-index/${file}`);
     expect(paths.some((path) => /^(?:test|benchmark|src\.old|node_modules|\.agents|\.github|dist)\//u.test(path))).toBe(false);
     const installation = join(root, 'installation'); await mkdir(installation);

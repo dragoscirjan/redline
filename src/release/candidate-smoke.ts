@@ -3,8 +3,8 @@ import { promisify } from 'node:util';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { record } from '../harness-worker/contract.ts';
-import { frame, FrameReader } from '../transport/framing.ts';
+import { isRecord as record } from '../process-runner.ts';
+import { frame, FrameReader } from '../rpc/framing.ts';
 const exec = promisify(execFile);
 /** Test exact packed bytes before publication. No registry, install lifecycle, host config or live models. */
 export async function verifyOfflineCandidate(tarball: string, version: string): Promise<{ readonly checks: readonly string[] }> {

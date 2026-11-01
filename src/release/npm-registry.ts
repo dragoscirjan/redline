@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { record } from '../harness-worker/contract.ts';
+import { isRecord as record } from '../process-runner.ts';
 import type { ReleaseRecord } from './coordinator.ts';
 import { responseBytes } from './http.ts';
 const exec = promisify(execFile);

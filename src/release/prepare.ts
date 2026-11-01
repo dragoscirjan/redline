@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileDigest } from '../harness-worker/build.ts';
-import { record } from '../harness-worker/contract.ts';
+import { isRecord as record } from '../process-runner.ts';
 import { parseWorkerManifest } from '../harness-worker/images.ts';
 import { parseReleaseRecord, type ReleaseRecord, type ReleaseImage } from './coordinator.ts';
 import { combinePlatforms, inspectCandidate, type OciCandidate } from './oci.ts';

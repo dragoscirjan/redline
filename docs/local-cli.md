@@ -315,7 +315,7 @@ Git capture permits at most 20,000 tree/index entries, 16 MiB per captured worki
 
 Git commands use absolute trusted executables, argument arrays, a constructed environment, no lazy fetches, and scratch metadata without repository hooks, filters, text converters, credentials, or external diff configuration. Symlinks are captured as path/target data and are never installed into the source export. Redline never runs project builds, tests, installers, scripts, or executables.
 
-This is a trusted-host CLI, not malicious-host protection. Opt-in [Docker workers](./docker-workers.md) isolate Pi/OpenCode and keep real credentials in the host broker. Direct mode remains the default. Podman and protection from an untrusted host/kernel are not implemented. The independent finding verifier remains disabled; Docker mode does not activate that quality gate.
+This is a trusted-host CLI, not malicious-host protection. Opt-in [Docker workers](./docker-workers.md) wrap Pi/OpenCode binaries and pass only the selected model-provider key into each container. Direct mode remains the default. Podman and protection from an untrusted host/kernel are not implemented. The independent finding verifier remains disabled; Docker mode does not activate that quality gate.
 
 ## Release operations
 

@@ -29,7 +29,7 @@ authentication policy. Install and publication lifecycle scripts are disabled.
 
 1. Native Linux amd64 and arm64 jobs build Pi and OpenCode from the same clean source,
    pinned Node base, pinned BuildKit, frozen SDK lockfile and exact SDK versions.
-2. Both real SDKs execute through the host broker against synthetic loopback models.
+2. Both real SDK binaries execute through Docker against a synthetic model container, without a host broker or published host port.
    The suite checks findings, RPC, retry quotas, fatal auth, cancellation and kernel
    restrictions. No provider secrets or live models are used.
 3. Each OCI candidate's config digest must equal the image config that actually ran.

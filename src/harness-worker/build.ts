@@ -7,7 +7,8 @@ import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import { record, type WorkerHarness } from './contract.ts';
+import { isRecord as record } from '../process-runner.ts';
+import type { WorkerHarness } from './images.ts';
 
 const exec = promisify(execFile);
 const source = fileURLToPath(new URL('../../', import.meta.url));

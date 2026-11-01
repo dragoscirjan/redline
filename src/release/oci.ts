@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { responseBytes } from './http.ts';
-import { record } from '../harness-worker/contract.ts';
+import { isRecord as record } from '../process-runner.ts';
 
 const exec = promisify(execFile);
 export const OCI_INDEX = 'application/vnd.oci.image.index.v1+json';

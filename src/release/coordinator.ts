@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { record } from '../harness-worker/contract.ts';
+import { isRecord as record } from '../process-runner.ts';
 import { validDigest } from './oci.ts';
 
 export const RELEASE_MARKER = 'redline-release/v1';

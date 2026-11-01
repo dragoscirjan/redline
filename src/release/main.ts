@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { appendFile, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { record } from '../harness-worker/contract.ts';
+import { isRecord as record } from '../process-runner.ts';
 import { coordinateRelease, parseReleaseRecord, recordIdentity, type ReleasePorts, type ReleaseRecord } from './coordinator.ts';
 import { classifyReleaseChangesets } from './npm-check.ts';
 import { GitHubReleases } from './github.ts';

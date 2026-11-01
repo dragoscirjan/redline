@@ -1,10 +1,10 @@
 import { readFile } from 'node:fs/promises';
-import { FRAME_LIMITS } from '../transport/framing.ts';
 
 export const VERSION = '1.0';
 export const LIMITS = Object.freeze({
-  ...FRAME_LIMITS, batchSize: 16, historyRuns: 8, retainedBytes: 8 * 1024 * 1024,
-  resultPageItems: 50, frameTimeoutMs: 10_000,
+  headerBytes: 1024, messageBytes: 1024 * 1024, queueBytes: 2 * 1024 * 1024,
+  queueMessages: 32, batchSize: 16, historyRuns: 8, retainedBytes: 8 * 1024 * 1024,
+  resultPageItems: 50, frameTimeoutMs: 10_000, writeTimeoutMs: 5_000,
 });
 export const CODES = Object.freeze({
   parse: -32700, request: -32600, method: -32601, params: -32602, internal: -32603,

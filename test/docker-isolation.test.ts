@@ -64,6 +64,30 @@ describe.runIf(process.platform === 'linux')('private Docker controller', () => 
       await expect(c.preflight(image, AbortSignal.timeout(5000))).rejects.toThrow('enforce'); expect(run.mock.calls.some(([args]) => args[0] === 'create')).toBe(false);
     } finally { await c.close(); }
   });
+  it('does not block a fresh review when another run removes or cannot remove a stale owned container', async () => {
+    const c = await client(); const gone = 'a'.repeat(64); const stuck = 'b'.repeat(64);
+    const run = vi.spyOn(c, 'run').mockImplementation(async args => {
+      if (args[0] === 'info') return JSON.stringify({ os: 'linux', arch: 'amd64', security: ['name=seccomp,profile=builtin'], memory: true, swap: true, pids: true, cpu: true });
+      if (args[0] === 'image') return args.includes('{{.Id}}') ? 'sha256:' + 'a'.repeat(64) : JSON.stringify({ user: '10001:10001', entrypoint: ['node', '/opt/redline/bin/redline-worker.mjs'], revision: image.identity.revision, kind: 'release' });
+      if (args[1] === 'ls') return gone + '\n' + stuck;
+      if (args[0] === 'container' && args[2] === stuck) return JSON.stringify({ [MANAGED]: 'worker/v1', [OWNER]: c.owner, [JOB]: job, 'io.redline.expires': String(Date.now() - 1) });
+      throw new Error('Concurrent removal or unavailable cleanup');
+    });
+    try {
+      await expect(c.preflight(image, AbortSignal.timeout(5000))).resolves.toBeUndefined();
+      expect(run.mock.calls.some(([args]) => args[0] === 'rm' && args.at(-1) === stuck)).toBe(true);
+      expect(run.mock.calls.some(([args]) => args[0] === 'rm' && args.at(-1) === gone)).toBe(false);
+    } finally { await c.close(); }
+  });
+  it('propagates cancellation instead of swallowing it as a reconciliation race', async () => {
+    const c = await client(); const controller = new AbortController(); const reason = new Error('Original cancellation');
+    vi.spyOn(c, 'run').mockImplementation(async args => {
+      if (args[0] === 'info') return JSON.stringify({ os: 'linux', arch: 'amd64', security: ['name=seccomp,profile=builtin'], memory: true, swap: true, pids: true, cpu: true });
+      if (args[0] === 'image') return args.includes('{{.Id}}') ? 'sha256:' + 'a'.repeat(64) : JSON.stringify({ user: '10001:10001', entrypoint: ['node', '/opt/redline/bin/redline-worker.mjs'], revision: image.identity.revision, kind: 'release' });
+      controller.abort(reason); throw new Error('Cleanup interrupted');
+    });
+    try { await expect(c.preflight(image, controller.signal)).rejects.toBe(reason); } finally { await c.close(); }
+  });
   it('refuses cleanup unless marker, owner and exact job all match', async () => {
     const c = await client();
     const run = vi.spyOn(c, 'run').mockResolvedValue(JSON.stringify({ [MANAGED]: 'worker/v1', [OWNER]: 'someone-else', [JOB]: job }));

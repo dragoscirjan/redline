@@ -99,15 +99,23 @@ export class DockerClient {
     await this.run(['rm', '--force', identifier], signal);
   }
   private async reconcile(signal: AbortSignal): Promise<void> {
-    const listed = await this.run(['container', 'ls', '--all', '--no-trunc', '--filter', `label=${MANAGED}=worker/v1`, '--filter', `label=${OWNER}=${this.owner}`, '--format', '{{.ID}}'], signal);
-    const ids = listed === '' ? [] : listed.split('\n');
-    if (ids.length > 128 || ids.some(id => !/^[a-f0-9]{64}$/u.test(id))) throw new WorkerFault('Owned container reconciliation limit exceeded');
-    for (const id of ids) {
-      const labels: unknown = JSON.parse(await this.run(['container', 'inspect', id, '--format', '{{json .Config.Labels}}'], signal));
-      if (!record(labels) || labels[OWNER] !== this.owner || labels[MANAGED] !== 'worker/v1') throw new WorkerFault('Container reconciliation ownership mismatch');
-      const expiry = Number(labels[EXPIRY]);
-      if (Number.isSafeInteger(expiry) && expiry > 0 && expiry < Date.now() && typeof labels[JOB] === 'string') await this.remove(id, labels[JOB]);
+    let ids: string[];
+    try {
+      const listed = await this.run(['container', 'ls', '--all', '--no-trunc', '--filter', `label=${MANAGED}=worker/v1`, '--filter', `label=${OWNER}=${this.owner}`, '--format', '{{.ID}}'], signal);
+      ids = listed === '' ? [] : listed.split('\n');
+    } catch { signal.throwIfAborted(); return; }
+    // Crash leftovers belong to other invocations. Their cleanup cannot disable a fresh review.
+    for (const id of ids.slice(0, 128)) {
+      signal.throwIfAborted();
+      if (!/^[a-f0-9]{64}$/u.test(id)) continue;
+      try {
+        const labels: unknown = JSON.parse(await this.run(['container', 'inspect', id, '--format', '{{json .Config.Labels}}'], signal));
+        if (!record(labels) || labels[OWNER] !== this.owner || labels[MANAGED] !== 'worker/v1') continue;
+        const expiry = Number(labels[EXPIRY]); signal.throwIfAborted();
+        if (Number.isSafeInteger(expiry) && expiry > 0 && expiry < Date.now() && typeof labels[JOB] === 'string') await this.remove(id, labels[JOB]);
+      } catch { signal.throwIfAborted(); }
     }
+    signal.throwIfAborted();
   }
   async close(): Promise<void> { await rm(this.directory, { recursive: true, force: true }); }
 }

@@ -218,6 +218,8 @@ describe('npm release boundary', () => {
     expect(source).toContain('run: node src/release/main.ts restore');
     expect(source).toContain('run: node src/release/main.ts finalize');
     expect(source).toContain('artifact-ids: ${{ needs.plan.outputs.candidate-id }}');
+    expect(source).toContain('CANDIDATE_ARTIFACT: release-candidate-${{ needs.plan.outputs.source }}-${{ github.run_id }}-attempt${{ github.run_attempt }}');
+    expect(source).not.toContain('CANDIDATE_ARTIFACT: ${{ needs.plan.outputs.candidate-artifact }}');
     expect(source).toContain('run-id: ${{ needs.plan.outputs.run-id }}');
     expect(source).not.toContain('outputs.published');
     expect(source).toContain("if: steps.version.outputs.pr-number != ''");

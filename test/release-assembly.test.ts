@@ -27,7 +27,7 @@ it.runIf(process.platform === 'linux')('assembles a complete immutable release f
   const git = (...args: string[]) => execFileSync('git', ['-C', source, '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgSign=false', ...args], { env, encoding: 'utf8' }).trim();
   git('init', '--quiet', '-b', 'main'); git('config', 'user.name', 'Assembly fixture'); git('config', 'user.email', 'assembly@example.invalid'); git('add', '.'); git('commit', '--quiet', '-m', 'fixture');
   const sha = git('rev-parse', 'HEAD');
-  const intent: ReleaseIntent = { release: '1.2.0', source: sha, runId: '123', candidateArtifact: `release-candidate-${sha}-123-attempt1`,
+  const intent: ReleaseIntent = { release: '1.2.0', source: sha, runId: '123', candidateArtifact: `release-candidate-${sha}-123-attempt2`,
     artifacts: { amd64: 'worker-native-amd64-123-attempt1', arm64: 'worker-native-arm64-123-attempt1' } };
   const pins = JSON.parse(await readFile(join(source, 'containers/pins.json'), 'utf8')); const nativeRoot = join(root, 'native'); await mkdir(nativeRoot);
   for (const architecture of ['amd64', 'arm64'] as const) {
@@ -63,6 +63,9 @@ console.log(JSON.stringify([{unitFixture:true,warning:'Not cryptographic proof'}
   vi.stubEnv('PATH', bin + delimiter + (process.env.PATH ?? '')); vi.stubEnv('REDLINE_MODEL_AUTH', 'synthetic-ambient-key-must-not-reach-verifier');
   const original = await readFile(join(source, 'src/harness-worker/worker-images.json'), 'utf8'); const stage = join(root, 'stage');
   const result = await prepareRelease(source, nativeRoot, stage, intent, 'unit-attestation-token');
+  // The plan/native jobs can remain from attempt 1 while prepare and its upload rerun in attempt 2.
+  expect(result.candidateArtifact).toBe(`release-candidate-${sha}-123-attempt2`);
+  expect(result.artifacts.amd64).toBe('worker-native-amd64-123-attempt1');
   expect(await validateStage(stage, result)).toEqual(result); expect(result.images.pi.platforms).toHaveLength(2); expect(result.images.opencode.platforms).toHaveLength(2);
   expect(await readFile(join(source, 'src/harness-worker/worker-images.json'), 'utf8')).toBe(original); expect(git('status', '--porcelain=v1')).toBe('');
   const embedded = JSON.parse(execFileSync('tar', ['-xOf', join(stage, result.npm.filename), 'package/src/harness-worker/worker-images.json'], { env, encoding: 'utf8' }));

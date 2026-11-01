@@ -52,6 +52,7 @@ export default defineConfig({
         collapsed: true,
         items: [
           { text: 'CLI options and behavior', link: '/local-cli' },
+          { text: 'Stdio JSON-RPC protocol', link: '/stdio-protocol' },
           { text: 'Review eligibility', link: '/review-eligibility' },
           { text: 'Review output schema', link: '/review-reporting' },
           { text: 'Review environment contract', link: '/runnable-review-configuration' },

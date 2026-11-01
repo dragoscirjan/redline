@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "generator": {
+    "name": "Archify",
+    "version": "3.2.0",
+    "revision": "208acba8d412335185b2056fedf54b3405df43fb",
+    "archiveSha256": "7a6ee4f608c47d72c1f406be05fc30d015796f9f5006a7eda0daa79a8d695adc"
+  },
+  "sourceRevision": "60ea6f5083fab4ddc8592f27e898be7410b23bb0",
+  "diagrams": [
+    {
+      "id": "local-review",
+      "type": "architecture",
+      "specification": {
+        "path": "docs/diagrams/local-review.architecture.json",
+        "sha256": "c72db5cf3f7a528c179da8a1f418a739ceaeab75ba03eef2c79068c0832db09c",
+        "bytes": 6270
+      },
+      "html": {
+        "path": "docs/public/diagrams/local-review.html",
+        "sha256": "3174fd02864f52bee9220e8a5ab74a111f8ab0af80172f2408fa9b140df94cfb",
+        "bytes": 823869
+      },
+      "svg": {
+        "path": "docs/public/diagrams/local-review.svg",
+        "sha256": "ddc33acf2dd39c0c931f6aa39eb80144054792513e8eabad2727d33aa21cb7d1",
+        "bytes": 170987
+      },
+      "checks": {
+        "quality": "showcase",
+        "validate": "pass",
+        "deliver": "pass",
+        "artifact": "pass",
+        "browser": "pass"
+      }
+    },
+    {
+      "id": "rpc-lifecycle",
+      "type": "lifecycle",
+      "specification": {
+        "path": "docs/diagrams/rpc-lifecycle.lifecycle.json",
+        "sha256": "736a9ec9cc8411377e20751ea9e1b528bdb8b44235192c4c53970e35b142acbe",
+        "bytes": 4525
+      },
+      "html": {
+        "path": "docs/public/diagrams/rpc-lifecycle.html",
+        "sha256": "d6e044aec6f2300b6b7834d763ebb30b5663e22e30ce155cd326a8582eef2d60",
+        "bytes": 816253
+      },
+      "svg": {
+        "path": "docs/public/diagrams/rpc-lifecycle.svg",
+        "sha256": "18ff27a552e2ebbbbdc48b33cbcd532f770da8a183bdccee34de6dc680f475b3",
+        "bytes": 152752
+      },
+      "checks": {
+        "quality": "showcase",
+        "validate": "pass",
+        "deliver": "pass",
+        "artifact": "pass",
+        "browser": "pass"
+      }
+    }
+  ]
+}

@@ -1,0 +1,304 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Local CLI and RPC review architecture",
+    "locale": "en",
+    "output": "docs/public/diagrams/local-review.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "git@github.com:dragoscirjan/redline.git",
+      "revision": "60ea6f5083fab4ddc8592f27e898be7410b23bb0",
+      "link_mode": "local-only"
+    }
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Client program",
+      "sublabel": "Reference client today",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        180,
+        72
+      ],
+      "sources": [
+        {
+          "path": "test/helpers/rpc-client.ts",
+          "line": 10,
+          "end_line": 36
+        }
+      ]
+    },
+    {
+      "id": "rpc",
+      "type": "backend",
+      "label": "redline rpc",
+      "sublabel": "Validate / route / redact",
+      "pos": [
+        350,
+        40
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "src/rpc/server.ts",
+          "line": 17,
+          "end_line": 43
+        },
+        {
+          "path": "src/rpc/session.ts",
+          "line": 77,
+          "end_line": 98
+        },
+        {
+          "path": "src/rpc/local.ts",
+          "line": 74,
+          "end_line": 113
+        }
+      ]
+    },
+    {
+      "id": "cli",
+      "type": "frontend",
+      "label": "redline review",
+      "sublabel": "Terminal presentation",
+      "pos": [
+        350,
+        240
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "src/local/cli.ts",
+          "line": 19,
+          "end_line": 60
+        }
+      ]
+    },
+    {
+      "id": "application",
+      "type": "backend",
+      "label": "Shared review",
+      "sublabel": "Capture / run / validate",
+      "pos": [
+        700,
+        240
+      ],
+      "size": [
+        200,
+        82
+      ],
+      "sources": [
+        {
+          "path": "src/local/run.ts",
+          "line": 101,
+          "end_line": 141
+        },
+        {
+          "path": "src/application/review.ts",
+          "line": 104,
+          "end_line": 145
+        },
+        {
+          "path": "src/review/runner.ts",
+          "line": 1065,
+          "end_line": 1074
+        }
+      ]
+    },
+    {
+      "id": "repository",
+      "type": "database",
+      "label": "Git repository",
+      "sublabel": "Revisions / index / files",
+      "pos": [
+        1050,
+        40
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "src/local/git-source.ts",
+          "line": 118,
+          "end_line": 177
+        }
+      ]
+    },
+    {
+      "id": "executor",
+      "type": "backend",
+      "label": "Harness executor",
+      "sublabel": "Pi / OpenCode / echo",
+      "pos": [
+        1050,
+        240
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "src/harness-executor/registry.ts",
+          "line": 25,
+          "end_line": 40
+        },
+        {
+          "path": "src/harness-executor/pi-executor.ts",
+          "line": 590,
+          "end_line": 610
+        },
+        {
+          "path": "src/harness-executor/opencode-executor.ts",
+          "line": 90,
+          "end_line": 107
+        }
+      ]
+    },
+    {
+      "id": "artifacts",
+      "type": "database",
+      "label": "Review artifacts",
+      "sublabel": "JSON / Markdown / status",
+      "pos": [
+        700,
+        460
+      ],
+      "size": [
+        200,
+        72
+      ],
+      "sources": [
+        {
+          "path": "src/review/runner.ts",
+          "line": 1065,
+          "end_line": 1074
+        },
+        {
+          "path": "src/local/run.ts",
+          "line": 133,
+          "end_line": 148
+        }
+      ]
+    },
+    {
+      "id": "provider",
+      "type": "external",
+      "label": "Configured model",
+      "sublabel": "May receive source",
+      "pos": [
+        1050,
+        460
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "src/harness-executor/pi-executor.ts",
+          "line": 205,
+          "end_line": 230
+        },
+        {
+          "path": "src/harness-executor/opencode-executor.ts",
+          "line": 218,
+          "end_line": 228
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "requests",
+      "from": "client",
+      "to": "rpc",
+      "label": "stdio requests",
+      "variant": "emphasis"
+    },
+    {
+      "id": "responses",
+      "from": "rpc",
+      "to": "client",
+      "label": "results / events"
+    },
+    {
+      "id": "rpc-run",
+      "from": "rpc",
+      "to": "application",
+      "label": "review",
+      "variant": "emphasis"
+    },
+    {
+      "id": "cli-run",
+      "from": "cli",
+      "to": "application",
+      "label": "review"
+    },
+    {
+      "id": "capture",
+      "from": "application",
+      "to": "repository",
+      "label": "capture"
+    },
+    {
+      "id": "execute",
+      "from": "application",
+      "to": "executor",
+      "label": "fixed prompts",
+      "variant": "emphasis"
+    },
+    {
+      "id": "persist",
+      "from": "application",
+      "to": "artifacts",
+      "label": "write"
+    },
+    {
+      "id": "model",
+      "from": "executor",
+      "to": "provider",
+      "label": "Pi/OpenCode only"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "One review policy",
+      "items": [
+        "Both commands use the same capture, retry, validation and artifact workflow.",
+        "Internal source/context/reporter adapters are grouped into Shared review."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Trusted settings",
+      "items": [
+        "Model, credential and executable settings come from trusted startup configuration.",
+        "RPC requests choose source data, not credentials or execution settings."
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Scope and limits",
+      "items": [
+        "Editor integrations are planned, not delivered here. No HTTP or LSP server.",
+        "echo stays local and is not model-quality evidence. Tools disabled is not a container sandbox."
+      ]
+    }
+  ]
+}

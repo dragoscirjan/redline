@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -118,8 +118,14 @@ describe('npm release boundary', () => {
   });
 
   it('uses the reviewed manifest version by default and ignores ambient VERSION without registry access', async () => {
-    const file = new URL('../src/release/npm-check.ts', import.meta.url);
+    const source = new URL('../src/release/npm-check.ts', import.meta.url);
     const metadata = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    const root = await mkdtemp(join(tmpdir(), 'redline-release-version-')); roots.push(root);
+    await mkdir(join(root, 'src/release'), { recursive: true }); await mkdir(join(root, '.changeset'));
+    await writeFile(join(root, 'package.json'), JSON.stringify({ name: metadata.name, version: metadata.version, type: 'module' }));
+    await writeFile(join(root, '.changeset/config.json'), '{}');
+    const file = pathToFileURL(join(root, 'src/release/npm-check.ts'));
+    await writeFile(file, await readFile(source));
     for (const explicit of [false, true]) {
       const script = `globalThis.fetch = async () => new Response('', { status: 404 });
         process.argv = [process.execPath, ${JSON.stringify(fileURLToPath(file))}${explicit ? ', ' + JSON.stringify(metadata.version) : ''}];

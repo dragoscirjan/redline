@@ -2,10 +2,6 @@
 
 The harness executor layer (`src/harness-executor/`) adapts the generic review-execution contract to one coding-agent harness. The review core never learns harness specifics; it sees one interface.
 
-The local CLI and RPC can select the opt-in [Docker executor](./docker-workers.md).
-It wraps the existing Pi/OpenCode process launches, without a custom worker protocol or
-model broker. The current GitHub Action is not rewired by this milestone.
-
 ## Interface
 
 ```ts
@@ -34,21 +30,7 @@ The registry (`createHarnessExecutor`) is the factory: resolving a harness
 name to its implementation is the only harness-specific decision the review
 core makes.
 
-## Docker adapter
-
-The Docker executor wraps Pi/OpenCode with fresh hardened containers for every attempt.
-The host retains review control, validation and artifacts. The SDK receives only its
-selected provider credential and generated configuration through a read-only input mount.
-Bridge networking permits the provider connection; no repository mount, Docker socket,
-GitHub token or unrelated host credential is available. Requested
-Docker execution fails closed without direct fallback. Image digests enter the semantic
-reuse identity. See the worker guide for build commands, limits and supported hosts.
-
 ## Harness implementations
-
-The Pi/OpenCode configuration details below apply to both modes. Docker uses the same
-host-side adapters and output parsers with a Docker-backed process spawner. Echo remains
-in-process and has no Docker image.
 
 ### Pi
 

@@ -79,7 +79,7 @@ Git CLI (#178)
 ├── JSON-RPC protocol (#179)
 │   ├── VS Code / VSCodium (#182)
 │   └── Zed (#187)
-├── Docker harness image (#203)
+├── Redline Docker image (#203)
 │   └── GitHub adapter (#180)
 │       ├── Forgejo / Gitea (#181)
 │       ├── GitLab (#183)
@@ -88,7 +88,7 @@ Git CLI (#178)
 └── Mercurial adapter (#186)
 ```
 
-The [Docker worker milestone (#203)](https://github.com/dragoscirjan/redline/issues/203) adds opt-in Pi/OpenCode isolation through one shared Node/Bun image on native Linux. See [build and usage commands](docs/docker-workers.md). Image publishing uses a standard GHCR workflow; npm releasing stays unchanged. Direct execution remains the default. Podman and malicious-host protection are not implemented. Repository content remains inert data and is never executed during review.
+The [Docker milestone (#203)](https://github.com/dragoscirjan/redline/issues/203) runs Redline itself in an image containing Node, Bun, Python, Pi, OpenCode and the requested MCP packages. See [build and usage commands](docs/docker-workers.md). Docker is started externally; Redline does not orchestrate containers. Image publishing uses a standard GHCR workflow; npm releasing stays unchanged. The npm CLI remains available without Docker. Podman and malicious-host protection are not implemented. Repository content remains inert data and is never executed during review.
 
 ## Development
 

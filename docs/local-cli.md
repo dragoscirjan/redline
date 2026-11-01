@@ -69,7 +69,7 @@ redline review --base main --head HEAD --harness pi \
 
 Replace the path and namespace with the artifact's actual values. Without `--code-context-repository`, the expected namespace is `local/<opaque Git-common-directory hash>` from `capture.json`; no GitHub remote is needed. Import checks namespace, head, optional base identity, supported provider/schema, bounded paths/spans, and captured head source. An import is not trusted merely because it was produced earlier. Provider selection flags apply to building; an imported artifact supplies its own validated provider identity.
 
-Local indexing automatically retains validated base databases under `$XDG_STATE_HOME/redline/indexes/v1` (or `$HOME/.local/state/redline/indexes/v1`), separate from review outputs and pinned tools. Identity includes the local repository namespace, base commit, provider/version, platform/architecture, and index configuration. Head-only changes and token-budget changes do not rebuild a healthy matching base index. Missing, corrupt, incompatible, or unsafe state is rebuilt; an unavailable cache falls back to a fresh per-run index rather than trusting it. The terminal reports `Base index:` with one of these values:
+Local indexing retains validated base databases under `$XDG_CACHE_HOME/redline/indexes/v1` when `XDG_CACHE_HOME` is set. Otherwise it keeps the existing `$XDG_STATE_HOME/redline/indexes/v1` (or `$HOME/.local/state/redline/indexes/v1`) location. Provider data stays separate from review outputs and pinned tools. Identity includes the local repository namespace, base commit, provider/version, platform/architecture, and index configuration. Head-only changes and token-budget changes do not rebuild a healthy matching base index. Missing, corrupt, incompatible, or unsafe state is rebuilt; an unavailable cache falls back to a fresh per-run index rather than trusting it. The terminal reports `Base index:` with one of these values:
 
 - `reused`: a matching base index was reused.
 - `rebuilt`: a base index was built with persistent cache storage.
@@ -315,7 +315,7 @@ Git capture permits at most 20,000 tree/index entries, 16 MiB per captured worki
 
 Git commands use absolute trusted executables, argument arrays, a constructed environment, no lazy fetches, and scratch metadata without repository hooks, filters, text converters, credentials, or external diff configuration. Symlinks are captured as path/target data and are never installed into the source export. Redline never runs project builds, tests, installers, scripts, or executables.
 
-This is a trusted-host CLI, not malicious-host protection. Opt-in [Docker workers](./docker-workers.md) wrap Pi/OpenCode binaries and pass only the selected model-provider key into each container. Direct mode remains the default. Podman and protection from an untrusted host/kernel are not implemented. The independent finding verifier remains disabled; Docker mode does not activate that quality gate.
+This is a trusted-host CLI, not malicious-host protection. The [Docker image](./docker-workers.md) runs this same Redline CLI and its installed harnesses together. Docker is invoked externally; Redline has no container-orchestration mode. Podman and protection from an untrusted host/kernel are not implemented. The independent finding verifier remains disabled; Docker mode does not activate that quality gate.
 
 ## Release operations
 

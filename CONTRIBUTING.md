@@ -15,7 +15,7 @@ Run `mise tasks` to list the available tasks. Use `mise run <task>` when a task 
 
 Use GitHub Issues for defects, features, and acceptance criteria. Keep product documentation and design decisions under `docs/`, rendered as a VitePress site (`pnpm run docs` builds it; `pnpm run serve` serves it during editing). Link implementation pull requests to the relevant docs and issues.
 
-The repository is in a restart phase: the current implementation is the leaner harness-executor design described in `AGENTS.md`. Opt-in Docker containers wrap the existing Pi/OpenCode binaries on trusted native Linux hosts; each container receives only the selected model-provider API key. Managed local model runtimes, Forgejo/Gitea entry points, and protection from untrusted hosts or kernels remain planned follow-ups. GitHub publication (one review per file plus a managed summary, dogfood auto-review on this repository) is implemented. `src.old/` and `github/action.yaml.old` keep the earlier design as reference material; do not import from them.
+The repository is in a restart phase: the current implementation is the leaner harness-executor design described in `AGENTS.md`. The Docker image runs Redline with Pi and OpenCode on trusted native Linux hosts; each harness receives only the selected model-provider API key. Managed local model runtimes, Forgejo/Gitea entry points, and protection from untrusted hosts or kernels remain planned follow-ups. GitHub publication (one review per file plus a managed summary, dogfood auto-review on this repository) is implemented. `src.old/` and `github/action.yaml.old` keep the earlier design as reference material; do not import from them.
 
 The stack is pnpm, TypeScript, Node, Bun, vitest, bats, and VitePress. Do not add a second package manager, task runner, formatter, or test framework without an accepted design change. Follow `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `mise.toml`, and the scripts in `package.json`.
 
@@ -76,7 +76,7 @@ Product documentation lives under `docs/` as a VitePress site. Register new page
 
 ## Releasing the action
 
-Published `vMAJOR.MINOR.PATCH` action tags are immutable. Consumers pin the full version; the `vMAJOR` alias moves only through the guarded manual release flow described in the Wiki's Release operations runbook, with repository tag rules requiring the trusted releaser. A release tag must contain the exact reviewed TypeScript source used by the composite action; emitted `dist/**/*.js` files are not part of the runtime contract. Legacy runner images remain reference material. The shared harness image is published to GHCR independently of npm releases and Action tags.
+Published `vMAJOR.MINOR.PATCH` action tags are immutable. Consumers pin the full version; the `vMAJOR` alias moves only through the guarded manual release flow described in the Wiki's Release operations runbook, with repository tag rules requiring the trusted releaser. A release tag must contain the exact reviewed TypeScript source used by the composite action; emitted `dist/**/*.js` files are not part of the runtime contract. Legacy runner images remain reference material. The Redline image is published to GHCR independently of npm releases and Action tags.
 
 ## Pull request checklist
 

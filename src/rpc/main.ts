@@ -16,7 +16,7 @@ All clients can query completed results before shutdown/EOF.
 No HTTP listener, editor extension, or forge publication.
 See docs/stdio-protocol.md for schemas, limits, errors and recovery.
 `;
-const SETTINGS = ['config', 'harness', 'isolation', 'container-image', 'container-memory', 'container-scratch', 'container-cpus', 'container-pids', 'provider', 'endpoint', 'model', 'auth', 'indexing',
+const SETTINGS = ['config', 'harness', 'provider', 'endpoint', 'model', 'auth', 'indexing',
   'indexing-provider', 'index-executable', 'index-runtime', 'max-output-tokens', 'timeout',
   'run-timeout', 'retries', 'concurrency', 'finding-scope', 'reuse', 'scheduling', 'head-context', 'model-protocol', 'fail-on'] as const;
 export async function main(

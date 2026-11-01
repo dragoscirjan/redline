@@ -1,4 +1,4 @@
-name: Docker harness image
+name: Redline Docker image
 
 on:
   push:
@@ -33,13 +33,21 @@ jobs:
       - uses: ./.github/actions/install-dependencies
         with:
           telemetry-label: docker-${{ matrix.arch }}
-      - name: Build the shared image
-        run: docker build --file containers/Dockerfile --tag redline-harnesses:test .
+      - name: Restore and save persistent provider data
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ${{ runner.temp }}/redline-code-index/cache
+          key: redline-image-index-${{ matrix.arch }}-${{ hashFiles('containers/Dockerfile', 'containers/package.json', 'containers/pnpm-lock.yaml', 'containers/requirements.txt', 'src/code-index/**') }}-${{ github.event.pull_request.base.sha || github.sha }}
+          restore-keys: |
+            redline-image-index-${{ matrix.arch }}-${{ hashFiles('containers/Dockerfile', 'containers/package.json', 'containers/pnpm-lock.yaml', 'containers/requirements.txt', 'src/code-index/**') }}-
+      - name: Build the Redline image
+        run: docker build --file containers/Dockerfile --tag redline:test .
       - name: Test real harnesses with a synthetic model
         env:
           REDLINE_CONTAINER_TESTS: '1'
-          REDLINE_CONTAINER_IMAGE: redline-harnesses:test
-        run: pnpm exec vitest run test/container-worker.test.ts
+          REDLINE_CONTAINER_IMAGE: redline:test
+          REDLINE_CONTAINER_CACHE: ${{ runner.temp }}/redline-code-index/cache
+        run: pnpm exec vitest run test/container.test.ts
 
   publish:
     needs: test
@@ -67,7 +75,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}-harnesses:main
-            ghcr.io/${{ github.repository }}-harnesses:${{ github.sha }}
+            ghcr.io/${{ github.repository }}:main
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
           provenance: true
           sbom: true

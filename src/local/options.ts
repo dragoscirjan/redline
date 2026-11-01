@@ -3,20 +3,17 @@ import { constants } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { CapabilityError, requireCapability } from '../application/capabilities.ts';
-import { containerLimits, DEFAULT_CONTAINER_LIMITS } from '../harness-executor/docker-client.ts';
-import type { IsolationOptions } from './isolation.ts';
+import { requireCapability } from '../application/capabilities.ts';
 import { parseOutputTokens } from '../harness-executor/output-budget.ts';
 import { DEFAULT_REVIEW_RETRIES, parseReviewRetries } from '../review/retries.ts';
 import { parseReviewEnvironment, type ReviewEnvironment } from '../review/environment.ts';
 import { executable, GitCommand, gitEnvironment, inside, repositoryBoundary } from './process.ts';
 
-const KEYS = ['repository', 'output', 'vcs', 'base', 'head', 'worktree', 'comparison', 'untracked', 'harness', 'isolation', 'container-image', 'container-memory', 'container-scratch', 'container-cpus', 'container-pids',
+const KEYS = ['repository', 'output', 'vcs', 'base', 'head', 'worktree', 'comparison', 'untracked', 'harness',
   'provider', 'endpoint', 'model', 'auth', 'reuse', 'scheduling', 'head-context', 'model-protocol', 'max-output-tokens', 'timeout', 'run-timeout', 'retries', 'concurrency', 'finding-scope', 'fail-on', 'color', 'indexing', 'indexing-provider', 'index-executable', 'index-runtime', 'code-context', 'code-context-repository'] as const;
 type Key = (typeof KEYS)[number];
 export interface LocalOptions {
   readonly repository: string;
-  readonly isolation?: IsolationOptions;
   readonly output: string | undefined;
   readonly stateDirectory: string;
   readonly reuse: 'enabled' | 'disabled';
@@ -61,13 +58,7 @@ No target: review staged and unstaged tracked changes against HEAD.
   --code-context PATH                Import an existing revision-matched context artifact
   --code-context-repository ID        Expected artifact namespace; default local identity
   --config PATH                      Trusted user JSON; never repository config
-  --harness pi|opencode|echo          pi by default; direct binaries installed separately
-  --isolation direct|docker          Default direct; Docker fails closed, Linux Pi/OpenCode only
-  --container-image REF              Trusted image tag or digest; required for Docker mode
-  --container-memory MiB             Default 1024; range 256..8192
-  --container-scratch MiB            Default 256; range 64..1024, writable tmpfs only
-  --container-cpus COUNT             Default 1; range 0.25..4
-  --container-pids COUNT             Default 128; range 32..512
+  --harness pi|opencode|echo          pi by default; binaries installed separately
   --provider ID --endpoint URL --model ID
   --auth none                        Credential-less endpoint; otherwise use
                                     REDLINE_MODEL_AUTH provider-keyed JSON
@@ -188,24 +179,6 @@ export async function parseLocalOptions(args: readonly string[], env: NodeJS.Pro
   const untracked = choice(get('untracked', 'exclude'), ['exclude', 'include'], 'untracked');
   if (mode === 'staged' && untracked === 'include') throw new UsageError('untracked inclusion is incompatible with staged-only review');
   const harness = get('harness', 'pi');
-  const isolationMode = choice(get('isolation', 'direct'), ['direct', 'docker'], 'isolation');
-  const dockerKeys = ['container-image', 'container-memory', 'container-scratch', 'container-cpus', 'container-pids'] as const;
-  if (isolationMode === 'direct' && dockerKeys.some(key => flag(key) !== undefined || env[`REDLINE_${key.toUpperCase().replaceAll('-', '_')}`] !== undefined || defaults[key] !== undefined)) {
-    throw new UsageError('container settings require --isolation docker');
-  }
-  if (isolationMode === 'docker' && (harness === 'echo' || process.platform !== 'linux')) throw new CapabilityError('Docker isolation initially supports Pi/OpenCode on Linux only');
-  const budget = (key: Key, fallback: number): number => {
-    const text = get(key, String(fallback));
-    if (!/^[0-9]+(?:\.[0-9]{1,2})?$/u.test(text)) throw new UsageError('container budgets must be decimal numbers');
-    return Number(text);
-  };
-  let limits;
-  try { limits = containerLimits({ memoryMiB: budget('container-memory', DEFAULT_CONTAINER_LIMITS.memoryMiB),
-    scratchMiB: budget('container-scratch', DEFAULT_CONTAINER_LIMITS.scratchMiB), cpus: budget('container-cpus', DEFAULT_CONTAINER_LIMITS.cpus),
-    pids: budget('container-pids', DEFAULT_CONTAINER_LIMITS.pids) }); } catch { throw new UsageError('invalid container resource budget'); }
-  const rawImage = flag('container-image') ?? env.REDLINE_CONTAINER_IMAGE ?? defaults['container-image'];
-  if (isolationMode === 'docker' && rawImage === undefined) throw new UsageError('Docker isolation requires --container-image');
-  const isolation: IsolationOptions = { mode: isolationMode, limits, image: rawImage === undefined ? undefined : get('container-image', '') };
   let model: Record<string, unknown> = {};
   const rawModel = env.REDLINE_MODEL_CONFIG ?? defaults['model-config'];
   if (rawModel !== undefined) {
@@ -260,7 +233,6 @@ export async function parseLocalOptions(args: readonly string[], env: NodeJS.Pro
     ? { kind: 'worktree', mode, untracked: untracked === 'include' }
     : { kind: 'revision', head: get('head', String(head)), comparison: choice(get('comparison', 'merge-base'), ['merge-base', 'direct'], 'comparison') };
   return {
-    isolation,
     reuse: choice(get('reuse', 'enabled'), ['enabled', 'disabled'], 'reuse'),
     repository, stateDirectory: resolve(cwd, stateDirectory), output: output === undefined ? undefined : resolve(cwd, String(output)), base, target,
     indexing: { mode: indexMode, provider: choice(get('indexing-provider', 'cgc'), ['cgc', 'gitnexus'], 'indexing-provider'),

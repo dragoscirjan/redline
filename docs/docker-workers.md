@@ -1,84 +1,96 @@
-# Docker harness image
+# Run Redline with Docker
 
-Docker mode runs Pi or OpenCode in one shared image. Redline stays on the host for
-Git capture, review control, validation and output. Direct execution remains the default.
+The image runs **Redline itself**, with Node, Bun, Python, Pi, OpenCode and the
+requested MCP packages installed. You run Docker; Redline does not start containers.
+No Docker daemon or socket is needed inside the image.
 
-## Build and run
+## Build
 
 From a trusted Redline checkout:
 
 ```bash
-docker build --file containers/Dockerfile --tag redline-harnesses:dev .
-node bin/redline.mjs review \
-  --repository /path/to/repository \
-  --config /outside-reviewed-repository/redline-config.json \
-  --harness pi --isolation docker \
-  --container-image redline-harnesses:dev
+docker build --file containers/Dockerfile --tag redline:dev .
+docker run --rm redline:dev --help
 ```
 
-Use `--harness opencode` to select OpenCode from the same image. No host harness
-installation is needed. The image includes Node 24.21.0, Bun 1.4.4, both harnesses,
-CodeGraphContext, GitNexus, context-mode and sequential-thinking packages. Package
-versions are pinned in the image dependency manifests and lockfiles.
+The entrypoint is `node /opt/redline/bin/redline.mjs`. Arguments after the image name
+are normal Redline CLI arguments. There are no `--isolation` or `--container-image`
+options in Redline.
 
-The read-only MCP configuration and persistent index-cache mounts are still being
-implemented in [issue #209](https://github.com/dragoscirjan/redline/issues/209).
-Installing a package does not by itself expose its tools to the review model.
-GitNexus uses the PolyForm Noncommercial license; check its terms before using the image.
+The pinned runtimes are Node24.21.0, Bun1.4.4 and Python3.12. Pi1.4.0,
+OpenCode1.18.34, CGC0.5.7, GitNexus1.6.12, context-mode1.0.169 and
+sequential-thinking2.0.0 are installed during the trusted image build.
+GitNexus uses the PolyForm Noncommercial license; check its terms before use.
 
-## Configuration
+MCP packages are installed and their server startup is tested. Exposing the approved
+read-only MCP tools to the review LLM is still tracked in
+[issue #209](https://github.com/dragoscirjan/redline/issues/209). Installation alone
+does not enable model tool access.
 
-`--container-image` accepts a trusted image tag or digest. Redline resolves it to a
-local immutable image ID before execution. That ID also separates review-cache
-entries. There is no release manifest or automatic image/package version coupling.
-The equivalent trusted environment setting is `REDLINE_CONTAINER_IMAGE`.
+## Review a repository
 
-The startup settings apply to both CLI and RPC. A review request cannot change
-isolation, image selection, model credentials or resource limits.
+Keep cache and output directories outside the repository. Export
+`REDLINE_MODEL_AUTH` through your normal secret mechanism, then run:
 
-| Setting | Default | Allowed range |
-| --- | --- | --- |
-| `--isolation` | `direct` | `direct`, `docker` |
-| `--container-memory` | 1024 MiB | 256–8192 MiB |
-| `--container-scratch` | 256 MiB | 64–1024 MiB |
-| `--container-cpus` | 1 | 0.25–4 |
-| `--container-pids` | 128 | 32–512 |
+```bash
+CACHE="$HOME/.cache/redline-docker"
+OUTPUT="$HOME/.local/state/redline-docker"
+mkdir -p "$CACHE" "$OUTPUT"
 
-## Boundary
+docker run --rm --init \
+  --user "$(id -u):$(id -g)" \
+  --read-only --cap-drop ALL --security-opt no-new-privileges \
+  --memory 2g --cpus 2 --pids-limit 256 \
+  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777 \
+  --mount "type=bind,src=$PWD,dst=/repository,readonly" \
+  --mount "type=bind,src=$CACHE,dst=/cache" \
+  --mount "type=bind,src=$OUTPUT,dst=/output" \
+  --env REDLINE_MODEL_AUTH \
+  redline:dev review \
+  --repository /repository --base main --head HEAD \
+  --harness pi --provider openrouter \
+  --endpoint https://openrouter.ai/api/v1 --model YOUR_MODEL \
+  --output "/output/run-$(date +%s)"
+```
 
-Containers run non-root, with a read-only root filesystem, dropped capabilities,
-no-new-privileges, built-in seccomp, private IPC/cgroup namespaces and bounded
-writable temporary storage. CPU, memory and process limits apply per invocation.
-Docker mode fails if the engine cannot enforce the required profile. It never
-falls back to a host harness.
+Use `--harness opencode` to select OpenCode. The existing executors launch the
+installed binaries normally inside the container. Prompts, reasoning, retry policy
+and authoritative finding validation use the same review engine as the npm CLI.
 
-Only private generated configuration and the fixed policy enter the read-only input
-mount. The selected provider credential enters the container through the existing
-harness configuration. No working-repository mount, host HOME, Docker socket,
-GitHub token or unrelated host credential is forwarded.
+The example maps your non-root host UID/GID so Git ownership and writable mounts
+work without permission changes. The image defaults to UID/GID10001. When using
+named volumes, make sure your chosen runtime user can write them.
 
-The existing executor constructs input and parses the SDK's output. There is no
-custom worker protocol, model relay or credential broker. Reasoning, retry ownership,
-timeouts and authoritative finding validation remain in the existing review flow.
+Only reviewed data is mounted at `/repository`; it is read-only. Redline never
+executes repository scripts, builds, installers or hooks. Its generated configuration
+and captured snapshots live in container scratch/output directories.
 
-Bridge networking permits provider connections. Container `127.0.0.1` is not the
-host. A host-local service must listen on a trusted Docker-reachable interface;
-`host.docker.internal` names the host gateway. Host firewall rules still apply.
+## Persistent caches and GitHub Actions
 
-Docker trusts the host administrator, daemon and kernel. It is not protection from
-a malicious host or a kernel escape. Native Linux amd64 and arm64 are the image
-targets; Docker Desktop compatibility is not claimed.
+`/cache` and `/output` are declared volumes. `XDG_CACHE_HOME=/cache` directs both
+CGC and GitNexus retained index data to `/cache/redline/indexes/v1`, separate from
+per-run state and model credentials. Entries remain keyed by repository/base,
+provider/version, platform and index configuration, with validation before reuse.
 
-Normal completion, failure and cancellation remove only the owned container. Later
-preflight can reconcile expired owned containers. A dead controller cannot guarantee
-immediate cleanup. Redline never runs a global prune.
+Bind a host directory to `/cache` to retain data across containers. GitHub Actions
+can restore/save that host directory with `actions/cache`. The Docker CI workflow
+does this at `${{ runner.temp }}/redline-code-index/cache` and proves that each
+real provider reuses its data in a second Redline container. The existing code-index
+Action's cache restore/save contract is unchanged.
 
-## Publishing
+For RPC, run `docker run --rm -i [mounts and environment] IMAGE rpc [settings]`.
+Do not allocate a TTY for framed stdio RPC.
 
-`.github/workflows/docker.yml` builds and tests the image on native amd64 and arm64.
-Only a push to this repository's `main` can publish the shared multi-architecture image
-as `ghcr.io/dragoscirjan/redline-harnesses`, tagged `main` and with its source commit.
-Use the digest printed by the build when you need an immutable external reference.
-The workflow uses standard Docker actions. npm publishing remains independent and
-unchanged. If GHCR creates the package as private, the owner must make it public
-before anonymous pulls can work. No image has been published by this implementation session.
+## Publishing and limits
+
+`.github/workflows/docker.yml` builds and tests the Redline image on native Linux
+amd64 and arm64. Only this repository's main-branch push can publish
+`ghcr.io/dragoscirjan/redline`, tagged `main` and with its source commit. npm releasing
+stays independent. No image has been manually published by this implementation.
+
+If GHCR initially makes the package private, the owner must make it public for
+anonymous pulls. Use an image digest when you need an immutable reference.
+
+Docker flags, mounts and resource limits belong to the outer Docker invocation,
+not to Redline. Docker shares the host kernel and trusts its administrator and daemon.
+It does not protect against a malicious host or guarantee protection from kernel escapes.

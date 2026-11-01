@@ -3,5 +3,13 @@
 !containers/**
 !package.json
 !LICENSE
+!bin/
+!bin/*.mjs
+!src/
+!src/**
+!prompts/
+!prompts/**
+!schemas/
+!schemas/**
 containers/**/node_modules
 containers/**/.cache

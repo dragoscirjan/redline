@@ -105,8 +105,6 @@ export interface ReviewReuseEnvironment {
 }
 
 export interface ReviewEnvironment {
-  /** Trusted adapter identity, not an environment variable or repository input. */
-  readonly executionIdentity?: string;
   readonly harness: HarnessName;
   readonly reviewDirectory: string;
   readonly sourceDirectory: string;

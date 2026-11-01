@@ -12,11 +12,12 @@ import { buildFileReviewPrompt } from '../src/review/prompt.ts';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
-async function fixture() {
+async function fixture(xdgCache = false) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'redline-context-test-'))); roots.push(root);
   const repository = join(root, 'repo'); await mkdir(join(repository, 'src'), { recursive: true }); await mkdir(join(repository, 'test'));
   const env = { PATH: process.env.PATH ?? process.env.Path, SystemRoot: process.env.SystemRoot ?? process.env.SYSTEMROOT,
     HOME: root, XDG_CONFIG_HOME: join(root, 'config'), XDG_STATE_HOME: join(root, 'state'),
+    ...(xdgCache ? { XDG_CACHE_HOME: join(root, 'cache-volume') } : {}),
     GH_TOKEN: 'must-not-reach-indexer', OPENROUTER_API_KEY: 'must-not-reach-indexer' };
   const git = (...args: string[]) => execFileSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], {
     encoding: 'utf8', env: { ...env, GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
@@ -63,6 +64,19 @@ if(args[0]==='query') {
 async function summary(output: string) { return JSON.parse(await readFile(join(output, 'reviews/summary.json'), 'utf8')); }
 
 describe('local indexed-context parity', () => {
+  it('retains provider data under XDG_CACHE_HOME independently of per-run state', async () => {
+    const f = await fixture(true);
+    const first = await f.run(['--indexing', 'required']); expect(first.code, first.stderr).toBe(0);
+    const second = await f.run(['--indexing', 'required']); expect(second.code, second.stderr).toBe(0);
+    expect(second.stderr).toContain('Base index: reused');
+    const entries = await readdir(join(f.root, 'cache-volume/redline/indexes/v1'));
+    const key = entries.find(name => /^[a-f0-9]{64}$/u.test(name));
+    expect(key).toBeDefined();
+    const metadata = JSON.parse(await readFile(join(f.root, 'cache-volume/redline/indexes/v1', key!, 'entry.json'), 'utf8'));
+    expect(JSON.parse(metadata.identity).provider).toBe('cgc');
+    expect(await readdir(join(f.root, 'state/redline/indexes')).catch(() => [])).toEqual([]);
+  });
+
   it('reuses the base database across repeated runs, token budgets, and head changes while refreshing head evidence', async () => {
     const f = await fixture(); const first = await f.run(['--indexing', 'required']); expect(first.code, first.stderr).toBe(0);
     const second = await f.run(['--indexing', 'required', '--max-output-tokens', '32768']); expect(second.code, second.stderr).toBe(0);

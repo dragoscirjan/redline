@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertNpmVersionAvailable, assertPublishOnlyChangesets } from '../src/release/npm-check.ts';
+import { assertNpmVersionAvailable, assertPublishOnlyChangesets, classifyReleaseChangesets } from '../src/release/npm-check.ts';
 
 const roots: string[] = [];
 const lineEndings = [['LF', '\n'], ['CRLF', '\r\n']] as const;
@@ -86,6 +86,14 @@ describe('npm release boundary', () => {
     await expect(assertPublishOnlyChangesets(join(directory, 'absent'))).rejects.toThrow();
   });
 
+  it('chooses version mode only for regular Markdown notes and never for prerelease/unknown state', async () => {
+    const directory = await releaseDirectory();
+    await expect(classifyReleaseChangesets(directory)).resolves.toBe('publish');
+    await writeFile(join(directory, 'feature.md'), '---\n"@dragoscirjan/redline": minor\n---\nFeature.');
+    await expect(classifyReleaseChangesets(directory)).resolves.toBe('version');
+    await writeFile(join(directory, 'pre.json'), '{}'); await expect(classifyReleaseChangesets(directory)).rejects.toThrow('prerelease');
+    await rm(join(directory, 'pre.json')); await mkdir(join(directory, 'disguised.md')); await expect(classifyReleaseChangesets(directory)).rejects.toThrow('regular');
+  });
   it('handles clean main and consumes version notes with the real Changesets 3 CLI', async () => {
     const root = await mkdtemp(join(tmpdir(), 'redline-changesets-')); roots.push(root);
     await mkdir(join(root, '.changeset'));
@@ -190,9 +198,12 @@ describe('npm release boundary', () => {
     expect(source).not.toContain('run: node src/release/npm-check.ts');
     expect(source).toContain('dragoscirjan/tempel-javascript/.github/actions/release@71e3379b37d477ae0e7915f6463b0a3921d28f8d');
     expect(source).toContain('fetch-depth: 0');
-    expect(source).toContain('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}');
-    expect(source.match(/secrets\.NPM_TOKEN/gu)).toHaveLength(2);
-    expect(source.indexOf('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}')).toBeGreaterThan(source.indexOf('- name: Install frozen dependencies'));
+    expect(source).not.toContain('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}');
+    expect(source.match(/secrets\.NPM_TOKEN/gu)).toHaveLength(1);
+    expect(source).toContain('NPM_TOKEN: ${{ secrets.NPM_TOKEN }}');
+    expect(source).toContain('run: test "$SELECTED_MODE" = version');
+    const plan = source.split('\n  plan:\n')[1]?.split('\n  prepare:\n')[0] ?? '';
+    expect(plan).not.toMatch(/secrets\.NPM_TOKEN|id-token: write/u);
     expect(source).toContain("if: steps.plan.outputs.mode == 'version'");
     expect(source).toContain("npm_config_ignore_scripts: 'true'");
     expect(source).toContain("npm_config_provenance: 'true'");

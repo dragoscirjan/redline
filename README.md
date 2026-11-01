@@ -79,15 +79,16 @@ Git CLI (#178)
 ├── JSON-RPC protocol (#179)
 │   ├── VS Code / VSCodium (#182)
 │   └── Zed (#187)
-├── GitHub adapter (#180)
-│   ├── Forgejo / Gitea (#181)
-│   ├── GitLab (#183)
-│   └── Bitbucket Cloud (#185)
+├── Docker workers and coordinated releases (#203)
+│   └── GitHub adapter (#180)
+│       ├── Forgejo / Gitea (#181)
+│       ├── GitLab (#183)
+│       └── Bitbucket Cloud (#185)
 ├── Jujutsu adapter (#184)
 └── Mercurial adapter (#186)
 ```
 
-Docker or Podman sandboxing remains a separate future hardening milestone. It is not a prerequisite for documenting or designing these adapters, and none of the roadmap items may weaken the current rule that repository content is inert data and is never executed during review.
+The [Docker worker milestone (#203)](https://github.com/dragoscirjan/redline/issues/203) adds opt-in Pi/OpenCode isolation on native Linux and coordinated npm/GHCR releases before the GitHub rewire. See [build and usage commands](docs/docker-workers.md) and [release recovery](docs/coordinated-releases.md). Direct execution remains the default. Podman and malicious-host protection are not implemented. Repository content remains inert data and is never executed during review.
 
 ## Development
 

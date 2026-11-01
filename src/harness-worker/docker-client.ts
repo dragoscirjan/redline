@@ -77,9 +77,9 @@ export class DockerClient {
       if (image.development) throw new WorkerFault('Local worker image is missing; rebuild it');
       await this.run(['pull', image.reference], signal, 120_000, 1024 * 1024);
     }
-    const raw: unknown = JSON.parse(await this.run(['image', 'inspect', image.reference, '--format', '{"user":{{json .Config.User}},"entrypoint":{{json .Config.Entrypoint}},"revision":{{json (index .Config.Labels "org.opencontainers.image.revision")}}}'], signal));
+    const raw: unknown = JSON.parse(await this.run(['image', 'inspect', image.reference, '--format', '{"user":{{json .Config.User}},"entrypoint":{{json .Config.Entrypoint}},"revision":{{json (index .Config.Labels "org.opencontainers.image.revision")}},"kind":{{json (index .Config.Labels "io.redline.source-kind")}}}'], signal));
     if (!record(raw) || raw.user !== '10001:10001' || JSON.stringify(raw.entrypoint) !== '["node","/opt/redline/bin/redline-worker.mjs"]'
-      || raw.revision !== image.identity.revision) throw new WorkerFault('Worker image metadata does not match its manifest');
+      || raw.revision !== image.identity.revision || (!image.development && raw.kind !== 'release')) throw new WorkerFault('Worker image metadata does not match its manifest');
     await this.reconcile(signal);
   }
   attach(id: string): { child: ChildProcessWithoutNullStreams; exit: Promise<number | null> } {

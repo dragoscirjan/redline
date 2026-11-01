@@ -59,10 +59,15 @@ jobs:
         with:
           config: .github/release.json
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           npm_config_ignore_scripts: 'true'
           npm_config_provenance: 'true'
           npm_config_access: public
+      - name: Require version-only action behavior without registry authority
+        if: steps.plan.outputs.mode == 'version'
+        shell: bash
+        env:
+          SELECTED_MODE: ${{ steps.version.outputs.mode }}
+        run: test "$SELECTED_MODE" = version
       - name: Validate the version pull request without approving or merging it
         if: steps.version.outputs.pr-number != ''
         shell: bash

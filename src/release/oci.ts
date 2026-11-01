@@ -69,7 +69,8 @@ export class OciRegistry {
   private async headers(repository: string, write: boolean): Promise<Record<string, string>> {
     this.repository(repository);
     if (this.#origin.protocol === 'http:') return {};
-    const scope = `repository:${repository}:${write ? 'pull,push' : 'pull'}`;
+    // A writer must authorize first-publication lookup/creation, not request pull-only access to a missing package.
+    const scope = `repository:${repository}:${write || this.#credentials !== undefined ? 'pull,push' : 'pull'}`;
     let token = this.#tokens.get(scope);
     if (token === undefined) {
       const url = new URL('/token', this.#origin); url.searchParams.set('service', 'ghcr.io'); url.searchParams.set('scope', scope);

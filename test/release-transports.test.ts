@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { digest, inspectCandidate, combinePlatforms, OciRegistry, OCI_INDEX, OCI_MANIFEST } from '../src/release/oci.ts';
 import { GitHubReleases } from '../src/release/github.ts';
 import { recordIdentity } from '../src/release/coordinator.ts';
@@ -11,6 +11,7 @@ import { npmIntegrity, waitForIdentity } from '../src/release/npm-registry.ts';
 import { releaseAssetBytes, releaseFixture } from './helpers/release.ts';
 const roots: string[] = []; const servers: Server[] = [];
 afterEach(async () => {
+  vi.unstubAllGlobals();
   await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); })));
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
@@ -32,6 +33,20 @@ async function archive(architecture: 'amd64' | 'arm64') {
   return inspectCandidate(path, architecture, digest(config));
 }
 describe('OCI content-addressed release transport', () => {
+  it('authorizes publication lookup in writer context while keeping public verification pull-only', async () => {
+    const scopes: string[] = [];
+    const request = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname === '/token') { scopes.push(url.searchParams.get('scope') ?? ''); return new Response(JSON.stringify({ token: 'synthetic-bearer' })); }
+      return new Response('', { status: 404 });
+    });
+    vi.stubGlobal('fetch', request);
+    const writer = new OciRegistry({ username: 'unit-actor', token: 'synthetic-token' });
+    expect(await writer.manifest('dragoscirjan/redline-pi', '1.2.0')).toBeUndefined();
+    expect(await new OciRegistry().manifest('dragoscirjan/redline-pi', '1.2.0')).toBeUndefined();
+    expect(scopes).toEqual(['repository:dragoscirjan/redline-pi:pull,push', 'repository:dragoscirjan/redline-pi:pull']);
+    expect(JSON.stringify(writer)).not.toContain('synthetic-token');
+  });
   it('binds native execution configs, combines both platforms, uploads exact blobs and refuses tag changes', async () => {
     const amd = await archive('amd64'); const arm = await archive('arm64'); const index = combinePlatforms([arm, amd]);
     expect(JSON.parse(index.bytes.toString()).manifests.map((m: { platform: { architecture: string } }) => m.platform.architecture)).toEqual(['amd64', 'arm64']);
@@ -100,6 +115,31 @@ describe('owned GitHub release transport', () => {
     await f.github.attach(record, 'release-manifest.json', Buffer.from(JSON.stringify(record, null, 2) + '\n'));
     const count = f.writes(); await f.github.attach(record, record.npm.filename, releaseAssetBytes(record.npm.filename)); expect(f.writes()).toBe(count);
     f.conflict(); await expect(f.github.finalize(record)).rejects.toThrow('source conflict'); expect(f.published()).toBe(0);
+  });
+  it('rejects an existing conflicting source tag before reserving or publishing anything', async () => {
+    const f = await fixture(); const record = releaseFixture(); f.conflict();
+    await expect(f.github.reserve(record)).rejects.toThrow('source conflict'); expect(f.writes()).toBe(0); expect(f.published()).toBe(0);
+  });
+  it('makes a complete matching draft public once, without replacing an attached asset', async () => {
+    const f = await fixture(); const record = releaseFixture();
+    for (const asset of record.assets) await f.github.attach(record, asset.name, releaseAssetBytes(asset.name));
+    await f.github.attach(record, 'release-manifest.json', Buffer.from(JSON.stringify(record, null, 2) + '\n'));
+    await f.github.finalize(record); await f.github.finalize(record);
+    expect(f.published()).toBe(1); expect(f.writes()).toBe(record.assets.length + 1);
+    const first = f.assets[0]; if (first === undefined) throw new Error('Missing fixture asset'); first.digest = 'sha256:' + '0'.repeat(64);
+    await expect(f.github.attach(record, record.npm.filename, releaseAssetBytes(record.npm.filename))).rejects.toThrow('asset conflict');
+  });
+  it('selects original source artifacts on recovery instead of later successful rerun candidates', async () => {
+    const record = releaseFixture(); let wrongSource = false;
+    const origin = await listen(createServer((_req, res) => {
+      const artifact = (id: number, arch: string, attempt: number) => ({ id, name: `worker-native-${arch}-123-attempt${attempt}`, expired: false,
+        workflow_run: { head_sha: wrongSource ? 'b'.repeat(40) : record.source } });
+      res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ artifacts: [artifact(1, 'amd64', 1), artifact(2, 'amd64', 2), artifact(3, 'arm64', 1)] }));
+    }));
+    const github = new GitHubReleases('synthetic-token', origin);
+    expect((await github.artifactSelection('123', record.source)).ids).toBe('2,3');
+    expect((await github.artifactSelection('123', record.source, record.artifacts)).ids).toBe('1,3');
+    wrongSource = true; await expect(github.artifactSelection('123', record.source, record.artifacts)).rejects.toThrow('different source');
   });
   it('fails closed on a marked release owned by the wrong actor without adding an asset', async () => {
     const f = await fixture(); const record = releaseFixture(); await f.github.reserve(record); f.foreign();

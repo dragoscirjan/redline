@@ -18,7 +18,8 @@
     "src/context-bundle.ts", "src/duration.ts", "src/process-runner.ts", "src/review-eligibility.ts",
     "src/code-index/context.ts", "src/code-index/cache.ts", "src/code-index/lock.py", "src/code-index/export.py", "src/code-index/gitnexus-query.mjs",
     "prompts/v8/*.md", "prompts/verification/v3/*.md",
-    "docs/local-cli.md", "docs/portable-architecture.md", "docs/internal-worker-protocol.md"
+    "docs/local-cli.md", "docs/portable-architecture.md", "docs/internal-worker-protocol.md",
+    "docs/docker-workers.md", "docs/coordinated-releases.md"
   ],
   "bin": {
     "redline": "bin/redline.mjs",

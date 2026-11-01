@@ -16,7 +16,7 @@ export async function pullPublicImages(record: ReleaseRecord, state: string): Pr
       const image: WorkerImage = { reference: `ghcr.io/${entry.repository}@${entry.digest}`, platforms: ['linux/amd64', 'linux/arm64'], development: false,
         identity: { harness: h, release: record.release, revision: record.source, harnessVersion: entry.harnessVersion } };
       const signal = AbortSignal.timeout(180_000);
-      await client.run(['pull', '--platform', 'linux/' + arch, image.reference], signal);
+      await client.run(['pull', '--platform', 'linux/' + arch, image.reference], signal, 180_000, 1024 * 1024);
       await client.preflight(image, signal);
       const config = await client.run(['image', 'inspect', image.reference, '--format', '{{.Id}}'], signal);
       if (config !== entry.platforms.find(p => p.architecture === arch)?.config) throw new Error('Public image does not match the executed native candidate');

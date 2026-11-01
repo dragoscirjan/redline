@@ -80,7 +80,21 @@ export class GitHubReleases {
     }
     throw new Error('Release discovery limit exceeded');
   }
+  private async tagSource(manifest: ReleaseRecord): Promise<void> {
+    const ref = await this.request(`${repo}/git/ref/tags/${encodeURIComponent(releaseTag(manifest.release))}`);
+    if (ref !== undefined) {
+      if (!record(ref) || !record(ref.object)) throw new Error('Invalid release tag reference');
+      let object = ref.object;
+      for (let depth = 0; object.type === 'tag' && depth < 4; depth++) {
+        if (typeof object.sha !== 'string' || !/^[a-f0-9]{40}$/u.test(object.sha)) throw new Error('Invalid annotated tag');
+        const tag = await this.request(`${repo}/git/tags/${object.sha}`);
+        if (!record(tag) || !record(tag.object)) throw new Error('Invalid annotated tag'); object = tag.object;
+      }
+      if (object.type !== 'commit' || object.sha !== manifest.source) throw new Error('Immutable release tag source conflict');
+    }
+  }
   async reserve(manifest: ReleaseRecord): Promise<ManagedRelease> {
+    await this.tagSource(manifest);
     const existing = await this.find(manifest.release);
     if (existing !== undefined) {
       if (recordIdentity(existing.record) !== recordIdentity(manifest)) throw new Error('Immutable release identity conflict');
@@ -140,17 +154,7 @@ export class GitHubReleases {
     const manifestBytes = Buffer.from(JSON.stringify(manifest, null, 2) + '\n');
     const manifestDigest = 'sha256:' + createHash('sha256').update(manifestBytes).digest('hex');
     if (available.filter(v => v.name === 'release-manifest.json' && v.digest === manifestDigest).length !== 1) throw new Error('Immutable release manifest asset is missing');
-    const ref = await this.request(`${repo}/git/ref/tags/${encodeURIComponent(releaseTag(manifest.release))}`);
-    if (ref !== undefined) {
-      if (!record(ref) || !record(ref.object)) throw new Error('Invalid release tag reference');
-      let object = ref.object;
-      for (let depth = 0; object.type === 'tag' && depth < 4; depth++) {
-        if (typeof object.sha !== 'string' || !/^[a-f0-9]{40}$/u.test(object.sha)) throw new Error('Invalid annotated tag');
-        const tag = await this.request(`${repo}/git/tags/${object.sha}`);
-        if (!record(tag) || !record(tag.object)) throw new Error('Invalid annotated tag'); object = tag.object;
-      }
-      if (object.type !== 'commit' || object.sha !== manifest.source) throw new Error('Immutable release tag source conflict');
-    }
+    await this.tagSource(manifest);
     if (release.draft) await this.request(`${repo}/releases/${release.id}`, 'PATCH', { draft: false, body: releaseBody(manifest, true) + '\n<!-- redline-release-progress/v1:true -->\n' });
   }
 }

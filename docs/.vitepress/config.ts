@@ -32,6 +32,7 @@ export default defineConfig({
         text: 'Use Redline',
         items: [
           { text: 'Common commands', link: '/commands' },
+          { text: 'Docker workers and builds', link: '/docker-workers' },
           { text: 'Read the results', link: '/results' },
           { text: 'Troubleshooting', link: '/troubleshooting' },
         ],
@@ -77,6 +78,7 @@ export default defineConfig({
           { text: 'Performance', link: '/performance-benchmark' },
           { text: 'Checkout', link: '/checkout-benchmark' },
           { text: 'Model execution', link: '/model-execution-benchmark' },
+          { text: 'Coordinated npm/image releases', link: '/coordinated-releases' },
           { text: 'Release operations', link: '/local-cli#release-operations' },
         ],
       },

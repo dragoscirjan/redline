@@ -1,12 +1,12 @@
 # Internal worker protocol
 
-This is the protocol and host-broker foundation for [#203](https://github.com/dragoscirjan/redline/issues/203).
-It does not enable Docker execution. Hardened images and their bootstrap belong to
-[#204](https://github.com/dragoscirjan/redline/issues/204). CLI/RPC activation belongs to
-[#206](https://github.com/dragoscirjan/redline/issues/206).
+This is the private transport used by the [Docker workers](./docker-workers.md) in
+[#203](https://github.com/dragoscirjan/redline/issues/203). The image bootstrap bridges its
+pinned SDK to the host credential broker over framed stdio.
 
-This internal byte channel is not the public [stdio JSON-RPC protocol](./stdio-protocol.md).
-It adds no public method, HTTP server, SDK export or CLI flag. Direct execution remains unchanged.
+This channel is not the public [stdio JSON-RPC protocol](./stdio-protocol.md).
+It adds no public RPC method or SDK export. CLI/RPC startup selects the executor;
+review requests cannot change it. Direct execution remains the default.
 
 ## Trust boundary
 
@@ -17,7 +17,8 @@ runtime security profile before attaching the byte channel.
 
 `ModelBroker` makes only POST requests to the full generation URL supplied by the trusted
 adapter. Worker messages contain no URL, credential, host path, executable or Docker flags.
-The broker accepts only the configured model and rejects nonempty tool/function declarations.
+The broker accepts only the configured model and rejects nonempty tool/function,
+plugin and agent declarations.
 It never follows redirects. Configure the final generation URL. URL user information and
 fragments are invalid. Bearer authentication and auth-none are supported.
 
@@ -68,12 +69,14 @@ A blocked transport can take up to the write bound to settle after cancellation.
    and `harnessVersion`. The host compares every field with its trusted expected identity.
    The hello is a compatibility check, not proof of an image digest.
 2. The host sends `invoke`. Its fields are `harness`, `model` with provider/model names,
-   `timeoutMs`, `retryOwnership`, `modelProtocol`, and optional `maxOutputTokens`.
+   `timeoutMs`, `retryOwnership`, `modelProtocol`, and optional `maxOutputTokens`/`streamMode`.
    There is no endpoint, credential map, work directory or tool-permission field.
 3. The host sends `input` frames with `data`, then `input.end`. Together they encode the
-   JSON prompt with `system`, `user` and optional fixed `responseSchema`.
+   JSON prompt with `system`, `user` and optional fixed `responseSchema`. Host-only
+   fingerprint metadata is explicitly excluded from this projection.
 4. The worker requests model traffic as described below, then sends `output` frames with
-   `stream: "text"` or `stream: "diagnostic"` and base64 `data`.
+   `stream: "text"` or `stream: "diagnostic"` and base64 `data`. Optional bounded `tap`
+   messages report live text/diagnostic activity without replacing final output validation.
 5. The worker sends one `result` with `run`. This is `HarnessRun` metadata without inline
    text/diagnostic fields. Only the existing status, exit, timing, failure/retry and telemetry
    members are valid. The host reconstructs bounded text and diagnostics separately.
@@ -93,6 +96,7 @@ The worker sends `request.start` with a sequential `requestId` and `accept`, the
 `request.data` frames and `request.end`. Accept is `application/json`, `text/event-stream` or
 `*/*`. The bounded body must be a JSON object selecting the job's configured model. When the
 host has an effective output-token cap, the body must supply a positive cap no larger than it.
+Each supplied token-cap field is checked; a second field or null cannot bypass the bound.
 The broker preserves valid request-body bytes, reasoning/vendor fields and stream settings.
 
 The host sends `response.start` with `status` and selected `headers`, zero or more
@@ -124,11 +128,14 @@ still reap the child/container in its own finally path, handle bootstrap failure
 only its own crash leftovers. A dead host cannot promise immediate container deletion through
 this protocol. There is no persistent host listener or ambient environment dependency in the broker.
 
-## Evidence and remaining integration
+## Evidence
 
-Tests use synthetic credentials, real loopback HTTP/SSE/compressed responses and a scripted
-Node subprocess. They cover framing/schema rejection, settings projection, streamed credential
-redaction, request quotas, HTTP status/retry preservation, cancellation, output limits and EOF.
-They do not prove Linux namespace restrictions, real Pi/OpenCode image compatibility,
-Docker Desktop support, production publication or live model quality. Those claims require the
-later milestone acceptance checks.
+Transport tests use synthetic credentials, loopback HTTP/SSE/compressed responses and a
+scripted Node subprocess. The separate native container suite runs real pinned Pi and
+OpenCode images through CLI and RPC, including retries, fatal reflected-auth errors,
+cancellation and the kernel/network/filesystem/cgroup profile. Both native architectures
+are required release gates. Builds or skipped tests do not count as runtime evidence.
+
+Neither suite proves Docker Desktop support, live model quality or a successful production
+publication. Public release acceptance requires the separate anonymous installed-package
+and image verification described in [coordinated releases](./coordinated-releases.md).

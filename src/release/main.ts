@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { appendFile, readFile, readdir } from 'node:fs/promises';
+import { appendFile, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { record } from '../harness-worker/contract.ts';
 import { coordinateRelease, parseReleaseRecord, recordIdentity, type ReleasePorts, type ReleaseRecord } from './coordinator.ts';
+import { classifyReleaseChangesets } from './npm-check.ts';
 import { GitHubReleases } from './github.ts';
 import { combinePlatforms, OciRegistry } from './oci.ts';
 import { pullPublicImages } from './verification.ts';
@@ -29,8 +30,8 @@ function savedRecord(): ReleaseRecord | undefined {
 export async function releasePlan(github: GitHubReleases): Promise<void> {
   const context = ci(); const pkg = await jsonFile(join(sourceRoot, 'package.json'));
   if (!record(pkg) || pkg.name !== '@dragoscirjan/redline' || typeof pkg.version !== 'string') throw new Error('Package identity unavailable');
-  const notes = await readdir(join(sourceRoot, '.changeset'));
-  if (notes.some(name => name !== 'README.md' && name !== 'config.json')) { await outputs({ mode: 'version' }); return; }
+  const mode = await classifyReleaseChangesets(join(sourceRoot, '.changeset'));
+  if (mode === 'version') { await outputs({ mode: 'version' }); return; }
   const existing = await github.find(pkg.version);
   const npm = await npmIntegrity(pkg.version);
   if (existing === undefined && ['1.0.0', '1.1.0'].includes(pkg.version) && npm !== undefined) {

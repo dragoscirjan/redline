@@ -28,6 +28,8 @@ The last two commands wait for framed requests on stdin. They do not start a rev
 
 For a real model, configure the existing [private user configuration](/get-started/configuration). Selecting Pi or OpenCode can send captured source to the configured provider and incur model charges. Trusted startup flags can select the harness, model, endpoint, budgets, indexing and reuse. The server reads that fixed configuration path and inherited settings for each review. Repository selection still rechecks that the configuration file and executables are outside the reviewed repository. Existing output defaults also apply. Omit a fixed output directory from persistent-session configuration because every review needs a new directory.
 
+The startup `--auth` option accepts only `none`, the non-secret credential-less endpoint mode. It does not accept a key or token. Credentials come from the trusted configuration file or `REDLINE_MODEL_AUTH`; the RPC server passes startup options to its in-memory configuration parser. It does not forward `--auth` to a harness command line.
+
 No credential values, configuration paths, executable paths, model endpoints, output paths or reporter selection are accepted in protocol requests. Keep credentials out of command-line values too. Reviewed content never selects configuration or executes code.
 
 Stdout contains protocol frames only. Stderr is reserved for startup diagnostics and runtime warnings. Clients must drain both streams.
@@ -48,7 +50,7 @@ This uses a common stdio framing convention, not LSP method semantics. JSON-RPC'
 
 Request IDs are strings of at most 128 Unicode characters or safe integers. ID zero is valid. Null IDs are not accepted. Methods below require IDs. The only defined client notification is `redline/v1/exit`; other client notifications are ignored without a response.
 
-Batches contain 1 to 16 messages, processed in array order. Notification-only batches have no response. Duplicate request IDs in a batch are rejected before any batch method runs. If a batch's combined response would exceed the message limit, its requests receive limit errors and can be queried individually.
+Batches contain 1 to 16 messages, processed in array order. Notification-only batches have no response. Duplicate request IDs in a batch are rejected before any batch method runs. If a batch's combined response would exceed the message limit, the server replaces its largest result replies with limit errors until the batch fits. Small acknowledgements for already-accepted start, cancel and shutdown operations remain intact. Query a rejected result individually instead of repeating the operation.
 
 ## Initialize and negotiate
 

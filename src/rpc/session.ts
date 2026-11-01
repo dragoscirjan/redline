@@ -57,9 +57,19 @@ export class Session {
         const reply = this.request(value);
         if (reply !== undefined) replies.push(reply);
       }
-      const bounded = Buffer.byteLength(JSON.stringify(replies)) <= LIMITS.messageBytes ? replies
-        : replies.map(reply => ({ jsonrpc: '2.0', id: object(reply) ? reply.id : null, error: { code: CODES.limit, message: 'Batch response exceeds limit; query individually' } }));
-      if (bounded.length > 0 && !this.options.send(bounded)) this.stop();
+      const sizes = replies.map(reply => Buffer.byteLength(JSON.stringify(reply)));
+      let bytes = 2 + Math.max(0, replies.length - 1) + sizes.reduce((sum, size) => sum + size, 0);
+      // Bound large data replies without discarding acknowledgements of operations already run.
+      const largest = sizes.map((size, index) => ({ size, index })).sort((a, b) => b.size - a.size);
+      for (const { size, index } of largest) {
+        if (bytes <= LIMITS.messageBytes) break;
+        const reply = replies[index];
+        const limited = { jsonrpc: '2.0', id: object(reply) ? reply.id : null,
+          error: { code: CODES.limit, message: 'Batch result exceeds limit; query this result individually' } };
+        replies[index] = limited;
+        bytes += Buffer.byteLength(JSON.stringify(limited)) - size;
+      }
+      if (replies.length > 0 && !this.options.send(replies)) this.stop();
       return;
     }
     const reply = this.request(input);

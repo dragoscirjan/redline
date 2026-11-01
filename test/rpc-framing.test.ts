@@ -1,6 +1,6 @@
 import { Writable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
-import { FrameReader, FrameWriter, frame } from '../src/rpc/framing.ts';
+import { FrameReader, FrameWriter, FramingError, frame } from '../src/rpc/framing.ts';
 import { LIMITS, valid, params, assertSchemaVocabulary } from '../src/rpc/contract.ts';
 
 describe('RPC framing and committed schemas', () => {
@@ -35,6 +35,12 @@ describe('RPC framing and committed schemas', () => {
     expect(() => reader.end()).toThrow('Truncated');
     expect(() => frame('x'.repeat(LIMITS.messageBytes))).toThrow('limit');
     expect(() => new FrameReader().push(Buffer.concat(Array.from({ length: 33 }, () => frame(0))))).toThrow();
+  });
+  it('rejects a large coalesced stream of minimum-sized frames as a framing error', () => {
+    const tiny = frame(0);
+    const input = Buffer.concat(Array.from({ length: 4096 }, () => tiny));
+    expect(input.length).toBeGreaterThan(64 * 1024);
+    expect(() => new FrameReader().push(input)).toThrow(FramingError);
   });
   it('bounds decoded message bytes before buffering another complete body', () => {
     const encoded = frame('x'.repeat(LIMITS.messageBytes - 2));

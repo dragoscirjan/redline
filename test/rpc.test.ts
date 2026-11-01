@@ -3,9 +3,12 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { parseLocalOptions } from '../src/local/options.ts';
+import { runLocalReview } from '../src/local/run.ts';
 import { RpcClient } from './helpers/rpc-client.ts';
 import { CODES, object } from '../src/rpc/contract.ts';
+import { frame } from '../src/rpc/framing.ts';
 import { reviewFinding } from './helpers/finding.ts';
 
 const binary = fileURLToPath(new URL('../bin/redline.mjs', import.meta.url));
@@ -89,7 +92,19 @@ describe('real stdio reference-client conformance', () => {
     expect(JSON.stringify(client.messages)).not.toContain('PRIVATE_VALUE');
     await client.call('shutdown'); client.eof(); expect((await client.exit).code).toBe(0);
   });
-  it('cancels a real owned harness process and preserves terminal artifacts', async () => {
+  it('classifies a missing trusted harness as configuration before creating output', async () => {
+    const f = await fixture();
+    const options = await parseLocalOptions(['--repository', f.repository, '--harness', 'pi', '--provider', 'mock',
+      '--endpoint', 'http://127.0.0.1:1/v1', '--model', 'fixture', '--auth', 'none', '--indexing', 'disabled', '--reuse', 'disabled'], f.env, f.root);
+    const reporter = vi.fn(() => { throw new Error('Preflight must precede reporting'); });
+    const outcome = await runLocalReview(options, { ...f.env, PATH: '' }, {
+      signal: new AbortController().signal, reporter, stdout: () => {}, stderr: () => {},
+    });
+    expect(outcome).toMatchObject({ status: 'failed', failureKind: 'configuration' });
+    expect(outcome.outputDirectory).toBeUndefined(); expect(reporter).not.toHaveBeenCalled();
+    expect(await stat(join(f.root, 'state')).then(() => true, () => false)).toBe(false);
+  });
+  it.each(['request', 'output-close'])('cancels a real owned harness process via %s and preserves terminal artifacts', async mode => {
     const f = await fixture(); const bin = join(f.root, 'bin'); await mkdir(bin);
     const pidFile = join(f.root, 'pid'); const secret = 'rpc-private!key*value';
     await writeFile(join(bin, 'pi'), '#!/usr/bin/env node\n' +
@@ -107,18 +122,42 @@ describe('real stdio reference-client conformance', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
     }
     const pid = Number(await readFile(pidFile, 'utf8'));
-    let stopped = false;
+    let stopped = false; let watchdogFired = false; let timer: NodeJS.Timeout | undefined;
     try {
-      await client.call('review.cancel', { runId: job.runId });
-      const terminal = await client.wait(String(job.runId));
-      expect(terminal.state).toBe('cancelled'); expect(terminal.exitCode).toBe(130);
+      let output: string;
+      if (mode === 'request') {
+        await client.call('review.cancel', { runId: job.runId });
+        const terminal = await client.wait(String(job.runId));
+        expect(terminal.state).toBe('cancelled'); expect(terminal.exitCode).toBe(130);
+        output = directory(terminal);
+      } else {
+        output = directory(await client.call('review.get', { runId: job.runId }));
+        const closed = new Promise<void>(resolve => client.child.stdout.once('close', () => resolve()));
+        client.child.stdout.destroy(); await closed;
+        client.child.stdin.write(frame({ jsonrpc: '2.0', id: 900, method: 'redline/v1/review.get', params: { runId: job.runId } }));
+        timer = setTimeout(() => { watchdogFired = true; client.child.kill('SIGKILL'); }, 10_000);
+        const exit = await client.exit;
+        expect(watchdogFired, client.stderr).toBe(false);
+        expect(exit.code !== 0 || exit.signal !== null).toBe(true);
+        expect(client.stderr).toContain('redline rpc: output unavailable');
+        expect(client.stderr).not.toMatch(/Unhandled|unhandled|node:events/gu);
+      }
       expect(() => process.kill(pid, 0)).toThrow(); stopped = true;
-      expect(JSON.parse(await readFile(join(directory(terminal), 'status.json'), 'utf8')).status).toBe('cancelled');
+      expect(JSON.parse(await readFile(join(output, 'status.json'), 'utf8')).status).toBe('cancelled');
       expect(JSON.stringify(client.messages)).not.toContain(secret);
     } finally {
+      if (timer !== undefined) clearTimeout(timer);
       // The fixture owns this exact synthetic harness PID, including on assertion failure.
       if (!stopped) try { process.kill(pid, 'SIGKILL'); } catch { /* Already reaped by normal cancellation. */ }
     }
+  });
+  it('treats auth as the non-secret none mode, never a credential argument', async () => {
+    const f = await fixture();
+    const client = f.start(false, ['--harness', 'echo', '--auth', 'SYNTHETIC_NOT_AN_AUTH_MODE', '--indexing', 'disabled']);
+    await client.call('initialize', { protocolVersion: '1.0' });
+    const job = await client.call('review.start', { repository: f.repository });
+    expect(await client.wait(String(job.runId))).toMatchObject({ state: 'failed', error: { code: CODES.configuration }, artifacts: null });
+    expect(JSON.stringify(client.messages)).not.toContain('SYNTHETIC_NOT_AN_AUTH_MODE');
   });
   it('projects validated findings, source evidence, suggestions and deterministic fix prompts', async () => {
     const f = await fixture(); const bin = join(f.root, 'bin'); await mkdir(bin);

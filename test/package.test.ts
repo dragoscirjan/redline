@@ -58,6 +58,10 @@ it('installs the packed package offline and runs both CLIs without source checko
     execFileSync(process.execPath, npmArguments(['install', '--prefix', installation, '--ignore-scripts', '--offline', '--no-audit', '--no-fund', '--package-lock=false', join(root, archive.filename)]), { env, encoding: 'utf8' });
     const binary = join(installation, 'node_modules/@dragoscirjan/redline/bin/redline.mjs');
     const legacy = join(dirname(binary), 'redline-review.mjs');
+    const reference = join(dirname(binary), '../docs/local-cli.md');
+    const protocolLink = /\[stdio JSON-RPC protocol\]\(([^)]+)\)/u.exec(await readFile(reference, 'utf8'))?.[1];
+    expect(protocolLink).toBe('./stdio-protocol.md');
+    if (protocolLink !== undefined) expect(await readFile(join(dirname(reference), protocolLink), 'utf8')).toContain('# Stdio JSON-RPC protocol');
     const run = (args: string[], cwd = root) => spawnSync(process.execPath, [binary, ...args], { env, cwd, encoding: 'utf8' });
     const help = run(['--help']); expect(help.status, help.stderr).toBe(0); expect(help.stdout).toContain('--worktree');
     const version = JSON.parse(await readFile(join(project, 'package.json'), 'utf8')).version;

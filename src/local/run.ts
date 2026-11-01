@@ -34,7 +34,7 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
   let output: string | undefined;
   let timer: NodeJS.Timeout | undefined;
   let deadlineExpired = false;
-  let failureKind: 'configuration' | 'revision' | 'model' = 'model';
+  let failureKind: 'configuration' | 'revision' | 'model' = 'configuration';
   try {
     signal.throwIfAborted();
     // Preflight harness availability before capture/output creation. Never search repository-local PATH entries.
@@ -43,7 +43,6 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
     const executor = createHarnessExecutor(options.environment.harness, {
       ...(launch === undefined ? {} : { command: launch.command }), spawner: cancellableSpawner(signal, launch),
     });
-    failureKind = 'configuration';
     if (options.output === undefined) {
       if (inside(options.repository, options.stateDirectory)) throw new LocalOperationError('default output must be outside the reviewed repository');
       let ancestor = options.stateDirectory;

@@ -66,6 +66,41 @@ describe('RPC session state', () => {
     if (once) expect(h.call('review.start', { repository: '/repo' }).error.code).toBe(CODES.busy);
     await h.session.end();
   });
+  it.each(['review.start', 'review.cancel', 'shutdown'])('preserves %s acknowledgements when batch result pages exceed the wire limit', async method => {
+    const overview = done.sections?.overview[0];
+    if (overview === undefined) throw new Error('Missing overview fixture');
+    const large: Completion = { ...done, sections: { overview: [{ ...overview, limitations: [
+      { code: 'fixture-a', required: false, message: 'x'.repeat(400_000) },
+      { code: 'fixture-b', required: false, message: 'y'.repeat(400_000) },
+    ] }], files: [], findings: [] } };
+    let executions = 0;
+    const h = harness(async (_selection, signal) => {
+      if (++executions === 1) return large;
+      if (method === 'review.cancel') {
+        await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+        return { state: 'cancelled', exitCode: 130, error: null };
+      }
+      return done;
+    }); h.init();
+    const previous = h.call('review.start', { repository: '/repo' }).result;
+    await new Promise(resolve => setImmediate(resolve));
+    let parameters: Record<string, unknown> = method === 'review.start' ? { repository: '/repo' } : {};
+    if (method === 'review.cancel') {
+      const active = h.call('review.start', { repository: '/repo' }).result;
+      parameters = { runId: active.runId }; await new Promise(resolve => setImmediate(resolve));
+    }
+    h.sent.length = 0;
+    const page = (id: string) => ({ jsonrpc: '2.0', id, method: 'redline/v1/review.result', params: { runId: previous.runId } });
+    h.session.receive([page('page-a'), page('page-b'), { jsonrpc: '2.0', id: 'operation', method: 'redline/v1/' + method, params: parameters }]);
+    const batch = h.sent.find(value => value.batch.length > 0);
+    expect(batch?.batch).toHaveLength(3);
+    expect(Buffer.byteLength(JSON.stringify(batch?.raw))).toBeLessThanOrEqual(LIMITS.messageBytes);
+    expect(batch?.batch.find(value => value.id === 'operation')?.result).toMatchObject(method === 'shutdown' ? { accepted: true } : { state: 'running' });
+    const pages = batch?.batch.filter(value => value.id !== 'operation') ?? [];
+    expect(pages.filter(value => value.error.code === CODES.limit)).toHaveLength(1);
+    expect(pages.filter(value => Array.isArray(value.result.items))).toHaveLength(1);
+    await h.session.end();
+  });
   it('cancels active work cooperatively and emits exactly one terminal notification', async () => {
     const h = harness(async (_selection, signal) => new Promise(resolve => {
       signal.addEventListener('abort', () => resolve({ state: 'cancelled', exitCode: 130, error: { code: CODES.cancellation, message: 'Review cancelled' } }), { once: true });
@@ -108,6 +143,19 @@ describe('RPC session state', () => {
     const count = h.sent.length; callbacks?.progress({ kind: 'started' });
     expect(h.sent).toHaveLength(count); expect(JSON.stringify(h.sent)).not.toContain('SECRET_SOURCE');
     expect(h.sent.find(v => v.method === 'redline/v1/progress')?.params.event).toEqual({ kind: 'file-completed', fileId: '1', outcome: 'clean', requiredFiles: 1, settledFiles: 1, activeFiles: 0 });
+    await h.session.end();
+  });
+  it.each(['file-retry', 'context-started'])('drops credential-bearing free text from %s progress', async kind => {
+    const credential = 'SYNTHETIC_PROGRESS_CREDENTIAL';
+    const h = harness(async (_selection, _signal, events) => {
+      events.progress(kind === 'file-retry'
+        ? { kind, fileId: '000001', attempt: 2, maximumAttempts: 4, timeoutMs: 60_000, reason: credential }
+        : { kind: 'context-started', provider: credential });
+      return done;
+    }); h.init(); h.call('review.start', { repository: '/repo' });
+    await new Promise(resolve => setImmediate(resolve));
+    expect(h.sent.find(value => value.method === 'redline/v1/progress')?.params.event).toMatchObject({ kind });
+    expect(JSON.stringify(h.sent)).not.toContain(credential);
     await h.session.end();
   });
   it('does not echo thrown input or credential text into diagnostics', async () => {

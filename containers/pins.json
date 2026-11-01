@@ -1,6 +1,10 @@
 {
   "version": 1,
   "node": "node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20",
+  "bun": {
+    "version": "1.4.4",
+    "image": "oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d"
+  },
   "buildkit": "moby/buildkit@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c",
   "pnpm": {
     "version": "10.33.0",

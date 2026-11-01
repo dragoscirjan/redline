@@ -38,8 +38,11 @@ for (const entry of await readdir('/opt/harness/node_modules/.pnpm', { withFileT
 const osPackages = execFileSync('/usr/bin/dpkg-query', ['-W', '-f=${Package}\t${Version}\t${Architecture}\n'],
   { encoding: 'utf8', maxBuffer: 1024 * 1024, env: { PATH: '/usr/bin:/bin', LANG: 'C' } }).trim().split('\n')
   .map(line => { const [name, version, architecture] = line.split('\t'); return { name, version, architecture }; });
+const bunVersion = execFileSync('/usr/local/bin/bun', ['--version'], { encoding: 'utf8', env: { PATH: '/usr/local/bin:/usr/bin:/bin', LANG: 'C' } }).trim();
+if (bunVersion !== pins.bun.version) throw new Error('Bun runtime does not match its pin');
+packages.push({ name: 'bun', version: bunVersion, sha256: createHash('sha256').update(await readFile('/usr/local/bin/bun')).digest('hex'), license: 'MIT' });
 packages.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
 await writeFile('/opt/redline/worker.json', JSON.stringify({ harness, release: pkg.version, revision, harnessVersion: pins.harnesses[harness] }) + '\n');
-await writeFile('/opt/redline/worker-inventory.json', JSON.stringify({ version: 1, development: process.env.REDLINE_SOURCE_KIND !== 'release', base: pins.node, source: revision, release: pkg.version, harness, harnessVersion: pins.harnesses[harness], nodeVersion: process.version, osPackages, packages }) + '\n');
+await writeFile('/opt/redline/worker-inventory.json', JSON.stringify({ version: 1, development: process.env.REDLINE_SOURCE_KIND !== 'release', base: pins.node, source: revision, release: pkg.version, harness, harnessVersion: pins.harnesses[harness], nodeVersion: process.version, bunVersion, bunImage: pins.bun.image, osPackages, packages }) + '\n');
 // Build-only pnpm timestamps are not runtime inputs and prevent reproducible layers.
 for (const path of ['/opt/harness/node_modules/.modules.yaml', '/opt/harness/node_modules/.pnpm-workspace-state-v1.json']) await rm(path, { force: true });

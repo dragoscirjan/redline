@@ -48,6 +48,8 @@ mise exec -- node src/harness-worker/build.ts \
 ```
 
 The supported Dockerfile is `containers/Dockerfile`, with targets `pi` and `opencode`.
+Both keep the pinned Node.js base and include Bun 1.4.4 from an immutable amd64/arm64
+donor image. `bun` and `bunx` are available; no host runtime installation is changed.
 The older `packages/*-runner/Dockerfile` files are references, not this implementation.
 You can build an individual development target directly:
 

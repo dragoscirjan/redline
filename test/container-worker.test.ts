@@ -175,11 +175,12 @@ describe.runIf(enabled)('real isolated Pi/OpenCode workers', () => {
       await client.preflight(image, signal);
       const args = containerArguments(image, client.owner, jobId, 30_000, DEFAULT_CONTAINER_LIMITS);
       args.splice(args.length - 1, 0, '--entrypoint', 'node');
-      args.push('-e', `const fs=require('node:fs'),os=require('node:os');const root=fs.readFileSync('/proc/self/mountinfo','utf8').split('\\n').find(l=>l.split(' ')[4]==='/');console.log(JSON.stringify({uid:process.getuid(),status:fs.readFileSync('/proc/self/status','utf8'),root,interfaces:Object.keys(os.networkInterfaces()),socket:fs.existsSync('/var/run/docker.sock'),marker:fs.existsSync(${JSON.stringify(marker)}),controller:fs.existsSync('/opt/redline/src'),customWorker:fs.existsSync('/opt/redline/bin/redline-worker.mjs'),credential:process.env.REDLINE_MODEL_AUTH??null,memory:fs.readFileSync('/sys/fs/cgroup/memory.max','utf8').trim(),pids:fs.readFileSync('/sys/fs/cgroup/pids.max','utf8').trim()}));`);
+      args.push('-e', `const fs=require('node:fs'),os=require('node:os'),cp=require('node:child_process');const root=fs.readFileSync('/proc/self/mountinfo','utf8').split('\\n').find(l=>l.split(' ')[4]==='/');console.log(JSON.stringify({nodeVersion:process.version,bunVersion:cp.execFileSync('/usr/local/bin/bun',['--version'],{encoding:'utf8'}).trim(),uid:process.getuid(),status:fs.readFileSync('/proc/self/status','utf8'),root,interfaces:Object.keys(os.networkInterfaces()),socket:fs.existsSync('/var/run/docker.sock'),marker:fs.existsSync(${JSON.stringify(marker)}),controller:fs.existsSync('/opt/redline/src'),customWorker:fs.existsSync('/opt/redline/bin/redline-worker.mjs'),credential:process.env.REDLINE_MODEL_AUTH??null,memory:fs.readFileSync('/sys/fs/cgroup/memory.max','utf8').trim(),pids:fs.readFileSync('/sys/fs/cgroup/pids.max','utf8').trim()}));`);
       id = await client.run(args, signal); const data = JSON.parse(await client.run(['start', '--attach', id], signal));
       expect(data.uid).toBe(10001); expect(data.status).toMatch(/NoNewPrivs:\s+1/u); expect(data.status).toMatch(/Seccomp:\s+2/u); expect(data.status).toMatch(/CapEff:\s+0+\n/u);
       expect(data.root.split(' ')[5].split(',')).toContain('ro'); expect(data.interfaces).toContain('eth0');
       expect(data.socket).toBe(false); expect(data.marker).toBe(false); expect(data.controller).toBe(false); expect(data.customWorker).toBe(false); expect(data.credential).toBeNull();
+      expect(data.nodeVersion).toBe('v24.21.0'); expect(data.bunVersion).toBe('1.4.4');
       expect(data.memory).toBe(String(1024 * 1024 * 1024)); expect(data.pids).toBe('128');
     } finally { if (id !== undefined) await client.remove(id, jobId); await client.close(); }
   }, 60_000);

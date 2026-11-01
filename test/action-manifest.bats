@@ -279,7 +279,7 @@ PY
 }
 
 @test "CI and docs use the bounded versioned pnpm store cache" {
-  [ "$(grep -Fc 'uses: ./.github/actions/install-dependencies' "$CI_WORKFLOW")" -eq 4 ]
+  [ "$(grep -Fc 'uses: ./.github/actions/install-dependencies' "$CI_WORKFLOW")" -eq 3 ]
   [ "$(grep -Fc 'uses: ./.github/actions/install-dependencies' "$DOCS_WORKFLOW")" -eq 1 ]
   ! grep -Fq 'pnpm install' "$CI_WORKFLOW"
   ! grep -Fq 'pnpm install' "$DOCS_WORKFLOW"

@@ -319,14 +319,17 @@ This is a trusted-host CLI, not malicious-host protection. Opt-in [Docker worker
 
 ## Release operations
 
-See [coordinated releases](./coordinated-releases.md) for the full npm/GHCR process and recovery rules.
+The existing npm release workflow remains independent of Docker image publishing.
+Main-branch CI gates the pinned Tempel/Changesets flow. It creates owner-controlled
+version pull requests or publishes an approved version; it never approves or merges
+those pull requests. npm authentication still uses the owner-managed token, separately
+from provenance permissions.
 
-Successful main push CI gates publication, including all six direct CLI targets and both native Linux worker targets. The pinned Tempel/Changesets flow still creates owner-controlled version PRs, never approves or merges them, and dispatches their validation. Only the coordinated controller publishes exact validated candidate bytes. PRs and manually dispatched validation runs cannot publish.
+The [Docker image workflow](./docker-workers.md#publishing) builds and tests one shared
+image, then publishes it to GHCR only on this repository's main-branch push. There is
+no coordinated release controller, package/image version coupling or release manifest.
 
-`package.json` supplies the product version. npm and both worker variants share that version under a package-qualified GitHub Release, separate from the Action's immutable `vMAJOR.MINOR.PATCH` tags. Incomplete publication or anonymous verification leaves a draft. Existing npm integrity, image digests, source tags and attached assets cannot be overwritten. Historical npm 1.0.0/1.1.0 are not backfilled.
-
-Keep `NPM_TOKEN` in the owner-controlled secret/environment configuration, never files, arguments, logs or chat. Token authentication remains separate from `id-token: write` provenance. No npm or publication credential reaches the anonymous native verification jobs or a harness. Default workflow permissions remain read-only; release/attestation permissions are job-scoped.
-
-Before publication, exact candidate npm bytes run offline without lifecycle scripts. After publication, fresh anonymous installs verify exact integrity and signatures/provenance, pull matching digest-pinned images, and run the public CLI through real native workers against mock models. Both native receipts are required before the GitHub Release becomes public. A skipped/no-op installed check is not a successful smoke.
-
-There is no npm installer hook, production dependency installation or emitted-JavaScript runtime contract. Local validation does not prove public registry availability, live model quality or production release acceptance. Merge, manual publication, workflow reruns and exceptional recovery remain owner-controlled.
+Keep publication credentials in owner-controlled secrets, never files, arguments or
+logs. No publication credential reaches a review harness. Local tests do not prove
+registry availability or live model quality. Merge, manual publication and workflow
+reruns still require explicit owner permission.

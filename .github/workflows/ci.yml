@@ -158,76 +158,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  container-workers:
-    name: Isolated workers (Linux ${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-    steps:
-      - name: Check out exact source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
-        with:
-          persist-credentials: false
-      - name: Set up native Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
-        with:
-          node-version: 24
-      - name: Install frozen development dependencies
-        uses: ./.github/actions/install-dependencies
-        with:
-          telemetry-label: container-${{ matrix.arch }}
-      - name: Build and execute both pinned native workers without live models
-        shell: bash
-        env:
-          WORKER_OUTPUT: ${{ runner.temp }}/worker-native
-          WORKER_ARTIFACT_NAME: worker-native-${{ matrix.arch }}-${{ github.run_id }}-attempt${{ github.run_attempt }}
-        run: |
-          set -euo pipefail
-          node src/harness-worker/build.ts --release --oci --output "$WORKER_OUTPUT"
-          export REDLINE_CONTAINER_TESTS=1
-          export REDLINE_WORKER_MANIFEST="$WORKER_OUTPUT/worker-manifest.json"
-          pnpm exec vitest run test/container-worker.test.ts --reporter=json --outputFile="$WORKER_OUTPUT/test-results.json"
-          node src/release/native-receipt.ts "$WORKER_OUTPUT"
-      - name: Retain immutable native candidates and receipts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: worker-native-${{ matrix.arch }}-${{ github.run_id }}-attempt${{ github.run_attempt }}
-          path: ${{ runner.temp }}/worker-native/
-          if-no-files-found: error
-          retention-days: 90
-
-  candidate-provenance:
-    name: Attest validated native candidates
-    needs: [container-workers]
-    if: github.repository == 'dragoscirjan/redline' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      actions: read
-      attestations: write
-      id-token: write
-    steps:
-      - name: Download this source run's native candidates
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: worker-native-*-${{ github.run_id }}-attempt*
-          path: ${{ runner.temp }}/worker-provenance
-      - name: Attest exact OCI archive bytes from trusted main
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-path: ${{ runner.temp }}/worker-provenance/**/*.oci.tar
-          create-storage-record: false
-
   local-cli:
     name: Local CLI (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
@@ -410,14 +340,12 @@ jobs:
           retention-days: 14
 
   release:
-    needs: [validate, harness-matrix, source-runtime, local-cli, container-workers, candidate-provenance]
+    needs: [validate, harness-matrix, source-runtime, local-cli]
     if: github.repository == 'dragoscirjan/redline' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       actions: write
       contents: write
       pull-requests: write
-      packages: write
-      attestations: write
       id-token: write
     uses: ./.github/workflows/npm.release.yml
     secrets:

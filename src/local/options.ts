@@ -4,14 +4,14 @@ import { open, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { CapabilityError, requireCapability } from '../application/capabilities.ts';
-import { containerLimits, DEFAULT_CONTAINER_LIMITS } from '../harness-worker/docker-client.ts';
+import { containerLimits, DEFAULT_CONTAINER_LIMITS } from '../harness-executor/docker-client.ts';
 import type { IsolationOptions } from './isolation.ts';
 import { parseOutputTokens } from '../harness-executor/output-budget.ts';
 import { DEFAULT_REVIEW_RETRIES, parseReviewRetries } from '../review/retries.ts';
 import { parseReviewEnvironment, type ReviewEnvironment } from '../review/environment.ts';
 import { executable, GitCommand, gitEnvironment, inside, repositoryBoundary } from './process.ts';
 
-const KEYS = ['repository', 'output', 'vcs', 'base', 'head', 'worktree', 'comparison', 'untracked', 'harness', 'isolation', 'worker-manifest', 'container-memory', 'container-scratch', 'container-cpus', 'container-pids',
+const KEYS = ['repository', 'output', 'vcs', 'base', 'head', 'worktree', 'comparison', 'untracked', 'harness', 'isolation', 'container-image', 'container-memory', 'container-scratch', 'container-cpus', 'container-pids',
   'provider', 'endpoint', 'model', 'auth', 'reuse', 'scheduling', 'head-context', 'model-protocol', 'max-output-tokens', 'timeout', 'run-timeout', 'retries', 'concurrency', 'finding-scope', 'fail-on', 'color', 'indexing', 'indexing-provider', 'index-executable', 'index-runtime', 'code-context', 'code-context-repository'] as const;
 type Key = (typeof KEYS)[number];
 export interface LocalOptions {
@@ -63,7 +63,7 @@ No target: review staged and unstaged tracked changes against HEAD.
   --config PATH                      Trusted user JSON; never repository config
   --harness pi|opencode|echo          pi by default; direct binaries installed separately
   --isolation direct|docker          Default direct; Docker fails closed, Linux Pi/OpenCode only
-  --worker-manifest PATH             Trusted local-build manifest outside the reviewed repository
+  --container-image REF              Trusted image tag or digest; required for Docker mode
   --container-memory MiB             Default 1024; range 256..8192
   --container-scratch MiB            Default 256; range 64..1024, writable tmpfs only
   --container-cpus COUNT             Default 1; range 0.25..4
@@ -189,7 +189,7 @@ export async function parseLocalOptions(args: readonly string[], env: NodeJS.Pro
   if (mode === 'staged' && untracked === 'include') throw new UsageError('untracked inclusion is incompatible with staged-only review');
   const harness = get('harness', 'pi');
   const isolationMode = choice(get('isolation', 'direct'), ['direct', 'docker'], 'isolation');
-  const dockerKeys = ['worker-manifest', 'container-memory', 'container-scratch', 'container-cpus', 'container-pids'] as const;
+  const dockerKeys = ['container-image', 'container-memory', 'container-scratch', 'container-cpus', 'container-pids'] as const;
   if (isolationMode === 'direct' && dockerKeys.some(key => flag(key) !== undefined || env[`REDLINE_${key.toUpperCase().replaceAll('-', '_')}`] !== undefined || defaults[key] !== undefined)) {
     throw new UsageError('container settings require --isolation docker');
   }
@@ -203,9 +203,9 @@ export async function parseLocalOptions(args: readonly string[], env: NodeJS.Pro
   try { limits = containerLimits({ memoryMiB: budget('container-memory', DEFAULT_CONTAINER_LIMITS.memoryMiB),
     scratchMiB: budget('container-scratch', DEFAULT_CONTAINER_LIMITS.scratchMiB), cpus: budget('container-cpus', DEFAULT_CONTAINER_LIMITS.cpus),
     pids: budget('container-pids', DEFAULT_CONTAINER_LIMITS.pids) }); } catch { throw new UsageError('invalid container resource budget'); }
-  const rawWorkerManifest = flag('worker-manifest') ?? env.REDLINE_WORKER_MANIFEST ?? defaults['worker-manifest'];
-  const isolation: IsolationOptions = { mode: isolationMode, limits,
-    manifest: rawWorkerManifest === undefined ? undefined : resolve(cwd, get('worker-manifest', '')) };
+  const rawImage = flag('container-image') ?? env.REDLINE_CONTAINER_IMAGE ?? defaults['container-image'];
+  if (isolationMode === 'docker' && rawImage === undefined) throw new UsageError('Docker isolation requires --container-image');
+  const isolation: IsolationOptions = { mode: isolationMode, limits, image: rawImage === undefined ? undefined : get('container-image', '') };
   let model: Record<string, unknown> = {};
   const rawModel = env.REDLINE_MODEL_CONFIG ?? defaults['model-config'];
   if (rawModel !== undefined) {

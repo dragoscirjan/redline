@@ -1,1 +1,0 @@
-{"version":1,"status":"unreleased","note":"The coordinated release builds and verifies both image variants before generating the immutable runtime manifest. For local builds use --worker-manifest with the generated development manifest."}

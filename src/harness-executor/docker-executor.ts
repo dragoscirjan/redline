@@ -3,8 +3,10 @@ import { constants, closeSync, fstatSync, openSync, readFileSync, realpathSync, 
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { inside } from '../local/process.ts';
-import { containerArguments, type ContainerLimits, type DockerClient } from '../harness-worker/docker-client.ts';
-import type { WorkerHarness, WorkerImage } from '../harness-worker/images.ts';
+import { containerArguments, type ContainerLimits, type DockerClient } from './docker-client.ts';
+import type { DockerImage } from './docker-client.ts';
+import type { HarnessName } from './types.ts';
+type WorkerHarness = Exclude<HarnessName, 'echo'>;
 import type { ProcessSpawner, SpawnRequest } from '../process-runner.ts';
 import { createPiExecutor } from './pi-executor.ts';
 import { createOpenCodeExecutor } from './opencode-executor.ts';
@@ -46,7 +48,7 @@ function input(harness: WorkerHarness, request: SpawnRequest, directory: string,
   return { args: request.args, env };
 }
 /** Docker changes process launch only. Existing SDK configuration, parsing and retry behavior stay authoritative. */
-export function createDockerExecutor(harness: WorkerHarness, client: DockerClient, image: WorkerImage, limits: ContainerLimits,
+export function createDockerExecutor(harness: WorkerHarness, client: DockerClient, image: DockerImage, limits: ContainerLimits,
   signal: AbortSignal, warning: (message: string) => void = () => {}): HarnessExecutor {
   return {
     harness,
@@ -75,7 +77,7 @@ export function createDockerExecutor(harness: WorkerHarness, client: DockerClien
           if (/[,\r\n]/u.test(directory)) throw new Error('Unsupported container input path');
           args.splice(args.length - 1, 0, '--mount', `type=bind,src=${directory},dst=${INPUT},readonly`,
             ...Object.keys(selected.env).flatMap(key => ['--env', key]));
-          args.push(...selected.args); started = true;
+          args.push(harness, ...selected.args); started = true;
           const child = client.spawn(args, request.stdin, selected.env, signal);
           return { stdout: child.stdout, stderr: child.stderr, wait: () => child.wait(), kill() { child.kill(); void owned.reap(); } };
         },

@@ -1,9 +1,0 @@
-# Private, build-only SDK dependency workspace. Keep the root supply-chain policy.
-packages:
-  - pi
-  - opencode
-minimumReleaseAge: 1440
-overrides:
-  rollup: 4.63.6
-ignoredBuiltDependencies:
-  - esbuild

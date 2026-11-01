@@ -1,7 +1,0 @@
-{
-  "name": "@redline-private/worker-opencode",
-  "private": true,
-  "dependencies": {
-    "opencode-ai": "1.18.34"
-  }
-}

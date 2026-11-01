@@ -5,13 +5,16 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { DockerClient, containerArguments, DEFAULT_CONTAINER_LIMITS } from '../src/harness-worker/docker-client.ts';
-import { loadWorkerImage, parseWorkerManifest, type WorkerImage } from '../src/harness-worker/images.ts';
+import { DockerClient, containerArguments, DEFAULT_CONTAINER_LIMITS } from '../src/harness-executor/docker-client.ts';
 import { executable } from '../src/local/process.ts';
 import { RpcClient } from './helpers/rpc-client.ts';
 
 const enabled = process.env.REDLINE_CONTAINER_TESTS === '1';
-const manifest = process.env.REDLINE_WORKER_MANIFEST;
+function imageName(): string {
+  const value = process.env.REDLINE_CONTAINER_IMAGE;
+  if (value === undefined) throw new Error('Set REDLINE_CONTAINER_IMAGE for native Docker tests');
+  return value;
+}
 const binary = process.env.REDLINE_CONTAINER_CLI ?? fileURLToPath(new URL('../bin/redline.mjs', import.meta.url));
 const roots: string[] = []; const cleanups: (() => Promise<void>)[] = [];
 const key = 'synthetic-container-model-key-do-not-persist';
@@ -25,15 +28,6 @@ afterEach(async () => {
   await Promise.all(cleanups.splice(0).map(cleanup => cleanup()));
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
-async function testImage(repository: string): Promise<WorkerImage> {
-  if (manifest === undefined && process.env.REDLINE_CONTAINER_CLI !== undefined) {
-    const packageRoot = dirname(dirname(binary));
-    const pkg = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'));
-    const data = parseWorkerManifest(JSON.parse(await readFile(join(packageRoot, 'src/harness-worker/worker-images.json'), 'utf8')), pkg.version, false);
-    return { ...data.images.pi, development: false, identity: { harness: 'pi', release: data.release, revision: data.revision, harnessVersion: data.images.pi.harnessVersion } };
-  }
-  return loadWorkerImage('pi', repository, manifest);
-}
 async function fixture(mode: 'finding' | 'busy' | 'unauthorized' | 'hang' = 'finding') {
   const firstRequest = deferred();
   const root = await mkdtemp(join(tmpdir(), 'redline-container-test-')); roots.push(root);
@@ -46,8 +40,8 @@ async function fixture(mode: 'finding' | 'busy' | 'unauthorized' | 'hang' = 'fin
   await writeFile(join(repository, 'src/example.ts'), 'new\n'); git('commit', '--quiet', '-am', 'head');
   const requests: { path: string; authorization: string | undefined; body: Record<string, unknown> }[] = [];
   const command = await executable('docker', process.env.PATH ?? '', repository);
-  const image = await testImage(repository);
   const client = await DockerClient.create(command, repository, root, env);
+  const image = await client.preflight(imageName(), AbortSignal.timeout(30_000));
   const job = randomUUID(); const name = 'redline-' + job;
   const controller = new AbortController(); const ready = deferred();
   const args = containerArguments(image, client.owner, job, 120_000, DEFAULT_CONTAINER_LIMITS);
@@ -98,7 +92,7 @@ describe.runIf(enabled)('real isolated Pi/OpenCode workers', () => {
       const f = await fixture(); const output = join(f.root, 'output');
       const before = f.git('status', '--porcelain=v1');
       const result = await cli(['review', '--repository', f.repository, '--base', f.base, '--head', 'HEAD', '--indexing', 'disabled', '--reuse', 'disabled',
-        '--harness', harness, '--isolation', 'docker', ...(manifest === undefined ? [] : ['--worker-manifest', manifest]),
+        '--harness', harness, '--isolation', 'docker', '--container-image', imageName(),
         '--provider', 'mock', '--endpoint', f.endpoint, '--model', 'test-model', '--max-output-tokens', '4096', '--retries', '0', '--output', output],
       { ...f.env, REDLINE_MODEL_AUTH: JSON.stringify({ mock: key }) });
       const failureRecord = result.code === 0 ? '' : await readFile(join(output, 'reviews/000001.json'), 'utf8').catch(() => 'no file record');
@@ -114,7 +108,7 @@ describe.runIf(enabled)('real isolated Pi/OpenCode workers', () => {
     }, 120_000);
     it(`${harness} uses the same isolated executor through RPC and rejects request-selected isolation`, async () => {
       const f = await fixture();
-      const client = new RpcClient(binary, ['--harness', harness, '--isolation', 'docker', ...(manifest === undefined ? [] : ['--worker-manifest', manifest]),
+      const client = new RpcClient(binary, ['--harness', harness, '--isolation', 'docker', '--container-image', imageName(),
         '--provider', 'mock', '--endpoint', f.endpoint, '--model', 'test-model', '--max-output-tokens', '4096', '--retries', '0', '--indexing', 'disabled', '--reuse', 'disabled'],
       { ...f.env, REDLINE_MODEL_AUTH: JSON.stringify({ mock: key }) }, f.root);
       try {
@@ -135,7 +129,7 @@ describe.runIf(enabled)('real isolated Pi/OpenCode workers', () => {
     it(`${harness} preserves native retry ownership inside fresh outer invocations`, async () => {
       const f = await fixture('busy');
       const result = await cli(['review', '--repository', f.repository, '--base', f.base, '--head', 'HEAD', '--indexing', 'disabled', '--reuse', 'disabled',
-        '--harness', harness, '--isolation', 'docker', ...(manifest === undefined ? [] : ['--worker-manifest', manifest]), '--provider', 'mock', '--endpoint', f.endpoint,
+        '--harness', harness, '--isolation', 'docker', '--container-image', imageName(), '--provider', 'mock', '--endpoint', f.endpoint,
         '--model', 'test-model', '--max-output-tokens', '4096', '--retries', '1', '--timeout', '1m', '--run-timeout', '2m'], { ...f.env, REDLINE_MODEL_AUTH: JSON.stringify({ mock: key }) });
       expect(result.code, result.stdout + result.stderr).toBe(1);
       expect(f.requests).toHaveLength(harness === 'pi' ? 2 : 12);
@@ -144,13 +138,13 @@ describe.runIf(enabled)('real isolated Pi/OpenCode workers', () => {
     it(`${harness} treats authentication failure as nonretryable and redacts reflected credentials from diagnostics`, async () => {
       const f = await fixture('unauthorized');
       const result = await cli(['review', '--repository', f.repository, '--base', f.base, '--head', 'HEAD', '--indexing', 'disabled', '--reuse', 'disabled',
-        '--harness', harness, '--isolation', 'docker', ...(manifest === undefined ? [] : ['--worker-manifest', manifest]), '--provider', 'mock', '--endpoint', f.endpoint,
+        '--harness', harness, '--isolation', 'docker', '--container-image', imageName(), '--provider', 'mock', '--endpoint', f.endpoint,
         '--model', 'test-model', '--max-output-tokens', '4096', '--retries', '3'], { ...f.env, REDLINE_MODEL_AUTH: JSON.stringify({ mock: key }) });
       expect(result.code, result.stdout + result.stderr).toBe(1); expect(f.requests).toHaveLength(1); expect(result.stdout + result.stderr).not.toContain(key);
     }, 120_000);
     it(`${harness} cancels an active isolated model stream through RPC`, async () => {
       const f = await fixture('hang');
-      const client = new RpcClient(binary, ['--harness', harness, '--isolation', 'docker', ...(manifest === undefined ? [] : ['--worker-manifest', manifest]),
+      const client = new RpcClient(binary, ['--harness', harness, '--isolation', 'docker', '--container-image', imageName(),
         '--provider', 'mock', '--endpoint', f.endpoint, '--model', 'test-model', '--max-output-tokens', '4096', '--retries', '0', '--indexing', 'disabled', '--reuse', 'disabled'],
       { ...f.env, REDLINE_MODEL_AUTH: JSON.stringify({ mock: key }) }, f.root);
       try {
@@ -168,11 +162,10 @@ describe.runIf(enabled)('real isolated Pi/OpenCode workers', () => {
   it('enforces the same kernel, filesystem, environment and network profile without host mounts', async () => {
     const f = await fixture(); const marker = join(f.root, 'host-only-marker'); await writeFile(marker, 'host-only');
     const command = await executable('docker', process.env.PATH ?? '', f.repository);
-    const image = await testImage(f.repository);
     const client = await DockerClient.create(command, f.repository, f.root, f.env);
+    const image = await client.preflight(imageName(), AbortSignal.timeout(30_000));
     const jobId = randomUUID(); const signal = AbortSignal.timeout(30_000); let id: string | undefined;
     try {
-      await client.preflight(image, signal);
       const args = containerArguments(image, client.owner, jobId, 30_000, DEFAULT_CONTAINER_LIMITS);
       args.splice(args.length - 1, 0, '--entrypoint', 'node');
       args.push('-e', `const fs=require('node:fs'),os=require('node:os'),cp=require('node:child_process');const root=fs.readFileSync('/proc/self/mountinfo','utf8').split('\\n').find(l=>l.split(' ')[4]==='/');console.log(JSON.stringify({nodeVersion:process.version,bunVersion:cp.execFileSync('/usr/local/bin/bun',['--version'],{encoding:'utf8'}).trim(),uid:process.getuid(),status:fs.readFileSync('/proc/self/status','utf8'),root,interfaces:Object.keys(os.networkInterfaces()),socket:fs.existsSync('/var/run/docker.sock'),marker:fs.existsSync(${JSON.stringify(marker)}),controller:fs.existsSync('/opt/redline/src'),customWorker:fs.existsSync('/opt/redline/bin/redline-worker.mjs'),credential:process.env.REDLINE_MODEL_AUTH??null,memory:fs.readFileSync('/sys/fs/cgroup/memory.max','utf8').trim(),pids:fs.readFileSync('/sys/fs/cgroup/pids.max','utf8').trim()}));`);

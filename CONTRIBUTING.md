@@ -76,7 +76,7 @@ Product documentation lives under `docs/` as a VitePress site. Register new page
 
 ## Releasing the action
 
-Published `vMAJOR.MINOR.PATCH` action tags are immutable. Consumers pin the full version; the `vMAJOR` alias moves only through the guarded manual release flow described in the Wiki's Release operations runbook, with repository tag rules requiring the trusted releaser. A release tag must contain the exact reviewed TypeScript source used by the composite action; emitted `dist/**/*.js` files are not part of the runtime contract. Legacy runner images remain reference material. The new Pi/OpenCode worker images follow the coordinated npm/GHCR product release flow, separate from Action tags.
+Published `vMAJOR.MINOR.PATCH` action tags are immutable. Consumers pin the full version; the `vMAJOR` alias moves only through the guarded manual release flow described in the Wiki's Release operations runbook, with repository tag rules requiring the trusted releaser. A release tag must contain the exact reviewed TypeScript source used by the composite action; emitted `dist/**/*.js` files are not part of the runtime contract. Legacy runner images remain reference material. The shared harness image is published to GHCR independently of npm releases and Action tags.
 
 ## Pull request checklist
 

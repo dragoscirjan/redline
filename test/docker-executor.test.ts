@@ -4,8 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDockerExecutor } from '../src/harness-executor/docker-executor.ts';
-import { DockerClient, DEFAULT_CONTAINER_LIMITS } from '../src/harness-worker/docker-client.ts';
-import type { WorkerHarness, WorkerImage } from '../src/harness-worker/images.ts';
+import { DockerClient, DEFAULT_CONTAINER_LIMITS, type DockerImage } from '../src/harness-executor/docker-client.ts';
 import type { SpawnedProcess } from '../src/process-runner.ts';
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -19,8 +18,7 @@ describe.runIf(process.platform === 'linux')('existing harness launch wrapped in
     const repository = join(root, 'repository'); const scratch = join(root, 'scratch'); await mkdir(repository); await mkdir(scratch);
     const client = await DockerClient.create(process.execPath, repository, root, { PATH: process.env.PATH, HOME: '/synthetic-host-home',
       GITHUB_TOKEN: 'unrelated-token', OPENAI_API_KEY: 'unrelated-provider-key', REDLINE_MODEL_AUTH: 'unrelated-auth-map' });
-    const image: WorkerImage = { reference: 'sha256:' + 'a'.repeat(64), platforms: ['linux/amd64'], development: true,
-      identity: { harness, harnessVersion: '1.0.0', release: '1.2.0', revision: 'a'.repeat(40) } };
+    const image: DockerImage = { reference: 'sha256:' + 'a'.repeat(64) };
     let mounted = ''; let copied: string[] = [];
     const remove = vi.spyOn(client, 'remove').mockResolvedValue();
     const spawn = vi.spyOn(client, 'spawn').mockImplementation((args, stdin, environment) => {
@@ -48,7 +46,7 @@ describe.runIf(process.platform === 'linux')('existing harness launch wrapped in
       return processResult();
     });
     try {
-      const adapter = createDockerExecutor(harness as WorkerHarness, client, image, DEFAULT_CONTAINER_LIMITS, new AbortController().signal);
+      const adapter = createDockerExecutor(harness, client, image, DEFAULT_CONTAINER_LIMITS, new AbortController().signal);
       const prepared = await adapter.prepare({ model: { provider: 'mock', endpoint: 'http://model.invalid/v1', model: 'test-model' },
         credential: { provider: 'mock', value: selectedKey }, workDirectory: scratch, timeoutMs: 1000, maxOutputTokens: 4096, retryOwnership: 'caller' });
       await adapter.execute(prepared, prompt);

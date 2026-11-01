@@ -1,13 +1,12 @@
 import { CapabilityError } from '../application/capabilities.ts';
 import { createDockerExecutor } from '../harness-executor/docker-executor.ts';
-import { DockerClient, type ContainerLimits } from '../harness-worker/docker-client.ts';
-import { loadWorkerImage } from '../harness-worker/images.ts';
+import { DockerClient, type ContainerLimits } from '../harness-executor/docker-client.ts';
 import type { HarnessExecutor, HarnessName } from '../harness-executor/types.ts';
 import { executable } from './process.ts';
 
 export interface IsolationOptions {
   readonly mode: 'direct' | 'docker';
-  readonly manifest: string | undefined;
+  readonly image: string | undefined;
   readonly limits: ContainerLimits;
 }
 export interface IsolatedRuntime {
@@ -21,9 +20,9 @@ export async function isolatedRuntime(harness: HarnessName, options: IsolationOp
   try {
     if (harness === 'echo' || process.platform !== 'linux') throw new CapabilityError('Docker isolation initially supports Pi/OpenCode on Linux only');
     const command = await executable('docker', env.PATH ?? '', repository);
-    const image = await loadWorkerImage(harness, repository, options.manifest);
+    if (options.image === undefined) throw new CapabilityError('Docker isolation requires a trusted container image');
     client = await DockerClient.create(command, repository, state, env);
-    await client.preflight(image, signal);
+    const image = await client.preflight(options.image, signal);
     const owned = client;
     return { executor: createDockerExecutor(harness, client, image, options.limits, signal, warning),
       identity: 'docker:' + image.reference, close: () => owned.close() };

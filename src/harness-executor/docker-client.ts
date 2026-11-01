@@ -5,23 +5,23 @@ import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { cancellableSpawner, inside } from '../local/process.ts';
 import { isRecord as record, runBoundedProcess, type SpawnedProcess } from '../process-runner.ts';
-import { WorkerFault } from './images.ts';
-import type { WorkerImage } from './images.ts';
+export class DockerError extends Error {}
+export interface DockerImage { readonly reference: string }
 
 export interface ContainerLimits { readonly memoryMiB: number; readonly scratchMiB: number; readonly cpus: number; readonly pids: number }
 export const DEFAULT_CONTAINER_LIMITS: ContainerLimits = Object.freeze({ memoryMiB: 1024, scratchMiB: 256, cpus: 1, pids: 128 });
 export function containerLimits(value: ContainerLimits): ContainerLimits {
   for (const [key, min, max] of [['memoryMiB', 256, 8192], ['scratchMiB', 64, 1024], ['pids', 32, 512]] as const) {
-    if (!Number.isSafeInteger(value[key]) || value[key] < min || value[key] > max) throw new WorkerFault('Invalid container resource budget');
+    if (!Number.isSafeInteger(value[key]) || value[key] < min || value[key] > max) throw new DockerError('Invalid container resource budget');
   }
-  if (!Number.isFinite(value.cpus) || value.cpus < 0.25 || value.cpus > 4) throw new WorkerFault('Invalid container CPU budget');
+  if (!Number.isFinite(value.cpus) || value.cpus < 0.25 || value.cpus > 4) throw new DockerError('Invalid container CPU budget');
   return { ...value };
 }
 export const MANAGED = 'io.redline.managed';
 export const OWNER = 'io.redline.owner';
 export const JOB = 'io.redline.job';
 export const EXPIRY = 'io.redline.expires';
-export function containerArguments(image: WorkerImage, owner: string, jobId: string, timeoutMs: number, limits: ContainerLimits): string[] {
+export function containerArguments(image: DockerImage, owner: string, jobId: string, timeoutMs: number, limits: ContainerLimits): string[] {
   containerLimits(limits);
   return ['create', '--name', 'redline-' + jobId,
     '--label', MANAGED + '=worker/v1', '--label', OWNER + '=' + owner, '--label', JOB + '=' + jobId,
@@ -42,9 +42,9 @@ export class DockerClient {
   }
   static async create(command: string, repository: string, state: string, host: NodeJS.ProcessEnv): Promise<DockerClient> {
     const parent = await realpath(tmpdir());
-    if (inside(repository, parent)) throw new WorkerFault('Container client scratch must be outside the reviewed repository');
+    if (inside(repository, parent)) throw new DockerError('Container client scratch must be outside the reviewed repository');
     if ((host.DOCKER_CONTEXT !== undefined && host.DOCKER_CONTEXT !== 'default')
-      || (host.DOCKER_HOST !== undefined && !/^unix:\/\/\//u.test(host.DOCKER_HOST))) throw new WorkerFault('Initial Docker support requires a local Linux Unix-socket engine');
+      || (host.DOCKER_HOST !== undefined && !/^unix:\/\/\//u.test(host.DOCKER_HOST))) throw new DockerError('Initial Docker support requires a local Linux Unix-socket engine');
     const directory = await mkdtemp(join(parent, 'redline-docker-'));
     try {
       const config = join(directory, 'config'); await mkdir(config, { mode: 0o700 });
@@ -61,26 +61,27 @@ export class DockerClient {
       command: this.command, args, cwd: this.directory, env: this.env, timeoutMs, stdoutLimitBytes: limit,
     });
     signal.throwIfAborted();
-    if (result.code !== 0 || result.timedOut || result.stdoutTruncated) throw new WorkerFault(`Docker ${args[0] ?? 'operation'} failed`);
+    if (result.code !== 0 || result.timedOut || result.stdoutTruncated) throw new DockerError(`Docker ${args[0] ?? 'operation'} failed`);
     return result.stdout.trim();
   }
-  async preflight(image: WorkerImage, signal: AbortSignal): Promise<void> {
-    if (process.platform !== 'linux') throw new WorkerFault('Docker isolation is initially certified on Linux hosts only');
+  async preflight(reference: string, signal: AbortSignal): Promise<DockerImage> {
+    if (!/^[a-z0-9][a-zA-Z0-9._/:@-]{0,511}$/u.test(reference)) throw new DockerError('Invalid container image reference');
+    if (process.platform !== 'linux') throw new DockerError('Docker isolation supports Linux hosts only');
     const format = '{"os":{{json .OSType}},"arch":{{json .Architecture}},"security":{{json .SecurityOptions}},"memory":{{json .MemoryLimit}},"swap":{{json .SwapLimit}},"pids":{{json .PidsLimit}},"cpu":{{json .CPUCfsQuota}}}';
     const info: unknown = JSON.parse(await this.run(['info', '--format', format], signal));
     if (!record(info) || info.os !== 'linux' || !Array.isArray(info.security) || !info.security.includes('name=seccomp,profile=builtin')
-      || info.memory !== true || info.swap !== true || info.pids !== true || info.cpu !== true) throw new WorkerFault('Docker cannot enforce the required kernel/resource profile');
+      || info.memory !== true || info.swap !== true || info.pids !== true || info.cpu !== true) throw new DockerError('Docker cannot enforce the required kernel/resource profile');
+    try { await this.run(['image', 'inspect', reference, '--format', '{{.Id}}'], signal); }
+    catch { signal.throwIfAborted(); await this.run(['pull', reference], signal, 120_000, 1024 * 1024); }
+    const raw: unknown = JSON.parse(await this.run(['image', 'inspect', reference, '--format',
+      '{"id":{{json .Id}},"os":{{json .Os}},"arch":{{json .Architecture}},"user":{{json .Config.User}},"entrypoint":{{json .Config.Entrypoint}}}'], signal));
     const arch = info.arch === 'x86_64' ? 'amd64' : info.arch === 'aarch64' ? 'arm64' : info.arch;
-    if (!image.platforms.includes('linux/' + String(arch))) throw new WorkerFault('Worker image is unavailable for this engine architecture');
-    try { await this.run(['image', 'inspect', image.reference, '--format', '{{.Id}}'], signal); }
-    catch {
-      if (image.development) throw new WorkerFault('Local worker image is missing; rebuild it');
-      await this.run(['pull', image.reference], signal, 120_000, 1024 * 1024);
-    }
-    const raw: unknown = JSON.parse(await this.run(['image', 'inspect', image.reference, '--format', '{"user":{{json .Config.User}},"entrypoint":{{json .Config.Entrypoint}},"revision":{{json (index .Config.Labels "org.opencontainers.image.revision")}},"kind":{{json (index .Config.Labels "io.redline.source-kind")}}}'], signal));
-    if (!record(raw) || raw.user !== '10001:10001' || JSON.stringify(raw.entrypoint) !== '["/usr/local/bin/redline-harness"]'
-      || raw.revision !== image.identity.revision || (!image.development && raw.kind !== 'release')) throw new WorkerFault('Worker image metadata does not match its manifest');
+    if (!record(raw) || raw.os !== 'linux' || raw.arch !== arch || !['amd64', 'arm64'].includes(String(arch))
+      || typeof raw.id !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(raw.id) || raw.user !== '10001:10001'
+      || JSON.stringify(raw.entrypoint) !== '["/usr/local/bin/redline-harness"]') throw new DockerError('Container image does not match the supported harness image');
     await this.reconcile(signal);
+    // Resolve a trusted tag once; every invocation and cache identity uses the immutable ID.
+    return { reference: raw.id };
   }
   inputDirectory(): string {
     const directory = mkdtempSync(join(this.directory, 'input-'));
@@ -93,7 +94,7 @@ export class DockerClient {
   async remove(identifier: string, jobId: string): Promise<void> {
     const signal = AbortSignal.timeout(10_000);
     const raw: unknown = JSON.parse(await this.run(['container', 'inspect', identifier, '--format', '{{json .Config.Labels}}'], signal));
-    if (!record(raw) || raw[MANAGED] !== 'worker/v1' || raw[OWNER] !== this.owner || raw[JOB] !== jobId) throw new WorkerFault('Container ownership mismatch; refusing cleanup');
+    if (!record(raw) || raw[MANAGED] !== 'worker/v1' || raw[OWNER] !== this.owner || raw[JOB] !== jobId) throw new DockerError('Container ownership mismatch; refusing cleanup');
     await this.run(['rm', '--force', identifier], signal);
   }
   private async reconcile(signal: AbortSignal): Promise<void> {

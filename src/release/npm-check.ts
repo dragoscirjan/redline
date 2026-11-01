@@ -27,20 +27,6 @@ export async function assertPublishOnlyChangesets(directory: string | URL): Prom
   }
 }
 
-/** Only regular Markdown notes can request version-PR mode; unknown/prerelease state fails closed. */
-export async function classifyReleaseChangesets(directory: string | URL): Promise<'version' | 'publish'> {
-  const entries = await readdir(directory, { withFileTypes: true });
-  if (!entries.some(entry => entry.name === 'config.json' && entry.isFile())) throw new Error('Missing regular Changesets configuration');
-  let pending = false;
-  for (const entry of entries) {
-    if (!entry.isFile()) throw new Error('Changesets entries must be regular files');
-    if (entry.name === 'config.json' || entry.name === 'README.md') continue;
-    if (!entry.name.endsWith('.md')) throw new Error('Unknown or prerelease Changesets state');
-    pending = true;
-  }
-  return pending ? 'version' : 'publish';
-}
-
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const metadata: { name: string; version: string } = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));

@@ -11,7 +11,7 @@
   "files": [
     "bin/*.mjs",
     "src/application/*.ts", "src/local/*.ts", "src/review/*.ts",
-    "src/rpc/*.ts", "src/harness-worker/*.ts", "src/harness-worker/*.json",
+    "src/rpc/*.ts",
     "schemas/rpc/v1/*.json", "docs/stdio-protocol.md",
     "src/harness-executor/*.ts", "src/publish/*.ts",
     "src/code-context/*.ts", "src/code-intelligence/*.ts", "src/change-impact/*.ts",
@@ -19,7 +19,7 @@
     "src/code-index/context.ts", "src/code-index/cache.ts", "src/code-index/lock.py", "src/code-index/export.py", "src/code-index/gitnexus-query.mjs",
     "prompts/v8/*.md", "prompts/verification/v3/*.md",
     "docs/local-cli.md", "docs/portable-architecture.md",
-    "docs/docker-workers.md", "docs/coordinated-releases.md"
+    "docs/docker-workers.md"
   ],
   "bin": {
     "redline": "bin/redline.mjs",

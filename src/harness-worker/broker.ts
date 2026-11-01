@@ -31,6 +31,7 @@ export class ModelBroker {
   private requests = 0;
   private busy = false;
   private closed = false;
+  private deadlineExpired = false;
   constructor(policy: BrokerPolicy) {
     try { this.#url = new URL(policy.url); } catch { throw new WorkerFault('Invalid broker policy'); }
     if (!['http:', 'https:'].includes(this.#url.protocol) || this.#url.username || this.#url.password || this.#url.hash
@@ -45,11 +46,12 @@ export class ModelBroker {
     this.maxRequests = policy.maxRequests;
     this.maxResponseBytes = policy.maxResponseBytes ?? LIMITS.outputBytes;
     this.maxOutputTokens = policy.maxOutputTokens === undefined ? undefined : validateOutputTokens(policy.maxOutputTokens);
-    this.timer = setTimeout(() => this.close(), policy.timeoutMs);
+    this.timer = setTimeout(() => { this.deadlineExpired = true; this.close(); }, policy.timeoutMs);
     this.external = policy.signal;
     this.external?.addEventListener('abort', this.close, { once: true });
     if (this.external?.aborted) this.close();
   }
+  get timedOut(): boolean { return this.deadlineExpired; }
   get signal(): AbortSignal { return this.controller.signal; }
   readonly close = (): void => {
     if (this.closed) return;
@@ -65,11 +67,16 @@ export class ModelBroker {
     const value = parseJson(body);
     if (!record(value) || value.model !== this.model || (value.tools !== undefined && (!Array.isArray(value.tools) || value.tools.length !== 0))
       || (value.functions !== undefined && (!Array.isArray(value.functions) || value.functions.length !== 0))
+      || (value.plugins !== undefined && (!Array.isArray(value.plugins) || value.plugins.length !== 0))
+      || (value.agents !== undefined && (!Array.isArray(value.agents) || value.agents.length !== 0))
       || (value.tool_choice !== undefined && value.tool_choice !== 'none' && value.tool_choice !== 'auto')
       || (value.function_call !== undefined && value.function_call !== 'none')) throw new WorkerFault('Broker access denied');
-    if (this.maxOutputTokens !== undefined) {
-      const cap = value.max_completion_tokens ?? value.max_tokens;
-      if (!Number.isSafeInteger(cap) || typeof cap !== 'number' || cap < 1 || cap > this.maxOutputTokens) throw new WorkerFault('Broker access denied');
+    const maxOutputTokens = this.maxOutputTokens;
+    if (maxOutputTokens !== undefined) {
+      const caps = ['max_completion_tokens', 'max_tokens'].filter(key => Object.hasOwn(value, key)).map(key => value[key]);
+      if (caps.length === 0 || caps.some(cap => !Number.isSafeInteger(cap) || typeof cap !== 'number' || cap < 1 || cap > maxOutputTokens)) {
+        throw new WorkerFault('Broker access denied');
+      }
     }
   }
   async *request(requestId: number, body: Buffer, accept: Accept): AsyncGenerator<HostMessage> {

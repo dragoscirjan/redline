@@ -164,13 +164,13 @@ describe('npm release boundary', () => {
   it.each(lineEndings)('runs release after every required main CI check, never on PRs or dispatches (%s)', async (_label, newline) => {
     const source = workflowText((await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')).replace(/\r?\n/gu, newline));
     const release = source.split('\n  release:\n')[1]?.split(/\n  [a-z][a-z-]*:\n/u)[0] ?? '';
-    expect(release).toContain('needs: [validate, harness-matrix, source-runtime, local-cli]');
+    expect(release).toContain('needs: [validate, harness-matrix, source-runtime, local-cli, container-workers, candidate-provenance]');
     expect(release).toContain("github.event_name == 'push' && github.ref == 'refs/heads/main'");
     expect(release).toContain("github.repository == 'dragoscirjan/redline'");
     expect(release).toContain('uses: ./.github/workflows/npm.release.yml');
     expect(release).toContain('NPM_TOKEN: ${{ secrets.NPM_TOKEN }}');
     expect(release).not.toContain('secrets: inherit');
-    for (const permission of ['actions: write', 'contents: write', 'pull-requests: write', 'id-token: write']) {
+    for (const permission of ['actions: write', 'contents: write', 'pull-requests: write', 'packages: write', 'attestations: write', 'id-token: write']) {
       expect(release).toContain(permission);
     }
     expect(source.split('\njobs:')[0]).toContain('permissions:\n  contents: read');
@@ -191,16 +191,27 @@ describe('npm release boundary', () => {
     expect(source).toContain('dragoscirjan/tempel-javascript/.github/actions/release@71e3379b37d477ae0e7915f6463b0a3921d28f8d');
     expect(source).toContain('fetch-depth: 0');
     expect(source).toContain('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}');
-    expect(source.match(/secrets\.NPM_TOKEN/gu)).toHaveLength(1);
-    expect(source.indexOf('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}')).toBeGreaterThan(source.indexOf('- name: Install development dependencies'));
-    expect(source).toContain("NODE_AUTH_TOKEN: ''");
+    expect(source.match(/secrets\.NPM_TOKEN/gu)).toHaveLength(2);
+    expect(source.indexOf('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}')).toBeGreaterThan(source.indexOf('- name: Install frozen dependencies'));
+    expect(source).toContain("if: steps.plan.outputs.mode == 'version'");
     expect(source).toContain("npm_config_ignore_scripts: 'true'");
     expect(source).toContain("npm_config_provenance: 'true'");
     expect(source).toContain("npm_config_access: public");
-    expect(source).toContain('test "$PUBLISHED" = true');
-    expect(source).toContain('npm install --prefix "$SMOKE/installation" --ignore-scripts');
-    expect(source).toContain("if: steps.release.outputs.published == 'true'");
-    expect(source).toContain("if: steps.release.outputs.pr-number != ''");
+    expect(source).toContain('run: node src/release/main.ts publish');
+    expect(source).toContain('run: node src/release/main.ts restore');
+    expect(source).toContain('run: node src/release/main.ts finalize');
+    expect(source).toContain('artifact-ids: ${{ needs.plan.outputs.candidate-id }}');
+    expect(source).toContain('run-id: ${{ needs.plan.outputs.run-id }}');
+    expect(source).not.toContain('outputs.published');
+    expect(source).toContain("if: steps.version.outputs.pr-number != ''");
+    const verification = source.split('\n  verify:\n')[1]?.split('\n  finalize:\n')[0] ?? '';
+    expect(verification).toContain('run: node src/release/main.ts install');
+    expect(verification).toContain('REDLINE_CONTAINER_CLI: ${{ steps.installation.outputs.binary }}');
+    expect(verification).toContain('runner: ubuntu-24.04-arm');
+    expect(verification).not.toMatch(/NPM_TOKEN|GH_TOKEN|id-token: write|packages: write/u);
+    const finalization = source.split('\n  finalize:\n')[1] ?? '';
+    expect(finalization).toContain('needs: [prepare, publish, verify]');
+    expect(finalization).not.toMatch(/NPM_TOKEN|id-token: write|packages: write/u);
     expect(source).toContain('gh workflow run ci.yml --ref "$head_ref"');
     expect(source).not.toContain('gh pr merge');
     expect(source).not.toContain('gh pr review');

@@ -97,7 +97,9 @@ describe('job-scoped host model broker', () => {
     const url = await endpoint((_req, res) => { calls++; res.end('{}'); });
     const b = broker(url, { maxOutputTokens: 4096 });
     for (const input of [body({ model: 'other', max_tokens: 4096 }), body({ tools: [{ type: 'function' }], max_tokens: 4096 }),
-      body({ functions: [{}], max_tokens: 4096 }), body({ max_tokens: 8192 }), body(), Buffer.from('not-json')]) {
+      body({ functions: [{}], max_tokens: 4096 }), body({ plugins: [{}], max_tokens: 4096 }), body({ agents: 'remote', max_tokens: 4096 }),
+      body({ max_completion_tokens: 4096, max_tokens: 8192 }), body({ max_tokens: 4096, max_completion_tokens: null }),
+      body({ max_tokens: 8192 }), body(), Buffer.from('not-json')]) {
       await expect(collect(b, 1, input)).rejects.toThrow();
     }
     expect(calls).toBe(0);

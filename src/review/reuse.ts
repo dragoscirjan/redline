@@ -218,6 +218,7 @@ export async function buildReviewSemanticFingerprint(options: {
     policyDigest: prompt.policyDigest,
     verificationPolicyDigest: verificationPolicy?.digest ?? null,
     harness: options.environment.harness,
+    ...(options.environment.executionIdentity === undefined ? {} : { executionIdentity: options.environment.executionIdentity }),
     model: {
       provider: options.environment.model.provider,
       endpoint: options.environment.model.endpoint,

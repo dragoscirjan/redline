@@ -1,4 +1,4 @@
-name: Release npm CLI
+name: Release coordinated npm and Docker workers
 
 on:
   workflow_call:
@@ -13,37 +13,48 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  plan:
     if: github.repository == 'dragoscirjan/redline' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: npm-release
     permissions:
       contents: write
       actions: write
       pull-requests: write
-      id-token: write
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      source: ${{ steps.plan.outputs.source }}
+      run-id: ${{ steps.plan.outputs.run-id }}
+      release: ${{ steps.plan.outputs.release }}
+      native-ids: ${{ steps.plan.outputs.native-ids }}
+      native-names: ${{ steps.plan.outputs.native-names }}
+      candidate-artifact: ${{ steps.plan.outputs.candidate-artifact }}
+      candidate-id: ${{ steps.plan.outputs.candidate-id }}
+      record: ${{ steps.plan.outputs.record }}
     steps:
       - name: Check out trusted source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
         with:
           fetch-depth: 0
           persist-credentials: false
-
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
-
-      - name: Install development dependencies
+      - name: Install frozen dependencies
         uses: ./.github/actions/install-dependencies
         with:
-          telemetry-label: npm-release
-
-      # The caller waits for validation, every harness/runtime and all native CLI jobs.
-      - name: Create a version PR or publish the reviewed version with Tempel
-        id: release
+          telemetry-label: release-plan
+      - name: Select version PR, immutable recovery, or a new release
+        id: plan
+        run: node src/release/main.ts plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+      # Tempel only manages pending Changesets. The coordinator publishes exact candidate bytes.
+      - name: Create or update the owner-controlled version PR
+        if: steps.plan.outputs.mode == 'version'
+        id: version
         uses: dragoscirjan/tempel-javascript/.github/actions/release@71e3379b37d477ae0e7915f6463b0a3921d28f8d
         with:
           config: .github/release.json
@@ -52,48 +63,228 @@ jobs:
           npm_config_ignore_scripts: 'true'
           npm_config_provenance: 'true'
           npm_config_access: public
-
-      - name: Validate the version pull request
-        if: steps.release.outputs.pr-number != ''
+      - name: Validate the version pull request without approving or merging it
+        if: steps.version.outputs.pr-number != ''
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ steps.release.outputs.pr-number }}
+          PR_NUMBER: ${{ steps.version.outputs.pr-number }}
         run: |
           set -euo pipefail
           head_ref="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefName --jq .headRefName)"
           gh workflow run ci.yml --ref "$head_ref"
 
-      - name: Verify the published package outside the source checkout
-        if: steps.release.outputs.published == 'true'
+  prepare:
+    needs: [plan]
+    if: needs.plan.outputs.mode == 'prepare' || needs.plan.outputs.mode == 'recover'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      attestations: write
+      id-token: write
+    outputs:
+      record: ${{ steps.describe.outputs.record }}
+      stage-artifact: release-candidate-${{ needs.plan.outputs.source }}-${{ github.run_id }}-attempt${{ github.run_attempt }}
+    env:
+      RELEASE_DIRECTORY: ${{ runner.temp }}/release-candidate
+      NATIVE_ROOT: ${{ runner.temp }}/native-candidates
+      RELEASE_RECORD: ${{ needs.plan.outputs.record }}
+    steps:
+      - name: Check out the current trusted release controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: 24
+      - name: Install frozen dependencies
+        uses: ./.github/actions/install-dependencies
+        with:
+          telemetry-label: release-prepare
+      - name: Download the exact original native artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.plan.outputs.native-ids }}
+          run-id: ${{ needs.plan.outputs.run-id }}
+          github-token: ${{ github.token }}
+          path: ${{ env.NATIVE_ROOT }}
+      - name: Recover original immutable npm and metadata assets
+        if: needs.plan.outputs.mode == 'recover'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.plan.outputs.candidate-id }}
+          run-id: ${{ needs.plan.outputs.run-id }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: ${{ env.RELEASE_DIRECTORY }}
+      - name: Assemble and validate candidates before any irreversible publication
+        if: needs.plan.outputs.mode == 'prepare'
+        run: node src/release/main.ts prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SOURCE: ${{ needs.plan.outputs.source }}
+          RELEASE_VERSION: ${{ needs.plan.outputs.release }}
+          SOURCE_RUN_ID: ${{ needs.plan.outputs.run-id }}
+          NATIVE_NAMES: ${{ needs.plan.outputs.native-names }}
+          CANDIDATE_ARTIFACT: ${{ needs.plan.outputs.candidate-artifact }}
+      - name: Verify recovered bytes without rebuilding or repacking
+        if: needs.plan.outputs.mode == 'recover'
+        run: node src/release/main.ts restore
+      - name: Attest exact new npm candidate bytes
+        if: needs.plan.outputs.mode == 'prepare'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ env.RELEASE_DIRECTORY }}/*.tgz
+          create-storage-record: false
+      - name: Expose only validated public release identity
+        id: describe
+        run: node src/release/main.ts describe
+      - name: Retain immutable npm and metadata candidates
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-candidate-${{ needs.plan.outputs.source }}-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: ${{ env.RELEASE_DIRECTORY }}/
+          if-no-files-found: error
+          retention-days: 90
+
+  publish:
+    needs: [plan, prepare]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: npm-release
+    permissions:
+      contents: write
+      actions: read
+      packages: write
+      id-token: write
+    env:
+      RELEASE_DIRECTORY: ${{ runner.temp }}/release-candidate
+      NATIVE_ROOT: ${{ runner.temp }}/native-candidates
+      RELEASE_RECORD: ${{ needs.prepare.outputs.record }}
+    steps:
+      - name: Check out the trusted release controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: 24
+      - name: Download exact native candidates
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.plan.outputs.native-ids }}
+          run-id: ${{ needs.plan.outputs.run-id }}
+          github-token: ${{ github.token }}
+          path: ${{ env.NATIVE_ROOT }}
+      - name: Download exact npm and metadata candidates
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.prepare.outputs.stage-artifact }}
+          path: ${{ env.RELEASE_DIRECTORY }}
+      - name: Reserve a draft, attach immutable assets, and publish only missing identities
+        run: node src/release/main.ts publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  verify:
+    name: Anonymous installed release (Linux ${{ matrix.arch }})
+    needs: [prepare, publish]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      RELEASE_DIRECTORY: ${{ runner.temp }}/release-candidate
+      RELEASE_RECORD: ${{ needs.prepare.outputs.record }}
+      PUBLIC_INSTALLATION: ${{ runner.temp }}/public-installation
+      PUBLIC_TEST_RESULTS: ${{ runner.temp }}/public-tests.json
+      PUBLIC_RECEIPT: ${{ runner.temp }}/public-receipts/${{ matrix.arch }}.json
+    steps:
+      - name: Check out verification code only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Set up native Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: 24
+      - name: Install frozen test dependencies
+        uses: ./.github/actions/install-dependencies
+        with:
+          telemetry-label: release-public-${{ matrix.arch }}
+      - name: Download immutable public identity
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.prepare.outputs.stage-artifact }}
+          path: ${{ env.RELEASE_DIRECTORY }}
+      - name: Install the exact public npm package and anonymously pull both digest-pinned images
+        id: installation
+        run: node src/release/main.ts install
+      - name: Execute the published CLI and workers with only synthetic loopback credentials
         shell: bash
         env:
-          RELEASE_MODE: ${{ steps.release.outputs.mode }}
-          PUBLISHED: ${{ steps.release.outputs.published }}
-          NODE_AUTH_TOKEN: ''
+          REDLINE_CONTAINER_TESTS: '1'
+          REDLINE_CONTAINER_CLI: ${{ steps.installation.outputs.binary }}
         run: |
           set -euo pipefail
-          test "$RELEASE_MODE" = publish
-          test "$PUBLISHED" = true
-          VERSION="$(node -p "require('./package.json').version")"
-          SMOKE="$(mktemp -d "$RUNNER_TEMP/redline-npm.XXXXXX")"
-          export NPM_CONFIG_USERCONFIG="$SMOKE/npmrc"
-          printf 'registry=https://registry.npmjs.org/\n' > "$NPM_CONFIG_USERCONFIG"
-          npm install --prefix "$SMOKE/installation" --ignore-scripts --no-audit --no-fund "@dragoscirjan/redline@$VERSION"
-          CLI="$SMOKE/installation/node_modules/@dragoscirjan/redline/bin/redline.mjs"
-          export XDG_CONFIG_HOME="$SMOKE/config" XDG_STATE_HOME="$SMOKE/state"
-          git init --initial-branch main "$SMOKE/repository"
-          cd "$SMOKE/repository"
-          git config user.name 'Redline release verification'
-          git config user.email 'redline-release@example.invalid'
-          printf 'export const value = 1;\n' > example.ts
-          git add example.ts
-          git -c core.hooksPath=/dev/null -c commit.gpgSign=false commit -m 'test: seed release fixture'
-          BASE="$(git rev-parse HEAD)"
-          printf 'export const value = 2;\n' > example.ts
-          git add example.ts
-          git -c core.hooksPath=/dev/null -c commit.gpgSign=false commit -m 'test: change release fixture'
-          node "$CLI" --help
-          node "$CLI" review --harness echo --indexing disabled --base "$BASE" --head HEAD
-          printf 'export const value = 3;\n' > example.ts
-          node "$CLI" review --harness echo --indexing disabled
+          pnpm exec vitest run test/container-worker.test.ts --reporter=json --outputFile="$PUBLIC_TEST_RESULTS"
+          mkdir -p "$(dirname "$PUBLIC_RECEIPT")"
+          node src/release/main.ts public-receipt
+      - name: Retain the native anonymous verification receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: worker-public-${{ matrix.arch }}-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: ${{ env.PUBLIC_RECEIPT }}
+          if-no-files-found: error
+          retention-days: 90
+
+  finalize:
+    needs: [prepare, publish, verify]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    env:
+      RELEASE_DIRECTORY: ${{ runner.temp }}/release-candidate
+      RELEASE_RECORD: ${{ needs.prepare.outputs.record }}
+      PUBLIC_RECEIPTS: ${{ runner.temp }}/public-receipts
+    steps:
+      - name: Check out finalization code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
+        with:
+          node-version: 24
+      - name: Download immutable release assets
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.prepare.outputs.stage-artifact }}
+          path: ${{ env.RELEASE_DIRECTORY }}
+      - name: Download both native verification receipts from this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: worker-public-*-${{ github.run_id }}-attempt*
+          merge-multiple: true
+          path: ${{ env.PUBLIC_RECEIPTS }}
+      - name: Recheck every immutable identity before making the managed release public
+        run: node src/release/main.ts finalize
+        env:
+          GH_TOKEN: ${{ github.token }}

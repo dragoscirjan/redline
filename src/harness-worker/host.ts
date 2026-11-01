@@ -1,5 +1,5 @@
 import type { Readable, Writable } from 'node:stream';
-import type { HarnessPrompt, HarnessRun, HarnessSettings } from '../harness-executor/types.ts';
+import type { HarnessPrompt, HarnessRun, HarnessSettings, HarnessOutputLine, HarnessStreamMode } from '../harness-executor/types.ts';
 import { outputCaptureBytes } from '../harness-executor/output-budget.ts';
 import { FrameReader, FrameWriter } from '../transport/framing.ts';
 import { chunks, decodeData, identityValid, invocationMessages, LIMITS, parseHostMessage, parseJson, parseWorkerMessage, WorkerFault,
@@ -14,6 +14,8 @@ export interface WorkerJob {
   readonly settings: HarnessSettings;
   readonly prompt: HarnessPrompt;
   readonly broker: ModelBroker;
+  readonly streamMode?: HarnessStreamMode;
+  readonly onOutputLine?: (output: HarnessOutputLine) => void;
 }
 /** Owns one invocation's byte channel. The container/process owner still must reap its worker. */
 export async function runWorkerJob(job: WorkerJob): Promise<HarnessRun> {
@@ -29,7 +31,7 @@ export async function runWorkerJob(job: WorkerJob): Promise<HarnessRun> {
   let terminalRequest = 0;
   let ready = false;
   const text: Buffer[] = []; const diagnostic: Buffer[] = [];
-  let textBytes = 0; let diagnosticBytes = 0;
+  let textBytes = 0; let diagnosticBytes = 0; let tapBytes = 0;
   const send = async (message: HostMessage): Promise<void> => {
     parseHostMessage(message);
     if (failed || !writer.send(message)) throw new WorkerFault('Worker output unavailable');
@@ -55,7 +57,7 @@ export async function runWorkerJob(job: WorkerJob): Promise<HarnessRun> {
           if (message.kind !== 'hello' || (['harness', 'release', 'revision', 'harnessVersion'] as const).some(key => message.identity[key] !== identity[key])) {
             throw new WorkerFault('Worker identity mismatch');
           }
-          for (const invocation of invocationMessages(identity.harness, broker.jobId, job.settings, job.prompt)) await send(invocation);
+          for (const invocation of invocationMessages(identity.harness, broker.jobId, job.settings, job.prompt, job.onOutputLine === undefined ? 'off' : job.streamMode ?? 'text')) await send(invocation);
           ready = true; continue;
         }
         if (message.kind === 'hello' || message.jobId !== broker.jobId) throw new WorkerFault();
@@ -85,6 +87,14 @@ export async function runWorkerJob(job: WorkerJob): Promise<HarnessRun> {
                 await send(response);
               }
             })().then(() => { transfer = undefined; }, () => { broker.close(); stop(); });
+            break;
+          }
+          case 'tap': {
+            const bytes = decodeData(message.data); tapBytes += bytes.length;
+            if (tapBytes <= outputCaptureBytes(job.settings.maxOutputTokens) + LIMITS.diagnosticBytes) {
+              job.onOutputLine?.({ stream: message.stream, kind: message.tapKind,
+                line: broker.redact(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) });
+            }
             break;
           }
           case 'output': {

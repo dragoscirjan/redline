@@ -24,6 +24,13 @@ describe('internal worker contract', () => {
     expect(() => [...invocationMessages('pi', jobId, settings, { system: 'fixed', user: settings.credential?.value ?? '' })]).toThrow('selected credential');
     expect(messages[0]).toMatchObject({ kind: 'invoke', model: { provider: 'openrouter', model: 'owner/model' }, maxOutputTokens: 4096 });
   });
+  it('projects prompt content without host-only fingerprint metadata', () => {
+    const prompt = { system: 'fixed', user: 'source', responseSchema: { type: 'object' }, policyDigest: 'host-fingerprint-only' };
+    const messages = [...invocationMessages('pi', jobId, settings, prompt)];
+    const bytes = Buffer.concat(messages.flatMap(m => m.kind === 'input' ? [decodeData(m.data)] : []));
+    expect(readPrompt(bytes)).toEqual({ system: prompt.system, user: prompt.user, responseSchema: prompt.responseSchema });
+    expect(bytes.toString()).not.toContain('host-fingerprint-only');
+  });
   it('rejects unsupported versions, extra authority and invalid fields without echoing them', () => {
     const first = [...invocationMessages('pi', jobId, settings, { system: 'fixed', user: 'data' })][0];
     for (const value of [{ ...first, protocol: 'future' }, { ...first, endpoint: 'secret.invalid' },

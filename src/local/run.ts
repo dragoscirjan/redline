@@ -8,6 +8,8 @@ import { GitRevisionSource } from './git-source.ts';
 import type { LocalOptions } from './options.ts';
 import { cancellableSpawner, harnessCommand, inside, LocalOperationError } from './process.ts';
 import { prepareLocalContext } from './context.ts';
+import { CapabilityError } from '../application/capabilities.ts';
+import { isolatedRuntime, type IsolatedRuntime } from './isolation.ts';
 import { localReviewReuse } from './reuse.ts';
 import { terminalText } from './reporter.ts';
 
@@ -16,7 +18,7 @@ export interface LocalRunResult {
   readonly status: 'completed' | 'incomplete' | 'failed' | 'cancelled' | 'deadline-exhausted';
   readonly outputDirectory?: string;
   readonly report?: Pick<ReviewReport, 'review' | 'summary'>;
-  readonly failureKind?: 'configuration' | 'revision' | 'model';
+  readonly failureKind?: 'configuration' | 'revision' | 'model' | 'capability';
 }
 export interface LocalRunDependencies {
   readonly signal: AbortSignal;
@@ -34,13 +36,18 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
   let output: string | undefined;
   let timer: NodeJS.Timeout | undefined;
   let deadlineExpired = false;
-  let failureKind: 'configuration' | 'revision' | 'model' = 'configuration';
+  let failureKind: 'configuration' | 'revision' | 'model' | 'capability' = 'configuration';
+  let runtime: IsolatedRuntime | undefined;
+  const start = performance.now();
   try {
     signal.throwIfAborted();
+    timer = setTimeout(() => { deadlineExpired = true; controller.abort(); }, options.environment.runTimeout.milliseconds);
     // Preflight harness availability before capture/output creation. Never search repository-local PATH entries.
-    const launch = options.environment.harness === 'echo' ? undefined
+    if (options.isolation?.mode === 'docker') runtime = await isolatedRuntime(options.environment.harness, options.isolation,
+      options.repository, options.stateDirectory, env, signal, stderr);
+    const launch = runtime !== undefined || options.environment.harness === 'echo' ? undefined
       : await harnessCommand(options.environment.harness, env.PATH ?? '', options.repository);
-    const executor = createHarnessExecutor(options.environment.harness, {
+    const executor = runtime?.executor ?? createHarnessExecutor(options.environment.harness, {
       ...(launch === undefined ? {} : { command: launch.command }), spawner: cancellableSpawner(signal, launch),
     });
     if (options.output === undefined) {
@@ -88,8 +95,6 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
     dependencies.onOutput?.(destination);
     if (options.environment.maxOutputTokens !== undefined) stdout(`Output budget: ${options.environment.maxOutputTokens} tokens per model call`);
     const reporter = dependencies.reporter(destination);
-    const start = performance.now();
-    timer = setTimeout(() => { deadlineExpired = true; controller.abort(); }, options.environment.runTimeout.milliseconds);
     let reuse: Awaited<ReturnType<typeof localReviewReuse>>;
     stdout(`Model protocol: ${options.environment.modelProtocol}; requested controls are not proof the model honors them.`);
     if (options.environment.harness === 'opencode') stdout('OpenCode retains native provider retries inside each review attempt. --retries counts review attempts, not HTTP requests.');
@@ -118,7 +123,7 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
         const remaining = Math.max(1, Math.floor(options.environment.runTimeout.milliseconds - (performance.now() - start)));
         return executePreparedReview({ ...input,
           sleep: milliseconds => sleep(milliseconds, undefined, { signal }),
-          environment: { ...input.environment, reuse, runTimeout: { minutes: remaining / 60_000, milliseconds: remaining } },
+          environment: { ...input.environment, reuse, ...(runtime === undefined ? {} : { executionIdentity: runtime.identity }), runTimeout: { minutes: remaining / 60_000, milliseconds: remaining } },
           executor: {
             harness: executor.harness,
             prepare: (settings) => { signal.throwIfAborted(); return executor.prepare(settings); },
@@ -139,13 +144,15 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
     await writeFile(join(destination, 'status.json'), `${JSON.stringify({ version: 1, status: code === 0 || code === 3 ? 'completed' : 'incomplete', exitCode: code, ...(options.environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: options.environment.maxOutputTokens }), modelProtocol: options.environment.modelProtocol, retries: options.environment.retries, reporterFailures: [...reporter.failures] }, null, 2)}\n`);
     return { exitCode: code, status: code === 0 || code === 3 ? 'completed' : 'incomplete', outputDirectory: destination, report: { review: result.review, summary: result.summary } };
   } catch (error) {
+    if (error instanceof CapabilityError) { failureKind = 'capability'; stderr(`redline: ${error.message}`); }
     if (error instanceof LocalOperationError) stderr(`redline: ${terminalText(error.message, options.environment.credential?.value)}`);
     const status = signal.aborted ? deadlineExpired ? 'deadline-exhausted' : 'cancelled' : 'failed';
-    const code = status === 'cancelled' ? 130 : 1;
+    const code = status === 'cancelled' ? 130 : failureKind === 'capability' ? 4 : 1;
     stderr(`redline: ${status}; ${output === undefined ? 'no output created' : `partial artifacts: ${terminalText(output, options.environment.credential?.value)}`}`);
     if (output !== undefined) await writeFile(join(output, 'status.json'), `${JSON.stringify({ version: 1, status, exitCode: code })}\n`).catch(() => undefined);
     return { exitCode: code, status, failureKind, ...(output === undefined ? {} : { outputDirectory: output }) };
   } finally {
     if (timer !== undefined) clearTimeout(timer);
+    await runtime?.close().catch(() => stderr('redline: container client scratch cleanup failed'));
   }
 }

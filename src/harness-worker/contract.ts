@@ -1,4 +1,4 @@
-import type { HarnessName, HarnessPrompt, HarnessRun, HarnessSettings } from '../harness-executor/types.ts';
+import type { HarnessName, HarnessPrompt, HarnessRun, HarnessSettings, HarnessStreamMode } from '../harness-executor/types.ts';
 import { redactCredentialText } from '../harness-executor/model-failure.ts';
 import { MIN_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS } from '../harness-executor/output-budget.ts';
 import { MAX_DIAGNOSTIC_BYTES, MAX_INPUT_BYTES } from '../process-runner.ts';
@@ -26,6 +26,7 @@ export interface Invocation extends Envelope {
   readonly retryOwnership: 'caller' | 'executor';
   readonly modelProtocol: 'compatible' | 'openrouter-json';
   readonly maxOutputTokens?: number;
+  readonly streamMode?: HarnessStreamMode;
 }
 export type RunMetadata = Omit<HarnessRun, 'text' | 'diagnostic' | 'harness'> & { readonly harness: WorkerHarness };
 export type HostMessage = Invocation
@@ -40,6 +41,7 @@ export type WorkerMessage = { readonly protocol: typeof PROTOCOL; readonly kind:
   | Envelope & { readonly kind: 'request.data'; readonly requestId: number; readonly data: string }
   | Envelope & { readonly kind: 'request.end'; readonly requestId: number }
   | Envelope & { readonly kind: 'output'; readonly stream: 'text' | 'diagnostic'; readonly data: string }
+  | Envelope & { readonly kind: 'tap'; readonly stream: 'stdout' | 'stderr'; readonly tapKind: 'line' | 'text'; readonly data: string }
   | Envelope & { readonly kind: 'result'; readonly run: RunMetadata };
 export class WorkerFault extends Error {
   constructor(message = 'Invalid worker message') { super(message); }
@@ -107,12 +109,13 @@ function hostValid(v: unknown): v is HostMessage {
   if (!record(v) || v.protocol !== PROTOCOL || !jobIdValid(v.jobId)) return false;
   const base = ['protocol', 'jobId', 'kind'];
   switch (v.kind) {
-    case 'invoke': return keys(v, [...base, 'harness', 'model', 'timeoutMs', 'retryOwnership', 'modelProtocol'], ['maxOutputTokens'])
+    case 'invoke': return keys(v, [...base, 'harness', 'model', 'timeoutMs', 'retryOwnership', 'modelProtocol'], ['maxOutputTokens', 'streamMode'])
       && (v.harness === 'pi' || v.harness === 'opencode') && record(v.model) && keys(v.model, ['provider', 'model'])
       && string(v.model.provider, 256) && string(v.model.model, 1024) && integer(v.timeoutMs, 1, 2_147_483_647)
       && choice(v.retryOwnership, ['caller', 'executor']) && choice(v.modelProtocol, ['compatible', 'openrouter-json'])
       && (v.modelProtocol !== 'openrouter-json' || (v.harness === 'pi' && v.model.provider === 'openrouter'))
-      && (v.maxOutputTokens === undefined || integer(v.maxOutputTokens, MIN_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS));
+      && (v.maxOutputTokens === undefined || integer(v.maxOutputTokens, MIN_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS))
+      && (v.streamMode === undefined || choice(v.streamMode, ['off', 'dots', 'text']));
     case 'input': return keys(v, [...base, 'data']) && dataValid(v.data);
     case 'input.end': case 'cancel': return keys(v, base);
     case 'response.start': return keys(v, [...base, 'requestId', 'status', 'headers']) && integer(v.requestId, 1, 100)
@@ -133,6 +136,7 @@ function workerValid(v: unknown): v is WorkerMessage {
     case 'request.data': return keys(v, [...base, 'requestId', 'data']) && integer(v.requestId, 1, 100) && dataValid(v.data);
     case 'request.end': return keys(v, [...base, 'requestId']) && integer(v.requestId, 1, 100);
     case 'output': return keys(v, [...base, 'stream', 'data']) && choice(v.stream, ['text', 'diagnostic']) && dataValid(v.data);
+    case 'tap': return keys(v, [...base, 'stream', 'tapKind', 'data']) && choice(v.stream, ['stdout', 'stderr']) && choice(v.tapKind, ['line', 'text']) && dataValid(v.data);
     case 'result': return keys(v, [...base, 'run']) && metadataValid(v.run);
     default: return false;
   }
@@ -167,8 +171,9 @@ export function readPrompt(bytes: Buffer): HarnessPrompt {
 export function* chunks(bytes: Buffer): Generator<string> {
   for (let i = 0; i < bytes.length; i += LIMITS.chunkBytes) yield bytes.subarray(i, i + LIMITS.chunkBytes).toString('base64');
 }
-export function* invocationMessages(harness: WorkerHarness, jobId: string, settings: HarnessSettings, prompt: HarnessPrompt): Generator<HostMessage> {
-  const payload = Buffer.from(JSON.stringify(prompt));
+export function* invocationMessages(harness: WorkerHarness, jobId: string, settings: HarnessSettings, prompt: HarnessPrompt, streamMode: HarnessStreamMode = 'off'): Generator<HostMessage> {
+  const payload = Buffer.from(JSON.stringify({ system: prompt.system, user: prompt.user,
+    ...(prompt.responseSchema === undefined ? {} : { responseSchema: prompt.responseSchema }) }));
   readPrompt(payload);
   if (redactCredentialText(payload.toString(), settings.credential?.value) !== payload.toString()) {
     throw new WorkerFault('Worker input contains a selected credential');
@@ -177,7 +182,8 @@ export function* invocationMessages(harness: WorkerHarness, jobId: string, setti
   const invocation = parseHostMessage({ protocol: PROTOCOL, kind: 'invoke', jobId, harness,
     model: { provider: settings.model.provider, model: settings.model.model }, timeoutMs: settings.timeoutMs,
     retryOwnership: settings.retryOwnership ?? 'executor', modelProtocol: settings.modelProtocol ?? 'compatible',
-    ...(settings.maxOutputTokens === undefined ? {} : { maxOutputTokens: settings.maxOutputTokens }) });
+    ...(settings.maxOutputTokens === undefined ? {} : { maxOutputTokens: settings.maxOutputTokens }),
+    ...(streamMode === 'off' ? {} : { streamMode }) });
   const metadata = JSON.stringify(invocation);
   if (redactCredentialText(metadata, settings.credential?.value) !== metadata) throw new WorkerFault('Worker input contains a selected credential');
   yield invocation;

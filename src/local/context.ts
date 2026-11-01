@@ -1,7 +1,7 @@
 /** Local tool discovery only; the shared context builder owns artifact preparation. */
 import { createHash } from 'node:crypto';
 import { lstat, readFile, realpath } from 'node:fs/promises';
-import { delimiter, dirname, isAbsolute, join } from 'node:path';
+import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import type { CapturedRevision } from '../application/review.ts';
 import { prepareReviewContext, type PreparedReviewContext } from '../code-index/context.ts';
 import type { LocalOptions } from './options.ts';
@@ -61,12 +61,13 @@ export async function prepareLocalContext(capture: CapturedRevision, options: Lo
     throw new LocalOperationError('Python is unavailable for code-context preparation');
   };
   const credential = options.environment.credential?.value;
+  const cacheAnchor = env.XDG_CACHE_HOME === undefined ? dirname(options.stateDirectory) : join(resolve(env.XDG_CACHE_HOME), 'redline');
   return prepareReviewContext(capture, {
     provider: options.indexing.provider, outputDirectory,
     importedArtifact: options.indexing.artifact, repository: options.indexing.repository,
     timeoutMs: Math.max(1, Math.min(remainingMs, 5 * 60_000)), hostPath: directories.join(delimiter),
     systemRoot: env.SystemRoot ?? env.SYSTEMROOT,
-    cacheDirectory: join(dirname(options.stateDirectory), 'indexes', 'v1'), cacheAnchor: dirname(options.stateDirectory), repositoryDirectory: options.repository,
+    cacheDirectory: join(cacheAnchor, 'indexes', 'v1'), cacheAnchor, repositoryDirectory: options.repository,
     spawner: cancellableSpawner(signal), resolveProvider: () => providerCommand(options, env), resolvePython: python,
     redact: (text) => credential === undefined ? text : text.split(credential).join('[redacted]'),
   }, signal);

@@ -32,6 +32,7 @@ export default defineConfig({
         text: 'Use Redline',
         items: [
           { text: 'Common commands', link: '/commands' },
+          { text: 'Docker workers and builds', link: '/docker-workers' },
           { text: 'Read the results', link: '/results' },
           { text: 'Troubleshooting', link: '/troubleshooting' },
         ],

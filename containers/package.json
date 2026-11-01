@@ -1,0 +1,20 @@
+{
+  "name": "redline-harnesses",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.4.0",
+    "opencode-ai": "1.18.34",
+    "context-mode": "1.0.169",
+    "gitnexus": "1.6.12",
+    "@modelcontextprotocol/server-sequential-thinking": "2.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "rollup": "4.63.6"
+    },
+    "ignoredBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

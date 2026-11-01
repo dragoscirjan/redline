@@ -44,7 +44,7 @@
   (`HarnessExecutor`), one implementation per harness (`pi`, `opencode`,
   `echo`), a factory/registry, and a bounded process runner. Executors own
   all harness concerns: generated configuration, credentials, model
-  selection, non-interactive invocation with tools disabled, bounded
+  selection, non-interactive invocation with explicit tool permissions, bounded
   output, and timeouts.
 - `src/review/` — the review tool. Parses the `REDLINE_*` environment
   contract, loads the context bundle, builds fixed versioned prompts from
@@ -108,8 +108,10 @@ Review inputs must arrive together; partial selections fail. Unknown
 
 - Pull request content is untrusted data. Never execute pull request code,
   scripts, builds, tests, or package installers during a review.
-- Harnesses run with every tool disabled, isolated generated configuration,
-  and a constructed environment. No ambient credentials or GitHub tokens
+- Harnesses use isolated generated configuration and a constructed environment.
+  Direct execution disables every tool. Docker execution permits only the approved
+  MCP allowlist for read-only code-index queries, context-mode index/search over
+  captured source, and sequential thinking. No ambient credentials or GitHub tokens
   reach a harness. The publication token lives only in the publication
   layer, after review artifacts are written.
 - Publication writes only managed objects: identified by marker plus the

@@ -69,7 +69,7 @@ redline review --base main --head HEAD --harness pi \
 
 Replace the path and namespace with the artifact's actual values. Without `--code-context-repository`, the expected namespace is `local/<opaque Git-common-directory hash>` from `capture.json`; no GitHub remote is needed. Import checks namespace, head, optional base identity, supported provider/schema, bounded paths/spans, and captured head source. An import is not trusted merely because it was produced earlier. Provider selection flags apply to building; an imported artifact supplies its own validated provider identity.
 
-Local indexing automatically retains validated base databases under `$XDG_STATE_HOME/redline/indexes/v1` (or `$HOME/.local/state/redline/indexes/v1`), separate from review outputs and pinned tools. Identity includes the local repository namespace, base commit, provider/version, platform/architecture, and index configuration. Head-only changes and token-budget changes do not rebuild a healthy matching base index. Missing, corrupt, incompatible, or unsafe state is rebuilt; an unavailable cache falls back to a fresh per-run index rather than trusting it. The terminal reports `Base index:` with one of these values:
+Local indexing retains validated base databases under `$XDG_CACHE_HOME/redline/indexes/v1` when `XDG_CACHE_HOME` is set. Otherwise it keeps the existing `$XDG_STATE_HOME/redline/indexes/v1` (or `$HOME/.local/state/redline/indexes/v1`) location. Provider data stays separate from review outputs and pinned tools. Identity includes the local repository namespace, base commit, provider/version, platform/architecture, and index configuration. Head-only changes and token-budget changes do not rebuild a healthy matching base index. Missing, corrupt, incompatible, or unsafe state is rebuilt; an unavailable cache falls back to a fresh per-run index rather than trusting it. The terminal reports `Base index:` with one of these values:
 
 - `reused`: a matching base index was reused.
 - `rebuilt`: a base index was built with persistent cache storage.
@@ -315,26 +315,21 @@ Git capture permits at most 20,000 tree/index entries, 16 MiB per captured worki
 
 Git commands use absolute trusted executables, argument arrays, a constructed environment, no lazy fetches, and scratch metadata without repository hooks, filters, text converters, credentials, or external diff configuration. Symlinks are captured as path/target data and are never installed into the source export. Redline never runs project builds, tests, installers, scripts, or executables.
 
-This is a trusted-host CLI, not a sandbox for arbitrary untrusted runners. Docker/Podman and the credential gateway remain separate future work. Candidate verification remains disabled; this CLI does not activate its independent quality gate.
+This is a trusted-host CLI, not malicious-host protection. The [Docker image](./docker-workers.md) runs this same Redline CLI and its installed harnesses together. Docker is invoked externally; Redline has no container-orchestration mode. Podman and protection from an untrusted host/kernel are not implemented. The independent finding verifier remains disabled; Docker mode does not activate that quality gate.
 
 ## Release operations
 
-Releases are part of CI. A push to `main` runs the reusable `Release npm CLI` workflow after validation, every harness and runtime job, and all six native CLI jobs succeed. Pull requests and manually dispatched validation runs cannot publish. No separate release dispatch or version input is required.
+The existing npm release workflow remains independent of Docker image publishing.
+Main-branch CI gates the pinned Tempel/Changesets flow. It creates owner-controlled
+version pull requests or publishes an approved version; it never approves or merges
+those pull requests. npm authentication still uses the owner-managed token, separately
+from provenance permissions.
 
-The SHA-pinned Tempel action and Changesets 3 choose one of three outcomes:
+The [Docker image workflow](./docker-workers.md#publishing) builds and tests one shared
+image, then publishes it to GHCR only on this repository's main-branch push. There is
+no coordinated release controller, package/image version coupling or release manifest.
 
-- Pending Changesets open or update a version pull request. For user-visible changes, run `pnpm exec changeset` on the development branch and commit the note. The version PR applies the notes and updates package versions and the changelog.
-- A reviewed manifest version that is not yet published is published automatically after successful main CI. This also handles the first publication. Review and merge the version PR to release later versions; the workflow never approves or merges it.
-- An already-published version with no pending notes does nothing. Unrelated main commits do not fail CI or overwrite npm versions.
-
-The release job dispatches CI for version PRs created with `GITHUB_TOKEN`, since those PRs do not start normal pull-request workflows automatically. Only the release job has Actions, Contents and Pull requests write permission. Repository-wide workflow permissions remain read-only; GitHub's setting allowing Actions to create pull requests must be enabled. Remote Git tags and GitHub releases remain disabled in `.github/release.json`; the separate GitHub Action release policy is unchanged.
-
-Provide an npm publishing token authorized to create or publish `@dragoscirjan/redline`, subject to the account's npm access and two-factor policy, as `NPM_TOKEN`. The existing repository secret works; an environment secret can also be used. The job references the `npm-release` environment and honors any protection rules the owner configures there. Do not put the token in repository files, command arguments, logs or chat messages.
-
-The npm token reaches only the shared release action as `NODE_AUTH_TOKEN`, after all prerequisite checks. This is token authentication, not npm trusted publishing. `id-token: write` supplies npm provenance attestations, which are separate from registry authentication. Ordinary validation jobs do not receive npm credentials.
-
-The publication hook reads the version from `package.json`, rejects unconsumed notes or prerelease state, and requires an authoritative registry 404 for that exact immutable version immediately before publishing. Existing versions, registry errors and network errors fail that publication attempt rather than permitting an overwrite. This check does not run in version-PR or no-op mode. Publication retains public access, provenance and disabled lifecycle scripts.
-
-After publication, the workflow requires a successful publish result, installs the exact registry version with scripts disabled in a temporary directory, and checks help plus committed-revision and working-tree reviews against an inert fixture using `echo` and disabled indexing. These checks use no live model or reviewed-code execution. Verification can fail after npm accepted the immutable version. Such a failure does not roll back publication; inspect the registry and repeat verification rather than attempting to overwrite that version.
-
-There is no installer hook, runtime dependency installation, or emitted-JavaScript build step. Changesets is a development dependency only. `mise run validate` includes packed-package installation tests, but passing them is not evidence of npm publication. Merging the automatic-release configuration enables this CI behavior; no agent merge or manual publication is implied.
+Keep publication credentials in owner-controlled secrets, never files, arguments or
+logs. No publication credential reaches a review harness. Local tests do not prove
+registry availability or live model quality. Merge, manual publication and workflow
+reruns still require explicit owner permission.

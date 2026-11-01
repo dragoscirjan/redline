@@ -176,6 +176,92 @@ describe('npm release boundary', () => {
     expect(source.split('\njobs:')[0]).toContain('permissions:\n  contents: read');
   });
 
+  it.runIf(process.platform === 'linux').each([
+    { visibleAfter: 1, attempts: 1, success: true },
+    { visibleAfter: 3, attempts: 3, success: true },
+    { visibleAfter: 6, attempts: 5, success: false },
+  ])('bounds published-package install retries when visible after $visibleAfter attempts', async ({ visibleAfter, attempts, success }) => {
+    const source = workflowText(await readFile(new URL('../.github/workflows/npm.release.yml', import.meta.url), 'utf8'));
+    const step = source.split('      - name: Verify the published package outside the source checkout\n')[1]?.split('\n  docker:\n')[0] ?? '';
+    const script = step.split('        run: |\n')[1]?.split('\n').map(line => line.slice(10)).join('\n');
+    expect(script).toBeDefined();
+    const root = await releaseDirectory();
+    await mkdir(join(root, 'bin'));
+    await writeFile(join(root, 'package.json'), JSON.stringify({ version: '1.0.0' }));
+    await writeFile(join(root, 'output'), '');
+    await writeFile(join(root, 'bin/npm'), `#!${process.execPath}
+const fs = require('node:fs'), path = require('node:path');
+const count = path.join(process.env.FIXTURE_ROOT, 'attempts');
+const n = fs.existsSync(count) ? Number(fs.readFileSync(count, 'utf8')) + 1 : 1;
+fs.writeFileSync(count, String(n));
+if (n < Number(process.env.VISIBLE_AFTER)) process.exit(1);
+if (!process.argv.includes('--ignore-scripts')) process.exit(2);
+const prefix = process.argv[process.argv.indexOf('--prefix') + 1];
+const bin = path.join(prefix, 'node_modules/@dragoscirjan/redline/bin');
+fs.mkdirSync(bin, { recursive: true });
+fs.writeFileSync(path.join(bin, 'redline.mjs'), 'process.exit(0);');
+`, { mode: 0o700 });
+    await writeFile(join(root, 'bin/sleep'), `#!${process.execPath}
+require('node:fs').appendFileSync(process.env.FIXTURE_ROOT + '/delays', process.argv[2] + '\\n');
+`, { mode: 0o700 });
+    const prelude = 'npm() { "$FIXTURE_ROOT/bin/npm" "$@"; }; sleep() { "$FIXTURE_ROOT/bin/sleep" "$@"; };\n';
+    const result = spawnSync('bash', ['-c', prelude + (script ?? 'exit 99')], { cwd: root,
+      env: { PATH: process.env.PATH, HOME: root, RUNNER_TEMP: root,
+        GITHUB_OUTPUT: join(root, 'output'), FIXTURE_ROOT: root, VISIBLE_AFTER: String(visibleAfter),
+        RELEASE_MODE: 'publish', PUBLISHED: 'true', NODE_AUTH_TOKEN: '',
+        GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: join(root, 'missing-git-config') },
+      encoding: 'utf8', timeout: 10_000 });
+    expect(result.status, result.stdout + result.stderr).toBe(success ? 0 : 1);
+    expect(Number(await readFile(join(root, 'attempts'), 'utf8'))).toBe(attempts);
+    expect((await readFile(join(root, 'delays'), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean))
+      .toEqual(Array.from({ length: attempts - 1 }, () => '15'));
+    expect(await readFile(join(root, 'output'), 'utf8')).toBe(success ? 'version=1.0.0\n' : '');
+  });
+
+  it.each(lineEndings)('builds Docker images only after a successful new npm publication (%s)', async (_label, newline) => {
+    const read = async (name: string): Promise<string> => workflowText((await readFile(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8')).replace(/\r?\n/gu, newline));
+    const npm = await read('npm.release.yml');
+    const docker = await read('docker.yml');
+    const ci = await read('ci.yml');
+    const trigger = docker.split('\njobs:')[0];
+    expect(trigger).toContain('workflow_call:');
+    expect(trigger).toContain('version:\n        required: true\n        type: string');
+    expect(trigger).not.toMatch(/^  (?:push|pull_request|workflow_run|workflow_dispatch|release):/mu);
+    expect(npm).toContain('published: ${{ steps.release.outputs.published }}');
+    expect(npm).toContain('version: ${{ steps.published.outputs.version }}');
+    expect(npm).toContain("needs.release.result == 'success' && needs.release.outputs.published == 'true' && needs.release.outputs.version != ''");
+    const call = npm.split('\n  docker:\n')[1] ?? '';
+    expect(call).toContain('needs: release');
+    expect(call).toContain('uses: ./.github/workflows/docker.yml');
+    expect(call).toContain('version: ${{ needs.release.outputs.version }}');
+    expect(call).not.toContain('secrets:');
+    const release = ci.split('\n  release:\n')[1]?.split(/\n  [a-z][a-z-]*:\n/u)[0] ?? '';
+    expect(release).toContain('packages: write');
+    expect(ci.split('\njobs:')[0]).not.toContain('packages: write');
+    const wait = npm.slice(npm.indexOf('      - name: Wait for npm registry propagation'), npm.indexOf('      - name: Verify the published package'));
+    expect(wait).toContain("if: steps.release.outputs.published == 'true'");
+    expect(wait).toContain('run: sleep 30');
+    expect(npm).toContain('printf \'version=%s\\n\' "$VERSION" >> "$GITHUB_OUTPUT"');
+  });
+
+  it.each(lineEndings)('uses the npm version and exact release commit for Docker builds (%s)', async (_label, newline) => {
+    const source = workflowText((await readFile(new URL('../.github/workflows/docker.yml', import.meta.url), 'utf8')).replace(/\r?\n/gu, newline));
+    expect(source.match(/ref: \$\{\{ github.sha \}\}/gu)).toHaveLength(2);
+    expect(source.match(/github.repository == 'dragoscirjan\/redline' && github.event_name == 'push' && github.ref == 'refs\/heads\/main'/gu)).toHaveLength(2);
+    expect(source).toContain('VERSION: ${{ inputs.version }}');
+    expect(source).toContain('test "$VERSION" = "$(node -p "require(\'./package.json\').version")"');
+    expect(source.indexOf('test "$VERSION"')).toBeLessThan(source.indexOf('run: docker build'));
+    const publish = source.split('\n  publish:\n')[1] ?? '';
+    expect(publish).toContain('needs: test');
+    expect(publish).toContain('packages: write');
+    expect(publish).toContain('ghcr.io/${{ github.repository }}:${{ inputs.version }}');
+    expect(publish).toContain('org.opencontainers.image.version=${{ inputs.version }}');
+    expect(publish).not.toContain('ghcr.io/${{ github.repository }}:main');
+    expect(publish).not.toContain('ghcr.io/${{ github.repository }}:${{ github.sha }}');
+    expect(source.split('\n  publish:\n')[0]).not.toContain('packages: write');
+    assertNoInlineVersionInput(source);
+  });
+
   it.each(lineEndings)('supports version, publish and no-op modes with isolated credentials (%s)', async (_label, newline) => {
     const source = workflowText((await readFile(new URL('../.github/workflows/npm.release.yml', import.meta.url), 'utf8')).replace(/\r?\n/gu, newline));
     expect(source).toContain("github.ref == 'refs/heads/main'");

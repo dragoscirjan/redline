@@ -19,8 +19,9 @@ export class RpcClient {
   private messageBytes = 0;
   private readonly finished = new Map<string, Record<string, unknown>>();
   private readonly waiting = new Map<string, Pending>();
-  constructor(binary: string, args: readonly string[], env: NodeJS.ProcessEnv, cwd: string) {
-    this.child = spawn(process.execPath, [binary, 'rpc', ...args], { cwd, env, stdio: 'pipe', windowsHide: true });
+  constructor(binary: string, args: readonly string[], env: NodeJS.ProcessEnv, cwd: string,
+    launcher?: { readonly command: string; readonly args: readonly string[] }) {
+    this.child = spawn(launcher?.command ?? process.execPath, launcher === undefined ? [binary, 'rpc', ...args] : [...launcher.args, 'rpc', ...args], { cwd, env, stdio: 'pipe', windowsHide: true });
     this.child.stdout.on('data', (chunk: Buffer) => {
       try {
         for (const body of this.reader.push(chunk)) {

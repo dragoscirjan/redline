@@ -93,8 +93,8 @@ jobs:
       record: ${{ steps.describe.outputs.record }}
       stage-artifact: release-candidate-${{ needs.plan.outputs.source }}-${{ github.run_id }}-attempt${{ github.run_attempt }}
     env:
-      RELEASE_DIRECTORY: ${{ runner.temp }}/release-candidate
-      NATIVE_ROOT: ${{ runner.temp }}/native-candidates
+      RELEASE_DIRECTORY: ${{ github.workspace }}/../redline-release-${{ github.run_id }}-${{ github.run_attempt }}/release-candidate
+      NATIVE_ROOT: ${{ github.workspace }}/../redline-release-${{ github.run_id }}-${{ github.run_attempt }}/native-candidates
       RELEASE_RECORD: ${{ needs.plan.outputs.record }}
     steps:
       - name: Check out the current trusted release controller
@@ -167,8 +167,8 @@ jobs:
       packages: write
       id-token: write
     env:
-      RELEASE_DIRECTORY: ${{ runner.temp }}/release-candidate
-      NATIVE_ROOT: ${{ runner.temp }}/native-candidates
+      RELEASE_DIRECTORY: ${{ github.workspace }}/../redline-release-${{ github.run_id }}-${{ github.run_attempt }}/release-candidate
+      NATIVE_ROOT: ${{ github.workspace }}/../redline-release-${{ github.run_id }}-${{ github.run_attempt }}/native-candidates
       RELEASE_RECORD: ${{ needs.prepare.outputs.record }}
     steps:
       - name: Check out the trusted release controller
@@ -214,11 +214,11 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     env:
-      RELEASE_DIRECTORY: ${{ runner.temp }}/release-candidate
+      RELEASE_DIRECTORY: ${{ github.workspace }}/../redline-release-${{ github.run_id }}-${{ github.run_attempt }}/release-candidate
       RELEASE_RECORD: ${{ needs.prepare.outputs.record }}
-      PUBLIC_INSTALLATION: ${{ runner.temp }}/public-installation
-      PUBLIC_TEST_RESULTS: ${{ runner.temp }}/public-tests.json
-      PUBLIC_RECEIPT: ${{ runner.temp }}/public-receipts/${{ matrix.arch }}.json
+      PUBLIC_INSTALLATION: ${{ github.workspace }}/../redline-release-${{ github.run_id }}-${{ github.run_attempt }}/public-installation
+      PUBLIC_TEST_RESULTS: ${{ github.workspace }}/../redline-release-${{ github.run_id }}-${{ github.run_attempt }}/public-tests.json
+      PUBLIC_RECEIPT: ${{ github.workspace }}/../redline-release-${{ github.run_id }}-${{ github.run_attempt }}/public-receipts/${{ matrix.arch }}.json
     steps:
       - name: Check out verification code only
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0
@@ -266,9 +266,9 @@ jobs:
       contents: write
       actions: read
     env:
-      RELEASE_DIRECTORY: ${{ runner.temp }}/release-candidate
+      RELEASE_DIRECTORY: ${{ github.workspace }}/../redline-release-${{ github.run_id }}-${{ github.run_attempt }}/release-candidate
       RELEASE_RECORD: ${{ needs.prepare.outputs.record }}
-      PUBLIC_RECEIPTS: ${{ runner.temp }}/public-receipts
+      PUBLIC_RECEIPTS: ${{ github.workspace }}/../redline-release-${{ github.run_id }}-${{ github.run_attempt }}/public-receipts
     steps:
       - name: Check out finalization code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0

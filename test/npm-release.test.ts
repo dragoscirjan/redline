@@ -186,6 +186,12 @@ describe('npm release boundary', () => {
 
   it.each(lineEndings)('supports version, publish and no-op modes with isolated credentials (%s)', async (_label, newline) => {
     const source = workflowText((await readFile(new URL('../.github/workflows/npm.release.yml', import.meta.url), 'utf8')).replace(/\r?\n/gu, newline));
+    let jobEnvironment = false;
+    for (const line of source.split('\n')) {
+      if (/^    env:\s*$/u.test(line)) { jobEnvironment = true; continue; }
+      if (line.trim() !== '' && line.length - line.trimStart().length <= 4) jobEnvironment = false;
+      if (jobEnvironment) expect(line).not.toMatch(/\$\{\{\s*runner\./u);
+    }
     expect(source).toContain("github.ref == 'refs/heads/main'");
     expect(source).toContain('environment: npm-release');
     expect(source).toContain('id-token: write');

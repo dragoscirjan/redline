@@ -1,6 +1,9 @@
 **
 !containers/
-!containers/**
+!containers/Dockerfile
+!containers/package.json
+!containers/pnpm-lock.yaml
+!containers/requirements.txt
 !package.json
 !LICENSE
 !bin/
@@ -11,5 +14,10 @@
 !prompts/**
 !schemas/
 !schemas/**
-containers/**/node_modules
-containers/**/.cache
+# Keep these last so subtree allow rules cannot admit local secrets or caches.
+**/.env
+**/.env.*
+**/secrets
+**/credentials
+**/node_modules
+**/.cache

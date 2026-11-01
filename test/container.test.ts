@@ -178,6 +178,19 @@ describe.runIf(enabled)('Redline runs inside Docker', () => {
       expect(results.find((r: { name: string }) => r.name === name)).toHaveProperty('tools');
     }
   }, 40_000);
+  it('retains bounded diagnostics when an installed MCP server fails to start', async () => {
+    const { root, env } = await environment();
+    const script = join(root, 'failed-server.mjs');
+    await writeFile(script, "process.stderr.write('x'.repeat(20000) + ' expected-startup-failure', () => process.exit(1));");
+    const raw = docker(['run', '--rm', ...profile, '--network', 'none',
+      '--mount', 'type=bind,src=' + script + ',dst=/opt/harness/node_modules/@modelcontextprotocol/server-sequential-thinking/dist/index.js,readonly',
+      '--entrypoint', 'node', image(), '--input-type=module', '-e',
+      await readFile(new URL('./fixtures/container-mcp.mjs', import.meta.url), 'utf8')], env);
+    const result = JSON.parse(raw).find((item: { name: string }) => item.name === 'sequential-thinking');
+    expect(result).toHaveProperty('error');
+    expect(result.stderr).toContain('expected-startup-failure');
+    expect(result.stderr.length).toBeLessThanOrEqual(4096);
+  }, 40_000);
   it('contains Redline, not Docker orchestration or a Docker socket', async () => {
     const { env } = await environment();
     const raw = docker(['run', '--rm', ...profile, '--network', 'none', '--entrypoint', 'node', image(), '-e',

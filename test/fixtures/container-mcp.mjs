@@ -14,18 +14,20 @@ for (const [name, command, args] of [
   ['cgc', '/opt/cgc/bin/cgc', ['mcp', 'start']],
 ]) {
   const client = new Client({ name: 'redline-image-test', version: '1.0.0' }, { capabilities: {} });
+  let stderr = '';
   try {
     const transport = new StdioClientTransport({
-      command, args, stderr: 'ignore',
+      command, args, stderr: 'pipe',
       env: { PATH: process.env.PATH, HOME: '/tmp/mcp', XDG_CACHE_HOME: '/tmp/mcp',
         DEFAULT_DATABASE: 'kuzudb', CGC_IGNORE_PROJECT_ENV: '1', ENABLE_AUTO_WATCH: 'false',
         CONTEXT_MODE_PROJECT_DIR: '/tmp/mcp' },
     });
+    transport.stderr?.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-4096); });
     await client.connect(transport, { timeout: 8000 });
     const { tools } = await client.listTools();
     results.push({ name, tools: tools.map(tool => tool.name) });
   } catch (error) {
-    results.push({ name, error: String(error).slice(0, 300) });
+    results.push({ name, error: String(error).slice(0, 300), stderr: stderr.trim() });
   } finally { await client.close(); }
 }
 console.log(JSON.stringify(results));

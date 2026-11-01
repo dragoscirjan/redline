@@ -87,8 +87,10 @@ Do not allocate a TTY for framed stdio RPC.
 The npm release workflow calls `.github/workflows/docker.yml` only after it
 publishes a new version and verifies the installed package. A 30-second grace period
 after publication gives the npm registry time to propagate before that verification.
-This wait does not guarantee registry availability; a failed verification blocks
-Docker builds.
+Package installation allows up to five attempts, with 15 seconds between failures,
+and uses `--prefer-online` to revalidate cached metadata. The CLI smoke runs only
+after installation succeeds. If installation or verification still fails, Docker
+builds remain blocked.
 
 The Docker workflow checks out the exact release commit and verifies that its
 package version matches the published version before building. It copies that

@@ -87,7 +87,11 @@ jobs:
           SMOKE="$(mktemp -d "$RUNNER_TEMP/redline-npm.XXXXXX")"
           export NPM_CONFIG_USERCONFIG="$SMOKE/npmrc"
           printf 'registry=https://registry.npmjs.org/\n' > "$NPM_CONFIG_USERCONFIG"
-          npm install --prefix "$SMOKE/installation" --ignore-scripts --no-audit --no-fund "@dragoscirjan/redline@$VERSION"
+          for attempt in 1 2 3 4 5; do
+            if npm install --prefix "$SMOKE/installation" --ignore-scripts --no-audit --no-fund --prefer-online "@dragoscirjan/redline@$VERSION"; then break; fi
+            if [ "$attempt" -eq 5 ]; then exit 1; fi
+            sleep 15
+          done
           CLI="$SMOKE/installation/node_modules/@dragoscirjan/redline/bin/redline.mjs"
           export XDG_CONFIG_HOME="$SMOKE/config" XDG_STATE_HOME="$SMOKE/state"
           git init --initial-branch main "$SMOKE/repository"

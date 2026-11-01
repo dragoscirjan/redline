@@ -88,7 +88,7 @@ Git CLI (#178)
 └── Mercurial adapter (#186)
 ```
 
-The [Docker milestone (#203)](https://github.com/dragoscirjan/redline/issues/203) runs Redline itself in an image containing Node, Bun, Python, Pi, OpenCode and the requested MCP packages. See [build and usage commands](docs/docker-workers.md). Docker is started externally; Redline does not orchestrate containers. Image publishing uses a standard GHCR workflow; npm releasing stays unchanged. The npm CLI remains available without Docker. Podman and malicious-host protection are not implemented. Repository content remains inert data and is never executed during review.
+The [Docker milestone (#203)](https://github.com/dragoscirjan/redline/issues/203) runs Redline itself in an image containing Node, Bun, Python, Pi, OpenCode and the requested MCP packages. See [build and usage commands](docs/docker-workers.md). Docker is started externally; Redline does not orchestrate containers. Docker builds run only after a successful new npm publication and use the same version tag. The npm CLI remains available without Docker. Podman and malicious-host protection are not implemented. Repository content remains inert data and is never executed during review.
 
 ## Development
 

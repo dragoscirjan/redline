@@ -76,7 +76,7 @@ Product documentation lives under `docs/` as a VitePress site. Register new page
 
 ## Releasing the action
 
-Published `vMAJOR.MINOR.PATCH` action tags are immutable. Consumers pin the full version; the `vMAJOR` alias moves only through the guarded manual release flow described in the Wiki's Release operations runbook, with repository tag rules requiring the trusted releaser. A release tag must contain the exact reviewed TypeScript source used by the composite action; emitted `dist/**/*.js` files are not part of the runtime contract. Legacy runner images remain reference material. The Redline image is published to GHCR independently of npm releases and Action tags.
+Published `vMAJOR.MINOR.PATCH` action tags are immutable. Consumers pin the full version; the `vMAJOR` alias moves only through the guarded manual release flow described in the Wiki's Release operations runbook, with repository tag rules requiring the trusted releaser. A release tag must contain the exact reviewed TypeScript source used by the composite action; emitted `dist/**/*.js` files are not part of the runtime contract. Legacy runner images remain reference material. The Redline image is built and published to GHCR only after a successful npm publication, using the same package version. Action tags remain separate.
 
 ## Pull request checklist
 

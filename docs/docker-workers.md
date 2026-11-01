@@ -6,7 +6,8 @@ No Docker daemon or socket is needed inside the image.
 
 ## Build
 
-From a trusted Redline checkout:
+CI builds only after a new npm version is published. To reproduce an image locally,
+use a trusted checkout of that published version's release commit:
 
 ```bash
 docker build --file containers/Dockerfile --tag redline:dev .
@@ -83,10 +84,21 @@ Do not allocate a TTY for framed stdio RPC.
 
 ## Publishing and limits
 
-`.github/workflows/docker.yml` builds and tests the Redline image on native Linux
-amd64 and arm64. Only this repository's main-branch push can publish
-`ghcr.io/dragoscirjan/redline`, tagged `main` and with its source commit. npm releasing
-stays independent. No image has been manually published by this implementation.
+The npm release workflow calls `.github/workflows/docker.yml` only after it
+publishes a new version and verifies the installed package. A 30-second grace period
+after publication gives the npm registry time to propagate before that verification.
+This wait does not guarantee registry availability; a failed verification blocks
+Docker builds.
+
+The Docker workflow checks out the exact release commit and verifies that its
+package version matches the published version before building. It copies that
+release source into the image, so it does not need another npm install.
+
+Native Linux amd64 and arm64 builds and container tests run at this point. After
+both pass, the workflow publishes `ghcr.io/dragoscirjan/redline:VERSION`, with the
+same version as the npm package and an OCI version label. Ordinary pushes, pull
+requests, version-PR creation and no-op releases do not build images. Action tags
+remain separate.
 
 If GHCR initially makes the package private, the owner must make it public for
 anonymous pulls. Use an image digest when you need an immutable reference.

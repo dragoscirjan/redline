@@ -176,6 +176,50 @@ describe('npm release boundary', () => {
     expect(source.split('\njobs:')[0]).toContain('permissions:\n  contents: read');
   });
 
+  it.each(lineEndings)('builds Docker images only after a successful new npm publication (%s)', async (_label, newline) => {
+    const read = async (name: string): Promise<string> => workflowText((await readFile(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8')).replace(/\r?\n/gu, newline));
+    const npm = await read('npm.release.yml');
+    const docker = await read('docker.yml');
+    const ci = await read('ci.yml');
+    const trigger = docker.split('\njobs:')[0];
+    expect(trigger).toContain('workflow_call:');
+    expect(trigger).toContain('version:\n        required: true\n        type: string');
+    expect(trigger).not.toMatch(/^  (?:push|pull_request|workflow_run|workflow_dispatch|release):/mu);
+    expect(npm).toContain('published: ${{ steps.release.outputs.published }}');
+    expect(npm).toContain('version: ${{ steps.published.outputs.version }}');
+    expect(npm).toContain("needs.release.result == 'success' && needs.release.outputs.published == 'true' && needs.release.outputs.version != ''");
+    const call = npm.split('\n  docker:\n')[1] ?? '';
+    expect(call).toContain('needs: release');
+    expect(call).toContain('uses: ./.github/workflows/docker.yml');
+    expect(call).toContain('version: ${{ needs.release.outputs.version }}');
+    expect(call).not.toContain('secrets:');
+    const release = ci.split('\n  release:\n')[1]?.split(/\n  [a-z][a-z-]*:\n/u)[0] ?? '';
+    expect(release).toContain('packages: write');
+    expect(ci.split('\njobs:')[0]).not.toContain('packages: write');
+    const wait = npm.slice(npm.indexOf('      - name: Wait for npm registry propagation'), npm.indexOf('      - name: Verify the published package'));
+    expect(wait).toContain("if: steps.release.outputs.published == 'true'");
+    expect(wait).toContain('run: sleep 30');
+    expect(npm).toContain('printf \'version=%s\\n\' "$VERSION" >> "$GITHUB_OUTPUT"');
+  });
+
+  it.each(lineEndings)('uses the npm version and exact release commit for Docker builds (%s)', async (_label, newline) => {
+    const source = workflowText((await readFile(new URL('../.github/workflows/docker.yml', import.meta.url), 'utf8')).replace(/\r?\n/gu, newline));
+    expect(source.match(/ref: \$\{\{ github.sha \}\}/gu)).toHaveLength(2);
+    expect(source.match(/github.repository == 'dragoscirjan\/redline' && github.event_name == 'push' && github.ref == 'refs\/heads\/main'/gu)).toHaveLength(2);
+    expect(source).toContain('VERSION: ${{ inputs.version }}');
+    expect(source).toContain('test "$VERSION" = "$(node -p "require(\'./package.json\').version")"');
+    expect(source.indexOf('test "$VERSION"')).toBeLessThan(source.indexOf('run: docker build'));
+    const publish = source.split('\n  publish:\n')[1] ?? '';
+    expect(publish).toContain('needs: test');
+    expect(publish).toContain('packages: write');
+    expect(publish).toContain('ghcr.io/${{ github.repository }}:${{ inputs.version }}');
+    expect(publish).toContain('org.opencontainers.image.version=${{ inputs.version }}');
+    expect(publish).not.toContain('ghcr.io/${{ github.repository }}:main');
+    expect(publish).not.toContain('ghcr.io/${{ github.repository }}:${{ github.sha }}');
+    expect(source.split('\n  publish:\n')[0]).not.toContain('packages: write');
+    assertNoInlineVersionInput(source);
+  });
+
   it.each(lineEndings)('supports version, publish and no-op modes with isolated credentials (%s)', async (_label, newline) => {
     const source = workflowText((await readFile(new URL('../.github/workflows/npm.release.yml', import.meta.url), 'utf8')).replace(/\r?\n/gu, newline));
     expect(source).toContain("github.ref == 'refs/heads/main'");

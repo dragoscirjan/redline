@@ -2,6 +2,9 @@
 
 The harness executor layer (`src/harness-executor/`) adapts the generic review-execution contract to one coding-agent harness. The review core never learns harness specifics; it sees one interface.
 
+The [internal worker protocol](./internal-worker-protocol.md) is the foundation for the
+planned Docker executor. It does not activate container isolation in the current CLI or Action.
+
 ## Interface
 
 ```ts

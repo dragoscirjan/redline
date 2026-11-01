@@ -64,6 +64,7 @@ export default defineConfig({
         items: [
           { text: 'Application architecture', link: '/portable-architecture' },
           { text: 'Harness executor', link: '/harness-executor' },
+          { text: 'Internal worker protocol', link: '/internal-worker-protocol' },
           { text: 'Change-impact planning', link: '/change-impact' },
           { text: 'Code intelligence', link: '/code-intelligence' },
         ],

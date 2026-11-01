@@ -5,7 +5,7 @@ export interface ModelFailureClassification {
   readonly retryable: boolean;
 }
 
-function percentHexCase(value: string): string {
+export function percentHexCase(value: string): string {
   return value.replace(/%(?:25)?[0-9a-f]{2}/giu, (escape) => escape.toUpperCase());
 }
 
@@ -27,28 +27,33 @@ function redactEncoded(message: string, encoded: string): string {
   return parts.join('');
 }
 
+/** The same finite forms are used by whole-text and streaming redaction. */
+export function credentialTextForms(credential: string): ReadonlyMap<string, boolean> {
+  const forms = new Map([[credential, false], [JSON.stringify(credential).slice(1, -1), false]]);
+  let layer = [credential];
+  // At most twelve encoded forms across two URI/strict-URI/form layers. Never recursively
+  // decode untrusted messages or build a regular expression from a secret.
+  for (let depth = 0; depth < 2; depth += 1) {
+    const next = new Set<string>();
+    for (const value of layer) {
+      try {
+        const component = encodeURIComponent(value);
+        const strict = component.replace(/[!'()*]/gu, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+        for (const encoded of [component, strict, new URLSearchParams({ key: value }).toString().slice(4)]) {
+          next.add(encoded);
+          if (!forms.has(encoded)) forms.set(encoded, true);
+        }
+      } catch { /* Malformed Unicode retains literal and JSON-escaped redaction. */ }
+    }
+    layer = [...next];
+  }
+  return forms;
+}
+
 /** Redact literal and encoded credentials without changing authoritative source whitespace. */
 export function redactCredentialText(message: string, credential?: string): string {
   if (credential !== undefined && credential.length > 0) {
-    const forms = new Map([[credential, false], [JSON.stringify(credential).slice(1, -1), false]]);
-    let layer = [credential];
-    // At most twelve encoded forms across two URI/strict-URI/form layers. Never recursively
-    // decode untrusted messages or build a regular expression from a secret.
-    for (let depth = 0; depth < 2; depth += 1) {
-      const next = new Set<string>();
-      for (const value of layer) {
-        try {
-          const component = encodeURIComponent(value);
-          const strict = component.replace(/[!'()*]/gu, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
-          for (const encoded of [component, strict, new URLSearchParams({ key: value }).toString().slice(4)]) {
-            next.add(encoded);
-            if (!forms.has(encoded)) forms.set(encoded, true);
-          }
-        } catch { /* Malformed Unicode retains literal and JSON-escaped redaction. */ }
-      }
-      layer = [...next];
-    }
-    for (const [value, encoded] of [...forms].sort(([a], [b]) => b.length - a.length)) {
+    for (const [value, encoded] of [...credentialTextForms(credential)].sort(([a], [b]) => b.length - a.length)) {
       message = encoded ? redactEncoded(message, value) : message.split(value).join('[redacted]');
     }
   }

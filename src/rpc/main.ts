@@ -25,6 +25,7 @@ export async function main(
 ): Promise<number> {
   if (args.length === 1 && args[0] === '--help') { process.stdout.write(RPC_HELP); return 0; }
   let once: boolean;
+  // Parser input only. This array is never used to spawn a process.
   const startup: string[] = [];
   try {
     if (args.length > 64 || Buffer.byteLength(args.join('')) > 64 * 1024) throw new Error('limit');

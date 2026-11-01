@@ -92,6 +92,7 @@ export function localExecutor(startupArgs: readonly string[], env: NodeJS.Proces
       onOutput: directory => callbacks.artifacts(sanitize(artifacts(directory))),
       reporter: () => new CompositeReporter([{
         id: 'rpc', preflight: async () => {},
+        // Session.progress owns the wire whitelist and drops free-text event fields.
         progress: event => callbacks.progress(event),
         complete: async report => {
           const projected = projection(report);

@@ -1,5 +1,11 @@
 # @dragoscirjan/redline
 
+## 1.2.1
+
+### Patch Changes
+
+- 54552e4: Build the pinned GitNexus parser and grammar bindings from source during Docker image construction. This fixes missing or mislabeled ARM64 prebuilds without enabling runtime compilation or unrelated install scripts.
+
 ## 1.2.0
 
 ### Minor Changes

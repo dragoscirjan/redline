@@ -7,6 +7,24 @@ async function patterns(): Promise<string[]> {
 }
 
 describe('Docker build-context contract', () => {
+  it('rebuilds only pinned tree-sitter native dependencies while compilers are available', async () => {
+    const source = await readFile(new URL('../containers/Dockerfile', import.meta.url), 'utf8');
+    const install = source.indexOf('apt-get install -y --no-install-recommends build-essential');
+    const rebuild = source.indexOf("npm_config_build_from_source=true CXXFLAGS=-std=c++20 pnpm rebuild --pending");
+    const purge = source.indexOf('apt-get purge -y --auto-remove build-essential');
+    expect(install).toBeGreaterThanOrEqual(0);
+    expect(rebuild).toBeGreaterThan(install);
+    expect(rebuild).toBeLessThan(purge);
+    expect(source).toContain('pnpm install --frozen-lockfile --prod --ignore-scripts');
+    const manifest = JSON.parse(await readFile(new URL('../containers/package.json', import.meta.url), 'utf8'));
+    expect(manifest.pnpm.onlyBuiltDependencies).toEqual([
+      'tree-sitter', 'tree-sitter-c-sharp', 'tree-sitter-cpp', 'tree-sitter-go', 'tree-sitter-java',
+      'tree-sitter-javascript', 'tree-sitter-php', 'tree-sitter-python', 'tree-sitter-ruby',
+      'tree-sitter-rust', 'tree-sitter-typescript',
+    ]);
+    expect(manifest.pnpm.ignoredBuiltDependencies).toEqual(['esbuild']);
+  });
+
   it('admits only the required container build files, not the whole subtree', async () => {
     const lines = await patterns();
     expect(lines[0]).toBe('**');

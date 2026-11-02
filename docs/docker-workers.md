@@ -21,6 +21,10 @@ options in Redline.
 The pinned runtimes are Node24.21.0, Bun1.4.4 and Python3.12. Pi1.4.0,
 OpenCode1.18.34, CGC0.5.7, GitNexus1.6.12, context-mode1.0.169 and
 sequential-thinking2.0.0 are installed during the trusted image build.
+The pinned tree-sitter parser and grammars are built from source with C++20 for
+Node24, because their Linux ARM64 prebuilds are missing or mislabeled. Only these
+packages receive build approval; general install scripts and esbuild remain
+disabled. Compilers are removed afterward, and nothing compiles during a review.
 GitNexus uses the PolyForm Noncommercial license; check its terms before use.
 
 MCP packages are installed and their server startup is tested. Exposing the approved

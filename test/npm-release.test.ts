@@ -246,19 +246,21 @@ require('node:fs').appendFileSync(process.env.FIXTURE_ROOT + '/delays', process.
 
   it.each(lineEndings)('uses the npm version and exact release commit for Docker builds (%s)', async (_label, newline) => {
     const source = workflowText((await readFile(new URL('../.github/workflows/docker.yml', import.meta.url), 'utf8')).replace(/\r?\n/gu, newline));
-    expect(source.match(/ref: \$\{\{ github.sha \}\}/gu)).toHaveLength(2);
+    expect(source.match(/ref: \$\{\{ github.sha \}\}/gu)).toHaveLength(1);
     expect(source.match(/github.repository == 'dragoscirjan\/redline' && github.event_name == 'push' && github.ref == 'refs\/heads\/main'/gu)).toHaveLength(2);
     expect(source).toContain('VERSION: ${{ inputs.version }}');
     expect(source).toContain('test "$VERSION" = "$(node -p "require(\'./package.json\').version")"');
-    expect(source.indexOf('test "$VERSION"')).toBeLessThan(source.indexOf('run: docker build'));
+    expect(source.indexOf('test "$VERSION"')).toBeLessThan(source.indexOf('- name: Build the native test image'));
     const publish = source.split('\n  publish:\n')[1] ?? '';
     expect(publish).toContain('needs: test');
     expect(publish).toContain('packages: write');
-    expect(publish).toContain('ghcr.io/${{ github.repository }}:${{ inputs.version }}');
-    expect(publish).toContain('org.opencontainers.image.version=${{ inputs.version }}');
+    expect(publish).toContain('IMAGE: ghcr.io/${{ github.repository }}');
+    expect(publish).toContain('VERSION: ${{ inputs.version }}');
+    expect(publish).toContain('imagetools create --tag "$IMAGE:$VERSION"');
+    expect(source.match(/labels: org.opencontainers.image.version=\$\{\{ inputs.version \}\}/gu)).toHaveLength(2);
     expect(publish).not.toContain('ghcr.io/${{ github.repository }}:main');
     expect(publish).not.toContain('ghcr.io/${{ github.repository }}:${{ github.sha }}');
-    expect(source.split('\n  publish:\n')[0]).not.toContain('packages: write');
+    expect(source.split('\njobs:')[0]).not.toContain('packages: write');
     assertNoInlineVersionInput(source);
   });
 

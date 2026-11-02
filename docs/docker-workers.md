@@ -79,7 +79,7 @@ provider/version, platform and index configuration, with validation before reuse
 
 Bind a host directory to `/cache` to retain data across containers. GitHub Actions
 can restore/save that host directory with `actions/cache`. The Docker CI workflow
-does this at `${{ runner.temp }}/redline-code-index/cache` and proves that each
+does this at `$RUNNER_TEMP/redline-code-index/cache` and proves that each
 real provider reuses its data in a second Redline container. The existing code-index
 Action's cache restore/save contract is unchanged.
 
@@ -100,9 +100,16 @@ The Docker workflow checks out the exact release commit and verifies that its
 package version matches the published version before building. It copies that
 release source into the image, so it does not need another npm install.
 
-Native Linux amd64 and arm64 builds and container tests run at this point. After
-both pass, the workflow publishes `ghcr.io/dragoscirjan/redline:VERSION`, with the
-same version as the npm package and an OCI version label. Ordinary pushes, pull
+Each native Linux amd64 and arm64 runner builds and loads its image, then runs the
+container tests. After its tests pass, the same runner exports the cached image by
+digest with SBOM and provenance attestations. Both exports use the release commit's
+timestamp, and a matching image-config digest proves that the exported runtime is
+the one tested. Registry login happens after the harness tests.
+
+Once both native jobs pass, `docker buildx imagetools create` combines their digest
+references into `ghcr.io/dragoscirjan/redline:VERSION`, with the same version as the
+npm package and an OCI version label. This final job does not rebuild images or use
+QEMU. It preserves the native images and their attestations. Ordinary pushes, pull
 requests, version-PR creation and no-op releases do not build images. Action tags
 remain separate.
 

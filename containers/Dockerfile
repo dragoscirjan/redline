@@ -19,8 +19,10 @@ RUN npm install --global --ignore-scripts pnpm@10.33.0 \
     && rm -rf /tmp/gitnexus-build
 
 COPY containers/requirements.txt ./
+# Locked parser/grammar ARM64 prebuilds are missing or mislabeled; Node24 needs C++20.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential \
+    && npm_config_build_from_source=true CXXFLAGS=-std=c++20 pnpm rebuild --pending \
     && python3 -m venv /opt/cgc \
     && /opt/cgc/bin/pip install --no-cache-dir --require-hashes -r requirements.txt \
     && apt-get purge -y --auto-remove build-essential \

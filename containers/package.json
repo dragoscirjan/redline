@@ -13,6 +13,19 @@
     "overrides": {
       "rollup": "4.63.6"
     },
+    "onlyBuiltDependencies": [
+      "tree-sitter",
+      "tree-sitter-c-sharp",
+      "tree-sitter-cpp",
+      "tree-sitter-go",
+      "tree-sitter-java",
+      "tree-sitter-javascript",
+      "tree-sitter-php",
+      "tree-sitter-python",
+      "tree-sitter-ruby",
+      "tree-sitter-rust",
+      "tree-sitter-typescript"
+    ],
     "ignoredBuiltDependencies": [
       "esbuild"
     ]

@@ -169,6 +169,15 @@ describe.runIf(enabled)('Redline runs inside Docker', () => {
       if (output === 'second') expect(result.stderr, result.stdout + result.stderr).toContain('Base index: reused');
     }
   }, 180_000);
+  it('loads every GitNexus native parser binding without network or runtime builds', async () => {
+    const { env } = await environment();
+    const raw = docker(['run', '--rm', ...profile, '--network', 'none', '--entrypoint', 'node', image(), '--input-type=module', '-e',
+      await readFile(new URL('./fixtures/container-parsers.mjs', import.meta.url), 'utf8')], env);
+    const result = JSON.parse(raw);
+    expect(result).toMatchObject({ root: 'program', hasError: false });
+    expect(result.loaded).toHaveLength(11);
+    expect(result.loaded).toContain('tree-sitter'); expect(result.loaded).toContain('tree-sitter-typescript');
+  }, 40_000);
   it('starts installed MCP servers without network or a writable root', async () => {
     const { env } = await environment();
     const raw = docker(['run', '--rm', ...profile, '--network', 'none', '--entrypoint', 'node', image(), '--input-type=module', '-e',

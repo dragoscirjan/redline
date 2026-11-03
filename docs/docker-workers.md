@@ -1,45 +1,36 @@
 # Run Redline with Docker
 
-The image runs **Redline itself**, with Node, Bun, Python, Pi, OpenCode and the
-requested MCP packages installed. You run Docker; Redline does not start containers.
-No Docker daemon or socket is needed inside the image.
+Use the published image to run Redline with its runtimes and harnesses already installed. You do not need to clone Redline or build an image.
 
-## Build
+The documented runtime is native Linux on amd64 or arm64 with Docker. You also need a Git checkout with a committed `HEAD`, tracked changes and a model-provider credential. The example assumes the checkout's Git metadata is inside the mounted directory, as in a standalone clone.
 
-CI builds only after a new npm version is published. To reproduce an image locally,
-use a trusted checkout of that published version's release commit:
+## Get the published image
 
 ```bash
-docker build --file containers/Dockerfile --tag redline:dev .
-docker run --rm redline:dev --help
+docker pull ghcr.io/dragoscirjan/redline:1.2.2
+docker run --rm ghcr.io/dragoscirjan/redline:1.2.2 --help
 ```
 
-The entrypoint is `node /opt/redline/bin/redline.mjs`. Arguments after the image name
-are normal Redline CLI arguments. There are no `--isolation` or `--container-image`
-options in Redline.
+Docker selects the matching architecture. Browse available versions on [GitHub Packages](https://github.com/users/dragoscirjan/packages/container/package/redline). Use a version tag, or an image digest when you need an immutable reference.
 
-The pinned runtimes are Node24.21.0, Bun1.4.4 and Python3.12. Pi1.4.0,
-OpenCode1.18.34, CGC0.5.7, GitNexus1.6.12, context-mode1.0.169 and
-sequential-thinking2.0.0 are installed during the trusted image build.
-The pinned tree-sitter parser and grammars are built from source with C++20 for
-Node24, because their Linux ARM64 prebuilds are missing or mislabeled. Only these
-packages receive build approval; general install scripts and esbuild remain
-disabled. Compilers are removed afterward, and nothing compiles during a review.
-GitNexus uses the PolyForm Noncommercial license; check its terms before use.
-
-MCP packages are installed and their server startup is tested. Exposing the approved
-read-only MCP tools to the review LLM is still tracked in
-[issue #209](https://github.com/dragoscirjan/redline/issues/209). Installation alone
-does not enable model tool access.
+The image runs Redline itself and includes Node, Bun, Python, Pi, OpenCode and the requested MCP packages. Redline does not start containers, and no Docker daemon or socket is needed inside the image. The bundled GitNexus package uses the PolyForm Noncommercial license; check its terms before use.
 
 ## Review a repository
 
-Keep cache and output directories outside the repository. Export
-`REDLINE_MODEL_AUTH` through your normal secret mechanism, then run:
+Open a terminal in the checkout you want to review as your regular, non-root user. Keep cache and output directories outside that checkout.
+
+Provide `REDLINE_MODEL_AUTH` through your normal secret mechanism. It is a provider-keyed JSON object; for the OpenRouter example below its shape is:
+
+```json
+{"openrouter":"YOUR_API_KEY"}
+```
+
+Replace `YOUR_MODEL_ID` in the command with an available model ID. Model reviews send captured source to your selected provider and can incur charges. Do not pass GitHub or other unrelated credentials into the container.
 
 ```bash
 CACHE="$HOME/.cache/redline-docker"
 OUTPUT="$HOME/.local/state/redline-docker"
+RUN="run-$(date +%s)"
 mkdir -p "$CACHE" "$OUTPUT"
 
 docker run --rm --init \
@@ -51,24 +42,29 @@ docker run --rm --init \
   --mount "type=bind,src=$CACHE,dst=/cache" \
   --mount "type=bind,src=$OUTPUT,dst=/output" \
   --env REDLINE_MODEL_AUTH \
-  redline:dev review \
-  --repository /repository --base main --head HEAD \
+  ghcr.io/dragoscirjan/redline:1.2.2 review \
+  --repository /repository --indexing disabled \
   --harness pi --provider openrouter \
-  --endpoint https://openrouter.ai/api/v1 --model YOUR_MODEL \
-  --output "/output/run-$(date +%s)"
+  --endpoint https://openrouter.ai/api/v1 --model YOUR_MODEL_ID \
+  --output "/output/$RUN"
 ```
 
-Use `--harness opencode` to select OpenCode. The existing executors launch the
-installed binaries normally inside the container. Prompts, reasoning, retry policy
-and authoritative finding validation use the same review engine as the npm CLI.
+This reviews staged and unstaged tracked changes against `HEAD`. Use `--harness opencode` to select OpenCode. Arguments after the image name are normal [Redline CLI options](/local-cli), so you can also choose branches or commits with `--base` and `--head`.
 
-The example maps your non-root host UID/GID so Git ownership and writable mounts
-work without permission changes. The image defaults to UID/GID10001. When using
-named volumes, make sure your chosen runtime user can write them.
+`--indexing disabled` keeps the first review independent of index preparation. Remove it to attempt the bundled default indexer; the cache mount retains validated provider data across containers. Context coverage remains explicit.
 
-Only reviewed data is mounted at `/repository`; it is read-only. Redline never
-executes repository scripts, builds, installers or hooks. Its generated configuration
-and captured snapshots live in container scratch/output directories.
+The command maps your non-root host UID/GID so Git ownership and writable mounts work without permission changes. The image defaults to UID/GID10001. With named volumes, make sure your chosen runtime user can write them.
+
+Only reviewed data is mounted at `/repository`; it is read-only. Redline never executes repository scripts, tests, builds, installers or hooks. Generated configuration and captured snapshots live in container scratch/output directories. Review reasoning, retries and finding validation use the same engine as the npm CLI.
+
+## Read the results
+
+Check findings and coverage in the terminal. The output bind mount keeps reports on the host after the container exits:
+
+- `$OUTPUT/$RUN/reviews/review.md` contains the consolidated review.
+- `$OUTPUT/$RUN/reviews/summary.json` contains coverage and run details.
+
+Review suggestions before acting on them. No findings with failed or omitted required files is not a complete review. See [Read the results](/results) for the other files and exit codes.
 
 ## Persistent caches and GitHub Actions
 
@@ -114,8 +110,32 @@ requests, version-PR creation and no-op releases do not build images. Action tag
 remain separate.
 
 If GHCR initially makes the package private, the owner must make it public for
-anonymous pulls. Use an image digest when you need an immutable reference.
+anonymous pulls.
 
 Docker flags, mounts and resource limits belong to the outer Docker invocation,
 not to Redline. Docker shares the host kernel and trusts its administrator and daemon.
 It does not protect against a malicious host or guarantee protection from kernel escapes.
+
+## Optional source build {#build}
+
+Contributors can reproduce the image from a trusted Redline checkout at a published version's release commit. This is not needed to use the published image.
+
+```bash
+docker build --file containers/Dockerfile --tag redline:dev .
+docker run --rm redline:dev --help
+```
+
+To use your local build, substitute `redline:dev` for the published image in the review command. The entrypoint is `node /opt/redline/bin/redline.mjs`; Redline has no `--isolation` or `--container-image` flags.
+
+The pinned runtimes are Node24.21.0, Bun1.4.4 and Python3.12. Pi1.4.0,
+OpenCode1.18.34, CGC0.5.7, GitNexus1.6.12, context-mode1.0.169 and
+sequential-thinking2.0.0 are installed during the trusted image build.
+The pinned tree-sitter parser and grammars are built from source with C++20 for
+Node24, because their Linux ARM64 prebuilds are missing or mislabeled. Only these
+packages receive build approval; general install scripts and esbuild remain
+disabled. Compilers are removed afterward, and nothing compiles during a review.
+
+MCP packages are installed and their server startup is tested. Exposing the approved
+read-only MCP tools to the review LLM is still tracked in
+[issue #209](https://github.com/dragoscirjan/redline/issues/209). Installation alone
+does not enable model tool access.

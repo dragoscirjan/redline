@@ -77,6 +77,49 @@ describe('task-first documentation', () => {
     }
   });
 
+  it('starts Docker usage with one published version and leaves source builds optional', async () => {
+    const source = await doc('docker-workers.md');
+    const build = source.indexOf('## Optional source build {#build}');
+    expect(build).toBeGreaterThan(source.indexOf('## Review a repository'));
+    expect(build).toBeGreaterThan(source.indexOf('## Read the results'));
+    const opening = source.slice(0, build);
+    const pull = /docker pull (ghcr\.io\/dragoscirjan\/redline:\d+\.\d+\.\d+)/u.exec(opening)?.[1];
+    expect(pull).toBeDefined();
+    expect(opening).toContain(pull + ' review');
+    expect(opening).not.toMatch(/^docker build(?:\s|$)/mu);
+    expect(opening).not.toContain('redline:dev');
+    expect(opening).toContain('$OUTPUT/$RUN/reviews/review.md');
+  });
+
+  it.runIf(process.platform === 'linux')('runs the documented Docker arguments with private host output and a read-only repository', async () => {
+    const source = await doc('docker-workers.md');
+    const command = [...source.matchAll(/```bash\n([\s\S]*?)\n```/gu)]
+      .map(match => match[1] ?? '').find(value => value.includes('--mount'));
+    expect(command).toBeDefined();
+    const f = await fixture(); const home = join(f.root, 'home with spaces'); await mkdir(home);
+    const stub = join(f.root, 'docker-stub.cjs'); const calls = join(f.root, 'docker-calls.json');
+    await writeFile(stub, "require('node:fs').writeFileSync(process.env.DOCKER_CALLS, JSON.stringify(process.argv.slice(2)));");
+    const prelude = 'docker() { "$NODE" "$DOCKER_STUB" "$@"; };\n';
+    execFileSync('bash', ['-eu', '-o', 'pipefail', '-c', prelude + command], {
+      cwd: f.repository, env: { ...f.env, HOME: home, NODE: process.execPath, DOCKER_STUB: stub, DOCKER_CALLS: calls,
+        REDLINE_MODEL_AUTH: '{"openrouter":"synthetic-doc-key"}' }, timeout: 5000,
+    });
+    const args: string[] = JSON.parse(await readFile(calls, 'utf8'));
+    expect(args.slice(0, 3)).toEqual(['run', '--rm', '--init']);
+    for (const flag of ['--read-only', '--cap-drop', '--security-opt', '--memory', '--cpus', '--pids-limit', '--tmpfs']) expect(args).toContain(flag);
+    expect(args[args.indexOf('--env') + 1]).toBe('REDLINE_MODEL_AUTH');
+    expect(args.join(' ')).not.toContain('synthetic-doc-key');
+    expect(args[args.indexOf('--user') + 1]).toBe(String(process.getuid?.()) + ':' + String(process.getgid?.()));
+    expect(args).toContain('type=bind,src=' + f.repository + ',dst=/repository,readonly');
+    for (const [directory, target] of [['.cache/redline-docker', '/cache'], ['.local/state/redline-docker', '/output']]) {
+      const path = join(home, directory ?? ''); await access(path);
+      expect(args).toContain('type=bind,src=' + path + ',dst=' + target);
+    }
+    expect(args[args.indexOf('--indexing') + 1]).toBe('disabled');
+    expect(args[args.indexOf('--output') + 1]).toMatch(/^\/output\/run-\d+$/u);
+    expect(args.some(value => /^ghcr\.io\/dragoscirjan\/redline:\d+\.\d+\.\d+$/u.test(value))).toBe(true);
+  });
+
   it('preserves the existing getting-started fragment links', async () => {
     const anchors = {
       'index': ['install-or-run-from-source', '_1-check-the-prerequisites', '_2-choose-how-to-run-redline', '_3-run-your-first-review'],

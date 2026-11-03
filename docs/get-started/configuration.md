@@ -1,15 +1,15 @@
 # Connect a model
 
-A real review needs Pi or OpenCode plus a model endpoint. Redline does not install either harness or a local model server for you.
+Choose Pi or OpenCode, then tell Redline which provider and model to use. This setup is for the local CLI. GitHub Actions uses a [repository secret instead](/get-started/github-actions).
 
-## 1. Install one harness
+## Install one harness {#_1-install-one-harness}
 
-Skip installation if your chosen harness is already on a trusted PATH outside the repository you will review.
+Skip installation if your chosen version is already on a trusted PATH outside the repository you will review. These are the versions used by the bundled Docker image.
 
 ### Pi
 
 ```sh
-npm install --global --ignore-scripts @earendil-works/pi-coding-agent
+npm install --global --ignore-scripts @earendil-works/pi-coding-agent@1.4.0
 pi --version
 ```
 
@@ -20,15 +20,18 @@ npm install --global opencode-ai@1.18.34
 opencode --version
 ```
 
-OpenCode's installer links its platform binary, so that installation needs its install script. `1.18.34` is the version used by Redline's CI protocol tests. This is separate from the Redline package, which has no install script or runtime dependencies.
+OpenCode needs its install script to link the platform binary. Redline's own npm package does not need an install script. For an environment with both harnesses already installed, use [Docker](/docker-workers).
 
-## 2. Create your private user configuration
+## Add your private configuration {#_2-create-your-private-user-configuration}
 
-Use `$XDG_CONFIG_HOME/redline/config.json` when `XDG_CONFIG_HOME` is set. Otherwise use `$HOME/.config/redline/config.json`. `$HOME` is your user home directory on Linux, macOS, and Windows.
+Create a regular file outside every repository you review:
 
-Keep this file outside every repository you review. It must be a regular file, not a symlink. If it already exists, edit it rather than replacing settings you need.
+- `$XDG_CONFIG_HOME/redline/config.json` if `XDG_CONFIG_HOME` is set.
+- Otherwise, `$HOME/.config/redline/config.json`.
 
-On Linux and macOS, create the file and restrict it to your account before adding a key. For the default location:
+`$HOME` is your user home directory on Linux, macOS and Windows. If the file already exists, edit it rather than replacing settings you need. Do not use a symlink or commit this file.
+
+On Linux and macOS, create the default location and restrict access before adding a key:
 
 ```sh
 mkdir -p "$HOME/.config/redline"
@@ -36,9 +39,9 @@ touch "$HOME/.config/redline/config.json"
 chmod 600 "$HOME/.config/redline/config.json"
 ```
 
-Use your actual XDG configuration path if it differs. On Windows, keep the file in your user profile and restrict access to your account. Never commit it or pass credentials as command-line arguments. `NPM_TOKEN` is a package-publishing credential, not a model API key.
+Use your XDG configuration path if it differs. On Windows, create the file in your user profile and restrict access to your account.
 
-This example uses OpenRouter. Replace `YOUR_MODEL_ID` with an available model ID and `YOUR_API_KEY` with its credential:
+This example uses OpenRouter. Replace `YOUR_MODEL_ID` with an available model ID and `YOUR_API_KEY` with its model-provider credential:
 
 ```json
 {
@@ -54,23 +57,23 @@ This example uses OpenRouter. Replace `YOUR_MODEL_ID` with an available model ID
 }
 ```
 
-For OpenCode, change `harness` to `opencode`. The credential-map key must match `model-config.provider`. The endpoint must include the provider's compatible API path, such as `/v1`.
+For OpenCode, change `harness` to `opencode`. The credential-map key must match `model-config.provider`. Keep credentials in this private file or your secret mechanism, never in command-line arguments.
 
-## 3. Run a model-based review
+Redline uses its own generated harness configuration rather than your personal Pi/OpenCode login, plugins or MCP settings.
 
-This sends captured source to your selected provider and can incur model charges. It uses your private configuration and does not execute the reviewed code.
+## Run a review {#_3-run-a-model-based-review}
 
-Run it from a repository with tracked changes:
+From a Git repository with tracked changes:
 
 ```sh
 redline review --indexing disabled
 ```
 
-Indexing is disabled here to keep the first model run independent of external indexer setup. Later, use `redline review` to attempt the default indexed context. Missing or partial context is reported; it is not proof that related code does not exist.
+This sends captured source to your selected provider and can incur model charges. Continue with [your first review](/get-started/first-review) or [read the results](/results).
 
 ## Use a local compatible endpoint
 
-The model server must already be running. If it needs no credential, use `auth: "none"` and omit `model-auth`:
+Start your model server separately. If it needs no credential, set `auth` to `none` and omit `model-auth`:
 
 ```json
 {
@@ -84,15 +87,13 @@ The model server must already be running. If it needs no credential, use `auth: 
 }
 ```
 
-The model ID must match the server's model. Redline does not start or download the model.
+Use the model ID and compatible API endpoint exposed by your server, including its API path such as `/v1`. Redline does not download or start models.
 
 ## Change settings for one run
-
-Non-secret flags override environment settings, which override the user file. For example:
 
 ```sh
 redline review --run-timeout 20m --concurrency 4
 redline review --config /path/to/private-config.json
 ```
 
-Scalar settings in the user file use strings, such as `"run-timeout": "20m"`. Both harnesses preserve provider/model reasoning defaults. See the [configuration reference](/local-cli#configuration) for the complete contract and [troubleshooting](/troubleshooting#the-model-rejects-the-request) for request failures.
+Non-secret flags override environment settings, which override the user file. Both harnesses preserve provider/model reasoning defaults. See the [configuration reference](/local-cli#configuration) for all settings, [related-code context](/local-cli#indexed-cross-file-context) for optional indexing, or [troubleshooting](/troubleshooting#the-model-rejects-the-request) for request failures.

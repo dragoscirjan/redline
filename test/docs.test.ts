@@ -49,6 +49,47 @@ const recipes = [
 ] satisfies [string, string[]][];
 
 describe('task-first documentation', () => {
+  it('leads the homepage, README and first-review guide with an actual review', async () => {
+    const readme = (await readFile(new URL('../README.md', import.meta.url), 'utf8')).replace(/\r\n?/gu, '\n');
+    for (const text of [readme, await doc('index.md'), await doc('get-started/first-review.md')]) {
+      const firstReview = /```sh\n(redline review[^\n]*)\n```/u.exec(text)?.[1];
+      expect(firstReview).toBe('redline review --indexing disabled');
+      expect(text).toContain('get-started/configuration');
+      expect(text.indexOf('get-started/configuration')).toBeLessThan(text.indexOf(firstReview ?? 'missing command'));
+    }
+    expect(await doc('index.md')).toContain('[Run with Docker](/docker-workers)');
+  });
+
+  it('keeps the detailed references and roadmap discoverable without putting the roadmap in the quick start', async () => {
+    const config = await doc('.vitepress/config.ts');
+    for (const route of ['/docker-workers', '/stdio-protocol', '/reusable-review-workflow', '/github-composite-action',
+      '/dogfood-review', '/code-index-action', '/review-eligibility', '/review-reporting', '/runnable-review-configuration',
+      '/portable-architecture', '/harness-executor', '/change-impact', '/code-intelligence', '/review-quality-benchmark',
+      '/performance-benchmark', '/checkout-benchmark', '/model-execution-benchmark', '/roadmap']) {
+      expect(config).toContain("link: '" + route + "'");
+    }
+    const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+    expect(readme).toContain('docs/roadmap.md');
+    expect(readme).not.toContain('Git CLI (#178)');
+    const roadmap = await doc('roadmap.md');
+    for (const issue of [178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 203]) {
+      expect(roadmap).toContain('/issues/' + issue);
+    }
+  });
+
+  it('preserves the existing getting-started fragment links', async () => {
+    const anchors = {
+      'index': ['install-or-run-from-source', '_1-check-the-prerequisites', '_2-choose-how-to-run-redline', '_3-run-your-first-review'],
+      'first-review': ['_1-create-a-disposable-repository', '_2-change-the-tracked-file', '_3-run-the-safe-review', '_4-check-the-result'],
+      'configuration': ['_1-install-one-harness', '_2-create-your-private-user-configuration', '_3-run-a-model-based-review'],
+      'github-actions': ['_1-add-the-model-credential-secret', '_2-add-the-caller-workflow', '_3-open-or-update-a-pull-request'],
+    };
+    for (const [page, ids] of Object.entries(anchors)) {
+      const source = await doc('get-started/' + page + '.md');
+      for (const id of ids) expect(source).toContain('{#' + id + '}');
+    }
+  });
+
   it('exempts echo from the opening model-configuration prerequisite', async () => {
     const opening = (await doc('commands.md')).split('\n\n')[1] ?? '';
     expect(opening).toContain('before a model-based review');

@@ -1,25 +1,21 @@
-# Install or run from source
+# Get started {#install-or-run-from-source}
 
-Start with a review that needs no API key. Connect a model after that works.
+Install Redline, connect a model and review your changes. For pull requests, you can go straight to [GitHub Actions setup](/get-started/github-actions) without installing the local CLI.
 
-For pull-request reviews instead, use [GitHub Actions setup](/get-started/github-actions). You do not need the local CLI for that path.
+## Requirements {#_1-check-the-prerequisites}
 
-## 1. Check the prerequisites
-
-For the first review, you need:
-
-- Node.js 24;
-- Git on your trusted PATH;
-- a Git repository with at least one commit.
+- Node.js 24 and Git on your trusted PATH.
+- A Git repository with at least one commit and changes to review.
+- Pi or OpenCode and a model credential, configured in the next step.
 
 ```sh
 node --version
 git --version
 ```
 
-Linux, macOS, and Windows each have native x64 and ARM64 CLI tests. Pi and OpenCode are installed separately when you [connect a model](/get-started/configuration). The safe trial uses neither. It also disables indexing, so it does not need Python or an external indexer.
+The local CLI supports Linux, macOS and Windows on x64 and ARM64. If you prefer bundled runtimes and harnesses, use the [Docker guide](/docker-workers).
 
-## 2. Choose how to run Redline
+## Install Redline {#_2-choose-how-to-run-redline}
 
 ### Install a published npm version
 
@@ -28,11 +24,19 @@ npm install --global --ignore-scripts @dragoscirjan/redline
 redline --help
 ```
 
-This requires a published package. If npm reports `E404`, publication may not be available yet; use the source checkout below. Do not install the unscoped `redline` package as a substitute.
+Use the scoped package `@dragoscirjan/redline`. To choose a published version, append `@VERSION`, replacing `VERSION` with its version number.
 
-To select a specific published version, use `@dragoscirjan/redline@VERSION` and replace `VERSION` with its exact version number.
+## Start a review {#_3-run-your-first-review}
 
-### Use a source checkout
+1. [Install Pi or OpenCode and connect a model](/get-started/configuration).
+2. [Run your first review](/get-started/first-review).
+3. [Read the results](/results) or find a [command for your change](/commands).
+
+No model key yet? The [optional setup check](/get-started/first-review#_3-run-the-safe-review) uses `echo` without a model or indexer. It tests setup, not code quality.
+
+## Use a source checkout
+
+You can run the CLI directly from trusted source instead of installing the npm package:
 
 ```sh
 git clone https://github.com/dragoscirjan/redline.git
@@ -40,18 +44,10 @@ cd redline
 node bin/redline.mjs --help
 ```
 
-The CLI runs directly on Node.js 24. You do not need to install development dependencies to run the CLI. Dependency installation is for building the documentation and running development tests.
-
-When reviewing another repository, stay in the Redline checkout and select the target explicitly:
+Node.js 24 runs the CLI without installing development dependencies. After model setup, select the repository you want to review:
 
 ```sh
-node bin/redline.mjs review --repository /path/to/your/repository --harness echo --indexing disabled
+node bin/redline.mjs review --repository /path/to/your/repository --indexing disabled
 ```
 
-Replace `/path/to/your/repository` with an existing Git repository. Paths with spaces need quotes.
-
-## 3. Run your first review
-
-Follow [Run your first review](/get-started/first-review) for a disposable example with an expected result. It makes no model request and does not change the reviewed files.
-
-After that, [connect Pi or OpenCode to a model](/get-started/configuration), then use the [command recipes](/commands) in your own repository.
+Replace the path with your repository's full path and quote it if it contains spaces. Development dependencies are needed only to run Redline's tests or build its documentation.

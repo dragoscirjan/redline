@@ -5,16 +5,32 @@ const base = process.env.DOCS_BASE ?? '/';
 
 export default defineConfig({
   title: 'Redline',
-  description: 'Review Git changes locally or in GitHub Actions with Pi or OpenCode.',
+  description: 'AI code reviews for local Git changes and GitHub pull requests.',
   base,
   cleanUrls: true,
   lastUpdated: true,
   themeConfig: {
     nav: [
       { text: 'Get started', link: '/get-started/' },
-      { text: 'Commands', link: '/commands' },
-      { text: 'GitHub', link: '/get-started/github-actions' },
-      { text: 'Reference', link: '/local-cli' },
+      {
+        text: 'Guides',
+        items: [
+          { text: 'Review a change', link: '/commands' },
+          { text: 'Run with Docker', link: '/docker-workers' },
+          { text: 'Set up GitHub Actions', link: '/get-started/github-actions' },
+          { text: 'Read the results', link: '/results' },
+          { text: 'Troubleshooting', link: '/troubleshooting' },
+        ],
+      },
+      {
+        text: 'Reference',
+        items: [
+          { text: 'CLI options', link: '/local-cli' },
+          { text: 'GitHub workflow', link: '/reusable-review-workflow' },
+          { text: 'JSON-RPC protocol', link: '/stdio-protocol' },
+          { text: 'Roadmap', link: '/roadmap' },
+        ],
+      },
     ],
     search: { provider: 'local' },
     outline: [2, 3],
@@ -23,16 +39,16 @@ export default defineConfig({
       {
         text: 'Get started',
         items: [
-          { text: 'Install or run from source', link: '/get-started/' },
+          { text: 'Install Redline', link: '/get-started/' },
           { text: 'Run your first review', link: '/get-started/first-review' },
           { text: 'Connect a model', link: '/get-started/configuration' },
         ],
       },
       {
-        text: 'Use Redline',
+        text: 'Guides',
         items: [
           { text: 'Common commands', link: '/commands' },
-          { text: 'Docker workers and builds', link: '/docker-workers' },
+          { text: 'Run with Docker', link: '/docker-workers' },
           { text: 'Read the results', link: '/results' },
           { text: 'Troubleshooting', link: '/troubleshooting' },
         ],
@@ -60,9 +76,10 @@ export default defineConfig({
         ],
       },
       {
-        text: 'Understand and extend',
+        text: 'Project and architecture',
         collapsed: true,
         items: [
+          { text: 'Roadmap', link: '/roadmap' },
           { text: 'Application architecture', link: '/portable-architecture' },
           { text: 'Harness executor', link: '/harness-executor' },
           { text: 'Change-impact planning', link: '/change-impact' },

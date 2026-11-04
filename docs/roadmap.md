@@ -15,7 +15,7 @@ The [Docker guide](/docker-workers) explains usage and limits. Docker is started
 
 - [GitHub adapter over the shared engine #180](https://github.com/dragoscirjan/redline/issues/180). Consolidate GitHub metadata and publication behind the shared application. Existing GitHub reviews are already available.
 - [Forgejo and Gitea #181](https://github.com/dragoscirjan/redline/issues/181). Share compatible API behavior and provide separately tested workflow templates.
-- [Read-only MCP analysis #209](https://github.com/dragoscirjan/redline/issues/209). Expose approved analysis tools to the review model. Installed server packages alone do not enable model tool access.
+The current source includes [read-only MCP analysis #209](https://github.com/dragoscirjan/redline/issues/209) for Pi and OpenCode, with availability checks and non-blocking fallbacks. It is not present in the published 1.2.2 image. See the [harness reference](/harness-executor#optional-read-only-analysis) for the enabled tools and boundaries.
 
 ## Further integration targets
 

@@ -9,6 +9,8 @@
  * specifics and only sees this interface (Strategy pattern).
  */
 
+import type { AnalysisRequest, PreparedAnalysis } from './analysis.ts';
+
 export type HarnessName = 'echo' | 'pi' | 'opencode';
 
 export const HARNESS_NAMES: readonly HarnessName[] = ['echo', 'pi', 'opencode'];
@@ -39,6 +41,8 @@ export interface HarnessSettings {
   readonly modelProtocol?: 'compatible' | 'openrouter-json' | undefined;
   /** Caller-managed scratch directory for generated harness configuration. */
   readonly workDirectory: string;
+  /** Optional analysis is confined to authoritative captured source and never blocks model execution. */
+  readonly analysis?: AnalysisRequest;
 }
 
 export interface HarnessPrompt {
@@ -101,6 +105,7 @@ export interface PreparedHarness {
    * summaries and diagnostics. Must never contain credential values.
    */
   readonly description: string;
+  readonly analysis?: PreparedAnalysis;
 }
 
 export interface HarnessOutputLine {

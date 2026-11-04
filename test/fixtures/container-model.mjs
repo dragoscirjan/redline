@@ -14,6 +14,34 @@ const server = createServer(async (req, res) => {
       type: mode === 'busy' ? 'server_error' : 'authentication_error' } });
     for (let offset = 0; offset < text.length; offset += 8) res.write(text.slice(offset, offset + 8)); res.end(); return;
   }
+  if (mode === 'analysis') {
+    const tools = Array.isArray(body.tools) ? body.tools : [];
+    const index = tools.find(tool => tool.function?.name?.endsWith('ctx_index'))?.function?.name;
+    const search = tools.find(tool => tool.function?.name?.endsWith('ctx_search'))?.function?.name;
+    const count = (Array.isArray(body.messages) ? body.messages : []).filter(message => message.role === 'tool').length;
+    const requests = [
+      { name: index, arguments: { path: 'src/example.ts' } },
+      { name: search, arguments: { queries: ['new'], limit: 1 } },
+      { name: index, arguments: { path: '../../owner-secret.txt' } },
+    ];
+    const call = requests[count];
+    if (call?.name !== undefined) {
+      const tool = { id: 'analysis-' + count, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.arguments) } };
+      if (body.stream === true) {
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.write('data: ' + JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', model: 'test-model',
+          choices: [{ index: 0, delta: { role: 'assistant', tool_calls: [{ index: 0, ...tool }] }, finish_reason: null }] }) + '\n\n');
+        res.end('data: ' + JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', model: 'test-model',
+          choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] }) + '\n\ndata: [DONE]\n\n');
+      } else {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ id: 'fixture', object: 'chat.completion', model: 'test-model', choices: [{ index: 0,
+          message: { role: 'assistant', content: null, tool_calls: [tool] }, finish_reason: 'tool_calls' }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }));
+      }
+      return;
+    }
+  }
   const fileId = /\\?"fileId\\?"\s*:\s*\\?"(\d{6})\\?"/u.exec(raw)?.[1] ?? '000001';
   const reply = JSON.stringify({ version: 4, fileId, outcome: 'findings', reason: 'Scripted supported defect.', contextRequests: [], findings: [{
     title: 'Fixture contract changed', dimensions: ['correctness'], category: 'correctness', classification: 'defect', severity: 'high', confidence: 0.9,
@@ -36,4 +64,5 @@ const server = createServer(async (req, res) => {
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }));
   }
 });
-server.listen(3000, '0.0.0.0', () => console.log(JSON.stringify({ type: 'ready' })));
+server.listen(Number(process.env.REDLINE_MOCK_PORT ?? 3000), process.env.REDLINE_MOCK_HOST ?? '0.0.0.0', () =>
+  console.log(JSON.stringify({ type: 'ready', port: server.address().port })));

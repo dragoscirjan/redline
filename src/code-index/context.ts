@@ -1,6 +1,7 @@
 /** Host-side context preparation shared with the action's Python artifact builder. */
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
+import { cgcGrammarEnvironment, CGC_GRAMMAR_VERSION, CGC_GRAMMAR_MANIFEST_SHA256, locateCgcGrammars } from './cgc-grammars.ts';
 import { acquireBaseIndex, type BaseIndexLease } from './cache.ts';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -49,7 +50,7 @@ export async function prepareReviewContext(capture: CapturedRevision, options: C
   const temporary = join(directory, 'tmp');
   await Promise.all([home, cache, temporary].map((path) => mkdir(path, { recursive: true, mode: 0o700 })));
   const environment: NodeJS.ProcessEnv = {
-    PATH: options.hostPath, HOME: home, XDG_CONFIG_HOME: home, XDG_CACHE_HOME: cache,
+    PATH: options.hostPath, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: home, XDG_CACHE_HOME: cache,
     TMPDIR: temporary, TMP: temporary, TEMP: temporary, RUNNER_TEMP: temporary,
     PYTHONDONTWRITEBYTECODE: '1', REDLINE_CONTEXT_HOST_PATH: options.hostPath,
     CGC_IGNORE_PROJECT_ENV: '1', ENABLE_AUTO_WATCH: 'false', SCIP_INDEXER: 'false', INDEX_SOURCE: 'false',
@@ -83,6 +84,10 @@ export async function prepareReviewContext(capture: CapturedRevision, options: C
       await save(artifact);
     } else {
       if (capture.contextSnapshot === undefined) throw new Error('context source capture unavailable');
+      if (options.provider === 'cgc') {
+        const grammars = await locateCgcGrammars([capture.sourceDirectory, ...(options.repositoryDirectory === undefined ? [] : [options.repositoryDirectory])]);
+        Object.assign(environment, cgcGrammarEnvironment(home, grammars));
+      }
       const command = await options.resolveProvider();
       signal.throwIfAborted();
       const health = await runBoundedProcess(options.spawner, {
@@ -98,7 +103,8 @@ export async function prepareReviewContext(capture: CapturedRevision, options: C
         const configuration = `${options.provider}-captured-source-v2-${createHash('sha256')
           .update(await readFile(new URL('./export.py', import.meta.url)))
           .update(await readFile(new URL('./gitnexus-query.mjs', import.meta.url)))
-          .update(JSON.stringify({ command: command.command, prefix: command.prefix })).digest('hex')}`;
+          .update(JSON.stringify({ command: command.command, prefix: command.prefix,
+            ...(options.provider === 'cgc' ? { grammars: CGC_GRAMMAR_VERSION, grammarManifest: CGC_GRAMMAR_MANIFEST_SHA256, parserPolicy: 'preloaded-offline-v1' } : {}) })).digest('hex')}`;
         if (options.cacheDirectory !== undefined && options.repositoryDirectory !== undefined) {
           lease = await acquireBaseIndex(options.cacheDirectory, options.repositoryDirectory, {
             repository, base: bundle.manifest.base, provider: provider.id, providerVersion: provider.version,

@@ -282,7 +282,7 @@ export class GitRevisionSource implements RevisionSource {
       }, null, 2)}\n`);
       let prepared: Promise<{ baseDirectory: string; headDirectory: string }> | undefined;
       return {
-        reviewDirectory: bundleDirectory, sourceDirectory, coverage,
+        reviewDirectory: bundleDirectory, sourceDirectory, repositoryDirectory: root, coverage,
         contextSnapshot: {
           repository: repositoryIdentity, base, head,
           prepareSources: (persistentBase) => prepared ??= (async () => {

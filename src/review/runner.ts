@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { disposeAnalysis, integrationToolNames, type IntegrationStatus } from '../harness-executor/analysis.ts';
 import { createHarnessExecutor } from '../harness-executor/registry.ts';
 import { augmentHeadContext } from './head-context.ts';
 import { scheduleBySize, workloadBound } from './scheduling.ts';
@@ -80,6 +81,8 @@ export interface FileHarnessOutputEvent extends HarnessOutputLine, FileReviewIde
 
 export interface ReviewRunInput {
   readonly environment: ReviewEnvironment;
+  readonly repositoryDirectory?: string;
+  readonly onAnalysisStatus?: (integrations: readonly IntegrationStatus[]) => void;
   /** Artifact port; defaults to the deterministic filesystem writer. */
   readonly writer?: ReviewWriter;
   /** Bounded metadata only: counts, explicit limits and policy, never source or credentials. */
@@ -286,6 +289,7 @@ async function reviewOneFile(
       findingScope: environment.findingScope,
       harness: environment.harness,
       model: environment.model.model,
+      tools: integrationToolNames(prepared.analysis, environment.harness === 'opencode' ? 'opencode' : 'pi'),
       indexedContext: fileContext.prompt,
       sourceContextStrategy,
       followUpAvailable: verifyCandidates && environment.codeContext !== undefined
@@ -781,90 +785,106 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
   // separately measured parallel verifier path.
   const verifyCandidates = input.verifyCandidates === true;
   const concurrency = verifyCandidates ? 1 : environment.reviewConcurrency;
-  const reuseCache = environment.reuse === undefined
-    ? undefined
-    : await loadReviewReuseCache(environment.reuse);
-  const recordsByManifestIndex = new Map<number, WritableFileReviewRecord>();
-  const fingerprintsByManifestIndex = new Map<number, string>();
-  let rejectedReuseCandidates = 0;
+  let workDirectory: string | undefined;
+  let prepared: Awaited<ReturnType<HarnessExecutor['prepare']>> | undefined;
+  try {
+    if (bundle.manifest.files.some(file => file.reviewed)) {
+      workDirectory = await mkdtemp(join(tmpdir(), 'redline-review-'));
+      prepared = await executor.prepare({
+        model: environment.model, credential: environment.credential, timeoutMs: environment.timeout.milliseconds,
+        ...(environment.retries === undefined ? {} : { retryOwnership: 'caller' as const }),
+        ...(environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: environment.maxOutputTokens }),
+        ...(environment.modelProtocol === undefined ? {} : { modelProtocol: environment.modelProtocol }),
+        workDirectory,
+        ...(environment.harness === 'echo' ? {} : { analysis: {
+          sourceDirectory: bundle.sourceRoot,
+          ...(input.repositoryDirectory === undefined ? {} : { repositoryDirectory: input.repositoryDirectory }),
+          files: [...new Set([...bundle.manifest.files.flatMap(file => !file.reviewed || file.binary || file.newPath === null ? [] : [file.newPath]),
+            ...[...indexedContext.files.values()].flatMap(file => file.prompt?.related.map(span => span.path) ?? [])])],
+          head: bundle.manifest.head, graphEnabled: environment.codeContext !== undefined,
+          timeoutMs: remainingRunMs(runDeadlineAtMs, now),
+        } }),
+      });
+    }
+    const tools = integrationToolNames(prepared?.analysis, environment.harness === 'opencode' ? 'opencode' : 'pi');
+    const analysisIdentity = prepared?.analysis?.identity;
+    if (prepared?.analysis !== undefined) {
+      const integrations = prepared.analysis.statuses.map(row => ({ ...row,
+        version: row.version === null ? null : redactCredential(row.version, environment.credential) }));
+      await writer.writeAnalysisReport?.(integrations);
+      input.onAnalysisStatus?.(integrations);
+    }
+    const reuseCache = environment.reuse === undefined
+      ? undefined
+      : await loadReviewReuseCache(environment.reuse);
+    const recordsByManifestIndex = new Map<number, WritableFileReviewRecord>();
+    const fingerprintsByManifestIndex = new Map<number, string>();
+    let rejectedReuseCandidates = 0;
 
-  // Restored data is processed before the worker queue exists. A cache
-  // failure or current-evidence mismatch is only a miss: the file proceeds
-  // through the normal harness path.
-  if (reuseCache !== undefined) {
-    for (const [manifestIndex, file] of bundle.manifest.files.entries()) {
-      if (!file.reviewed || file.binary) continue;
-      const fileContext = codeContextForFile(indexedContext, file);
-      const followUpAvailable = verifyCandidates && environment.codeContext !== undefined
-        && input.followUpExecutor !== undefined && fileContext.coverage.provider !== null
-        && fileContext.coverage.provider.id !== 'static-head';
-      let fingerprint: string;
-      try {
-        fingerprint = await buildReviewSemanticFingerprint({
-          bundle,
-          file,
-          environment,
-          indexedContext,
-          verifyCandidates,
-          followUpAvailable,
-        });
-        fingerprintsByManifestIndex.set(manifestIndex, fingerprint);
-      } catch {
-        continue;
-      }
-      const candidate = reuseCache.match(fileReviewPath(file), fingerprint);
-      if (candidate === undefined) continue;
-      try {
-        const record = await restoreReusableFileReview({
-          candidate,
-          bundle,
-          file,
-          environment,
-          indexedContext,
-          verifyCandidates,
-        });
-        await writer.writeFileReview(record);
-        recordsByManifestIndex.set(manifestIndex, record);
-        await reuseCache.write(
-          record.path,
-          fingerprint,
-          bundle.manifest.base,
-          bundle.manifest.head,
-          record,
-          record.savedDurationMs ?? 0,
-          verifyCandidates,
-        ).catch(() => undefined);
-        input.onFileDone?.(record);
-      } catch {
-        // Cache content is untrusted and optional. A current-evidence
-        // validation failure is counted and falls through to normal review.
-        rejectedReuseCandidates += 1;
+    // Restored data is processed before the worker queue exists. A cache
+    // failure or current-evidence mismatch is only a miss: the file proceeds
+    // through the normal harness path.
+    if (reuseCache !== undefined) {
+      for (const [manifestIndex, file] of bundle.manifest.files.entries()) {
+        if (!file.reviewed || file.binary) continue;
+        const fileContext = codeContextForFile(indexedContext, file);
+        const followUpAvailable = verifyCandidates && environment.codeContext !== undefined
+          && input.followUpExecutor !== undefined && fileContext.coverage.provider !== null
+          && fileContext.coverage.provider.id !== 'static-head';
+        let fingerprint: string;
+        try {
+          fingerprint = await buildReviewSemanticFingerprint({
+            bundle,
+            file,
+            environment,
+            indexedContext,
+            verifyCandidates,
+            followUpAvailable,
+            tools,
+            ...(analysisIdentity === undefined ? {} : { analysisIdentity }),
+          });
+          fingerprintsByManifestIndex.set(manifestIndex, fingerprint);
+        } catch {
+          continue;
+        }
+        const candidate = reuseCache.match(fileReviewPath(file), fingerprint);
+        if (candidate === undefined) continue;
+        try {
+          const record = await restoreReusableFileReview({
+            candidate,
+            bundle,
+            file,
+            environment,
+            indexedContext,
+            verifyCandidates,
+          });
+          await writer.writeFileReview(record);
+          recordsByManifestIndex.set(manifestIndex, record);
+          await reuseCache.write(
+            record.path,
+            fingerprint,
+            bundle.manifest.base,
+            bundle.manifest.head,
+            record,
+            record.savedDurationMs ?? 0,
+            verifyCandidates,
+          ).catch(() => undefined);
+          input.onFileDone?.(record);
+        } catch {
+          // Cache content is untrusted and optional. A current-evidence
+          // validation failure is counted and falls through to normal review.
+          rejectedReuseCandidates += 1;
+        }
       }
     }
-  }
 
-  const selectedManifestIndexes = new Set(bundle.manifest.files.flatMap((file, manifestIndex) =>
-    file.reviewed && !recordsByManifestIndex.has(manifestIndex) ? [manifestIndex] : []));
-  const scheduling = environment.scheduling ?? 'largest-first';
-  const tasks = await reviewTasks(bundle, concurrency, selectedManifestIndexes, scheduling);
-  input.onWorkload?.({ ...workloadBound(tasks.length, concurrency, maximumFileAttemptTimeMs(environment.timeout.milliseconds, retryLimit), remainingRunMs(runDeadlineAtMs, now)),
-    scheduling: concurrency === 1 ? 'manifest-order' : scheduling,
-    staticHeadFiles: [...indexedContext.files.values()].filter((file) => file.coverage.provider?.id === 'static-head').length });
-  let workDirectory: string | undefined;
-  try {
-    if (tasks.length > 0) workDirectory = await mkdtemp(join(tmpdir(), 'redline-review-'));
-    const prepared = tasks.length === 0
-      ? undefined
-      : await executor.prepare({
-          model: environment.model,
-          credential: environment.credential,
-          timeoutMs: environment.timeout.milliseconds,
-          ...(environment.retries === undefined ? {} : { retryOwnership: 'caller' as const }),
-          ...(environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: environment.maxOutputTokens }),
-          ...(environment.modelProtocol === undefined ? {} : { modelProtocol: environment.modelProtocol }),
-          workDirectory: workDirectory as string,
-        });
-
+    const selectedManifestIndexes = new Set(bundle.manifest.files.flatMap((file, manifestIndex) =>
+      file.reviewed && !recordsByManifestIndex.has(manifestIndex) ? [manifestIndex] : []));
+    const scheduling = environment.scheduling ?? 'largest-first';
+    const tasks = await reviewTasks(bundle, concurrency, selectedManifestIndexes, scheduling);
+    input.onWorkload?.({ ...workloadBound(tasks.length, concurrency, maximumFileAttemptTimeMs(environment.timeout.milliseconds, retryLimit), remainingRunMs(runDeadlineAtMs, now)),
+      scheduling: concurrency === 1 ? 'manifest-order' : scheduling,
+      staticHeadFiles: [...indexedContext.files.values()].filter((file) => file.coverage.provider?.id === 'static-head').length });
     const followUpBudget = new FollowUpBudget();
     const sharedFailure: RunHarnessState = { runs: new Map() };
     const timeoutByFile = new Map<number, number>();
@@ -1085,6 +1105,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       exitCode: sharedFailure.fatalReason === undefined && (validatedReviews > 0 || records.length === 0) ? 0 : 1,
     };
   } finally {
+    await disposeAnalysis(prepared?.analysis);
     if (workDirectory !== undefined) await rm(workDirectory, { recursive: true, force: true });
   }
 }

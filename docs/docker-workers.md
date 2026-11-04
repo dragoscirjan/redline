@@ -135,7 +135,21 @@ Node24, because their Linux ARM64 prebuilds are missing or mislabeled. Only thes
 packages receive build approval; general install scripts and esbuild remain
 disabled. Compilers are removed afterward, and nothing compiles during a review.
 
-MCP packages are installed and their server startup is tested. Exposing the approved
-read-only MCP tools to the review LLM is still tracked in
-[issue #209](https://github.com/dragoscirjan/redline/issues/209). Installation alone
-does not enable model tool access.
+Current source builds probe CGC, GitNexus, context-mode, sequential-thinking and
+the context-mode adapter before model execution. Only verified read-only tools
+are enabled through the native Pi/OpenCode MCP integration. Missing or broken
+components are recorded in `reviews/analysis-tools.json` and disabled without
+blocking a prompt. Context-mode's stock hooks are not activated. See the
+[harness reference](/harness-executor#optional-read-only-analysis) for the allowlist
+and source limits.
+
+CGC grammars are preloaded during the trusted image build from the pinned
+1.22.1 manifest, with platform-bundle checksum verification. The staged libraries
+retain checksum-pinned upstream grammar notices in `/opt/cgc-parsers/v1.22.1/NOTICE.txt`.
+Both native image
+jobs test real captured-source graph queries without network access. Missing
+parsers cannot trigger a download during a review.
+
+The published 1.2.2 image used in the quick start predates this tool integration
+and keeps model tools disabled. Installing MCP packages alone does not enable
+model access in that older image.

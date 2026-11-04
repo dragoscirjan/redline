@@ -167,9 +167,10 @@ describe('createPiExecutor', () => {
       expect((await stat(systemPromptFile)).mode & 0o777).toBe(0o600);
       expect(request.env?.PI_CODING_AGENT_DIR).toContain(join('pi-agent', 'invocation-'));
       expect(request.env?.[PI_CREDENTIAL_ENV_NAME]).toBe('test-key');
+      expect(request.env?.USERPROFILE).toBe(request.env?.HOME);
       // No ambient credentials leak into the child environment.
       expect(Object.keys(request.env ?? {}).sort()).toEqual(
-        ['HOME', 'LANG', 'PATH', 'PI_CODING_AGENT_DIR', 'PI_SKIP_VERSION_CHECK', PI_CREDENTIAL_ENV_NAME].sort(),
+        ['HOME', 'USERPROFILE', 'LANG', 'PATH', 'PI_CODING_AGENT_DIR', 'PI_SKIP_VERSION_CHECK', PI_CREDENTIAL_ENV_NAME].sort(),
       );
     } finally {
       await settings.cleanup();

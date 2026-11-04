@@ -142,9 +142,10 @@ Review inputs must arrive together; partial selections fail. Unknown
 - Pull request content is untrusted data. Never execute pull request code,
   scripts, builds, tests, or package installers during a review.
 - Harnesses use isolated generated configuration and a constructed environment.
-  Direct execution disables every tool. Docker execution permits only the approved
-  MCP allowlist for read-only code-index queries, context-mode index/search over
-  captured source, and sequential thinking. No ambient credentials or GitHub tokens
+  Local and Docker execution permit only the approved MCP allowlist for read-only
+  code-index queries, context-mode index/search over captured source, and sequential
+  thinking. Unavailable MCP servers or context-mode integrations are reported and
+  disabled without blocking prompt execution. No ambient credentials or GitHub tokens
   reach a harness. The publication token lives only in the publication
   layer, after review artifacts are written.
 - Publication writes only managed objects: identified by marker plus the

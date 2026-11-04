@@ -84,14 +84,16 @@ describe.each(['node', ...(bunAvailable ? ['bun'] : [])])('offline installed pac
     const archive = packed.find(entry => entry.name === '@dragoscirjan/redline');
     if (archive === undefined) throw new Error('Redline package archive is missing');
     const paths = archive.files.map((entry) => entry.path);
-    expect(paths).toContain('prompts/v8/core-policy.md');
+    expect(paths).toContain('prompts/v9/core-policy.md');
+    expect(paths).toContain('bin/redline-analysis.mjs');
+    expect(paths).toContain('src/harness-executor/analysis-server.ts');
     expect(paths).toContain('bin/redline.mjs');
     expect(paths.some(path => /^bin\/.*\.(?:sh|ps1|cmd)$/u.test(path))).toBe(false);
     for (const entry of ['local/cli.js', 'review/cli.js', 'rpc/main.js', 'code-index/export.py', 'code-index/lock.py', 'code-index/gitnexus-query.mjs']) expect(paths).toContain(`dist/${entry}`);
     expect(paths).toContain('src/rpc/main.ts');
     expect(paths).toContain('schemas/rpc/v1/protocol.schema.json');
     expect(paths).toContain('docs/stdio-protocol.md');
-    for (const file of ['context.ts', 'cache.ts', 'lock.py', 'export.py', 'gitnexus-query.mjs']) expect(paths).toContain(`src/code-index/${file}`);
+    for (const file of ['context.ts', 'cache.ts', 'cgc-grammars.ts', 'lock.py', 'export.py', 'gitnexus-query.mjs']) expect(paths).toContain(`src/code-index/${file}`);
     expect(paths.some((path) => /^(?:test|benchmark|src\.old|node_modules|\.agents|\.github|scripts)\//u.test(path))).toBe(false);
     state.packed = packed;
   }, 60_000);

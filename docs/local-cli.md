@@ -19,6 +19,20 @@ Replace `VERSION` with an existing immutable package version. Eligible versions 
 
 Pi or OpenCode must be installed separately on a trusted PATH outside the reviewed repository. Redline never installs a harness or project dependency. The `echo` harness needs neither a model service nor a credential and always returns a clean review; use it only to check integration, not review quality.
 
+## Optional analysis tools
+
+Pi and OpenCode use approved read-only MCP tools when compatible packages and
+runtimes are already installed outside the reviewed repository. Redline never
+installs them during a review. Missing servers, context-mode adapters or CGC
+grammars produce a warning and do not block the prompt. The run records each
+component's availability in `reviews/analysis-tools.json`.
+
+Tools inspect only a bounded captured-source subset. They cannot run commands,
+change files or select another repository. Context-mode uses native MCP index/search;
+its stock adapter hooks are checked but not activated. See the
+[harness reference](/harness-executor#optional-read-only-analysis) for versions,
+permissions, offline grammars and limits.
+
 ## Compare branches
 
 ```bash
@@ -103,7 +117,7 @@ redline review --base main --head HEAD --harness pi
 redline review --base main --head HEAD --harness pi --reuse disabled
 ```
 
-The private repository-scoped cache lives in `$XDG_STATE_HOME/redline/results/v1` (or `$HOME/.local/state/...`). It stores only validated clean/findings records, not failures. Completed files can therefore survive a partially failed or interrupted run. An exact semantic fingerprint includes model/endpoint/auth mode, protocol, output allowance, policy/schema, diff, captured source, related context, initial per-file timeout and retry policy. When retries are enabled, it also hashes the bounded enriched context, even if the first attempt succeeds. A recovered result cannot be reused after relevant source or retry-policy changes. Current evidence is revalidated, file IDs/revisions are remapped, and each run rebuilds coverage, verdicts, synthesis and artifacts. A cache hit does not authorize stale publication.
+The private repository-scoped cache lives in `$XDG_STATE_HOME/redline/results/v1` (or `$HOME/.local/state/...`). It stores only validated clean/findings records, not failures. Completed files can therefore survive a partially failed or interrupted run. An exact semantic fingerprint includes model/endpoint/auth mode, protocol, output allowance, policy/schema, diff, captured source, related context, initial per-file timeout, retry policy, available analysis tools and their bounded captured source. Optional tool readiness is checked before reuse matching. When retries are enabled, it also hashes the bounded enriched context, even if the first attempt succeeds. A recovered result cannot be reused after relevant source or retry-policy changes. Current evidence is revalidated, file IDs/revisions are remapped, and each run rebuilds coverage, verdicts, synthesis and artifacts. A cache hit does not authorize stale publication.
 
 Readers bound restored entries to 2,000 files, 512 KiB per record, and 32 MiB total. Writers reserve the same quotas per loaded cache; concurrent publication uses atomic replacement, so a collision can lose reuse but cannot become an unvalidated success. Unsafe/private-directory failures disable reuse, not review; cache misses, invalid records and changed fingerprints run normally. Existing state parents are never chmod'ed.
 
@@ -275,6 +289,7 @@ Default artifact location: `$XDG_STATE_HOME/redline/reviews/run-*`, or `$HOME/.l
 - `capture.json`: requested and resolved revisions, snapshot identity, capture coverage, excluded untracked paths, and inert symlink path/target data.
 - `index/code-context.json`, `index/status.json`: bounded normalized context and actual source-validated coverage when indexing/import is enabled.
 - `reviews/`: existing validated file records, summary, and consolidated review as JSON and Markdown.
+- `reviews/analysis-tools.json`: versioned optional MCP/adapter availability for Pi/OpenCode, without credentials, host paths or raw dependency errors.
 - `status.json`: local completion, failure, cancellation, or deadline classification and exit code.
 
 Model review documents remain unchanged. Operational file records additionally distinguish `not-started` after a shared harness failure; run summaries can carry the first bounded, redacted diagnostic in `harnessFailure`. Synthetic working-copy commit IDs and the index digest identify captured states, not user commits. Bundle/evidence selection is deterministic; existing operational durations and telemetry still vary between runs.

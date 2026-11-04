@@ -369,6 +369,7 @@ def provider_environment(provider: str, provider_home: Path, cache_root: Path, *
         environment["SystemRoot"] = os.environ.get("SystemRoot", os.environ.get("SYSTEMROOT", ""))
         environment["TEMP"] = environment["TMPDIR"]
         environment["TMP"] = environment["TMPDIR"]
+        environment["USERPROFILE"] = str(provider_home)
     if provider == "gitnexus":
         environment.update({
             "GITNEXUS_HOME": str(provider_home),
@@ -378,6 +379,12 @@ def provider_environment(provider: str, provider_home: Path, cache_root: Path, *
         return environment
     database_file = cache_root / "database" / "falkordb.db"
     socket_file = Path(socket_path) if socket_path is not None else cache_root / "database" / "falkordb.sock"
+    if "TREE_SITTER_LANGUAGE_PACK_LIBS_DIR" in os.environ:
+        environment["TREE_SITTER_LANGUAGE_PACK_LIBS_DIR"] = os.environ["TREE_SITTER_LANGUAGE_PACK_LIBS_DIR"]
+    # Legacy callers also fail closed. Never inherit a cached remote manifest
+    # or a download-URL override while processing captured review source.
+    environment["TREE_SITTER_LANGUAGE_PACK_CACHE_DIR"] = str(provider_home / "parser-cache")
+    environment["TREE_SITTER_LANGUAGE_PACK_MANIFEST_URL"] = (provider_home / "no-parser-downloads.json").as_uri()
     environment.update({
         "CGC_RUNTIME_DB_TYPE": "falkordb",
         "CGC_RUNTIME_DB_PATH": str(database_file),

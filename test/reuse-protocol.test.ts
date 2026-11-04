@@ -6,6 +6,21 @@ import { loadReviewCodeContext } from '../src/review/indexed-context.ts';
 import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
 
 describe('model-protocol reuse identity', () => {
+  it('invalidates changed available tools and captured analysis bytes', async () => {
+    const f = await createBundleFixture();
+    try {
+      const bundle = await loadReviewBundle(f.review, f.source);
+      const indexedContext = await loadReviewCodeContext(bundle, undefined);
+      const environment = parseReviewEnvironment(cleanReviewEnvironment(f, 'pi')).review!;
+      const common = { bundle, file: bundle.manifest.files[0]!, indexedContext, environment, verifyCandidates: false, followUpAvailable: false };
+      const none = await buildReviewSemanticFingerprint(common);
+      const tool = 'mcp__redline_context_mode__ctx_index';
+      const first = await buildReviewSemanticFingerprint({ ...common, tools: [tool], analysisIdentity: 'captured-bytes-a' });
+      const next = await buildReviewSemanticFingerprint({ ...common, tools: [tool], analysisIdentity: 'captured-bytes-b' });
+      expect(first).not.toBe(none); expect(next).not.toBe(first);
+      expect(await buildReviewSemanticFingerprint({ ...common, tools: [], analysisIdentity: 'captured-bytes-a' })).not.toBe(first);
+    } finally { await f.cleanup(); }
+  });
   it('invalidates request protocol changes without including credentials or scheduling in the identity', async () => {
     const f = await createBundleFixture();
     try {

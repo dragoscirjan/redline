@@ -16,6 +16,7 @@
  * work directory when the review run ends.
  */
 
+import { prepareAnalysis, integrationServers, integrationToolNames, type PreparedAnalysis } from './analysis.ts';
 import { outputCaptureBytes, validateOutputTokens } from './output-budget.ts';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -88,11 +89,16 @@ export interface PreparedOpenCode extends PreparedHarness {
 function buildConfig(
   modelConfig: PreparedOpenCode['modelConfig'],
   systemPrompt: string,
+  analysis?: PreparedAnalysis,
 ): string {
-  const tools: Record<string, boolean> = {};
+  const tools: Record<string, boolean> = { '*': false };
   for (const tool of DISABLED_TOOLS) tools[tool] = false;
+  const permission: Record<string, string> = { '*': 'deny' };
+  for (const name of integrationToolNames(analysis, 'opencode')) { tools[name] = true; permission[name] = 'allow'; }
   const config = {
     $schema: 'https://opencode.ai/config.json',
+    mcp: integrationServers(analysis, 'opencode'),
+    plugin: [],
     provider: {
       [modelConfig.provider]: {
         options: modelConfig.options,
@@ -103,6 +109,7 @@ function buildConfig(
       [OPENCODE_REVIEW_AGENT]: {
         prompt: systemPrompt,
         tools,
+        permission,
       },
     },
   };
@@ -218,6 +225,7 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
       const maxOutputTokens = settings.maxOutputTokens === undefined ? undefined : validateOutputTokens(settings.maxOutputTokens);
       const rootDirectory = join(settings.workDirectory, 'opencode');
       await mkdir(rootDirectory, { recursive: true });
+      const analysis = await prepareAnalysis(settings.analysis, settings.workDirectory, 'opencode', command);
       const modelOptions: Record<string, string> = { baseURL: settings.model.endpoint };
       if (settings.credential !== undefined) modelOptions['apiKey'] = settings.credential.value;
       const modelConfig = {
@@ -245,6 +253,7 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
       return Object.freeze({
         harness: 'opencode',
         model: settings.model,
+        ...(analysis === undefined ? {} : { analysis }),
         description: `opencode with isolated per-invocation config and XDG/HOME directories under ${rootDirectory}; max-output-tokens=${maxOutputTokens ?? 'provider-default'}`,
         command,
         args,
@@ -273,10 +282,11 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
         (directory) => mkdir(directory, { recursive: true }),
       ));
       const configFile = join(configDirectory, 'opencode.json');
-      await writeFile(configFile, buildConfig(state.modelConfig, prompt.system), { mode: 0o600 });
+      await writeFile(configFile, buildConfig(state.modelConfig, prompt.system, state.analysis), { mode: 0o600 });
       const env = {
         ...state.env,
         HOME: homeDirectory,
+        USERPROFILE: homeDirectory,
         XDG_CONFIG_HOME: configDirectory,
         XDG_DATA_HOME: dataDirectory,
         XDG_STATE_HOME: stateDirectory,

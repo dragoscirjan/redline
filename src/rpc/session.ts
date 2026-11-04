@@ -146,6 +146,9 @@ export class Session {
   }
   private progress(job: Job, event: ReviewEvent): void {
     if (terminal(job)) return;
+    // Availability is persisted in analysis-tools.json. Keep the v1 progress
+    // protocol unchanged rather than emitting an unversioned event kind.
+    if (event.kind === 'analysis-status') return;
     if (event.kind === 'planned') for (const file of event.files) if (file.reviewed) job.required.add(file.fileId);
     if (event.kind === 'file-started') { job.activeFiles.add(event.fileId); job.completed.delete(event.fileId); }
     if (event.kind === 'file-completed') { job.activeFiles.delete(event.fileId); if (job.required.has(event.fileId)) job.completed.add(event.fileId); }

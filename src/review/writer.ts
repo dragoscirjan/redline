@@ -8,6 +8,7 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { IntegrationStatus } from '../harness-executor/analysis.ts';
 import type { FollowUpRequestBatch } from '../code-context/follow-up.ts';
 import type { ResolvedFollowUp } from './follow-up.ts';
 import { spanLocation } from './remediation.ts';
@@ -257,6 +258,7 @@ function renderPullRequestReviewMarkdown(review: PullRequestReviewRecord): strin
 }
 
 export interface ReviewWriter {
+  writeAnalysisReport?(integrations: readonly IntegrationStatus[]): Promise<void>;
   writeFileReview(record: FileReviewRecordWithRaw): Promise<void>;
   writeSummary(summary: ReviewRunSummary): Promise<void>;
   writePullRequestReview(review: PullRequestReviewRecord): Promise<void>;
@@ -274,6 +276,10 @@ export function createReviewWriter(outputDirectory: string): ReviewWriter {
     await preparation;
   };
   return {
+    async writeAnalysisReport(integrations: readonly IntegrationStatus[]): Promise<void> {
+      await prepare();
+      await writeFile(join(reviewsDirectory, 'analysis-tools.json'), JSON.stringify({ version: 1, integrations }, null, 2) + '\n', { mode: 0o600 });
+    },
     async writeFileReview(record: FileReviewRecordWithRaw): Promise<void> {
       await prepare();
       const { rawModelOutput, verificationArtifact, followUpArtifact, ...rest } = record;

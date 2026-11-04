@@ -1,10 +1,10 @@
 /** Optional, credential-free analysis discovery. Never installs or loads user config. */
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { access, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { connect } from 'node:net';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ANALYSIS_COMPONENTS, analysisTools, authorizeAnalysisCall, type AnalysisComponent, type AnalysisScope } from './analysis-policy.ts';
@@ -55,9 +55,11 @@ export interface PreparedAnalysis {
   readonly statuses: readonly IntegrationStatus[];
   readonly backends: readonly AnalysisComponent[];
   readonly identity?: string;
+  readonly cgcSocketPath?: string;
 }
 const versions = { 'context-mode': '1.0.169', gitnexus: '1.6.12', 'sequential-thinking': '2.0.0', cgc: '0.5.7' };
 const launcher = fileURLToPath(new URL('../../bin/redline-analysis.mjs', import.meta.url));
+const ownedSocketPaths = new Set<string>();
 function inside(root: string, path: string): boolean {
   const value = relative(root, path);
   return value === '' || (!value.startsWith('..' + sep) && value !== '..' && !isAbsolute(value));
@@ -130,7 +132,18 @@ function checkedStatus(value: unknown): IntegrationStatus | undefined {
   return row as unknown as IntegrationStatus;
 }
 
-async function prepareChecked(request: AnalysisRequest | undefined, workDirectory: string, harness: 'pi' | 'opencode', harnessCommand: string): Promise<PreparedAnalysis | undefined> {
+/** Keep resolved UTF-8 paths below macOS's 104-byte Unix socket limit. */
+export async function createAnalysisSocketPath(): Promise<string> {
+  let base = await realpath(tmpdir());
+  const fits = (directory: string): boolean => Buffer.byteLength(join(directory, 'rl-mcp-XXXXXX', 'f.sock')) <= 100;
+  if (!fits(base) && process.platform !== 'win32') base = await realpath('/tmp');
+  if (!fits(base)) throw new Error('no short analysis socket directory');
+  const path = join(await mkdtemp(join(base, 'rl-mcp-')), 'f.sock');
+  ownedSocketPaths.add(path);
+  return path;
+}
+
+async function prepareChecked(request: AnalysisRequest | undefined, workDirectory: string, harness: 'pi' | 'opencode', harnessCommand: string, onSocketPath: (path: string) => void): Promise<PreparedAnalysis | undefined> {
   if (request === undefined) return undefined;
   const deadline = performance.now() + Math.max(0, Math.min(20_000, request.timeoutMs));
   const remaining = (): number => Math.max(1, Math.floor(deadline - performance.now()));
@@ -196,8 +209,11 @@ async function prepareChecked(request: AnalysisRequest | undefined, workDirector
       command = cgc as string; args = ['mcp', 'start'];
       Object.assign(environment, cgcGrammarEnvironment(home, grammars));
       const database = join(home, 'database'); await mkdir(database, { recursive: true, mode: 0o700 });
+      let socketPath: string;
+      try { socketPath = await createAnalysisSocketPath(); onSocketPath(socketPath); }
+      catch { initial.set(component, status(component, 'unusable', 'socket-unavailable', versions.cgc)); continue; }
       Object.assign(environment, { CGC_RUNTIME_DB_TYPE: 'falkordb', CGC_RUNTIME_DB_PATH: join(database, 'falkordb.db'),
-        DEFAULT_DATABASE: 'falkordb', FALKORDB_PATH: join(database, 'falkordb.db'), FALKORDB_SOCKET_PATH: join(database, 'falkordb.sock'),
+        DEFAULT_DATABASE: 'falkordb', FALKORDB_PATH: join(database, 'falkordb.db'), FALKORDB_SOCKET_PATH: socketPath,
         NO_COLOR: '1', COLUMNS: '65536', IGNORE_TEST_FILES: 'false' });
     } else if (component === 'context-mode') { command = bun as string; args = [join(context?.root ?? '', 'cli.bundle.mjs')]; }
     else args = [component === 'gitnexus' ? join(gitnexus?.root ?? '', 'dist/cli/index.js') : join(thinking?.root ?? '', 'dist/index.js'), ...(component === 'gitnexus' ? ['mcp'] : [])];
@@ -252,8 +268,12 @@ async function prepareChecked(request: AnalysisRequest | undefined, workDirector
 }
 
 export async function prepareAnalysis(request: AnalysisRequest | undefined, workDirectory: string, harness: 'pi' | 'opencode', command: string): Promise<PreparedAnalysis | undefined> {
-  try { return await prepareChecked(request, workDirectory, harness, command); }
-  catch {
+  let socketPath: string | undefined;
+  try {
+    const prepared = await prepareChecked(request, workDirectory, harness, command, path => { socketPath = path; });
+    return prepared === undefined || socketPath === undefined ? prepared : { ...prepared, cgcSocketPath: socketPath };
+  } catch {
+    await disposeSocket(socketPath);
     return request === undefined ? undefined : { manifestFile: '', command: process.execPath, launcher,
       statuses: [...ANALYSIS_COMPONENTS.map(component => status(component, 'unusable', 'setup-unavailable')), status('context-mode-plugin', 'unusable', 'setup-unavailable')], backends: [] };
   }
@@ -272,15 +292,20 @@ export function integrationServers(analysis: PreparedAnalysis | undefined, harne
   }));
 }
 
-/** Stop only this run's private embedded graph database, never a shared installation. */
-export async function disposeAnalysis(analysis: PreparedAnalysis | undefined): Promise<void> {
-  if (analysis === undefined || analysis.manifestFile === '') return;
+async function disposeSocket(path: string | undefined): Promise<void> {
+  if (path === undefined || !ownedSocketPaths.delete(path)) return;
   await new Promise<void>(done => {
-    const socket = connect({ path: join(dirname(analysis.manifestFile), 'cgc/database/falkordb.sock') });
+    const socket = connect({ path });
     const finish = (): void => { socket.destroy(); done(); };
     socket.setTimeout(500, finish); socket.once('error', finish); socket.once('close', done);
     socket.once('connect', () => socket.end('*2\r\n$8\r\nSHUTDOWN\r\n$6\r\nNOSAVE\r\n'));
   });
+  await rm(dirname(path), { recursive: true, force: true }).catch(() => undefined);
+}
+
+/** Stop this run's embedded database and remove its owned socket directory. */
+export async function disposeAnalysis(analysis: PreparedAnalysis | undefined): Promise<void> {
+  await disposeSocket(analysis?.cgcSocketPath);
 }
 
 export function integrationToolNames(analysis: PreparedAnalysis | undefined, harness: 'pi' | 'opencode'): string[] {

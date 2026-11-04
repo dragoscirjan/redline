@@ -38,8 +38,10 @@ core makes.
 - The provider credential travels through the `REDLINE_MODEL_API_KEY`
   environment variable; `models.json` only references it by interpolation,
   so the value never appears in a generated file.
-- Invocation: `pi --print --mode json --no-session --no-tools --provider …
-  --model … --system-prompt <generated-policy-file>`. Pi reads the fixed
+- Invocation starts with `pi --print --mode json --no-session --provider …
+  --model … --system-prompt <generated-policy-file>`. Verified MCP availability
+  adds only exact `mcp__redline_*` tool names and the built-in MCP integration.
+  With no available tools, Redline supplies `--no-tools`. Pi reads the fixed
   policy from a mode-0600 file in the temporary agent directory and the
   bounded user prompt from stdin. Large untrusted review context never
   enters a process argument.
@@ -102,6 +104,57 @@ finding document, so the artifacts carry real diff-validated findings
 while echo demonstrates the deterministic clean path. No secrets or live
 models are involved.
 
+## Optional read-only analysis
+
+Pi and OpenCode probe optional integrations before file prompts. The probe has a
+20-second limit inside the existing run deadline. Missing packages, incompatible
+versions, failed startup, missing context-mode integrations and empty CGC graphs
+are reported in `reviews/analysis-tools.json`. The CLI warns and continues without
+those tools. An optional integration does not become a requirement for a prompt.
+
+The native integration targets Pi 1.4.0 and OpenCode 1.18.34, with CGC 0.5.7,
+GitNexus 1.6.12 and context-mode 1.0.169. Sequential-thinking is checked through
+its standard API, including compatible date-versioned installations. Unsupported
+integrations are reported rather than silently installed or replaced.
+
+The fixed allowlist is:
+
+| Component | Model-facing tools |
+| --- | --- |
+| CGC | `find_code`, `analyze_code_relationships`, `get_repository_stats` |
+| GitNexus | `query`, `context`, `impact` |
+| context-mode | `ctx_index`, `ctx_search` |
+| sequential-thinking | `sequentialthinking` |
+
+The native harness integration connects through a standard MCP boundary that
+checks every call. It rejects execution, administrative operations, network
+retrieval, repository selectors and writes. Context-mode indexes only approved
+relative files from captured head source. Searches stay in that run's private
+index. Graph queries use a separate bounded captured-source graph, not an ambient
+user database. The approved source subset is limited to 200 files and 2 MiB,
+with a 128 KiB per-file limit. Graph preparation uses at most 100 code files.
+Each component permits at most 32 calls per file invocation. Tool failures remain
+coverage limitations, never proof that callers or tests do not exist.
+
+All built-in tools remain disabled. MCP children receive constructed environments
+without model keys, GitHub tokens or ambient configuration. Policy v9 declares
+only verified available tool names. Tool results remain untrusted, and findings
+still need authoritative diff mapping and byte-identical evidence. Available tool
+versions and captured analysis bytes participate in review-result reuse identity.
+
+The context-mode adapter module is checked for availability and import
+compatibility. Its stock hooks are not activated, because they can inject
+repository instructions and expose execution or administrative tools. The
+`loadable-not-activated` status means the module is installed and loadable, not
+that its hooks run. Context-mode index/search use native MCP in both harnesses.
+
+CGC uses preinstalled tree-sitter-language-pack 1.22.1 grammars. Docker builds stage
+12 grammars from a checksum-pinned manifest and verified platform bundles. Runtime
+loading uses a trusted library directory and a fresh private cache with a local,
+nonexistent download manifest. Missing grammars fail locally without reaching a
+remote download service. Local runs can use a preinstalled standard grammar cache
+or a trusted `TREE_SITTER_LANGUAGE_PACK_LIBS_DIR` outside the reviewed repository.
+
 ## Adding a harness
 
 1. Implement the `HarnessExecutor` interface in a new module under
@@ -120,5 +173,5 @@ paths. This prevents `spawn E2BIG` when a reviewed file's captured diff and
 source exceed the operating system's per-argument limit.
 
 Security rules for every implementation: argument arrays only (no shell),
-tools disabled, isolated generated configuration, constructed environment
+built-in tools disabled and optional MCP calls allowlisted, isolated generated configuration, constructed environment
 without ambient credentials, bounded output, and timeouts.

@@ -4,6 +4,7 @@
 !containers/package.json
 !containers/pnpm-lock.yaml
 !containers/requirements.txt
+!containers/preload-cgc-parsers.py
 !package.json
 !LICENSE
 !bin/

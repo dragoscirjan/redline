@@ -2,7 +2,7 @@
  * Pi harness executor.
  *
  * Runs Pi non-interactively: one `pi --print` child process per prompt with
- * all tools disabled and no session persistence. Model access is configured
+ * built-in tools disabled, optional scoped MCP analysis and no session persistence. Model access is configured
  * through a dedicated generated agent directory (`PI_CODING_AGENT_DIR`), so
  * the host user's own Pi configuration, extensions, and credentials are
  * never loaded or modified. The provider credential travels through the
@@ -11,6 +11,7 @@
  * generated file.
  */
 
+import { prepareAnalysis, integrationServers, integrationToolNames } from './analysis.ts';
 import { MAX_OUTPUT_TOKENS, outputCaptureBytes } from './output-budget.ts';
 import { piFailureDiagnostic, readPiFailure } from './pi-failure.ts';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
@@ -588,12 +589,15 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         transientRetries: settings.retryOwnership === 'caller' ? 0 : policy.transientRetries });
       const rootDirectory = join(settings.workDirectory, 'pi-agent');
       await mkdir(rootDirectory, { recursive: true });
+      const analysis = await prepareAnalysis(settings.analysis, settings.workDirectory, 'pi', command);
+      const tools = integrationToolNames(analysis, 'pi');
       const args = [
         '--print',
         '--mode',
         'json',
         '--no-session',
-        '--no-tools',
+        ...(tools.length === 0 ? ['--no-tools'] : ['--tools', tools.join(','), '--no-extensions', '--extension', 'builtin:mcp',
+          '--no-context-files', '--no-skills', '--no-prompt-templates', '--no-themes', '--offline', '--no-approve']),
         ...(effectivePolicy.thinkingLevel === undefined ? [] : ['--thinking', effectivePolicy.thinkingLevel]),
         '--provider',
         settings.model.provider,
@@ -612,6 +616,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
       return Object.freeze({
         harness: 'pi',
         model: settings.model,
+        ...(analysis === undefined ? {} : { analysis }),
         description: `pi with isolated per-invocation agent directories under ${rootDirectory}; thinking=${effectivePolicy.thinkingLevel ?? 'provider-default'}, max-output-tokens=${effectivePolicy.maxOutputTokens}, temperature=${effectivePolicy.temperature ?? 'provider-default'}, structured-output=${effectivePolicy.structuredOutput}, model-protocol=${settings.modelProtocol ?? 'compatible'}, transient-retries=${effectivePolicy.transientRetries} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
         command,
         args,
@@ -681,9 +686,10 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
           writeFile(join(invocationDirectory, 'models.json'), invocationAgentConfig(state, prompt), { mode: 0o600 }),
           writeFile(join(invocationDirectory, 'settings.json'), state.settingsConfig, { mode: 0o600 }),
           writeFile(systemPromptFile, prompt.system, { mode: 0o600 }),
+          writeFile(join(invocationDirectory, 'mcp.json'), JSON.stringify({ autoEnableCodemode: false, mcpServers: integrationServers(state.analysis, 'pi') }), { mode: 0o600 }),
         ]);
         const args = [...state.args, '--system-prompt', systemPromptFile];
-        const env: NodeJS.ProcessEnv = { ...state.env, PI_CODING_AGENT_DIR: invocationDirectory };
+        const env: NodeJS.ProcessEnv = { ...state.env, HOME: invocationDirectory, USERPROFILE: invocationDirectory, PI_CODING_AGENT_DIR: invocationDirectory };
         let timeToFirstTextMs: number | null = null;
         const result = await runBoundedProcess(spawner, {
           command: state.command,

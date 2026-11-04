@@ -11,6 +11,10 @@ const roots: string[] = [];
 const containers: { name: string; env: NodeJS.ProcessEnv }[] = [];
 const children: ChildProcess[] = [];
 const key = 'synthetic-container-model-key-do-not-persist';
+function runtimeMount(): string[] {
+  const source = process.env.REDLINE_CONTAINER_RUNTIME;
+  return source === undefined ? [] : ['--mount', 'type=bind,src=' + source + ',dst=/opt/redline,readonly'];
+}
 function image(): string {
   const value = process.env.REDLINE_CONTAINER_IMAGE;
   if (value === undefined) throw new Error('Set REDLINE_CONTAINER_IMAGE to test the Redline image');
@@ -80,7 +84,7 @@ async function fixture(mode = 'finding') {
       '--mount', 'type=bind,src=' + repository + ',dst=/repository,readonly',
       '--mount', 'type=bind,src=' + output + ',dst=/output',
       '--mount', 'type=bind,src=' + cache + ',dst=/cache',
-      '--env', 'REDLINE_MODEL_AUTH=' + JSON.stringify({ mock: key }), image()];
+      ...runtimeMount(), '--env', 'REDLINE_MODEL_AUTH=' + JSON.stringify({ mock: key }), image()];
   }
   return { root, env, repository, output, cache, git, base, common, runArgs, firstRequest,
     get requests() { return docker(['logs', model], env).split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(value => value.type === 'request') as typeof requests; } };
@@ -105,7 +109,47 @@ describe.runIf(enabled)('Redline runs inside Docker', () => {
     expect(result.code, result.stderr).toBe(0); expect(result.stdout).toContain('Usage: redline review');
     expect(result.stdout).not.toContain('--isolation'); expect(result.stdout).not.toContain('--container-image');
   }, 40_000);
+  it('probes every shipped MCP against bounded captured head source, including usable graph queries', async () => {
+    const { env } = await environment();
+    const script = await readFile(new URL('./fixtures/container-analysis.mjs', import.meta.url), 'utf8');
+    const result = await run(['run', '--rm', ...profile, ...runtimeMount(), '--network', 'none', '--entrypoint', 'node', image(), '--input-type=module', '-e', script], env);
+    expect(result.code, result.stderr).toBe(0);
+    const statuses = JSON.parse(result.stdout) as {component:string; status:string; reason:string}[];
+    for (const component of ['cgc','gitnexus','context-mode','sequential-thinking']) {
+      expect(statuses.find(item => item.component === component)?.status, result.stdout).toBe('ready');
+    }
+  }, 50_000);
   for (const harness of ['pi', 'opencode'] as const) {
+    it(`${harness} uses native read-only tools and survives an out-of-scope request`, async () => {
+      const f = await fixture('analysis');
+      const result = await run([...f.runArgs(), 'review', ...f.common, '--harness', harness, '--output', '/output/analysis'], f.env);
+      expect(result.code, result.stdout + result.stderr).toBe(0);
+      expect(f.requests).toHaveLength(4);
+      const requests = JSON.stringify(f.requests);
+      expect(requests).toContain('ctx_index'); expect(requests).toContain('ctx_search'); expect(requests).toContain('denied');
+      const statuses = JSON.parse(await readFile(join(f.output, 'analysis/reviews/analysis-tools.json'), 'utf8')).integrations as {component:string;status:string}[];
+      expect(statuses.find(item => item.component === 'context-mode')?.status).toBe('ready');
+      const record = await readFile(join(f.output, 'analysis/reviews/000001.json'), 'utf8');
+      expect(JSON.parse(record).outcome).toBe('findings'); expect(record + result.stderr + result.stdout).not.toContain(key);
+    }, 50_000);
+    it(`${harness} reports missing context-mode MCP and plugin without blocking a prompt`, async () => {
+      const f = await fixture('analysis');
+      const directory = docker(['run', '--rm', ...profile, '--entrypoint', 'node', image(), '-p',
+        "require('node:fs').realpathSync('/opt/harness/node_modules/context-mode')"], f.env);
+      if (!directory.startsWith('/opt/harness/node_modules/')) throw new Error('unexpected dependency location');
+      const empty = join(f.root, 'missing-context-mode'); await mkdir(empty);
+      const launch = f.runArgs(); launch.splice(launch.length - 1, 0, '--mount', 'type=bind,src=' + empty + ',dst=' + directory + ',readonly');
+      const result = await run([...launch, 'review', ...f.common, '--harness', harness, '--output', '/output/missing'], f.env);
+      expect(result.code, result.stdout + result.stderr).toBe(0);
+      expect(f.requests).toHaveLength(1);
+      const report = await readFile(join(f.output, 'missing/reviews/analysis-tools.json'), 'utf8');
+      const statuses = JSON.parse(report).integrations as {component:string;status:string}[];
+      expect(statuses.find(item => item.component === 'context-mode')?.status).toBe('missing');
+      expect(statuses.find(item => item.component === 'context-mode-plugin')?.status).toBe('missing');
+      expect(result.stderr).toContain('context-mode missing');
+      expect(JSON.parse(await readFile(join(f.output, 'missing/reviews/000001.json'), 'utf8')).outcome).toBe('findings');
+      expect(report + result.stdout + result.stderr).not.toContain(key);
+    }, 50_000);
     it(`${harness} reviews a read-only repository with the controller inside the image`, async () => {
       const f = await fixture(); const before = f.git('status', '--porcelain=v1');
       const result = await run([...f.runArgs(), 'review', ...f.common, '--harness', harness, '--output', '/output/run'], f.env);

@@ -98,6 +98,13 @@ export class CliReporter implements ReviewReporter {
       if (event.fileOnlyFiles > 0) {
         this.stderr(`Indexed context: ${terminalText(event.status)}; ${event.relatedSpans} related spans; ${event.fileOnlyFiles} required ${event.fileOnlyFiles === 1 ? 'file remains' : 'files remain'} file-only.`);
       }
+    } else if (event.kind === 'analysis-status') {
+      this.clearLine();
+      for (const integration of event.integrations) {
+        if (integration.status === 'missing' || integration.status === 'unusable') {
+          this.stderr(`Optional analysis: ${terminalText(integration.component)} ${terminalText(integration.status)}. Reason ${terminalText(integration.reason)}. Review continues without it.`);
+        }
+      }
     } else if (event.kind === 'workload') {
       // Erase the transient bar before permanent preflight messages. A newline
       // here would leave a second progress bar behind in terminal history.

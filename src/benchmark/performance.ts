@@ -1113,7 +1113,7 @@ export function renderPerformanceMarkdown(report: PerformanceReport): string {
       lines.push(`| ${file.path} | ${file.category} | ${seconds(file.queueWaitMs)} | ${seconds(file.modelDurationMs)} | ${file.timeToFirstTextMs === null ? 'n/a' : seconds(file.timeToFirstTextMs)} | ${file.baselinePromptBytes} | ${file.promptBytes} | ${file.promptReductionBytes} (${file.promptReductionPercent.toFixed(2)}%) | ${file.baselineEstimatedInputTokens} | ${file.estimatedInputTokens} | ${file.stdoutBytes} | ${file.outcome} |`);
     }
   }
-  lines.push('', '## Limitations', '', ...report.limitations.map((item) => `- ${item}`), '');
+  lines.push('', '## Limitations', '', ...report.limitations.map((item) => `- ${item}`));
   return `${lines.join('\n')}\n`;
 }
 

@@ -9,6 +9,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { IntegrationStatus } from '../harness-executor/analysis.ts';
+import { nativeRequestedTools, type NativeToolEvidence } from '../harness-executor/native.ts';
 import type { FollowUpRequestBatch } from '../code-context/follow-up.ts';
 import type { ResolvedFollowUp } from './follow-up.ts';
 import { spanLocation } from './remediation.ts';
@@ -119,6 +120,9 @@ function renderRecordMarkdown(record: FileReviewRecord): string {
     ...(record.savedDurationMs === undefined ? [] : [`- **Estimated model time saved:** ${record.savedDurationMs} ms`]),
     `- **Indexed context:** ${record.codeContext.status}; ${record.codeContext.relatedSpans} spans, ${record.codeContext.sourceBytes} source bytes`,
   ];
+  if (record.tools !== undefined) {
+    lines.push(`- **Native tools:** ${record.tools.catalogue.length} observed names; ${record.tools.calls.reduce((n, call) => n + call.started, 0)} calls; ${record.tools.calls.reduce((n, call) => n + call.succeeded, 0)} successful`);
+  }
   if (record.codeContext.provider !== null) {
     lines.push(`- **Index provider:** ${record.codeContext.provider.id} ${record.codeContext.provider.version}`);
   }
@@ -259,6 +263,7 @@ function renderPullRequestReviewMarkdown(review: PullRequestReviewRecord): strin
 
 export interface ReviewWriter {
   writeAnalysisReport?(integrations: readonly IntegrationStatus[]): Promise<void>;
+  writeNativeToolsReport?(evidence: NativeToolEvidence): Promise<void>;
   writeFileReview(record: FileReviewRecordWithRaw): Promise<void>;
   writeSummary(summary: ReviewRunSummary): Promise<void>;
   writePullRequestReview(review: PullRequestReviewRecord): Promise<void>;
@@ -279,6 +284,13 @@ export function createReviewWriter(outputDirectory: string): ReviewWriter {
     async writeAnalysisReport(integrations: readonly IntegrationStatus[]): Promise<void> {
       await prepare();
       await writeFile(join(reviewsDirectory, 'analysis-tools.json'), JSON.stringify({ version: 1, integrations }, null, 2) + '\n', { mode: 0o600 });
+    },
+    async writeNativeToolsReport(evidence: NativeToolEvidence): Promise<void> {
+      await prepare();
+      await writeFile(join(reviewsDirectory, 'native-tools.json'), JSON.stringify({
+        version: 1, executionMode: 'native', configuration: 'harness-global-and-checkout-local',
+        ...evidence, requestedMcp: nativeRequestedTools(evidence),
+      }, null, 2) + '\n', { mode: 0o600 });
     },
     async writeFileReview(record: FileReviewRecordWithRaw): Promise<void> {
       await prepare();

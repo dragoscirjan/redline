@@ -56,6 +56,7 @@ jobs:
           evidence_changes="$(git status --porcelain --untracked-files=all -- \
             benchmark/performance/v1/baseline \
             benchmark/policy-v8/performance \
+            benchmark/policy-v10/performance \
             benchmark/model-execution/v1/live-glm-5.3-flash/report.json \
             benchmark/model-execution/v1/live-glm-5.3-flash/report.md \
             benchmark/review-eligibility/v1/report.json \
@@ -68,6 +69,7 @@ jobs:
             git diff -- \
               benchmark/performance/v1/baseline \
               benchmark/policy-v8/performance \
+              benchmark/policy-v10/performance \
               benchmark/model-execution/v1/live-glm-5.3-flash/report.json \
               benchmark/model-execution/v1/live-glm-5.3-flash/report.md \
               benchmark/review-eligibility/v1/report.json \
@@ -136,6 +138,13 @@ jobs:
           REDLINE_MAX_OUTPUT_TOKENS: '32768'
           MOCK_EXPECT_MAX_OUTPUT_TOKENS: '32768'
         run: bash test/harness-matrix-run.sh "$HARNESS"
+
+      # Synthetic, temporary user/project configuration only; production Actions stay isolated.
+      - name: Verify native CLI configuration and MCP calls
+        if: matrix.harness == 'pi' || matrix.harness == 'opencode'
+        env:
+          REDLINE_NATIVE_CLI_TESTS: '1'
+        run: pnpm exec vitest run test/native-cli.integration.test.ts -t '${{ matrix.harness }}'
 
       - name: Verify request protocol and retries at loopback HTTP boundary
         if: matrix.harness == 'pi' || matrix.harness == 'opencode'

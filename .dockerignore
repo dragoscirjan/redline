@@ -5,6 +5,9 @@
 !containers/pnpm-lock.yaml
 !containers/requirements.txt
 !containers/preload-cgc-parsers.py
+!containers/native-pi-mcp.json
+!containers/native-opencode.json
+!containers/entrypoint.sh
 !package.json
 !LICENSE
 !bin/

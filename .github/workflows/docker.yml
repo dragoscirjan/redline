@@ -74,7 +74,9 @@ jobs:
           REDLINE_CONTAINER_TESTS: '1'
           REDLINE_CONTAINER_IMAGE: redline:test
           REDLINE_CONTAINER_CACHE: ${{ runner.temp }}/redline-code-index/cache
-        run: pnpm exec vitest run test/container.test.ts
+          REDLINE_NATIVE_CONTAINER_TESTS: '1'
+          REDLINE_NATIVE_IMAGE: redline:test
+        run: pnpm exec vitest run test/container.test.ts test/native-cli.integration.test.ts
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io

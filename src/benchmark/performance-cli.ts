@@ -58,7 +58,7 @@ function parseArguments(args: readonly string[]): CliOptions {
   return {
     corpusPath: resolve(corpusPath),
     profilePath: resolve(profilePath),
-    outputDirectory: resolve(outputDirectory ?? 'benchmark/policy-v9/performance'),
+    outputDirectory: resolve(outputDirectory ?? 'benchmark/policy-v10/performance'),
     runs,
     source,
   };

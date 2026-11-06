@@ -47,7 +47,7 @@ it('installs the packed package offline and runs both CLIs without source checko
       npmArguments(['pack', '--ignore-scripts', '--json', '--pack-destination', root]), { cwd: project, env, encoding: 'utf8' }));
     const archive = packed[0]!;
     const paths = archive.files.map((entry) => entry.path);
-    expect(paths).toContain('prompts/v9/core-policy.md');
+    expect(paths).toContain('prompts/v10/core-policy.md');
     expect(paths).toContain('bin/redline-analysis.mjs');
     expect(paths).toContain('src/harness-executor/analysis-server.ts');
     expect(paths).toContain('bin/redline.mjs');

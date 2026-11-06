@@ -1,6 +1,7 @@
 import type { ReviewEvent, ReviewReporter, ReviewReport } from '../application/review.ts';
 import type { PullRequestFinding } from '../review/types.ts';
 import { MAX_EXCERPT_LINES, type FindingDiffExcerpt } from './finding-diff.ts';
+import { nativeRequestedTools } from '../harness-executor/native.ts';
 
 /** Terminal data is untrusted too: remove control characters and bound every line. */
 export function terminalText(value: string, credential?: string): string {
@@ -245,6 +246,21 @@ export class CliReporter implements ReviewReporter {
     }
     const notStarted = result.summary.files.filter(file => file.execution === 'not-started').length;
     if (notStarted > 0) this.row('Not started:', `${notStarted} file${notStarted === 1 ? '' : 's'} after shared harness failure.`);
+
+    if (result.summary.tools !== undefined) {
+      const tools = result.summary.tools;
+      this.section('Native tools');
+      this.row('Configuration:', 'native global and checkout-local configuration; no Redline MCP allowlist');
+      this.row('Observed names:', `${tools.catalogue.length}; ${tools.catalogueSource}`);
+      this.row('Tool calls:', `${tools.calls.reduce((n, call) => n + call.started, 0)} started; ${tools.calls.reduce((n, call) => n + call.succeeded, 0)} succeeded; ${tools.calls.reduce((n, call) => n + call.failed, 0)} failed`);
+      for (const call of tools.calls.slice(0, 20)) this.row(safe(call.name) + ':', `${call.started} calls; ${call.succeeded} succeeded; ${call.failed} failed`);
+      for (const server of tools.servers ?? []) this.row('MCP ' + safe(server.name) + ':', server.status);
+      if (tools.catalogueSource === 'harness-catalogue' || tools.discovery === 'complete') {
+        for (const requested of nativeRequestedTools(tools).filter(row => row.observation === 'not-observed')) {
+          this.stderr(`Warning: requested ${requested.component} MCP tools were not observed under expected native names. They may be missing, aliased, disabled, deferred or still connecting; Redline did not filter the configured servers.`);
+        }
+      }
+    }
 
     this.section('Context');
     const context = result.summary.codeContext;

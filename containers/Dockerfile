@@ -44,9 +44,12 @@ COPY bin/ ./bin/
 COPY src/ ./src/
 COPY prompts/ ./prompts/
 COPY schemas/ ./schemas/
+COPY containers/native-pi-mcp.json ./native-config/pi-mcp.json
+COPY containers/native-opencode.json ./native-config/opencode.json
+COPY --chmod=755 containers/entrypoint.sh ./container-entrypoint.sh
 RUN mkdir -p /cache /output && chown 10001:10001 /cache /output
-ENV HOME=/tmp/redline/home XDG_STATE_HOME=/tmp/redline/state XDG_CACHE_HOME=/cache
+ENV HOME=/tmp/redline/home XDG_STATE_HOME=/tmp/redline/state XDG_CACHE_HOME=/cache container=redline
 VOLUME ["/cache", "/output"]
 USER 10001:10001
 WORKDIR /tmp
-ENTRYPOINT ["node", "/opt/redline/bin/redline.mjs"]
+ENTRYPOINT ["/opt/redline/container-entrypoint.sh"]

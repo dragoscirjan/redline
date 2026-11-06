@@ -103,10 +103,6 @@ export async function hostToolCommand(name: 'pi' | 'opencode' | 'cgc' | 'gitnexu
   throw new LocalOperationError(`trusted ${name} executable not found outside the reviewed repository`);
 }
 
-export function harnessCommand(name: 'pi' | 'opencode', path: string, repository: string): Promise<LaunchCommand> {
-  return hostToolCommand(name, path, repository);
-}
-
 export function cancellableSpawner(signal: AbortSignal, launch?: LaunchCommand): ProcessSpawner {
   return {
     spawn(request) {

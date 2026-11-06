@@ -47,7 +47,22 @@ describe('Docker build-context contract', () => {
     expect(lines.filter(line => line.startsWith('!containers/'))).toEqual([
       '!containers/', '!containers/Dockerfile', '!containers/package.json',
       '!containers/pnpm-lock.yaml', '!containers/requirements.txt', '!containers/preload-cgc-parsers.py',
+      '!containers/native-pi-mcp.json', '!containers/native-opencode.json', '!containers/entrypoint.sh',
     ]);
+  });
+
+  it('ships matching native MCP defaults without a Redline tool allowlist', async () => {
+    const pi = JSON.parse(await readFile(new URL('../containers/native-pi-mcp.json', import.meta.url), 'utf8'));
+    const opencode = JSON.parse(await readFile(new URL('../containers/native-opencode.json', import.meta.url), 'utf8'));
+    expect(Object.keys(pi.mcpServers).sort()).toEqual(['cgc', 'context-mode', 'gitnexus', 'sequential-thinking']);
+    for (const [name, server] of Object.entries(pi.mcpServers) as [string, { command: string; args: string[]; env: Record<string, string> }][]) {
+      expect(opencode.mcp[name]).toEqual({ type: 'local', command: [server.command, ...server.args], environment: server.env, enabled: true });
+      expect(JSON.stringify(server)).not.toContain('redline-analysis');
+    }
+    const entry = await readFile(new URL('../containers/entrypoint.sh', import.meta.url), 'utf8');
+    expect(entry).toContain('[ ! -e "$pi_dir/mcp.json" ]');
+    expect(entry).toContain('[ ! -e "$opencode_dir/opencode.jsonc" ]');
+    expect(entry).toContain('exec node /opt/redline/bin/redline.mjs "$@"');
   });
 
   it('applies secret and generated-directory exclusions after every allow rule', async () => {

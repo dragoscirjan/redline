@@ -1,0 +1,58 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "cgc": {
+      "type": "local",
+      "command": [
+        "/opt/cgc/bin/cgc",
+        "mcp",
+        "start"
+      ],
+      "environment": {
+        "CGC_IGNORE_PROJECT_ENV": "1",
+        "ENABLE_AUTO_WATCH": "false",
+        "DEFAULT_DATABASE": "falkordb",
+        "CGC_RUNTIME_DB_TYPE": "falkordb",
+        "CGC_RUNTIME_DB_PATH": "/cache/redline/native/cgc/graph.db",
+        "FALKORDB_PATH": "/cache/redline/native/cgc/graph.db",
+        "FALKORDB_SOCKET_PATH": "/tmp/redline/native/cgc.sock",
+        "TREE_SITTER_LANGUAGE_PACK_CACHE_DIR": "/tmp/redline/native/parsers",
+        "TREE_SITTER_LANGUAGE_PACK_MANIFEST_URL": "file:///opt/cgc-parsers/no-remote-manifest.json"
+      },
+      "enabled": true
+    },
+    "gitnexus": {
+      "type": "local",
+      "command": [
+        "/opt/harness/node_modules/.bin/gitnexus",
+        "mcp"
+      ],
+      "environment": {
+        "GITNEXUS_HOME": "/cache/redline/native/gitnexus"
+      },
+      "enabled": true
+    },
+    "context-mode": {
+      "type": "local",
+      "command": [
+        "/usr/local/bin/bun",
+        "/opt/harness/node_modules/context-mode/cli.bundle.mjs"
+      ],
+      "environment": {
+        "CONTEXT_MODE_PROJECT_DIR": "/tmp/redline/native/context-mode"
+      },
+      "enabled": true
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": [
+        "/usr/local/bin/node",
+        "/opt/harness/node_modules/@modelcontextprotocol/server-sequential-thinking/dist/index.js"
+      ],
+      "environment": {
+        "DISABLE_THOUGHT_LOGGING": "true"
+      },
+      "enabled": true
+    }
+  }
+}

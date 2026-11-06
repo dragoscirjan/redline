@@ -818,6 +818,34 @@ describe('extractPiAssistantText', () => {
     }
   });
 
+  it('retains native tool calls across an adapter-managed transient retry', async () => {
+    const settings = await createSettings();
+    try {
+      const tool = (id: string) => JSON.stringify({ type: 'tool_execution_end', toolName: 'mcp__extra__ping', toolCallId: id, isError: false });
+      const turn = (text: string) => JSON.stringify({ type: 'turn_end', message: { role: 'assistant', content: [{ type: 'text', text }], stopReason: 'stop', usage: { input: 10, output: text === '' ? 0 : 2 } } });
+      const spawner = new SequenceSpawner([{ code: 0, stdout: tool('one') + '\n' + turn('') }, { code: 0, stdout: tool('two') + '\n' + turn('done') }]);
+      const executor = createPiExecutor({ spawner, transientRetries: 1,
+        native: { directory: settings.workDirectory, environment: { HOME: settings.workDirectory } } });
+      const run = await executor.execute(await executor.prepare(settings), { system: 'SYS', user: 'USER' });
+      expect(run.status).toBe('succeeded');
+      expect(spawner.requests).toHaveLength(2);
+      expect(run.telemetry?.tools?.calls).toEqual([{ name: 'mcp__extra__ping', started: 2, succeeded: 2, failed: 0 }]);
+    } finally { await settings.cleanup(); }
+  });
+
+  it('does not enable native Pi authentication when auth is deliberately absent', async () => {
+    const settings = await createSettings({ credential: undefined });
+    try {
+      const spawner = new RecordingSpawner(); spawner.script('', 0);
+      const executor = createPiExecutor({ spawner, transientRetries: 0,
+        native: { directory: settings.workDirectory, environment: { HOME: settings.workDirectory } } });
+      await executor.execute(await executor.prepare(settings), { system: 'SYS', user: 'USER' });
+      const extension = await readFile(spawner.requests[0]!.args.at(-1)!, 'utf8');
+      expect(extension).toContain('"authenticated":false');
+      expect(extension).toContain('authHeader: config.authenticated');
+    } finally { await settings.cleanup(); }
+  });
+
   it('caps the streamed text and reports truncation', async () => {
     const settings = await createSettings();
     try {

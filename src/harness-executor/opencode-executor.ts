@@ -1,23 +1,16 @@
 /**
  * OpenCode harness executor.
  *
- * Runs OpenCode non-interactively: one `opencode run` child process per
- * prompt. Model access and the fixed review agent are configured through a
- * generated `OPENCODE_CONFIG` file. The process runs `--pure` (no external
- * plugins) with redirected HOME and XDG directories, so the host user's own
- * OpenCode configuration, plugins, MCP servers, and credentials never load.
- * The generated agent disables every built-in tool, including the skill
- * tool, so the review session is strictly read-only.
- *
- * The selected provider credential is written into the generated config
- * file (mode 0600) inside the caller-managed work directory. OpenCode has
- * no environment-interpolation mechanism comparable to Pi's `models.json`,
- * so that file is the credential boundary; it is removed together with the
- * work directory when the review run ends.
+ * Runs one non-interactive `opencode run` process per prompt. Native CLI/Docker
+ * merges request settings into normal global/local configuration and keeps
+ * configured tools, MCPs, plugins and permissions. The selected key uses an
+ * environment reference. Isolated Actions retain `--pure`, redirected HOME/XDG,
+ * generated mode-0600 configuration and exact read-only tool permissions.
  */
 
 import { prepareAnalysis, integrationServers, integrationToolNames, type PreparedAnalysis } from './analysis.ts';
 import { outputCaptureBytes, validateOutputTokens } from './output-budget.ts';
+import { nativeEnvironment, nativeToolEvidence, nativeOpenCodeServers, type NativeHarnessContext } from './native.ts';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
@@ -39,6 +32,7 @@ import type {
 } from './types.ts';
 
 export interface OpenCodeExecutorOptions {
+  readonly native?: NativeHarnessContext | undefined;
   /** Executable override; defaults to the `opencode` found on PATH. */
   readonly command?: string | undefined;
   readonly spawner?: ProcessSpawner | undefined;
@@ -76,6 +70,8 @@ export interface PreparedOpenCode extends PreparedHarness {
   readonly rootDirectory: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs: number;
+  readonly native?: NativeHarnessContext;
+  readonly nativeDiscovery?: ReturnType<typeof nativeOpenCodeServers>;
   readonly retryOwnership?: 'caller' | undefined;
   readonly credential?: string | undefined;
   readonly maxOutputTokens?: number | undefined;
@@ -114,6 +110,29 @@ function buildConfig(
     },
   };
   return `${JSON.stringify(config, null, 2)}\n`;
+}
+
+function nativeConfig(state: PreparedOpenCode, prompt: HarnessPrompt): string {
+  let base: unknown;
+  try { base = JSON.parse(state.env['OPENCODE_CONFIG_CONTENT'] ?? '{}'); }
+  catch { throw new Error('native OPENCODE_CONFIG_CONTENT must be a JSON object'); }
+  if (!isRecord(base)) throw new Error('native OPENCODE_CONFIG_CONTENT must be a JSON object');
+  const providers = isRecord(base['provider']) ? base['provider'] : {};
+  const selectedProvider = providers[state.model.provider];
+  const provider = isRecord(selectedProvider) ? selectedProvider : {};
+  const models = isRecord(provider['models']) ? provider['models'] : {};
+  const selectedModel = models[state.model.model];
+  const model = isRecord(selectedModel) ? selectedModel : {};
+  const agents = isRecord(base['agent']) ? base['agent'] : {};
+  const agent = isRecord(agents[OPENCODE_REVIEW_AGENT]) ? agents[OPENCODE_REVIEW_AGENT] : {};
+  return JSON.stringify({ ...base,
+    provider: { ...providers, [state.model.provider]: { ...provider,
+      options: { ...(isRecord(provider['options']) ? provider['options'] : {}),
+        baseURL: state.model.endpoint, apiKey: '{env:REDLINE_MODEL_API_KEY}' },
+      models: { ...models, [state.model.model]: { ...model } },
+    } },
+    agent: { ...agents, [OPENCODE_REVIEW_AGENT]: { ...agent, prompt: prompt.system } },
+  });
 }
 
 /** Text payload from one OpenCode JSON event, when present. */
@@ -176,6 +195,7 @@ function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null
     stderrBytes: result.stderrBytes ?? Buffer.byteLength(result.stderr, 'utf8'),
     stdoutTruncated: result.stdoutTruncated,
     stderrTruncated: result.stderrTruncated ?? false,
+    ...(state.native === undefined ? {} : { tools: { ...nativeToolEvidence(result.stdout, 'opencode', result.stdoutTruncated), ...state.nativeDiscovery } }),
   };
   if (result.timedOut) {
     return {
@@ -225,7 +245,8 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
       const maxOutputTokens = settings.maxOutputTokens === undefined ? undefined : validateOutputTokens(settings.maxOutputTokens);
       const rootDirectory = join(settings.workDirectory, 'opencode');
       await mkdir(rootDirectory, { recursive: true });
-      const analysis = await prepareAnalysis(settings.analysis, settings.workDirectory, 'opencode', command);
+      const analysis = options.native === undefined
+        ? await prepareAnalysis(settings.analysis, settings.workDirectory, 'opencode', command) : undefined;
       const modelOptions: Record<string, string> = { baseURL: settings.model.endpoint };
       if (settings.credential !== undefined) modelOptions['apiKey'] = settings.credential.value;
       const modelConfig = {
@@ -235,7 +256,7 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
       };
       const args = [
         'run',
-        '--pure',
+        ...(options.native === undefined ? ['--pure'] : ['--dir', options.native.directory]),
         '--format',
         'json',
         '--agent',
@@ -246,18 +267,28 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
         `${settings.model.provider}/${settings.model.model}`,
       ];
       const env: Record<string, string | undefined> = {
-        PATH: process.env.PATH,
-        LANG: process.env.LANG,
+        ...(options.native === undefined ? { PATH: process.env.PATH, LANG: process.env.LANG }
+          : { ...nativeEnvironment(options.native.environment), REDLINE_MODEL_API_KEY: settings.credential?.value ?? 'redline-unauthenticated' }),
         ...(maxOutputTokens === undefined ? {} : { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: String(maxOutputTokens) }),
       };
+      let nativeDiscovery: ReturnType<typeof nativeOpenCodeServers> | undefined;
+      if (options.native !== undefined) {
+        const listed = await runBoundedProcess(spawner, { command, args: ['mcp', 'list'],
+          cwd: options.native.directory, env, stdin: '', timeoutMs: Math.min(10_000, settings.timeoutMs), stdoutLimitBytes: 64 * 1024 });
+        nativeDiscovery = nativeOpenCodeServers(listed.stdout);
+        if (listed.code !== 0 || listed.timedOut || listed.stdoutTruncated) nativeDiscovery = { ...nativeDiscovery, discovery: 'incomplete' };
+      }
       return Object.freeze({
         harness: 'opencode',
         model: settings.model,
+        executionMode: options.native === undefined ? 'isolated' : 'native',
+        ...(options.native === undefined ? {} : { native: options.native }),
+        ...(nativeDiscovery === undefined ? {} : { nativeDiscovery }),
         ...(analysis === undefined ? {} : { analysis }),
-        description: `opencode with isolated per-invocation config and XDG/HOME directories under ${rootDirectory}; max-output-tokens=${maxOutputTokens ?? 'provider-default'}`,
+        description: options.native !== undefined ? 'opencode with native global and checkout-local configuration; configured tools and plugins remain enabled' : `opencode with isolated per-invocation config and XDG/HOME directories under ${rootDirectory}; max-output-tokens=${maxOutputTokens ?? 'provider-default'}`,
         command,
         args,
-        cwd: settings.workDirectory,
+        cwd: options.native?.directory ?? settings.workDirectory,
         rootDirectory,
         env,
         timeoutMs: settings.timeoutMs,
@@ -278,20 +309,17 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
       const dataDirectory = join(invocationRoot, 'data');
       const stateDirectory = join(invocationRoot, 'state');
       const homeDirectory = join(invocationRoot, 'home');
-      await Promise.all([configDirectory, dataDirectory, stateDirectory, homeDirectory].map(
-        (directory) => mkdir(directory, { recursive: true }),
-      ));
-      const configFile = join(configDirectory, 'opencode.json');
-      await writeFile(configFile, buildConfig(state.modelConfig, prompt.system, state.analysis), { mode: 0o600 });
-      const env = {
-        ...state.env,
-        HOME: homeDirectory,
-        USERPROFILE: homeDirectory,
-        XDG_CONFIG_HOME: configDirectory,
-        XDG_DATA_HOME: dataDirectory,
-        XDG_STATE_HOME: stateDirectory,
-        OPENCODE_CONFIG: configFile,
-      };
+      const env: NodeJS.ProcessEnv = { ...state.env };
+      if (state.native === undefined) {
+        await Promise.all([configDirectory, dataDirectory, stateDirectory, homeDirectory].map(
+          (directory) => mkdir(directory, { recursive: true }),
+        ));
+        const configFile = join(configDirectory, 'opencode.json');
+        await writeFile(configFile, buildConfig(state.modelConfig, prompt.system, state.analysis), { mode: 0o600 });
+        Object.assign(env, { HOME: homeDirectory, USERPROFILE: homeDirectory,
+          XDG_CONFIG_HOME: configDirectory, XDG_DATA_HOME: dataDirectory,
+          XDG_STATE_HOME: stateDirectory, OPENCODE_CONFIG: configFile });
+      } else env.OPENCODE_CONFIG_CONTENT = nativeConfig(state, prompt);
       const invocationStartedAt = Date.now();
       let timeToFirstTextMs: number | null = null;
       const result = await runBoundedProcess(spawner, {

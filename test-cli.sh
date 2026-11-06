@@ -53,6 +53,11 @@ export REDLINE_MODEL_AUTH
 PROVIDER="${REDLINE_PROVIDER:-openrouter}"
 ENDPOINT="${REDLINE_ENDPOINT:-https://openrouter.ai/api/v1}"
 MODEL="${REDLINE_MODEL:-z-ai/glm-5.3-flash}"
+# This helper supplies all model fields explicitly; an inherited JSON default must not mask them.
+unset REDLINE_MODEL_CONFIG
+# Decide before tee turns the child streams into pipes. Explicit always also works through redirected output.
+PROGRESS="${REDLINE_PROGRESS:-auto}"
+if [[ "$PROGRESS" == auto && -t 2 && "${TERM:-}" != dumb ]]; then PROGRESS=always; fi
 if [[ "$MODE" == docker ]]; then
   IMAGE="${TEST_DOCKER_IMAGE:-redline:dev}"
   CACHE="${TEST_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/redline-docker}"
@@ -92,7 +97,7 @@ for harness in "${HARNESSES[@]}"; do
   output="$OUTPUT_PARENT/$RUN-$harness"
   target_output="$output"
   if [[ "$MODE" == docker ]]; then target_output="/output/$RUN-$harness"; fi
-  review_args=(review --repository "$REPO" --base "${REDLINE_BASE:-origin/main}" --head "$REVIEW_HEAD"
+  review_args=(review --progress "$PROGRESS" --repository "$REPO" --base "${REDLINE_BASE:-origin/main}" --head "$REVIEW_HEAD"
     --harness "$harness" --provider "$PROVIDER" --endpoint "$ENDPOINT" --model "$MODEL"
     --max-output-tokens "${REDLINE_MAX_OUTPUT_TOKENS:-32768}" --model-protocol "$protocol"
     --scheduling mixed --indexing "${REDLINE_INDEXING:-disabled}"

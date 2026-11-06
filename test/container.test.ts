@@ -100,7 +100,7 @@ async function fixture(mode = 'finding') {
       const end = pending.indexOf('\n'); if (end < 0) break;
       const value = JSON.parse(pending.slice(0, end)); pending = pending.slice(end + 1);
       if (value.type === 'ready') readyDone?.();
-      if (value.type === 'request') { requests.push(value); requested?.(); }
+      if (value.type === 'request' && !JSON.stringify(value.body).includes('REDLINE_NATIVE_WARMUP')) { requests.push(value); requested?.(); }
     }
   });
   logs.stderr.resume();
@@ -120,7 +120,7 @@ async function fixture(mode = 'finding') {
       ...runtimeMount(), '--env', 'REDLINE_MODEL_AUTH=' + JSON.stringify({ openrouter: key }), image()];
   }
   return { root, env, repository, output, cache, git, base, common, runArgs, firstRequest,
-    get requests() { return docker(['logs', model], env).split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(value => value.type === 'request') as typeof requests; } };
+    get requests() { return docker(['logs', model], env).split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(value => value.type === 'request' && !JSON.stringify(value.body).includes('REDLINE_NATIVE_WARMUP')) as typeof requests; } };
 }
 /** Bound Docker client logs and lifetime; container removal remains the fixture teardown's responsibility. */
 function run(args: string[], env: NodeJS.ProcessEnv, timeoutMs = 30_000): Promise<{ code: number | null; stdout: string; stderr: string }> {

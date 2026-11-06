@@ -19,6 +19,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { disposeAnalysis, integrationToolNames, type IntegrationStatus } from '../harness-executor/analysis.ts';
 import { mergeNativeToolEvidence } from '../harness-executor/native.ts';
 import { createHarnessExecutor } from '../harness-executor/registry.ts';
+import { runNativeWarmup, warmupGuidance, type NativeWarmupReport } from './warmup.ts';
 import { augmentHeadContext } from './head-context.ts';
 import { scheduleBySize, workloadBound } from './scheduling.ts';
 import { maximumFileAttemptTimeMs, parseReviewRetries, RETRY_TIMEOUT_INCREMENT_MS, reviewRetryReason, upstreamRetryDelayMs, type ReviewRetryReason } from './retries.ts';
@@ -84,6 +85,8 @@ export interface ReviewRunInput {
   readonly environment: ReviewEnvironment;
   readonly repositoryDirectory?: string;
   readonly onAnalysisStatus?: (integrations: readonly IntegrationStatus[]) => void;
+  readonly onWarmupStarted?: () => void;
+  readonly onWarmup?: (report: NativeWarmupReport) => void;
   /** Artifact port; defaults to the deterministic filesystem writer. */
   readonly writer?: ReviewWriter;
   /** Bounded metadata only: counts, explicit limits and policy, never source or credentials. */
@@ -201,6 +204,7 @@ function deadlineOmissionRecord(
 }
 
 interface RunHarnessState {
+  readonly warmup?: NativeWarmupReport;
   readonly runs: Map<string, { readonly run: HarnessRun; readonly timeoutMs: number }>;
   failure?: { readonly scope: 'file' | 'run'; readonly diagnostic: string };
   fatalReason?: string;
@@ -292,6 +296,7 @@ async function reviewOneFile(
       model: environment.model.model,
       tools: integrationToolNames(prepared.analysis, environment.harness === 'opencode' ? 'opencode' : 'pi'),
       executionMode: prepared.executionMode ?? 'isolated',
+      ...(sharedFailure.warmup === undefined ? {} : { warmup: warmupGuidance(sharedFailure.warmup) }),
       indexedContext: fileContext.prompt,
       sourceContextStrategy,
       followUpAvailable: verifyCandidates && environment.codeContext !== undefined
@@ -789,10 +794,11 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
   const concurrency = verifyCandidates ? 1 : environment.reviewConcurrency;
   let workDirectory: string | undefined;
   let prepared: Awaited<ReturnType<HarnessExecutor['prepare']>> | undefined;
+  let warmup: NativeWarmupReport | undefined;
   try {
     if (bundle.manifest.files.some(file => file.reviewed)) {
       workDirectory = await mkdtemp(join(tmpdir(), 'redline-review-'));
-      prepared = await executor.prepare({
+      const settings = {
         model: environment.model, credential: environment.credential, timeoutMs: environment.timeout.milliseconds,
         ...(environment.retries === undefined ? {} : { retryOwnership: 'caller' as const }),
         ...(environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: environment.maxOutputTokens }),
@@ -806,7 +812,17 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           head: bundle.manifest.head, graphEnabled: environment.codeContext !== undefined,
           timeoutMs: remainingRunMs(runDeadlineAtMs, now),
         } }),
-      });
+      };
+      prepared = await executor.prepare(settings);
+      if (prepared.executionMode === 'native') {
+        input.onWarmupStarted?.();
+        warmup = await runNativeWarmup(executor, settings, {
+          head: bundle.manifest.head, sourceDirectory: bundle.sourceRoot,
+          paths: bundle.manifest.files.flatMap(file => file.reviewed && file.newPath !== null ? [file.newPath] : []),
+        }, Math.floor(remainingRunMs(runDeadlineAtMs, now) / 4));
+        await writer.writeWarmupReport?.(warmup);
+        input.onWarmup?.(warmup);
+      }
     }
     const tools = integrationToolNames(prepared?.analysis, environment.harness === 'opencode' ? 'opencode' : 'pi');
     const analysisIdentity = prepared?.analysis?.identity;
@@ -888,7 +904,10 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       scheduling: concurrency === 1 ? 'manifest-order' : scheduling,
       staticHeadFiles: [...indexedContext.files.values()].filter((file) => file.coverage.provider?.id === 'static-head').length });
     const followUpBudget = new FollowUpBudget();
-    const sharedFailure: RunHarnessState = { runs: new Map() };
+    const sharedFailure: RunHarnessState = { runs: new Map(),
+      ...(warmup === undefined ? {} : { warmup }),
+      ...(warmup?.fatal === true ? { fatalReason: warmup.reason, failure: { scope: 'run', diagnostic: warmup.reason } } : {}),
+    };
     const timeoutByFile = new Map<number, number>();
     const contextByFile = new Map<number, SourceContextStrategy>();
     const retryReasons = new Map<number, ReviewRetryReason>();
@@ -1028,10 +1047,10 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       if (record === undefined) throw new Error('review run did not produce a file record');
       return [record];
     });
-    const nativeTools = prepared?.executionMode === 'native' ? mergeNativeToolEvidence(records.flatMap(record =>
+    const nativeTools = prepared?.executionMode === 'native' ? mergeNativeToolEvidence([...(warmup === undefined ? [] : [warmup.tools]), ...records.flatMap(record =>
       record.attempts === undefined ? record.tools === undefined ? [] : [record.tools]
-        : record.attempts.flatMap(attempt => attempt.tools === undefined ? [] : [attempt.tools]))) : undefined;
-    if (nativeTools !== undefined) await writer.writeNativeToolsReport?.(nativeTools);
+        : record.attempts.flatMap(attempt => attempt.tools === undefined ? [] : [attempt.tools]))]) : undefined;
+    if (nativeTools !== undefined) await writer.writeNativeToolsReport?.(nativeTools, warmup);
     const excludedFiles = bundle.manifest.files.flatMap((file) => !file.reviewed ? [{
       fileId: file.id,
       path: fileReviewPath(file),
@@ -1043,6 +1062,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
     const harnessFailure = finalFailure === undefined ? undefined : 'scope' in finalFailure ? finalFailure
       : { scope: 'file' as const, diagnostic: finalFailure.reason ?? 'harness failed' };
     const summary: ReviewRunSummary = {
+      ...(warmup === undefined ? {} : { warmup }),
       ...(nativeTools === undefined ? {} : { tools: nativeTools }),
       version: REVIEW_RUN_SUMMARY_VERSION,
       harness: environment.harness,

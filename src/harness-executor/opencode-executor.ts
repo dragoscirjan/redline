@@ -10,7 +10,7 @@
 
 import { prepareAnalysis, integrationServers, integrationToolNames, type PreparedAnalysis } from './analysis.ts';
 import { outputCaptureBytes, validateOutputTokens } from './output-budget.ts';
-import { nativeEnvironment, nativeToolEvidence, nativeOpenCodeServers, type NativeHarnessContext } from './native.ts';
+import { nativeEnvironment, nativeToolEvidence, type NativeHarnessContext } from './native.ts';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
@@ -71,7 +71,6 @@ export interface PreparedOpenCode extends PreparedHarness {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs: number;
   readonly native?: NativeHarnessContext;
-  readonly nativeDiscovery?: ReturnType<typeof nativeOpenCodeServers>;
   readonly retryOwnership?: 'caller' | undefined;
   readonly credential?: string | undefined;
   readonly maxOutputTokens?: number | undefined;
@@ -195,7 +194,7 @@ function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null
     stderrBytes: result.stderrBytes ?? Buffer.byteLength(result.stderr, 'utf8'),
     stdoutTruncated: result.stdoutTruncated,
     stderrTruncated: result.stderrTruncated ?? false,
-    ...(state.native === undefined ? {} : { tools: { ...nativeToolEvidence(result.stdout, 'opencode', result.stdoutTruncated), ...state.nativeDiscovery } }),
+    ...(state.native === undefined ? {} : { tools: nativeToolEvidence(result.stdout, 'opencode', result.stdoutTruncated) }),
   };
   if (result.timedOut) {
     return {
@@ -271,19 +270,11 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
           : { ...nativeEnvironment(options.native.environment), REDLINE_MODEL_API_KEY: settings.credential?.value ?? 'redline-unauthenticated' }),
         ...(maxOutputTokens === undefined ? {} : { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: String(maxOutputTokens) }),
       };
-      let nativeDiscovery: ReturnType<typeof nativeOpenCodeServers> | undefined;
-      if (options.native !== undefined) {
-        const listed = await runBoundedProcess(spawner, { command, args: ['mcp', 'list'],
-          cwd: options.native.directory, env, stdin: '', timeoutMs: Math.min(10_000, settings.timeoutMs), stdoutLimitBytes: 64 * 1024 });
-        nativeDiscovery = nativeOpenCodeServers(listed.stdout);
-        if (listed.code !== 0 || listed.timedOut || listed.stdoutTruncated) nativeDiscovery = { ...nativeDiscovery, discovery: 'incomplete' };
-      }
       return Object.freeze({
         harness: 'opencode',
         model: settings.model,
         executionMode: options.native === undefined ? 'isolated' : 'native',
         ...(options.native === undefined ? {} : { native: options.native }),
-        ...(nativeDiscovery === undefined ? {} : { nativeDiscovery }),
         ...(analysis === undefined ? {} : { analysis }),
         description: options.native !== undefined ? 'opencode with native global and checkout-local configuration; configured tools and plugins remain enabled' : `opencode with isolated per-invocation config and XDG/HOME directories under ${rootDirectory}; max-output-tokens=${maxOutputTokens ?? 'provider-default'}`,
         command,

@@ -21,6 +21,18 @@ Replace `VERSION` with an existing immutable package version. Eligible versions 
 
 Pi or OpenCode must be installed separately on a trusted PATH outside the reviewed repository. Redline never installs a harness or project dependency. The `echo` harness needs neither a model service nor a credential and always returns a clean review; use it only to check integration, not review quality.
 
+## Native model warmup
+
+Before file reviews, native CLI/Docker execution runs one bounded warmup through the selected harness and model. The model discovers configured MCPs/tools, attempts to prepare or reuse indexes over the captured head source, performs a relevant query, and returns a fixed JSON report. Redline does not manually start/probe native servers or require another model service.
+
+The warmup has a two-minute ceiling, at most one quarter of the remaining whole-run time, and a separate 4,096-token generation cap. It preserves native reasoning and provider retries. It can make multiple provider/tool requests, consumes time and can incur model charges. It never extends the run budget or changes the file-review output allowance.
+
+Availability and index warnings appear **before** the file workload starts. `reviews/warmup.json` records the redacted status, source/head identity, reported file count and persistence, plus observed query activity. Tool availability can be observed in native telemetry or only reported by the model; reported names do not become confirmed query capabilities. A model's `reported-ready` index is advisory, not proof of graph completeness. Fresh file processes first confirm a small relevant query. Session-only, mismatched, failed or unverified indexes do not become trusted cross-file evidence.
+
+Malformed, unavailable or timed-out optional warmup produces non-indexed prompt guidance and continues review. Confirmed shared credential/model/request failures stop new requests. Native tools and extra MCPs remain configured and available; warmup changes review guidance, not permissions. Do not run repository scripts, builds, tests or installers to prepare an index.
+
+The separate precomputed `--indexing` pipeline remains available with its existing provider-cache contract. Its coverage is not native MCP readiness. The development helper disables that separate pipeline by default so native warmup handles tool-driven indexing without duplicate preparation.
+
 ## Optional analysis tools
 
 Pi and OpenCode load their own global and checkout-local MCP configuration, tools, plugins and permissions. Redline invokes the installed CLI entry point directly, does not replace the user's home/configuration directories, and does not filter extra configured MCPs. The harness controls connection and tool discovery. Redline never installs a missing server during review.
@@ -259,6 +271,7 @@ Run `redline review --help` for the complete contract.
 - `--untracked exclude|include`: working-tree reviews only; default `exclude`.
 - Repeatable `--reporter cli|github|forgejo|gitea|gitlab|bitbucket`: only `cli` works today; default `cli`. Duplicates are rejected.
 - `--output PATH`: a new directory outside the reviewed repository, with an existing parent.
+- `--progress auto|always|never`: default `auto`; `always` keeps the live progress strip when stderr is piped through `tee`. Logs then contain terminal redraw control sequences. `never` suppresses the strip.
 - `--color auto|always|never`: default `auto`. A defined `NO_COLOR` disables colors, and `TERM=dumb` disables live terminal redraw and colors.
 - `--indexing enabled|disabled|required`: default `enabled`.
 - `--indexing-provider cgc|gitnexus`: default `cgc`.
@@ -289,6 +302,7 @@ Default artifact location: `$XDG_STATE_HOME/redline/reviews/run-*`, or `$HOME/.l
 - `capture.json`: requested and resolved revisions, snapshot identity, capture coverage, excluded untracked paths, and inert symlink path/target data.
 - `index/code-context.json`, `index/status.json`: bounded normalized context and actual source-validated coverage when indexing/import is enabled.
 - `reviews/`: existing validated file records, summary, and consolidated review as JSON and Markdown.
+- `reviews/warmup.json`: the bounded model-mediated startup readiness/indexing report, printed before file reviews.
 - `reviews/native-tools.json`: native catalog/server observations and observed calls, without arguments, results, reasoning or credentials. A successful call means the harness reported completion without a tool error, not semantic correctness. Isolated Actions use `reviews/analysis-tools.json` for their separate bounded MCP bridge.
 - `status.json`: local completion, failure, cancellation, or deadline classification and exit code.
 

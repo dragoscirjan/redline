@@ -84,7 +84,7 @@ describe.each(['node', ...(bunAvailable ? ['bun'] : [])])('offline installed pac
     const archive = packed.find(entry => entry.name === '@dragoscirjan/redline');
     if (archive === undefined) throw new Error('Redline package archive is missing');
     const paths = archive.files.map((entry) => entry.path);
-    expect(paths).toContain('prompts/v10/core-policy.md');
+    expect(paths).toContain('prompts/v11/core-policy.md');
     expect(paths).toContain('bin/redline-analysis.mjs');
     expect(paths).toContain('src/harness-executor/analysis-server.ts');
     expect(paths).toContain('bin/redline.mjs');

@@ -1,11 +1,14 @@
 /** Application facade. Source capture and reporting do not own review policy. */
 import type { ReviewEnvironment } from '../review/environment.ts';
 import { runFileReviews, type ReviewRunInput, type ReviewRunResult } from '../review/runner.ts';
+import type { NativeWarmupReport } from '../review/warmup.ts';
 import type { IntegrationStatus } from '../harness-executor/analysis.ts';
 import type { ReviewWriter } from '../review/writer.ts';
 
 export type ReviewEvent =
   | { readonly kind: 'started' }
+  | { readonly kind: 'warmup-started' }
+  | { readonly kind: 'warmup-ready'; readonly report: NativeWarmupReport }
   | { readonly kind: 'analysis-status'; readonly integrations: readonly IntegrationStatus[] }
   | { readonly kind: 'workload'; readonly files: number; readonly workers: number; readonly maximumExecutionMs: number; readonly remainingMs: number; readonly mayExceedDeadline: boolean; readonly scheduling: string; readonly staticHeadFiles: number }
   | { readonly kind: 'context-started'; readonly provider: string }
@@ -121,6 +124,8 @@ export class ReviewApplication {
         environment: { ...command.environment, reviewDirectory: captured.reviewDirectory, sourceDirectory: captured.sourceDirectory, codeContext },
         ...(this.dependencies.artifacts === undefined ? {} : { writer: this.dependencies.artifacts }),
         ...(captured.repositoryDirectory === undefined ? {} : { repositoryDirectory: captured.repositoryDirectory }),
+        onWarmupStarted: () => reporter.progress({ kind: 'warmup-started' }),
+        onWarmup: (report) => reporter.progress({ kind: 'warmup-ready', report }),
         onAnalysisStatus: (integrations) => reporter.progress({ kind: 'analysis-status', integrations }),
         onWorkload: (value) => reporter.progress({ kind: 'workload', ...value }),
         onReviewPlan: (files) => reporter.progress({ kind: 'planned', files }),

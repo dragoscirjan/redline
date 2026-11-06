@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nativeEnvironment, nativeToolEvidence, nativeOpenCodeServers, mergeNativeToolEvidence, nativeRequestedTools } from '../src/harness-executor/native.ts';
+import { nativeEnvironment, nativeToolEvidence, mergeNativeToolEvidence, nativeRequestedTools } from '../src/harness-executor/native.ts';
 
 const lines = (...events: unknown[]) => events.map(event => JSON.stringify(event)).join('\n');
 
@@ -19,17 +19,12 @@ describe('native harness environment', () => {
 });
 
 describe('observed native tool activity', () => {
-  it('retains only native server names/states and distinguishes connections from calls', () => {
-    const listing = nativeOpenCodeServers('● ✓ gitnexus connected\n│ https://private.invalid/token\n● ✗ cgc failed\n');
-    expect(listing).toEqual({ discovery: 'complete', servers: [{ name: 'gitnexus', status: 'connected' }, { name: 'cgc', status: 'failed' }] });
-    const report = mergeNativeToolEvidence([{ ...nativeToolEvidence('', 'opencode'), ...listing }]);
+  it('reads historical server observations without treating a connection as a successful call', () => {
+    const report = mergeNativeToolEvidence([{ ...nativeToolEvidence('', 'opencode'),
+      servers: [{ name: 'gitnexus', status: 'connected' }, { name: 'cgc', status: 'failed' }], discovery: 'complete' }]);
     expect(report.calls).toEqual([]);
     expect(nativeRequestedTools(report).find(row => row.component === 'gitnexus')?.observation).toBe('connected');
-    expect(JSON.stringify(report)).not.toContain('private.invalid');
-    expect(nativeOpenCodeServers('No MCP servers configured').discovery).toBe('complete');
-    expect(nativeOpenCodeServers('partial unknown output').discovery).toBe('incomplete');
-    expect(nativeOpenCodeServers('error: secret-token connected while loading config').servers).toEqual([]);
-    expect(nativeOpenCodeServers(Array.from({ length: 300 }, (_, n) => `● ✓ server${n} connected`).join('\n')).discovery).toBe('incomplete');
+    expect(nativeRequestedTools(report).find(row => row.component === 'cgc')?.observation).toBe('failed');
   });
 
   it('distinguishes catalog visibility, successful calls, failures and unfinished calls', () => {

@@ -57,6 +57,7 @@ jobs:
             benchmark/performance/v1/baseline \
             benchmark/policy-v8/performance \
             benchmark/policy-v10/performance \
+            benchmark/policy-v11/performance \
             benchmark/model-execution/v1/live-glm-5.3-flash/report.json \
             benchmark/model-execution/v1/live-glm-5.3-flash/report.md \
             benchmark/review-eligibility/v1/report.json \
@@ -70,6 +71,7 @@ jobs:
               benchmark/performance/v1/baseline \
               benchmark/policy-v8/performance \
               benchmark/policy-v10/performance \
+              benchmark/policy-v11/performance \
               benchmark/model-execution/v1/live-glm-5.3-flash/report.json \
               benchmark/model-execution/v1/live-glm-5.3-flash/report.md \
               benchmark/review-eligibility/v1/report.json \

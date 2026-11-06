@@ -9,6 +9,7 @@ import type {
   CodeContextTimings,
 } from '../code-context/artifact.ts';
 
+import type { NativeWarmupReport } from './warmup.ts';
 import type { NativeToolEvidence } from '../harness-executor/native.ts';
 
 export type FindingScope = 'defects' | 'defects-and-risks';
@@ -274,6 +275,7 @@ export interface ReviewExcludedFile {
 }
 
 export interface ReviewRunSummary {
+  readonly warmup?: NativeWarmupReport;
   readonly tools?: NativeToolEvidence;
   readonly version: typeof REVIEW_RUN_SUMMARY_VERSION;
   readonly harness: string;

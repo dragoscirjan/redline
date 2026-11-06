@@ -19,6 +19,7 @@ export interface LocalOptions {
     | { readonly kind: 'worktree'; readonly mode: 'staged' | 'unstaged' | 'all'; readonly untracked: boolean };
   readonly reporters: readonly string[];
   readonly color: 'auto' | 'always' | 'never';
+  readonly progress: 'auto' | 'always' | 'never';
   readonly indexing: {
     readonly mode: 'enabled' | 'disabled' | 'required';
     readonly provider: 'cgc' | 'gitnexus';
@@ -142,6 +143,8 @@ export function createReviewCommand(command: Command = new Command('review')): C
     // Control terminal presentation for interactive output or redirected logs.
     // This does not change findings or review policy.
     .option('--color <auto|always|never>', 'Terminal color; default auto; NO_COLOR disables colors')
+    // Keep the live progress display when explicitly requested through redirected output.
+    .option('--progress <auto|always|never>', 'Live progress; default auto; always keeps the bar through tee')
     // Choose whether the review policy permits only defects or also risks.
     // This changes what the model is asked to report, not just the process exit status.
     .option('--finding-scope <defects|defects-and-risks>', 'Finding policy; default defects')
@@ -324,6 +327,7 @@ export async function resolveLocalOptions(values: Readonly<Record<string, unknow
       artifact: artifact === undefined ? undefined : resolve(cwd, artifact),
       executable: indexExecutable === undefined ? undefined : resolve(cwd, indexExecutable),
       runtime: indexRuntime === undefined ? undefined : resolve(cwd, indexRuntime), repository: contextRepository },
+    progress: choice(get('progress', 'auto'), ['auto', 'always', 'never'], 'progress'),
     reporters, color: choice(get('color', 'auto'), ['auto', 'always', 'never'], 'color'), failOn: choice(get('fail-on', 'none'), ['none', 'findings', 'high', 'critical'], 'fail-on'), environment: { ...parsed.review,
       retries,
       scheduling: choice(get('scheduling', 'largest-first'), ['largest-first', 'mixed'] as const, 'scheduling'),

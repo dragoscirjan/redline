@@ -37,7 +37,7 @@ Technical accuracy and safety take priority if the rules conflict.
 
 Pi can add response guidance through harness extensions. Other coding harnesses do not always support the same extension model.
 
-This skill moves the guidance into the portable `.agents/skills/` format. Pi and OpenCode can discover the same skill from the repository. No Pi extension code is included or required.
+This skill moves the guidance into the portable Agent Skills format. Pi and OpenCode discover the canonical `.agents/skills/` directory, while Claude Code can use a project-local `.claude/skills/` projection. No harness extension code is included or required.
 
 ## Adaptations for technical work
 

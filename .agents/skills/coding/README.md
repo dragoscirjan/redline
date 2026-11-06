@@ -38,7 +38,7 @@ A future extension skill follows the same rules for both `coding` and its langua
 
 The more specific skill overrides only an explicit conflict. Dependencies must not form a cycle.
 
-Do not rely on a harness-specific Skill tool. Use the skill metadata and paths that the active harness advertises. Pi and OpenCode must discover every skill as a flat sibling.
+Do not rely on a harness-specific Skill tool. Use the skill metadata and paths that the active harness advertises. Pi and OpenCode must discover every canonical skill as a flat sibling under `.agents/skills/`; Claude Code must discover equivalent flat sibling projections under `.claude/skills/`.
 
 ## Quality gates
 

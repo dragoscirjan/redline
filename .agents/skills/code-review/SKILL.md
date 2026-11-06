@@ -1,232 +1,95 @@
 ---
 name: code-review
-description: Review an implementation against a GitHub issue and every descendant issue, then return an evidence-backed verdict with findings, coverage, tests, and next steps. Use when requirements live in issue trees or when a code review must trace each finding to an issue requirement.
+description: "Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes: Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Runs both reviews in parallel sub-agents and reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to \"review since X\"."
+license: MIT
+compatibility: Requires Git and a harness that can run two read-only subagents in parallel.
 metadata:
-  short-description: Review code against an issue tree
+  author: Matt Pocock
+  source: https://github.com/mattpocock/skills/tree/59db609eb1e18aaf59b63284d0e52255aff0c63c/skills/engineering/code-review
+  upstream-commit: "59db609eb1e18aaf59b63284d0e52255aff0c63c"
 ---
 
-# Issue-driven code review
+Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
 
-Review the implementation against the complete issue tree. Treat the issues as the specification and the repository as the evidence. Do not modify code, tests, configuration, documentation, branches, issues, or pull requests during the review.
+- **Standards**: does the code conform to this repo's documented coding standards?
+- **Spec**: does the code faithfully implement the originating issue / spec?
 
-The review is complete only when every reachable descendant has been read, every material requirement has a coverage status, and every reported finding points to both a requirement and actual code behavior.
+Both axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings. Keep both sub-agents read-only. They may inspect repository state and run non-mutating checks, but they must not edit files, commit, push, or post review comments.
 
-## Scope and routing
+Use the repository's configured issue tracker when one is available. If it is not available, ask the user for the originating issue or spec.
 
-Start by identifying:
+## Process
 
-- The root issue URL, repository, issue number, and requested implementation ref or worktree.
-- The repository's local instructions, review conventions, package manager, task runner, and required tools.
-- Whether the request is a normal review, a high-risk review, or a review that needs a second independent pass.
+### 1. Pin the fixed point
 
-Use the narrowest available supporting workflow. Do not invoke every skill for every review.
+Whatever the user said is the fixed point (a commit SHA, branch name, tag, `main`, `HEAD~5`, etc.). If they didn't specify one, ask for it.
 
-- Use a code walkthrough workflow such as `how` when the relevant behavior spans unfamiliar modules or services.
-- Use a rationale or history workflow such as `why` when the issue depends on design intent that the current code and issue bodies do not establish.
-- Use a blast-radius workflow when the change looks local but may affect callers, wire formats, persisted data, integrations, or other packages.
-- Use an adversarial review workflow such as `interrogate` for high-risk, cross-cutting, security-sensitive, or disputed reviews. Give every reviewer the same scope and rubric, then deduplicate and judge the results yourself.
-- Use a decision-trail workflow such as `show-me-your-work` for long, unattended, or high-stakes reviews.
-- If no narrower workflow fits, design a short review playbook before inspecting code, following the principle behind `figure-it-out`.
+Capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so the comparison is against the merge-base). Also note the list of commits via `git log <fixed-point>..HEAD --oneline`.
 
-If a supporting skill is unavailable, perform only the relevant part inline. Never expand the review merely to justify another skill invocation.
+Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref or empty diff should fail here, not inside two parallel sub-agents.
 
-## 1. Read the complete issue tree
+### 2. Identify the spec source
 
-Read the root issue body completely. Then discover and read all direct children recursively, including grandchildren and deeper descendants.
+Look for the originating spec, in this order:
 
-For GitHub, use the connected GitHub tools or `gh` when available. Page every collection. A practical API route is:
+1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.), fetched through the repository's configured issue-tracker tools.
+2. A path the user passed as an argument.
+3. A spec file under `docs/`, `specs/`, or `.scratch/` matching the branch name or feature.
+4. If nothing is found, ask the user where the spec is. If they say there isn't one, the **Spec** sub-agent will skip and report "no spec available".
 
-```text
-/repos/{owner}/{repo}/issues/{number}/sub_issues?per_page=100&page=N
-```
+### 3. Identify the standards sources
 
-Continue until a page is empty. For every discovered issue, read its complete body and relevant comments. Follow linked design documents, pull requests, commits, or wiki pages when the issue treats them as part of the requirement. Do not assume the title or checkbox list is complete.
+Search the repo for every file that documents how code should be written. When `CODING_STANDARDS.md` or `CONTRIBUTING.md` exists, it must be on the list.
 
-Build an issue graph with at least:
+On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below: a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
 
-```text
-issue number, parent number, title, state, labels, body, comments,
-linked requirement sources, direct children, and retrieval status
-```
+- **The repo overrides.** A documented repo standard always wins; where it endorses something the baseline would flag, suppress the smell.
+- **Always a judgement call.** Each smell is a labelled heuristic ("possible Feature Envy"), never a hard violation. Like any standard here, skip anything tooling already enforces.
 
-Check the graph before proceeding:
+Each smell reads *what it is* → *how to fix*; match it against the diff:
 
-- Every child has a parent in the graph.
-- No child was silently dropped because a response was truncated or paginated.
-- Duplicate references resolve to one issue record.
-- Cycles, inaccessible issues, and ambiguous parentage are recorded.
-- An issue being closed does not count as evidence that its acceptance criteria are satisfied.
+- **Mysterious Name**: a function, variable, or type whose name doesn't reveal what it does or holds. → rename it; if no honest name comes, the design's murky.
+- **Duplicated Code**: the same logic shape appears in more than one hunk or file in the change. → extract the shared shape, call it from both.
+- **Feature Envy**: a method that reaches into another object's data more than its own. → move the method onto the data it envies.
+- **Data Clumps**: the same few fields or params keep travelling together (a type wanting to be born). → bundle them into one type, pass that.
+- **Primitive Obsession**: a primitive or string standing in for a domain concept that deserves its own type. → give the concept its own small type.
+- **Repeated Switches**: the same `switch`/`if`-cascade on the same type recurs across the change. → replace with polymorphism, or one map both sites share.
+- **Shotgun Surgery**: one logical change forces scattered edits across many files in the diff. → gather what changes together into one module.
+- **Divergent Change**: one file or module is edited for several unrelated reasons. → split so each module changes for one reason.
+- **Speculative Generality**: abstraction, parameters, or hooks added for needs the spec doesn't have. → delete it; inline back until a real need shows.
+- **Message Chains**: long `a.b().c().d()` navigation the caller shouldn't depend on. → hide the walk behind one method on the first object.
+- **Middle Man**: a class or function that mostly just delegates onward. → cut it, call the real target direct.
+- **Refused Bequest**: a subclass or implementer that ignores or overrides most of what it inherits. → drop the inheritance, use composition.
 
-If the graph cannot be proven complete, return `BLOCKED — insufficient information` and name the missing branch or inaccessible source.
+### 4. Spawn both sub-agents in parallel
 
-## 2. Build the consolidated specification
+Issue both sub-agent calls together, in the foreground, and aggregate the reports they return.
 
-Convert the issue tree into one requirement ledger. Preserve the source issue for every entry. Assign stable local IDs such as `R-001` and `AC-001`.
+**Standards sub-agent prompt** should include:
 
-Classify each item as one of:
+- The full diff command and commit list.
+- The list of standards-source files you found in step 3, **plus the smell baseline from step 3** pasted in full (the sub-agent has no other access to it).
+- The brief: "Report, per file/hunk where relevant, (a) every place the diff violates a documented standard: cite the standard (file + the rule); and (b) any baseline smell you spot: name it and quote the hunk. Distinguish hard violations from judgement calls: documented-standard breaches can be hard, but baseline smells are always judgement calls, and a documented repo standard overrides the baseline. Skip anything tooling enforces. Under 400 words."
 
-- Functional behavior.
-- Non-functional behavior such as security, reliability, performance, concurrency, compatibility, operability, or data integrity.
-- Acceptance criterion.
-- Constraint, invariant, edge case, or explicit non-goal.
-- Required test, documentation, migration, configuration, packaging, release, or operational change.
-- Ambiguity that needs clarification.
+**Spec sub-agent prompt** should include:
 
-When parent and child issues overlap, keep one consolidated requirement and list every source issue. When they conflict, do not choose silently. Record the conflict as an ambiguity and evaluate whether the implementation satisfies either interpretation.
+- The diff command and commit list.
+- The path or fetched contents of the spec.
+- The brief: "Report: (a) requirements the spec asked for that are missing or partial; (b) behaviour in the diff that wasn't asked for (scope creep); (c) requirements that look implemented but where the implementation looks wrong. Quote the spec line for each finding. Under 400 words."
 
-For each requirement, capture:
+If the spec is missing, skip the Spec sub-agent and note this in the final report.
 
-```text
-id
-source issue(s)
-exact requirement in plain language
-category
-observable proof expected
-dependencies or affected surfaces
-ambiguity, if any
-```
+### 5. Aggregate
 
-Separate requirements from recommendations. A suggestion in an issue is not an acceptance criterion unless the issue makes it binding.
+Present the two reports under `## Standards` and `## Spec` headings, verbatim or lightly cleaned. Do **not** merge or rerank findings, because the two axes are deliberately separate (see _Why two axes_).
 
-## 3. Map the implementation before judging it
+End with a one-line summary: total findings per axis, and the worst issue _within each axis_ (if any). Don't pick a single winner across axes: that's the reranking the separation exists to prevent.
 
-Read repository guidance before code. Check files such as `AGENTS.md`, `CONTRIBUTING.md`, package manifests, workspace configuration, CI workflows, release configuration, and documentation rules.
+## Why two axes
 
-Identify:
+A change can pass one axis and fail the other:
 
-- The implementation files and symbols related to the issue.
-- Public API and adapter layers.
-- Tests and fixtures.
-- Database models, migrations, indexes, and seed data.
-- Configuration schemas, loaders, defaults, and environment bindings.
-- Error types, retry and timeout behavior, locks, transactions, cleanup, and rollback paths.
-- Authentication, authorization, secret handling, logging, metrics, and tracing.
-- Documentation, package metadata, generated artifacts, changesets, and release configuration.
-- Callers, consumers, compatibility boundaries, and code in other packages or languages.
+- Code that follows every standard but implements the wrong thing → **Standards pass, Spec fail.**
+- Code that does exactly what the issue asked but breaks the project's conventions → **Spec pass, Standards fail.**
 
-Use repository-mandated indexing tools when available. Scope every query to the target repository or worktree. If local instructions require an indexer and none is available, record that limitation instead of pretending a text search is equivalent.
-
-Keep large raw outputs out of the main reasoning context. Store or delegate bulky issue, code, and test output, then retain concise notes with exact paths, symbols, line numbers, and commands.
-
-## 4. Inspect and verify
-
-Trace each requirement through the real implementation. Read enough surrounding code to understand ownership, control flow, state transitions, failure handling, and callers. Do not mark a requirement satisfied because a related function or test exists.
-
-For each requirement, look for the strongest available evidence:
-
-1. Direct source inspection with an exact location.
-2. A focused test or script that exercises the real behavior.
-3. An integration or end-to-end test across the relevant boundary.
-4. A safe runtime reproduction or observed command result.
-
-Prefer direct evidence over agent summaries, comments, names, or compilation alone. A passing build does not prove behavior. A test that only checks implementation details does not prove a user-visible contract.
-
-Run existing validation only when it is safe and non-mutating under the repository rules. Prefer the repository's documented task runner. Use disposable databases, temporary folders, isolated ports, and test fixtures where required. Do not run migrations, destructive cleanup, deployment, or external writes against shared resources. Do not repair failing tests during the review.
-
-Before and after commands, check that the working tree remains unchanged. If a tool generates files, record the generated changes and stop rather than deleting user work. Only remove artifacts that the review itself created and can identify exactly.
-
-Pay special attention to:
-
-- Partial failure after a write, rename, commit, or remote request.
-- Retry, timeout, cancellation, stale locks, and idempotency behavior.
-- Concurrent operations and isolation between tenants, projects, scopes, or workspaces.
-- Input validation before mutation and output contracts at every adapter.
-- Backward compatibility for existing callers, data, configuration, and wire formats.
-- Resource limits, pagination, ordering, cache freshness, and large inputs.
-- Security boundaries, symlink or path traversal behavior, secrets, permissions, and information leakage.
-- Test isolation, cleanup, fixture lifecycle, and whether the test actually reaches the claimed path.
-
-## 5. Report findings
-
-Report only issues supported by the issue ledger and actual evidence. Do not report hypothetical risks, style preferences, or duplicate descriptions of one root problem.
-
-Use these severity levels:
-
-- `BLOCKER`: The implementation cannot be safely merged or validated.
-- `CRITICAL`: Data loss, corruption, security exposure, severe production failure, or a direct violation of a core requirement.
-- `MAJOR`: Incorrect user-visible behavior, important missing requirement, serious reliability or compatibility risk, or a required acceptance test that is absent.
-- `MINOR`: Limited requirement gap or low-impact correctness, documentation, or testing issue.
-- `INFO`: Ambiguity, observation, or follow-up that does not by itself block the change.
-
-Sort findings by severity. For every finding, use this exact information:
-
-```text
-ID: F-001
-Severity: MAJOR
-Type: missing requirement | incorrect behavior | edge case | regression |
-      security | performance | reliability | testing | documentation | ambiguity
-Requirement: R-### or AC-###, with the source issue number
-Location: exact repository path and line number, or symbol when line numbers are unavailable
-Problem: the concrete defect or missing work
-Evidence: what the code, test, command, or artifact shows
-Impact: what can happen in practice
-Recommendation: the smallest concrete correction or clarification
-```
-
-A finding must answer all of these questions:
-
-- What requirement is affected?
-- Where is the behavior implemented or missing?
-- What evidence proves the claim?
-- What user, data, security, reliability, or maintenance impact follows?
-- What should happen next?
-
-If the implementation is correct, write exactly `No correctness or requirement gaps found.` in the findings section. Do not invent a finding to make the review look useful.
-
-## 6. Use the required output
-
-Begin with exactly one verdict:
-
-```text
-APPROVE
-APPROVE WITH minor concerns
-CHANGES REQUIRED
-BLOCKED — insufficient information
-```
-
-Then use this structure:
-
-```markdown
-### 1. Executive summary
-
-Briefly state whether the implementation satisfies the issue tree and why.
-
-### 2. Findings
-
-Findings sorted by severity. Use the required fields for each finding.
-
-### 3. Requirement coverage matrix
-
-| Requirement | Source issue | Status                                               | Evidence |
-| ----------- | ------------ | ---------------------------------------------------- | -------- |
-| ...         | ...          | Satisfied / Partial / Missing / Violated / Ambiguous | ...      |
-
-### 4. Test assessment
-
-Explain which requirements have behavioral coverage, which important cases are untested, whether tests validate behavior or implementation details, and the additional tests needed.
-
-### 5. Positive observations
-
-Mention correct and useful implementation choices that are supported by evidence.
-
-### 6. Final recommendation
-
-State whether the change can be merged, which findings must be fixed first, which tests or documentation are required, and which clarification questions remain.
-```
-
-Do not hide unresolved ambiguity inside a finding. Put it in the ambiguity register and mark affected requirements `Ambiguous` in the matrix. If one interpretation would violate a requirement and another would not, explain both and ask for clarification.
-
-## 7. Writing pass
-
-Before returning the review, remove filler and vague claims. Keep the meaning, evidence, and exact paths intact.
-
-- Use short, direct sentences.
-- Name the actor and mechanism instead of saying that something is "handled" or "ensured".
-- Replace claims such as "the implementation appears robust" with the exact behavior and proof.
-- Avoid decorative headings, repeated conclusions, stock chatbot phrases, and unnecessary jargon.
-- Use straight quotes and ordinary punctuation. Avoid em dashes except for the required blocked verdict literal.
-- Keep one idea per sentence where possible.
-- Do not soften a confirmed defect with excessive hedging.
-- Do not turn every finding into a three-part slogan.
-
-The final review should sound like a senior engineer explaining what the code proves, what it does not prove, and what must happen next.
+Reporting them separately stops one axis from masking the other.

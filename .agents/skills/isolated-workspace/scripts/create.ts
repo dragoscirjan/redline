@@ -57,6 +57,8 @@ interface CreatePlan {
   commands: PlannedCommand[];
 }
 
+const LANE_MARKER = "--lane-";
+
 const HELP = `Usage:
   bun scripts/create.ts --vcs git|jj --branch NAME [--base REVISION] [--dry-run]
   bun scripts/create.ts --vcs git|jj --branch NAME [--base REVISION] --apply --confirm --plan-id ID
@@ -84,7 +86,42 @@ Exit codes:
 Examples:
   bun scripts/create.ts --vcs git --branch change/issue-42
   bun scripts/create.ts --vcs git --branch change/issue-42 --apply --confirm --plan-id PLAN_ID
+  bun scripts/create.ts --vcs git --branch change/issue-42--lane-worker-a --base change/issue-42
   bun scripts/create.ts --vcs jj --branch change/issue-42 --base main --apply --confirm --plan-id PLAN_ID`;
+
+function laneCanonicalRef(branch: string): string | null {
+  const markerIndex = branch.indexOf(LANE_MARKER);
+  return markerIndex === -1 ? null : branch.slice(0, markerIndex);
+}
+
+function validateLaneIdentity(options: CreateOptions): void {
+  const markerIndex = options.branch.indexOf(LANE_MARKER);
+  if (markerIndex === -1) return;
+  if (markerIndex === 0 || markerIndex !== options.branch.lastIndexOf(LANE_MARKER)) {
+    throw new WorkspaceError(
+      `Temporary lane refs must use CANONICAL_REF${LANE_MARKER}LANE_KEY exactly once`,
+      EXIT.USAGE,
+    );
+  }
+  const canonicalRef = options.branch.slice(0, markerIndex);
+  const laneKey = options.branch.slice(markerIndex + LANE_MARKER.length);
+  const canonicalLeaf = assertSafeBranch(canonicalRef);
+  if (!laneKey || assertSafeBranch(laneKey) !== laneKey) {
+    throw new WorkspaceError("Temporary lane keys must be one safe path component", EXIT.USAGE);
+  }
+  if (assertSafeBranch(options.branch) !== `${canonicalLeaf}${LANE_MARKER}${laneKey}`) {
+    throw new WorkspaceError(
+      "A temporary lane workspace leaf must be the basename of its full lane ref",
+      EXIT.USAGE,
+    );
+  }
+  if (options.base !== canonicalRef) {
+    throw new WorkspaceError(
+      "A temporary lane requires --base to equal its canonical ref exactly",
+      EXIT.USAGE,
+    );
+  }
+}
 
 function gitPlan(options: CreateOptions): CreatePlan {
   const repository = detectRepository("git");
@@ -97,7 +134,14 @@ function gitPlan(options: CreateOptions): CreatePlan {
   if (checked.status !== 0) {
     throw new WorkspaceError(`Invalid Git branch name: ${options.branch}`, EXIT.USAGE);
   }
-  const base = gitBase(repository.primaryRoot, options.base);
+  const canonicalRef = laneCanonicalRef(options.branch);
+  const resolvedBase = gitBase(
+    repository.primaryRoot,
+    canonicalRef ? `refs/heads/${canonicalRef}` : options.base,
+  );
+  const base = canonicalRef
+    ? { expression: canonicalRef, commit: resolvedBase.commit }
+    : resolvedBase;
   const worktrees = listGitWorktrees(repository.primaryRoot);
   const expectedPath = canonicalIfExists(layout.workspacePath);
   const atPath = worktrees.find(
@@ -353,6 +397,7 @@ async function main() {
     throw new WorkspaceError("--apply requires --plan-id from the approved plan", EXIT.USAGE);
   }
   assertSafeBranch(options.branch);
+  validateLaneIdentity(options);
   const plan = buildPlan(options);
   const workspaceRootAction = existsSync(plan.layout.workspaceRoot)
     ? "reuse-directory"

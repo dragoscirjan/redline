@@ -142,6 +142,78 @@ describe("isolated-workspace create script", () => {
       .toBe("change/issue-42");
   });
 
+  test("creates a temporary sibling lane from an explicit canonical Git base", () => {
+    const repository = gitRepository();
+    const canonicalArgs = ["--vcs", "git", "--branch", "change/-canonical", "--base", "main"];
+    const canonicalPlan = output(invoke(repository, canonicalArgs));
+    output(invoke(repository, approvedApply(canonicalArgs, canonicalPlan)));
+    writeFileSync(join(canonicalPlan.result.workspacePath, "canonical.txt"), "canonical\n");
+    mustRun("git", ["add", "canonical.txt"], canonicalPlan.result.workspacePath);
+    mustRun("git", ["commit", "-qm", "canonical change"], canonicalPlan.result.workspacePath);
+    mustRun("git", ["tag", "change/-canonical", "main"], repository);
+
+    const laneArgs = [
+      "--vcs",
+      "git",
+      "--branch",
+      "change/-canonical--lane-worker-a",
+      "--base",
+      "change/-canonical",
+    ];
+    const lanePlan = output(invoke(canonicalPlan.result.workspacePath, laneArgs));
+    output(invoke(canonicalPlan.result.workspacePath, approvedApply(laneArgs, lanePlan)));
+
+    expect(lanePlan.result.workspacePath).toBe(`${repository}--workspaces/-canonical--lane-worker-a`);
+    expect(mustRun("git", ["rev-parse", "HEAD"], lanePlan.result.workspacePath).stdout.trim())
+      .toBe(mustRun("git", ["rev-parse", "HEAD"], canonicalPlan.result.workspacePath).stdout.trim());
+  });
+
+  test("rejects invalid temporary lane identity and nested lane provenance", () => {
+    const repository = gitRepository();
+
+    const missingBase = invoke(repository, [
+      "--vcs",
+      "git",
+      "--branch",
+      "change/canonical--lane-worker-a",
+    ]);
+    expect(missingBase.status).toBe(2);
+    expect(missingBase.stderr).toContain("requires --base");
+
+    const wrongBase = invoke(repository, [
+      "--vcs",
+      "git",
+      "--branch",
+      "change/canonical--lane-worker-a",
+      "--base",
+      "main",
+    ]);
+    expect(wrongBase.status).toBe(2);
+    expect(wrongBase.stderr).toContain("equal its canonical ref");
+
+    const nestedLane = invoke(repository, [
+      "--vcs",
+      "git",
+      "--branch",
+      "change/canonical--lane-worker-a--lane-child",
+      "--base",
+      "change/canonical--lane-worker-a",
+    ]);
+    expect(nestedLane.status).toBe(2);
+    expect(nestedLane.stderr).toContain("exactly once");
+
+    const pathKey = invoke(repository, [
+      "--vcs",
+      "git",
+      "--branch",
+      "change/canonical--lane-team/worker-a",
+      "--base",
+      "change/canonical",
+    ]);
+    expect(pathKey.status).toBe(2);
+    expect(pathKey.stderr).toContain("one safe path component");
+  });
+
   test("rejects apply when repository state differs from the approved plan", () => {
     const repository = gitRepository();
     const args = ["--vcs", "git", "--branch", "change/state-change"];

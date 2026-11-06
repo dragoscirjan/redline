@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "skills": {
+    "asd-ste100-technical": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/asd-ste100-technical/SKILL.md",
+      "computedHash": "5150a0a2a3695d7554e24c0c57d09f6d8ebe9c598c4e4771fb3f6f39d2a5d03e"
+    },
+    "caveman": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/caveman/SKILL.md",
+      "computedHash": "474dbba1cdcb84b0427557ac03cc6bc42d89f09f8f773e50a5df5fee6bae50fb"
+    },
+    "cleanup-workspaces": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/cleanup-workspaces/SKILL.md",
+      "computedHash": "48b3288971c4b633012281759e1decfe51b7edff6b044628dc9ba38b4bf24013"
+    },
+    "code-review": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/code-review/SKILL.md",
+      "computedHash": "6ad28bac758922b7b3c4e5a6b930a8d9e7365de2c64dbba6a9e34ae7b8df3b01"
+    },
+    "coding": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/coding/SKILL.md",
+      "computedHash": "cadededc6d86776d7e5625fa0d87ba21c1ccd0b360a064660d9fc0ccb22038a3"
+    },
+    "coding-bash": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/coding-bash/SKILL.md",
+      "computedHash": "777afb1d772b67192e69f605af4844f5b7261c65eac121a16ac53ee04480c0e5"
+    },
+    "coding-js": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/coding-js/SKILL.md",
+      "computedHash": "4a1f44fa0e013cbb09dccc9c5c3c92c4c366ad607c4fa2f9d5111de0fe9e4388"
+    },
+    "coding-mjs": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/coding-mjs/SKILL.md",
+      "computedHash": "0e1b62314c9159b722ab9c3b3e63a82e381f676b61f37d9a389a2c51908a1eee"
+    },
+    "coding-py": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/coding-py/SKILL.md",
+      "computedHash": "86ba5359527f01f9dda401a24ca148cacbc184514b72ea987f9aaffacb9b4d54"
+    },
+    "coding-sh": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/coding-sh/SKILL.md",
+      "computedHash": "9f09be83e0addfd28acca713143c4b007953071d54a37a25fbfb4de3ced48f91"
+    },
+    "coding-ts": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/coding-ts/SKILL.md",
+      "computedHash": "64a89c49f854bfaca9e7be42b370ee94112a6010259f9e6711cca05e5806904d"
+    },
+    "grill-me": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/grill-me/SKILL.md",
+      "computedHash": "3dbb212af4dc05c2de8929e1959c976edccb3045de509c22f9ac741c321c00a6"
+    },
+    "grilling": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/grilling/SKILL.md",
+      "computedHash": "10d5bcce93e8a40c691a98934f608f172ade8e1c8248c979dfbbf363f2140a78"
+    },
+    "instruction-maintenance": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/instruction-maintenance/SKILL.md",
+      "computedHash": "1003cc0192c767852e5f180c4da1199ae83f0bd0f185bfb3d9b7af69816946e9"
+    },
+    "isolated-workspace": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/isolated-workspace/SKILL.md",
+      "computedHash": "184b0a8519e5880fe83a25d41958c1c1e4fb4a3522ce9fe1a436e72a07420bc4"
+    },
+    "subagent-orchestration": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/subagent-orchestration/SKILL.md",
+      "computedHash": "873617fe68f1d18e93d8f5606e1e8c4221d223e368409086093f7c76484af748"
+    },
+    "sync-agent-assets": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/sync-agent-assets/SKILL.md",
+      "computedHash": "c041035cac078959088a89f2a0b273f9c2dabd132be99acb1407cbd5411778ca"
+    },
+    "systematic-debugging": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/systematic-debugging/SKILL.md",
+      "computedHash": "7972fd475308173b73843acfc11e83209a9526c813d8a95fb2cd5a531f2d26a7"
+    },
+    "unslop": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/unslop/SKILL.md",
+      "computedHash": "d003127ca47fb71416c3bb06ad01abd81c68fe47d96a708a0dac5f3d41b29bb4"
+    },
+    "wait-what": {
+      "source": "dragoscirjan/ai",
+      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/wait-what/SKILL.md",
+      "computedHash": "a32b8ec8e65cacd0f81aa3602fa2136880a3e3c7e7c7b54f6c6584fa1d59936e"
+    }
+  }
+}

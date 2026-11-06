@@ -1,6 +1,6 @@
 # Isolated workspace
 
-`isolated-workspace` protects the primary checkout by creating each change in a dedicated Git worktree or Jujutsu workspace.
+`isolated-workspace` protects the primary checkout by creating each change in a dedicated Git worktree or Jujutsu workspace. The tracked change has one canonical integration workspace; approved orchestration may create temporary sibling lanes beside it, never inside it.
 
 ## Automation
 
@@ -17,7 +17,7 @@ The caller must provide:
 --branch FULL_NAME
 ```
 
-The VCS is never inferred. The script detects the primary local repository and derives a sibling `<repository>--workspaces` directory. The final component of the branch or bookmark becomes the workspace directory and Jujutsu workspace name.
+The VCS is never inferred. The script detects the primary local repository and derives a sibling `<repository>--workspaces` directory. The final component of the branch or bookmark becomes the workspace directory and Jujutsu workspace name. One writer owns each workspace.
 
 The default mode emits a JSON plan and does not create a workspace. The plan includes a `planId`. Mutation requires `--apply`, `--confirm`, and that exact ID through `--plan-id`; the script rechecks the plan immediately before running commands.
 
@@ -30,6 +30,20 @@ bun scripts/create.ts --vcs git --branch change/issue-42 --base main
 bun scripts/create.ts --vcs git --branch change/issue-42 --base main \
   --apply --confirm --plan-id PLAN_ID
 ```
+
+Plan and then create a temporary Git lane from the explicit canonical ref:
+
+```sh
+bun scripts/create.ts --vcs git \
+  --branch change/issue-42--lane-worker-a \
+  --base change/issue-42
+bun scripts/create.ts --vcs git \
+  --branch change/issue-42--lane-worker-a \
+  --base change/issue-42 \
+  --apply --confirm --plan-id PLAN_ID
+```
+
+Use the same pattern with `--vcs jj`. Temporary lane refs must be `${CANONICAL_REF}--lane-${LANE_KEY}` with a one-component lane key; their workspace leaf is the basename of that ref. The `--lane-` marker is reserved, so canonical refs cannot contain it. The helper requires the exact canonical ref as the explicit base and rejects nested lane provenance.
 
 Plan and then create a Jujutsu workspace and bookmark:
 

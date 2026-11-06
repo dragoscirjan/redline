@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent skill catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "repository", "profiles", "skills"],
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "schemaVersion": { "const": 1 },
+    "repository": { "type": "string", "minLength": 1 },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manager", "bootstrap", "coreInstructions"],
+      "properties": {
+        "manager": { "$ref": "#/$defs/skillNames" },
+        "bootstrap": { "$ref": "#/$defs/skillNames" },
+        "coreInstructions": { "$ref": "#/$defs/skillNames" }
+      }
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "category", "selection", "dependencies", "safety", "harnesses", "signals"],
+        "properties": {
+          "name": { "$ref": "#/$defs/skillName" },
+          "category": { "type": "string", "minLength": 1 },
+          "selection": {
+            "enum": ["manager", "bootstrap", "core", "detected", "wrapper", "optional", "initializer"]
+          },
+          "dependencies": { "$ref": "#/$defs/skillNames" },
+          "safety": { "type": "string", "minLength": 1 },
+          "harnesses": {
+            "type": "array",
+            "uniqueItems": true,
+            "minItems": 1,
+            "items": { "enum": ["pi", "opencode", "claude-code"] }
+          },
+          "requires": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "provenance": { "enum": ["local", "vendored"] },
+          "signals": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "files": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "extensions": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "type": "string", "pattern": "^\\.[A-Za-z0-9]+$" }
+              },
+              "askWithoutSignals": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "skillName": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "skillNames": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/skillName" }
+    }
+  }
+}

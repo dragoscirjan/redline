@@ -22,7 +22,7 @@ The stack is pnpm, TypeScript, Node, Bun, vitest, bats, and VitePress. Do not ad
 ## Branches and pull requests
 
 1. Create a focused branch from `main` for each issue.
-2. Check it out in a dedicated worktree: `git worktree add ../redline--workspaces/<branch-name> -b <branch> origin/main`. Do not implement changes in the primary checkout.
+2. Follow `.agents/skills/isolated-workspace/SKILL.md` to plan and create its dedicated sibling worktree. Pass `--vcs git`, the full branch name, and `--base origin/main`. Obtain approval of the exact plan before applying it. Do not implement changes in the primary checkout.
 3. Commit with Conventional Commits.
 4. Run `mise run validate` before pushing.
 5. Open a pull request linked to the issue and relevant docs pages.
@@ -54,21 +54,25 @@ Tests use temporary directories and repositories. They must not modify the contr
 
 ## Before pushing, run the validation gate
 
-```bash
-mise run validate
-```
-
-The gate runs these tasks in order and stops on the first failure:
-
-1. `mise run typecheck` checks TypeScript without emitting files.
-2. `mise run test` runs the vitest and bats suites against TypeScript source. Node/Bun compatibility is enforced by no-emit type checking and the source-runtime integration matrix.
-3. `mise run docs` builds the VitePress site.
-
-Formatting, linting, duplication analysis, dependency vulnerability audits, recorded review-quality evaluation, and Git hooks are not implemented gates. Do not claim they passed or add no-op replacements. Adding them requires a separate reviewed change.
-
-A passing local gate does not prove live model quality, forge comment publication, or production action compatibility.
+Read and follow [`VALIDATION.md`](VALIDATION.md) before validating, committing,
+pushing, or publishing. It defines the existing `mise run validate` gate and
+the checks for agent-asset changes. Do not install missing tools or change
+validation policy without owner approval.
 
 The publication layer keeps the pull request informed while a review runs: a start notification is published into the managed summary comment before the review executes, and the same comment is replaced by the run summary or the failure state at completion. In the action these are separate steps with their own freshly minted tokens (the review step runs token-free); a failed start notification never aborts the review — artifacts remain the guaranteed output.
+
+## Agent instruction maintenance
+
+`AGENTS.md` routes shared instructions; `CLAUDE.md` imports it for Claude Code.
+Keep detailed reusable procedures in skills and validation policy in
+`VALIDATION.md`. Imported assets do not override Redline's security rules,
+workflow gates, toolchain policy, or owner authority.
+
+Use `instruction-maintenance` to audit instruction drift and prepare an exact
+proposal. Obtain explicit owner approval of the stated files and changes before
+editing instructions. Changed evidence, scope, dependencies, or protected rules
+requires a revised proposal and approval. An audit is not permission to mutate,
+commit, push, publish, merge, or release.
 
 ## Documentation
 

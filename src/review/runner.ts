@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { disposeAnalysis, integrationToolNames, type IntegrationStatus } from '../harness-executor/analysis.ts';
+import { mergeNativeToolEvidence } from '../harness-executor/native.ts';
 import { createHarnessExecutor } from '../harness-executor/registry.ts';
 import { augmentHeadContext } from './head-context.ts';
 import { scheduleBySize, workloadBound } from './scheduling.ts';
@@ -290,6 +291,7 @@ async function reviewOneFile(
       harness: environment.harness,
       model: environment.model.model,
       tools: integrationToolNames(prepared.analysis, environment.harness === 'opencode' ? 'opencode' : 'pi'),
+      executionMode: prepared.executionMode ?? 'isolated',
       indexedContext: fileContext.prompt,
       sourceContextStrategy,
       followUpAvailable: verifyCandidates && environment.codeContext !== undefined
@@ -972,12 +974,21 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           });
         }
         const invocation = sharedFailure.runs.get(file.id);
+        const observed = invocation?.run.telemetry?.tools;
+        if (observed !== undefined) {
+          record = { ...record, tools: { ...observed,
+            catalogue: observed.catalogue.map(name => redactCredential(name, environment.credential)),
+            ...(observed.servers === undefined ? {} : { servers: observed.servers.map(server => ({ ...server, name: redactCredential(server.name, environment.credential) })) }),
+            calls: observed.calls.map(call => ({ ...call, name: redactCredential(call.name, environment.credential) })),
+          } };
+        }
         if (environment.retries !== undefined) {
           const attempts = [...(previous?.attempts ?? []), ...(invocation === undefined ? [] : [{
             number: (previous?.attempts?.length ?? 0) + 1,
             timeoutMs: invocation.timeoutMs, sourceContextStrategy,
             outcome: record.outcome, errorKind: record.errorKind, reason: record.reason,
             durationMs: record.durationMs,
+            ...(record.tools === undefined ? {} : { tools: record.tools }),
           }])];
           record = { ...record, attempts, durationMs: (previous?.durationMs ?? 0) + record.durationMs };
         }
@@ -1017,6 +1028,10 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       if (record === undefined) throw new Error('review run did not produce a file record');
       return [record];
     });
+    const nativeTools = prepared?.executionMode === 'native' ? mergeNativeToolEvidence(records.flatMap(record =>
+      record.attempts === undefined ? record.tools === undefined ? [] : [record.tools]
+        : record.attempts.flatMap(attempt => attempt.tools === undefined ? [] : [attempt.tools]))) : undefined;
+    if (nativeTools !== undefined) await writer.writeNativeToolsReport?.(nativeTools);
     const excludedFiles = bundle.manifest.files.flatMap((file) => !file.reviewed ? [{
       fileId: file.id,
       path: fileReviewPath(file),
@@ -1028,6 +1043,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
     const harnessFailure = finalFailure === undefined ? undefined : 'scope' in finalFailure ? finalFailure
       : { scope: 'file' as const, diagnostic: finalFailure.reason ?? 'harness failed' };
     const summary: ReviewRunSummary = {
+      ...(nativeTools === undefined ? {} : { tools: nativeTools }),
       version: REVIEW_RUN_SUMMARY_VERSION,
       harness: environment.harness,
       model: environment.model.model,

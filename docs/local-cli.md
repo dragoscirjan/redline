@@ -2,11 +2,13 @@
 
 This is the detailed reference. For a short setup path, start with [Get started](/get-started/). For copyable recipes, use [Common commands](/commands). Programmatic clients can use the [stdio JSON-RPC protocol](./stdio-protocol.md).
 
-The local CLI reviews Git changes without a forge, pull request, remote URL, or publication token. It uses the same fixed prompts, harness isolation, diff evidence validation, and JSON/Markdown artifacts as the GitHub integration. It does not apply fixes or execute repository code.
+The local CLI reviews Git changes without a forge, pull request, remote URL, or publication token. It uses the same fixed review policy, diff evidence validation and JSON/Markdown artifacts as the GitHub integration. Current source invokes native Pi/OpenCode with their normal global and checkout-local configuration. This native behavior is not in published 1.2.2.
+
+**Unsandboxed CLI warning:** configured MCP servers and plugins can execute commands, modify files, access the network and use available credentials. Redline does not sandbox them. Use a container, VM or other isolation when needed. The existing GitHub Action remains isolated until its separate Docker migration.
 
 ## Install
 
-Requires Node.js 24 and Git on the trusted host. Release compatibility requires native execution tests on Linux, macOS, and Windows, each on x64 and ARM64. The CI matrix verifies the actual Node platform/architecture and runs local capture, context-builder contracts, reporting, cancellation, and installed-package tests on all six targets. External indexer compatibility is separate from these CLI tests. A target is not considered verified until its job passes. npm publishing requires successful CI for the exact main commit.
+Requires Node.js 24 and Git on the trusted host. Release compatibility requires native execution tests on Linux, macOS, and Windows, each on x64 and ARM64. The CI matrix verifies the actual Node platform/architecture and runs local capture, context-builder contracts, reporting, cancellation, and installed-package tests on all six targets. Native harness and external indexer compatibility are separate from these CLI tests. Direct harness execution requires a native executable entry point supported by the host; npm `.cmd` shims are not automatically interpreted by a shell. The new native CLI/Docker integration has local Linux amd64 evidence, not new ARM64 or Windows harness evidence. A target is not considered verified until its job passes. npm publishing requires successful CI for the exact main commit.
 
 Install a published version:
 
@@ -21,17 +23,13 @@ Pi or OpenCode must be installed separately on a trusted PATH outside the review
 
 ## Optional analysis tools
 
-Pi and OpenCode use approved read-only MCP tools when compatible packages and
-runtimes are already installed outside the reviewed repository. Redline never
-installs them during a review. Missing servers, context-mode adapters or CGC
-grammars produce a warning and do not block the prompt. The run records each
-component's availability in `reviews/analysis-tools.json`.
+Pi and OpenCode load their own global and checkout-local MCP configuration, tools, plugins and permissions. Redline invokes the installed CLI entry point directly, does not replace the user's home/configuration directories, and does not filter extra configured MCPs. The harness controls connection and tool discovery. Redline never installs a missing server during review.
 
-Tools inspect only a bounded captured-source subset. They cannot run commands,
-change files or select another repository. Context-mode uses native MCP index/search;
-its stock adapter hooks are checked but not activated. See the
-[harness reference](/harness-executor#optional-read-only-analysis) for versions,
-permissions, offline grammars and limits.
+Inspect configuration with the harness's own commands, such as `pi mcp list --json` or `opencode mcp list`. Pi's listing command reads project configuration only for already-trusted projects; native review grants trust for its invocation without changing the user's persistent trust configuration.
+
+Native reports use `reviews/native-tools.json` and per-file `tools` metadata. They distinguish observed names, server connection states, calls and successful results. A connected server does not prove that it has indexed the repository. A server or tool that was not observed is not labelled an unsupported installation. Missing requested integrations warn without blocking other configured tools. Tool arguments, results and reasoning are excluded from this diagnostic metadata.
+
+Precomputed `--indexing` context is a separate input preparation step. Its status does not control the native harness's MCPs. See [native harness execution](/harness-executor#native-cli-and-docker); the [read-only bridge](/harness-executor#optional-read-only-analysis) remains for isolated Actions.
 
 ## Compare branches
 
@@ -108,16 +106,18 @@ Discovery examines at most 512 code files, 256 directories, depth 12, 4,096 entr
 
 ## Resume validated work
 
-Local result reuse defaults to enabled. Repeat the same review command; no previous run path is required:
+Native Pi/OpenCode reviews disable persisted model-result reuse. User plugins and MCPs can depend on changing external data that a captured-source fingerprint cannot prove unchanged. The terminal states this explicitly. This does not disable the separate validated provider/base-index cache.
+
+The isolated review engine and deterministic echo path retain result reuse. For example:
 
 ```bash
-redline review --base main --head HEAD --harness pi
-redline review --base main --head HEAD --harness pi
+redline review --base main --head HEAD --harness echo
+redline review --base main --head HEAD --harness echo
 # Explicitly bypass result reuse:
-redline review --base main --head HEAD --harness pi --reuse disabled
+redline review --base main --head HEAD --harness echo --reuse disabled
 ```
 
-The private repository-scoped cache lives in `$XDG_STATE_HOME/redline/results/v1` (or `$HOME/.local/state/...`). It stores only validated clean/findings records, not failures. Completed files can therefore survive a partially failed or interrupted run. An exact semantic fingerprint includes model/endpoint/auth mode, protocol, output allowance, policy/schema, diff, captured source, related context, initial per-file timeout, retry policy, available analysis tools and their bounded captured source. Optional tool readiness is checked before reuse matching. When retries are enabled, it also hashes the bounded enriched context, even if the first attempt succeeds. A recovered result cannot be reused after relevant source or retry-policy changes. Current evidence is revalidated, file IDs/revisions are remapped, and each run rebuilds coverage, verdicts, synthesis and artifacts. A cache hit does not authorize stale publication.
+For the replayable isolated/echo paths, the private repository-scoped cache lives in `$XDG_STATE_HOME/redline/results/v1` (or `$HOME/.local/state/...`). It stores only validated clean/findings records, not failures. Completed files can therefore survive a partially failed or interrupted run. An exact semantic fingerprint includes model/endpoint/auth mode, protocol, output allowance, policy/schema, diff, captured source, related context, initial per-file timeout, retry policy, available analysis tools and their bounded captured source. Optional tool readiness is checked before reuse matching. When retries are enabled, it also hashes the bounded enriched context, even if the first attempt succeeds. A recovered result cannot be reused after relevant source or retry-policy changes. Current evidence is revalidated, file IDs/revisions are remapped, and each run rebuilds coverage, verdicts, synthesis and artifacts. A cache hit does not authorize stale publication.
 
 Readers bound restored entries to 2,000 files, 512 KiB per record, and 32 MiB total. Writers reserve the same quotas per loaded cache; concurrent publication uses atomic replacement, so a collision can lose reuse but cannot become an unvalidated success. Unsafe/private-directory failures disable reuse, not review; cache misses, invalid records and changed fingerprints run normally. Existing state parents are never chmod'ed.
 
@@ -165,7 +165,7 @@ Precedence:
 
 Default user configuration: `$XDG_CONFIG_HOME/redline/config.json`, or `$HOME/.config/redline/config.json`. `--config PATH` selects another trusted user file. The file must be outside the reviewed repository, bounded to 64 KiB, regular, and not a symlink. If it contains `model-auth`, Unix permissions must exclude group and other access (use `chmod 600`).
 
-Example for a credential-less local endpoint:
+Example for a credential-less local endpoint. Configure the selected provider/model in the native harness first; Pi needs its normal model metadata, including context and reasoning capabilities:
 
 ```json
 {
@@ -193,7 +193,7 @@ Other environment names mirror their scalar flags using uppercase and underscore
 - `REDLINE_REVIEW_CONCURRENCY`: worker count.
 - `REDLINE_REPORTER`: comma-separated reporter IDs.
 
-Repository configuration cannot choose model endpoints, executables, credentials, output paths, or reporters. The only repository policy consumed is the existing strict `.redline/review-eligibility.json` from the resolved committed base. Uncommitted policy cannot hide its own changes. There is no additional project config loader.
+Redline's own options are not loaded from repository configuration. Its review-eligibility policy still comes from the strict `.redline/review-eligibility.json` at the resolved committed base; uncommitted policy cannot hide its own changes. Separately, native Pi/OpenCode load their normal checkout-local instructions, tools, plugins and MCP settings. These native settings are not a security boundary.
 
 ## Review retries and timeouts
 
@@ -210,9 +210,9 @@ The first pass gives every uncached file an initial attempt before retry rounds 
 
 `--timeout` is the **initial per-attempt** limit, default `4m`, separate from `--run-timeout`. Only a per-file timeout adds `2m` to that file's next limit. Four consecutive timeouts therefore use limits of `4m`, `6m`, `8m`, `10m`. Invalid output or upstream errors leave the current limit unchanged. `--run-timeout` stays a hard total budget including capture, indexing and all attempts. Each invocation is clamped to remaining time, so not every allowed retry is guaranteed to fit. For example, the four timeout allowances total 28 minutes for one file and cannot all fit into a 20-minute run.
 
-Excerpt retries can include additional base/head source only from the same immutable capture. Small files can become complete within the existing 64 KiB per-side limit; larger files may receive wider surrounding excerpts if they fit. The 128 KiB file-read and 512 KiB complete prompt-payload limits do not grow. If enrichment cannot fit, the original context is retained. Source omissions and truncation remain explicit; repository code is never executed.
+Excerpt retries can include additional base/head source only from the same immutable capture. Small files can become complete within the existing 64 KiB per-side limit; larger files may receive wider surrounding excerpts if they fit. The 128 KiB file-read and 512 KiB complete prompt-payload limits do not grow. If enrichment cannot fit, the original context is retained. Source omissions and truncation remain explicit. The enrichment step reads captured bytes without executing repository code; native configured tools and plugins have their own capabilities.
 
-The retry count measures **Redline review attempts, not HTTP requests**. Pi's adapter and native provider retries are disabled in caller-managed mode. OpenCode 1.18.34 retains five hardcoded native provider retries inside each Redline attempt, so four attempts can issue up to 24 provider requests. OpenCode has no supported disable switch in this integration. Its native requests share the per-attempt timeout and hard whole-run deadline. The CLI warns about this distinction; loopback fixtures verify both harness counts without a paid model.
+The retry count measures **Redline review attempts, not HTTP requests**. Pi's adapter retries are disabled in caller-managed mode; native Pi retains its user-configured provider/agent retries. OpenCode 1.18.34 retains five hardcoded native provider retries inside each Redline attempt, so four attempts can issue up to 24 provider requests. OpenCode has no supported disable switch in this integration. Its native requests share the per-attempt timeout and hard whole-run deadline. The CLI warns about this distinction. Isolated loopback fixtures verify fixed harness counts without a paid model; native Pi request counts depend on its user settings.
 
 Per-file JSON records include bounded redacted `attempts` metadata with effective timeouts, source strategy, outcome, error kind and duration. Prior raw answers are not included in that history. File duration totals all attempts. The terminal and run summary report attempts, retried/recovered files, exhausted counters and files lacking time for remaining retries. These counters do not establish finding correctness or live-provider quality.
 
@@ -224,7 +224,7 @@ Per-file JSON records include bounded redacted `attempts` metadata with effectiv
 redline review --base main --head HEAD --harness pi --max-output-tokens 32768
 ```
 
-When unset, Pi retains its benchmark-derived 16,384-token default; OpenCode retains its existing model/provider defaults. An explicit setting configures Pi's isolated model `maxTokens` and OpenCode's runtime output ceiling, without changing OpenCode's model context-window metadata. OpenCode's catalog/provider may impose a lower model limit. Echo makes no model call; it validates and records the selection for integration tests.
+When unset, Pi retains its benchmark-derived 16,384-token default; OpenCode retains its existing model/provider defaults. An explicit setting configures Pi's model and native request output limit and OpenCode's runtime output ceiling, without changing OpenCode's model context-window metadata. OpenCode's catalog/provider may impose a lower model limit. Echo makes no model call; it validates and records the selection for integration tests.
 
 Output tokens are not bytes, words, context-window capacity, a whole-run allowance, or a dollar budget. Reasoning can consume this allowance depending on the provider. This setting does not allocate separate reasoning tokens or reserve tokens for final JSON, and does not promise syntactically valid output. Timeouts remain independent. Higher token allowances can increase cost and memory use: retained harness stdout remains separately bounded at 8–64 MiB (16 MiB for a 32,768-token allowance); persisted diagnostics and prompt bounds remain unchanged. An explicit token allowance participates in semantic review-cache fingerprints and is recorded in local `status.json` and terminal output.
 
@@ -241,7 +241,7 @@ redline review --base main --head HEAD --harness pi \
   --model-protocol openrouter-json --scheduling mixed
 ```
 
-The profile preserves provider/model reasoning behavior and sends no reasoning-disable override. It sends `provider: {require_parameters:true}` and a strict JSON Schema generation request for the fixed v4 discovery document. Tools remain disabled and sampling remains provider-default. The schema requires a concise reason even on clean results and excludes null optional fields; guidance findings omit proposed replacement text. Core JSON, schema, source/diff and impact-reference validation still runs independently. Other prompts without a supplied schema use JSON-object formatting.
+The profile preserves provider/model reasoning behavior and sends no reasoning-disable override. It sends `provider: {require_parameters:true}` and a strict JSON Schema generation request for the fixed v4 discovery document. Native tool availability remains controlled by harness configuration; isolated Actions keep their restricted tool policy. Sampling remains provider-default. The schema requires a concise reason even on clean results and excludes null optional fields; guidance findings omit proposed replacement text. Core JSON, schema, source/diff and impact-reference validation still runs independently. Other prompts without a supplied schema use JSON-object formatting.
 
 Selecting this profile with another harness/provider fails before model execution; it never silently downgrades. An unsupported endpoint, model, schema feature or upstream provider can reject the request. Loopback tests verify actual wire fields, not that every upstream honors them or that findings are correct. There is no separate repair model call or silent JSON repair. Rejected/malformed review documents can receive a fresh attempt under the local retry policy above. Separate reasoning allocation and reserved final-answer tokens remain unimplemented.
 
@@ -266,7 +266,7 @@ Run `redline review --help` for the complete contract.
 - `--code-context PATH`, `--code-context-repository ID`: optional artifact import and expected namespace.
 - `--harness pi|opencode|echo`: default `pi`.
 - `--provider`, `--endpoint`, `--model`, `--auth none`: trusted model selection.
-- `--reuse enabled|disabled`: default `enabled`; exact validated-result reuse.
+- `--reuse enabled|disabled`: default `enabled` for replayable isolated/echo execution; native Pi/OpenCode disable model-result reuse because external tool state cannot be validated.
 - `--head-context enabled|disabled`: default `enabled`; bounded static-head source candidates.
 - `--scheduling largest-first|mixed`: default `largest-first`.
 - `--model-protocol compatible|openrouter-json`: default `compatible`; explicit Pi/OpenRouter wire controls.
@@ -289,7 +289,7 @@ Default artifact location: `$XDG_STATE_HOME/redline/reviews/run-*`, or `$HOME/.l
 - `capture.json`: requested and resolved revisions, snapshot identity, capture coverage, excluded untracked paths, and inert symlink path/target data.
 - `index/code-context.json`, `index/status.json`: bounded normalized context and actual source-validated coverage when indexing/import is enabled.
 - `reviews/`: existing validated file records, summary, and consolidated review as JSON and Markdown.
-- `reviews/analysis-tools.json`: versioned optional MCP/adapter availability for Pi/OpenCode, without credentials, host paths or raw dependency errors.
+- `reviews/native-tools.json`: native catalog/server observations and observed calls, without arguments, results, reasoning or credentials. A successful call means the harness reported completion without a tool error, not semantic correctness. Isolated Actions use `reviews/analysis-tools.json` for their separate bounded MCP bridge.
 - `status.json`: local completion, failure, cancellation, or deadline classification and exit code.
 
 Model review documents remain unchanged. Operational file records additionally distinguish `not-started` after a shared harness failure; run summaries can carry the first bounded, redacted diagnostic in `harnessFailure`. Synthetic working-copy commit IDs and the index digest identify captured states, not user commits. Bundle/evidence selection is deterministic; existing operational durations and telemetry still vary between runs.
@@ -312,7 +312,7 @@ Terminal data is control-character filtered, bounded, and credential-redacted be
 
 `--fail-on high` includes high and critical findings. Incomplete reviews fail regardless of the finding threshold. Reporter failure cannot erase review artifacts or stop other reporters. Preflight configuration failure stops before review execution.
 
-SIGINT and SIGTERM cancel capture, active indexers, and active harness processes. Unix uses process-group termination; Windows uses the OS process-tree termination tool for the spawned process IDs. No shell is used to launch a harness. Node-based npm harness shims are resolved to their installed JavaScript entrypoints rather than executing Windows command scripts. Temporary Git/harness scratch cleanup is attempted on handled exit paths. If revision-snapshot disposal fails, the CLI prints a content-free warning without replacing the completed review result or the original execution/cancellation error; cleanup is not claimed to have succeeded. Interrupted runs can retain partial artifacts and `status.json`; they are never presented as complete reviews. Force-killing the Redline process cannot guarantee cleanup.
+SIGINT and SIGTERM cancel capture, active indexers, and active harness processes. Unix uses process-group termination; Windows uses the OS process-tree termination tool for the spawned process IDs. No shell is used to launch a harness. Installed harness entry points are invoked directly; Redline does not manually run their JavaScript through its Node process or interpret Windows command scripts. Temporary Git/harness scratch cleanup is attempted on handled exit paths. If revision-snapshot disposal fails, the CLI prints a content-free warning without replacing the completed review result or the original execution/cancellation error; cleanup is not claimed to have succeeded. Interrupted runs can retain partial artifacts and `status.json`; they are never presented as complete reviews. Force-killing the Redline process cannot guarantee cleanup.
 
 ## Harness errors
 
@@ -328,23 +328,17 @@ Loopback success/error tests establish request and failure handling, not live-pr
 
 Git capture permits at most 20,000 tree/index entries, 16 MiB per captured working file or Git command output, and 256 MiB each for aggregate captured source, working-tree content, and bundle output. Every Git command has a 30-second ceiling and also observes whole-run cancellation. Head source embeds only files up to the existing 128 KiB source-file bound; larger files are not copied into `source/`. The review prompt retains the existing 64 KiB embedded side and 512 KiB total untrusted-payload bounds.
 
-Git commands use absolute trusted executables, argument arrays, a constructed environment, no lazy fetches, and scratch metadata without repository hooks, filters, text converters, credentials, or external diff configuration. Symlinks are captured as path/target data and are never installed into the source export. Redline never runs project builds, tests, installers, scripts, or executables.
+Git commands use absolute trusted executables, argument arrays, a constructed environment, no lazy fetches, and scratch metadata without repository hooks, filters, text converters, credentials, or external diff configuration. Symlinks are captured as path/target data and are never installed into the source export. The capture and precomputed-context steps do not run project builds, tests, installers, scripts or executables. Native configured harness tools and plugins are unsandboxed in pure CLI and may do so.
 
 This is a trusted-host CLI, not malicious-host protection. The [Docker image](./docker-workers.md) runs this same Redline CLI and its installed harnesses together. Docker is invoked externally; Redline has no container-orchestration mode. Podman and protection from an untrusted host/kernel are not implemented. The independent finding verifier remains disabled; Docker mode does not activate that quality gate.
 
 ## Release operations
 
-The existing npm release workflow remains independent of Docker image publishing.
-Main-branch CI gates the pinned Tempel/Changesets flow. It creates owner-controlled
-version pull requests or publishes an approved version; it never approves or merges
-those pull requests. npm authentication still uses the owner-managed token, separately
-from provenance permissions.
+Main-branch CI gates the pinned Tempel/Changesets npm flow. It creates owner-controlled version pull requests or publishes an approved version; it never approves or merges those pull requests. npm authentication still uses the owner-managed token, separately from provenance permissions.
 
-The [Docker image workflow](./docker-workers.md#publishing) builds and tests one shared
-image, then publishes it to GHCR only on this repository's main-branch push. There is
-no coordinated release controller, package/image version coupling or release manifest.
+A successful **new npm publication**, including installed-package verification, gates the [Docker image workflow](./docker-workers.md#publishing). Native amd64/arm64 jobs build and test the shared image before registry login, export the tested runtime by attested digest, and publish a matching-version GHCR manifest only after both jobs pass. Ordinary pushes and no-op releases do not publish images. There is no runtime release controller.
 
 Keep publication credentials in owner-controlled secrets, never files, arguments or
-logs. No publication credential reaches a review harness. Local tests do not prove
+logs. Redline does not forward its publication context to review harnesses. Native tools can use other credentials available in the user's environment or configuration; do not provide release credentials to that runtime. Local tests do not prove
 registry availability or live model quality. Merge, manual publication and workflow
 reruns still require explicit owner permission.

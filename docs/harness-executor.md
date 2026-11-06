@@ -2,6 +2,18 @@
 
 The harness executor layer (`src/harness-executor/`) adapts the generic review-execution contract to one coding-agent harness. The review core never learns harness specifics; it sees one interface.
 
+## Native CLI and Docker
+
+Current source uses the installed `pi` or `opencode` entry point directly for local CLI and Docker reviews. This behavior is not in published 1.2.2. Redline does not manually launch the harness's JavaScript entry point through its own Node runtime.
+
+Both harnesses keep their normal global and checkout-local configuration, MCP servers, plugins, tools and permissions. Additional configured MCPs remain available. Pure CLI prints a prominent unsandboxed-execution warning. Docker is the container execution boundary; host configuration is visible only when explicitly supplied. Further container hardening is separate work.
+
+Precomputed CGC context is independent of native MCP configuration. A failed base-index build does not disable the harness's configured CGC server. Conversely, an installed or connected server does not prove an indexed repository, a successful query or correct findings.
+
+`reviews/native-tools.json` and per-file records distinguish observed tool names, native server states where the harness exposes them, calls started, successful calls and failures. Pi supplies a runtime tool catalog. OpenCode supplies its native MCP listing plus observed calls. Missing or unobserved requested integrations warn without filtering the remaining configured servers. Tool arguments, results and reasoning are not retained in these diagnostics.
+
+The current GitHub Action keeps its isolated execution described below. Moving it to the image is a separate milestone.
+
 ## Interface
 
 ```ts
@@ -15,8 +27,9 @@ interface HarnessExecutor {
 - `prepare` runs once per review: it validates and retains the bounded model,
   credential, command, and configuration template inside a caller-managed
   work directory.
-- `execute` runs once per file-review attempt: it creates an invocation-specific configuration,
-  prompt, home, and state directory, then sends one non-interactive prompt with a fixed
+- `execute` runs once per file-review attempt: it creates private request/prompt overrides,
+  and, in isolated execution only, separate configuration, home and state directories.
+  It sends one non-interactive prompt with a fixed
   system policy and the file's untrusted context, under a timeout and
   bounded output limits. The optional `options.timeoutMs` is a positive safe
   integer in milliseconds; it overrides the prepared `HarnessSettings.timeoutMs`
@@ -33,6 +46,10 @@ core makes.
 ## Harness implementations
 
 ### Pi
+
+Native CLI/Docker keeps `HOME`, `PI_CODING_AGENT_DIR`, global settings and checkout-local resources. It runs `pi --print --mode json --no-session --approve --provider … --model …`, appends Redline's policy with `--append-system-prompt`, and adds a private standard extension for the selected endpoint, generation cap, optional OpenRouter schema and metadata-only tool observations. It does not replace MCP configuration or filter tools. The selected model must exist in Pi's native catalog or configuration. Existing model metadata and reasoning are preserved, and Redline does not persist model-setting changes.
+
+The following configuration rules apply to isolated Actions:
 
 - Every invocation gets a separate mode-0600 `models.json` and system-prompt file in an isolated agent directory selected with `PI_CODING_AGENT_DIR`. Concurrent calls never share generated files. The host user's own Pi configuration never loads.
 - The provider credential travels through the `REDLINE_MODEL_API_KEY`
@@ -57,7 +74,7 @@ core makes.
   invocation directory and the same total per-file deadline. Timeouts,
   output-budget exhaustion, malformed streams, capture truncation, parser
   failures, and validation failures are never retried.
-- Local CLI execution supplies `retryOwnership: caller`, disables this adapter retry and lets the review runner own `--retries`. Invalid review documents, per-file timeouts and bounded excerpt retries are handled there. Agent and provider retries remain disabled; reasoning and output-token limits remain unchanged.
+- The review runner supplies `retryOwnership: caller` when it owns `--retries`, disabling adapter retries. Native CLI additionally retains the user's own Pi retry configuration. Native provider retries, outer review attempts and tool activity remain bounded by the file and whole-run deadlines.
 - When Pi exits without usable final assistant text after that policy, the
   file is omitted. Its reason is a bounded `pi-no-text/v1` JSON diagnostic
   that classifies capture truncation, malformed events, a missing `turn_end`,
@@ -73,19 +90,20 @@ core makes.
 
 ### OpenCode
 
+Native CLI/Docker runs `opencode run --dir <checkout> --format json --agent redline-review --model provider/model` without `--pure` or redirected home/XDG paths. A final `OPENCODE_CONFIG_CONTENT` merge adds only the selected provider request settings and review-agent prompt, preserving global/local MCPs, plugins, permissions and existing inline configuration. The credential is referenced as `{env:REDLINE_MODEL_API_KEY}`. Redline does not add `--auto` or override the user's permission decisions. The native MCP listing reports connection state without prebuilding a second Redline-owned graph.
+
+The following configuration rules apply to isolated Actions:
+
 - Every invocation gets a separate generated `opencode.json` (mode 0600) selected with `OPENCODE_CONFIG`, plus separate redirected `HOME` and `XDG_*` directories. Concurrent calls never share mutable configuration or state, the host user's configuration, plugins, and MCP servers never load, and the process runs with `--pure`.
 - The config registers a `redline-review` agent with the fixed review
   policy as its system prompt and every built-in tool disabled, including
   the `skill` tool.
-- OpenCode has no environment-interpolation mechanism comparable to Pi's
-  `models.json`, so the selected credential is written into the generated
-  config file — mode 0600 inside the review's temporary work directory,
-  which is deleted when the run ends.
+- This isolated adapter writes the selected credential into its generated mode-0600 configuration in the temporary work directory. Native execution instead uses OpenCode's environment interpolation and does not write the key into configuration.
 - Invocation: `opencode run --pure --format json --agent redline-review
   --model provider/model`, with the bounded user prompt on stdin. The
   generated configuration still supplies the fixed system policy.
 - Assistant text is concatenated from `text` parts of the JSON event stream. In caller-managed execution, a runtime `error` event rejects partial text, and only its status/message/retryability metadata is classified and credential-redacted. Response bodies and reasoning are not copied into failure diagnostics.
-- Local CLI `--retries` counts complete Redline attempts, not provider requests. OpenCode 1.18.34 hardcodes five native provider retries. There is no supported switch here to disable them; do not invent one. Thus four Redline attempts can issue up to 24 provider requests. Those native retries share the current attempt's timeout, and all attempts share the hard run deadline. Pi instead issues one provider request per caller-managed attempt. Loopback tests verify both counts.
+- Local CLI `--retries` counts complete Redline attempts, not provider requests. OpenCode 1.18.34 hardcodes five native provider retries. There is no supported switch here to disable them; do not invent one. Thus four Redline attempts can issue up to 24 provider requests. Those native retries share the current attempt's timeout, and all attempts share the hard run deadline. Isolated Pi instead issues one provider request per caller-managed attempt. Native Pi follows its user retry settings. Loopback tests verify the isolated counts.
 
 ### Echo
 
@@ -106,13 +124,13 @@ models are involved.
 
 ## Optional read-only analysis
 
-Pi and OpenCode probe optional integrations before file prompts. The probe has a
+This section applies to isolated Actions, not native CLI/Docker. The isolated Pi and OpenCode adapters probe optional integrations before file prompts. The probe has a
 20-second limit inside the existing run deadline. Missing packages, incompatible
 versions, failed startup, missing context-mode integrations and empty CGC graphs
 are reported in `reviews/analysis-tools.json`. The CLI warns and continues without
 those tools. An optional integration does not become a requirement for a prompt.
 
-The native integration targets Pi 1.4.0 and OpenCode 1.18.34, with CGC 0.5.7,
+The isolated integration targets Pi 1.4.0 and OpenCode 1.18.34, with CGC 0.5.7,
 GitNexus 1.6.12 and context-mode 1.0.169. Sequential-thinking is checked through
 its standard API, including compatible date-versioned installations. Unsupported
 integrations are reported rather than silently installed or replaced.
@@ -126,7 +144,7 @@ The fixed allowlist is:
 | context-mode | `ctx_index`, `ctx_search` |
 | sequential-thinking | `sequentialthinking` |
 
-The native harness integration connects through a standard MCP boundary that
+The isolated harness integration connects through a standard MCP boundary that
 checks every call. It rejects execution, administrative operations, network
 retrieval, repository selectors and writes. Context-mode indexes only approved
 relative files from captured head source. Searches stay in that run's private
@@ -137,7 +155,7 @@ Each component permits at most 32 calls per file invocation. Tool failures remai
 coverage limitations, never proof that callers or tests do not exist.
 
 All built-in tools remain disabled. MCP children receive constructed environments
-without model keys, GitHub tokens or ambient configuration. Policy v9 declares
+without model keys, GitHub tokens or ambient configuration. The isolated v10 policy declares
 only verified available tool names. Tool results remain untrusted, and findings
 still need authoritative diff mapping and byte-identical evidence. Available tool
 versions and captured analysis bytes participate in review-result reuse identity.
@@ -172,6 +190,4 @@ execution-time limits. The argument list contains only trusted options and
 paths. This prevents `spawn E2BIG` when a reviewed file's captured diff and
 source exceed the operating system's per-argument limit.
 
-Security rules for every implementation: argument arrays only (no shell),
-built-in tools disabled and optional MCP calls allowlisted, isolated generated configuration, constructed environment
-without ambient credentials, bounded output, and timeouts.
+All implementations use argument arrays without a shell, bounded output and timeouts. Native execution keeps the harness's configured tools, plugins and user-owned MCP credentials. Isolated Actions disable built-in tools and restrict MCP calls, generated configuration and credentials. Redline's publication token is never handed to either profile.

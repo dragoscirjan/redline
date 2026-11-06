@@ -5,6 +5,20 @@ import { describe, expect, it, vi } from 'vitest';
 import { providerCommand } from '../src/local/context.ts';
 import { parseLocalOptions } from '../src/local/options.ts';
 import { execaSync } from 'execa';
+import { executable } from '../src/local/process.ts';
+
+describe('native harness discovery', () => {
+  it.skipIf(process.platform === 'win32')('returns the installed CLI entry point rather than a manual Node launch', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'redline-native-discovery-')));
+    try {
+      const repository = join(root, 'repository'), bin = join(root, 'bin');
+      await Promise.all([mkdir(repository), mkdir(bin)]);
+      const command = join(bin, 'pi');
+      await writeFile(command, '#!/usr/bin/env node\nprocess.exit(0);\n', { mode: 0o700 });
+      expect(await executable('pi', bin, repository)).toBe(command);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+});
 
 describe('automatic managed CGC discovery', () => {
   it.skipIf(process.platform !== 'linux' || process.arch !== 'x64').each(['realpath', 'readFile'] as const)(

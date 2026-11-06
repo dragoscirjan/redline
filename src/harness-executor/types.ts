@@ -10,6 +10,7 @@
  */
 
 import type { AnalysisRequest, PreparedAnalysis } from './analysis.ts';
+import type { NativeToolEvidence } from './native.ts';
 
 export type HarnessName = 'echo' | 'pi' | 'opencode';
 
@@ -77,6 +78,8 @@ export interface HarnessRunTelemetry {
   readonly usage?: HarnessUsageTelemetry | undefined;
   /** Number of Redline-controlled retries after the initial attempt. */
   readonly retryCount?: number | undefined;
+  /** Observed native tool metadata only; never arguments, results or credentials. */
+  readonly tools?: NativeToolEvidence | undefined;
 }
 
 export interface HarnessRun {
@@ -106,6 +109,8 @@ export interface PreparedHarness {
    */
   readonly description: string;
   readonly analysis?: PreparedAnalysis;
+  /** Native configuration is controlled by the harness, not the isolated MCP allowlist. */
+  readonly executionMode?: 'native' | 'isolated';
 }
 
 export interface HarnessOutputLine {

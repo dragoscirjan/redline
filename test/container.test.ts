@@ -53,9 +53,18 @@ const profile = ['--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-p
 /** Own a mock-model container and disposable Git state; register children and containers for teardown. */
 async function fixture(mode = 'finding') {
   const { root, env } = await environment();
-  const repository = join(root, 'repository'), output = join(root, 'output');
+  const repository = join(root, 'repository'), output = join(root, 'output'), home = join(root, 'home');
   const cache = process.env.REDLINE_CONTAINER_CACHE ?? join(root, 'cache');
-  await Promise.all([mkdir(repository), mkdir(output), mkdir(cache, { recursive: true, mode: 0o700 })]);
+  await Promise.all([mkdir(repository), mkdir(output), mkdir(cache, { recursive: true, mode: 0o700 }),
+    mkdir(join(home, '.pi/agent'), { recursive: true }), mkdir(join(home, '.config/opencode'), { recursive: true })]);
+  // Native harness settings are fixture-owned; no owner configuration or automatic image MCP defaults load here.
+  await writeFile(join(home, '.pi/agent/models.json'), JSON.stringify({ providers: { openrouter: {
+    baseUrl: 'http://127.0.0.1:1/v1', api: 'openai-completions', apiKey: '$REDLINE_MODEL_API_KEY',
+    models: [{ id: 'test-model', name: 'Synthetic container model', reasoning: true, contextWindow: 128000, maxTokens: 4096 }],
+  } } }));
+  await writeFile(join(home, '.pi/agent/settings.json'), JSON.stringify({ defaultTools: [], retry: { enabled: false } }));
+  await writeFile(join(home, '.pi/agent/mcp.json'), '{"mcpServers":{}}');
+  await writeFile(join(home, '.config/opencode/opencode.json'), '{"mcp":{},"plugin":[]}');
   const git = (...args: string[]) => execaSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null',
     '-c', 'commit.gpgSign=false', ...args], {
       extendEnv: false,
@@ -101,13 +110,14 @@ async function fixture(mode = 'finding') {
   } finally { clearTimeout(timer); }
   const address = docker(['inspect', '--format', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', model], env);
   const common = ['--repository', '/repository', '--base', base, '--head', 'HEAD', '--indexing', 'disabled', '--reuse', 'disabled',
-    '--provider', 'mock', '--endpoint', 'http://' + address + ':3000/v1', '--model', 'test-model', '--max-output-tokens', '4096', '--retries', '0'];
+    '--provider', 'openrouter', '--endpoint', 'http://' + address + ':3000/v1', '--model', 'test-model', '--max-output-tokens', '4096', '--retries', '0'];
   function runArgs() {
     return ['run', '--rm', '--name', named(env), ...profile, '--user', String(process.getuid?.() ?? 10001) + ':' + String(process.getgid?.() ?? 10001),
       '--mount', 'type=bind,src=' + repository + ',dst=/repository,readonly',
       '--mount', 'type=bind,src=' + output + ',dst=/output',
       '--mount', 'type=bind,src=' + cache + ',dst=/cache',
-      ...runtimeMount(), '--env', 'REDLINE_MODEL_AUTH=' + JSON.stringify({ mock: key }), image()];
+      '--mount', 'type=bind,src=' + home + ',dst=/native-home', '--env', 'HOME=/native-home',
+      ...runtimeMount(), '--env', 'REDLINE_MODEL_AUTH=' + JSON.stringify({ openrouter: key }), image()];
   }
   return { root, env, repository, output, cache, git, base, common, runArgs, firstRequest,
     get requests() { return docker(['logs', model], env).split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(value => value.type === 'request') as typeof requests; } };
@@ -140,6 +150,13 @@ describe.runIf(enabled)('Redline runs inside Docker', () => {
     expect(result.code, result.stderr).toBe(0); expect(result.stdout).toContain('Usage: redline review');
     expect(result.stdout).not.toContain('--isolation'); expect(result.stdout).not.toContain('--container-image');
   }, 40_000);
+  it('continues CLI startup when optional native defaults cannot be written', async () => {
+    const { env } = await environment();
+    const result = await run(['run', '--rm', ...profile, '--env', 'HOME=/opt/redline', image(), '--help'], env);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain('Usage: redline review');
+    expect(result.stderr).toContain('continuing with native harness configuration');
+  }, 40_000);
   it('probes every shipped MCP against bounded captured head source, including usable graph queries', async () => {
     const { env } = await environment();
     const script = await readFile(new URL('./fixtures/container-analysis.mjs', import.meta.url), 'utf8');
@@ -151,9 +168,11 @@ describe.runIf(enabled)('Redline runs inside Docker', () => {
     }
   }, 50_000);
   for (const harness of ['pi', 'opencode'] as const) {
-    it(`${harness} uses native read-only tools and survives an out-of-scope request`, async () => {
+    it(`${harness} keeps isolated Actions tools read-only and rejects out-of-scope requests`, async () => {
       const f = await fixture('analysis');
-      const result = await run([...f.runArgs(), 'review', ...f.common, '--harness', harness, '--output', '/output/analysis'], f.env);
+      const launch = f.runArgs(); launch.splice(launch.length - 1, 0, '--entrypoint', 'node');
+      const script = await readFile(new URL('./fixtures/container-isolated.mjs', import.meta.url), 'utf8');
+      const result = await run([...launch, '--input-type=module', '-e', script, '--', 'isolated-fixture', ...f.common, '--harness', harness, '--output', '/output/analysis'], f.env);
       expect(result.code, result.stdout + result.stderr).toBe(0);
       expect(f.requests).toHaveLength(4);
       const requests = JSON.stringify(f.requests);
@@ -163,14 +182,15 @@ describe.runIf(enabled)('Redline runs inside Docker', () => {
       const record = await readFile(join(f.output, 'analysis/reviews/000001.json'), 'utf8');
       expect(JSON.parse(record).outcome).toBe('findings'); expect(record + result.stderr + result.stdout).not.toContain(key);
     }, 50_000);
-    it(`${harness} reports missing context-mode MCP and plugin without blocking a prompt`, async () => {
+    it(`${harness} isolated Actions report missing context-mode MCP and plugin without blocking a prompt`, async () => {
       const f = await fixture('analysis');
       const directory = docker(['run', '--rm', ...profile, '--entrypoint', 'node', image(), '-p',
         "require('node:fs').realpathSync('/opt/harness/node_modules/context-mode')"], f.env);
       if (!directory.startsWith('/opt/harness/node_modules/')) throw new Error('unexpected dependency location');
       const empty = join(f.root, 'missing-context-mode'); await mkdir(empty);
-      const launch = f.runArgs(); launch.splice(launch.length - 1, 0, '--mount', 'type=bind,src=' + empty + ',dst=' + directory + ',readonly');
-      const result = await run([...launch, 'review', ...f.common, '--harness', harness, '--output', '/output/missing'], f.env);
+      const launch = f.runArgs(); launch.splice(launch.length - 1, 0, '--mount', 'type=bind,src=' + empty + ',dst=' + directory + ',readonly', '--entrypoint', 'node');
+      const script = await readFile(new URL('./fixtures/container-isolated.mjs', import.meta.url), 'utf8');
+      const result = await run([...launch, '--input-type=module', '-e', script, '--', 'isolated-fixture', ...f.common, '--harness', harness, '--output', '/output/missing'], f.env);
       expect(result.code, result.stdout + result.stderr).toBe(0);
       expect(f.requests).toHaveLength(1);
       const report = await readFile(join(f.output, 'missing/reviews/analysis-tools.json'), 'utf8');

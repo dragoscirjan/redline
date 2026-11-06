@@ -137,7 +137,8 @@ export async function prepareReviewContext(capture: CapturedRevision, options: C
         if (result.code !== 0 || result.timedOut || result.stdoutTruncated) await save(unavailable('index-provider-build-failed'));
         else {
           const artifact = await loadCodeContextArtifact(artifactPath);
-          indexCache = artifact.diagnostics.some((item) => item.code === 'cache-base-revision') ? 'reused'
+          indexCache = artifact.diagnostics.some((item) => [options.provider + '-index-failed', options.provider + '-validation-failed'].includes(item.code)) ? 'unavailable'
+            : artifact.diagnostics.some((item) => item.code === 'cache-base-revision') ? 'reused'
             : artifact.diagnostics.some((item) => item.code === 'cold-index-skipped') ? 'not-needed'
             : ['complete', 'partial'].includes(artifact.status) && artifact.timings?.indexMs !== null ? (lease === undefined ? 'uncached' : 'rebuilt') : 'unavailable';
           await save(lease === undefined && options.cacheDirectory !== undefined ? { ...artifact, diagnostics: [...artifact.diagnostics,

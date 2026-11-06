@@ -139,15 +139,23 @@ Review inputs must arrive together; partial selections fail. Unknown
 
 ## Security boundaries
 
-- Pull request content is untrusted data. Never execute pull request code,
-  scripts, builds, tests, or package installers during a review.
-- Harnesses use isolated generated configuration and a constructed environment.
-  Local and Docker execution permit only the approved MCP allowlist for read-only
-  code-index queries, context-mode index/search over captured source, and sequential
-  thinking. Unavailable MCP servers or context-mode integrations are reported and
-  disabled without blocking prompt execution. No ambient credentials or GitHub tokens
-  reach a harness. The publication token lives only in the publication
-  layer, after review artifacts are written.
+- Docker reviews use the container as the execution isolation boundary. Inside it,
+  Redline invokes the installed Pi/OpenCode CLI entry points directly and permits
+  their normal global and checkout-local configuration, including configured MCP
+  servers and plugins. Redline does not impose its own MCP allowlist in this mode.
+  Additional container hardening is a separate follow-up. Host configuration and
+  credentials are available only when explicitly provided to the container.
+- Pure CLI reviews also use native harness configuration. Before execution,
+  Redline prominently warns that it provides no sandbox: configured tools and
+  plugins can execute commands, modify files, access the network and use available
+  credentials. Users are responsible for providing suitable isolation.
+- Missing requested MCP integrations produce warnings without blocking review.
+  Additional configured MCPs remain available. Reported availability must be
+  distinguished from observed tool calls and successful results.
+- Until GitHub Actions migrates to the Docker image, its existing isolated
+  configuration, read-only MCP allowlist and credential restrictions remain in
+  force. Redline's publication token remains confined to the publication layer
+  in every mode.
 - Publication writes only managed objects: identified by marker plus the
   expected author when the token's actor is known, or by marker plus the
   managed heading when an App installation token has no resolvable
@@ -156,10 +164,11 @@ Review inputs must arrive together; partial selections fail. Unknown
   auto-review target: the dogfood workflow publishes on this repository;
   other repositories opt in through the reusable workflow with their own
   token or App.
-- Repository content, PR metadata, paths, diff text, and indexed context
-  never alter the system prompt, tool permissions, result schema, or
-  publication policy. Indexed relationships only select candidates; every
-  path and span is re-resolved from bounded captured head source.
+- Every execution mode retains Redline's authoritative diff validation, finding
+  schema and publication policy. The existing untrusted Actions execution also
+  prevents repository content from changing system prompts or tool permissions.
+  Indexed relationships only select candidates; paths and spans are re-resolved
+  from bounded captured source.
 - Model output is rejected rather than guessed: findings must map both span
   endpoints to changed lines of the authoritative diff with byte-identical
   evidence at the start line.

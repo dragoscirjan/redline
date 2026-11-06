@@ -12,6 +12,8 @@ metadata:
 
 Establish a dedicated workspace before the first repository mutation. Do not edit, generate, move, or delete repository files until this gate passes.
 
+A normal tracked change uses one canonical branch or bookmark and workspace. Approved subagent orchestration may add temporary sibling lanes, but the canonical workspace remains the integration and pull-request workspace. Every workspace still has one writer, and workspaces are never nested.
+
 Use the bundled TypeScript automation. Do not recreate its path derivation or VCS procedures manually.
 
 ## Read project configuration
@@ -27,6 +29,8 @@ The script must receive `--vcs git` or `--vcs jj`. It never infers the VCS, incl
 Pass the full branch or bookmark name through `--branch`. Apply the configured prefix before invoking the script. For example, use `--branch change/issue-42`, not only `issue-42`.
 
 Pass a configured base through `--base`. When it is omitted, the script uses the Git remote default branch, then the current Git branch, or `trunk()` for Jujutsu.
+
+For a temporary orchestration lane, use the full ref `${CANONICAL_REF}--lane-${LANE_KEY}`, where `LANE_KEY` is one safe path component, and pass `CANONICAL_REF` exactly through `--base`. The lane workspace name and leaf are the basename of that full ref. The `--lane-` marker is reserved for temporary lanes, so canonical refs must not contain it. The helper validates this identity, requires the explicit canonical base, and rejects nested lane provenance. Do not let a lane default to the repository trunk or create a lane from another temporary lane.
 
 Bun runs the helper but is not added to the target repository. If Bun or the selected VCS is unavailable, stop. Do not install or reconfigure tools without owner approval.
 
@@ -51,7 +55,7 @@ workspace path = <workspace root>/<final branch component>
 workspace name = <final branch component>
 ```
 
-For `change/issue-42` in `/work/project`, the derived path is `/work/project--workspaces/issue-42`.
+For `change/issue-42` in `/work/project`, the derived path is `/work/project--workspaces/issue-42`. Its `worker-a` lane uses ref `change/issue-42--lane-worker-a` and sibling path `/work/project--workspaces/issue-42--lane-worker-a`; it is not created inside the canonical workspace.
 
 The script rejects unsafe names, path escapes, symlinked workspace roots, unregistered destination collisions, conflicting workspace names, and branches attached elsewhere. It does not use hosted-repository identity or a remote URL to derive local paths.
 
@@ -71,7 +75,9 @@ Review the plan. Confirm that it reports the intended:
 - Never mutate the primary checkout.
 - Never stash, reset, clean, move, or delete pre-existing changes.
 - Keep one active writer per workspace.
-- Do not create a nested workspace.
+- Keep one canonical integration workspace for the tracked change.
+- Do not create a nested workspace or base a temporary lane on another temporary lane.
+- Give concurrent writable lanes exclusive files or a stable contract boundary.
 - Treat a branch, bookmark, workspace-name, or path collision as a stop.
 - Reuse only an exact registered path and branch or bookmark match.
 - Before continuing in a reused workspace, inspect its status and confirm that existing changes belong to the current task. The script cannot determine task ownership.

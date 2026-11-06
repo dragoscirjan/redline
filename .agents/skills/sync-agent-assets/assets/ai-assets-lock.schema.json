@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Managed agent asset lock",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "managerVersion", "source", "selection", "catalogSkills", "files"],
+  "properties": {
+    "$schema": { "type": "string", "minLength": 1 },
+    "schemaVersion": { "const": 1 },
+    "managerVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "ref", "commit"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "ref": { "type": "string", "minLength": 1 },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" }
+      }
+    },
+    "selection": { "$ref": "selection.schema.json" },
+    "catalogSkills": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "selection.schema.json#/$defs/skillName" }
+    },
+    "files": {
+      "type": "object",
+      "propertyNames": { "$ref": "selection.schema.json#/$defs/relativePath" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "sourcePath", "sourceSha256", "installedSha256"],
+        "properties": {
+          "kind": { "enum": ["skill", "instruction"] },
+          "skill": { "$ref": "selection.schema.json#/$defs/skillName" },
+          "sourcePath": { "$ref": "selection.schema.json#/$defs/relativePath" },
+          "sourceSha256": { "$ref": "#/$defs/sha256" },
+          "installedSha256": { "$ref": "#/$defs/sha256" },
+          "retained": { "const": true },
+          "retentionReason": { "type": "string", "minLength": 1 },
+          "retainedFromCommit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "kind": { "const": "skill" } } },
+            "then": { "required": ["skill"] },
+            "else": { "not": { "required": ["skill"] } }
+          },
+          {
+            "if": { "required": ["retained"] },
+            "then": { "required": ["retentionReason", "retainedFromCommit"] }
+          }
+        ]
+      }
+    },
+    "projections": {
+      "type": "object",
+      "propertyNames": { "pattern": "^\\.claude/skills/[a-z0-9]+(?:-[a-z0-9]+)*$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["harness", "skill", "target"],
+        "properties": {
+          "harness": { "const": "claude-code" },
+          "skill": { "$ref": "selection.schema.json#/$defs/skillName" },
+          "target": { "type": "string", "pattern": "^\\.\\./\\.\\./\\.agents/skills/[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

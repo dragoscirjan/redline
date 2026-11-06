@@ -1,6 +1,6 @@
 # Cleanup workspaces
 
-`cleanup-workspaces` is the destructive companion to [`isolated-workspace`](../isolated-workspace/SKILL.md). It plans and safely removes clean integrated workspaces and prunes stale registrations after explicit confirmation.
+`cleanup-workspaces` is the destructive companion to [`isolated-workspace`](../isolated-workspace/SKILL.md). It plans and safely removes clean integrated workspaces and prunes safe stale registrations after explicit confirmation. It also has exact-target cleanup for a temporary lane created under [`subagent-orchestration`](../subagent-orchestration/SKILL.md).
 
 ## Automation
 
@@ -28,15 +28,27 @@ bun scripts/cleanup.ts --vcs git --base main \
   --apply --confirm --plan-id PLAN_ID
 ```
 
+To clean one integrated orchestration lane, run from the surviving canonical sibling workspace, name the lane workspace leaf, and use the canonical ref as the explicit base:
+
+```sh
+bun scripts/cleanup.ts --vcs git \
+  --lane issue-44--lane-worker-a --base change/issue-44
+bun scripts/cleanup.ts --vcs git \
+  --lane issue-44--lane-worker-a --base change/issue-44 \
+  --apply --confirm --plan-id PLAN_ID
+```
+
+Use `--vcs jj` for Jujutsu. A temporary lane ref is `${CANONICAL_REF}--lane-${LANE_KEY}` and its workspace leaf is the basename of that ref. The `--lane-` marker is reserved, the lane key is one safe component, and a temporary lane cannot act as the canonical caller. Lane mode selects no other workspace, validates the target ref under the caller's canonical ref, disables stale/global cleanup, and binds the target plus canonical workspace, ref, tip, and base into the plan.
+
 ## Safety model
 
-Git candidates require a clean status, matching registration and branch tip, no active operation, and exact local ancestry to the selected base. Removal uses `git worktree remove` and `git branch -d` without force.
+Git candidates require a clean status, matching registration and branch tip, no active operation, and exact local ancestry to the selected base. Removal uses `git worktree remove` and `git branch -d` without force. In lane mode both commands run from the surviving canonical workspace, after the target tip is proven to be an ancestor of canonical `HEAD`/base; this permits safe deletion even when the primary checkout has not merged the lane.
 
 Git stale pruning runs only when every prunable registration is in scope. This prevents repository-wide `git worktree prune --expire now` from silently affecting another workspace root.
 
-Jujutsu 0.38 or newer is required. Candidates require an exact integrated working-copy commit or an empty child whose parents are integrated. Cleanup uses `jj workspace forget` and `jj bookmark forget`, then removes only the revalidated workspace directory. An unresolved workspace root is skipped rather than inferred stale. Cleanup never abandons commits or propagates bookmark deletion.
+Jujutsu 0.38 or newer is required. Candidates require an exact integrated working-copy commit or an empty child whose parents are integrated. Cleanup uses `jj workspace forget` and `jj bookmark forget`, then removes only the revalidated original workspace path. In lane mode those commands run from the canonical workspace and the registered path must equal the named sibling target. Before every destructive step, cleanup rejects symlinks, path aliases, and changed directory identity; directory removal never dereferences a substituted path. An unresolved workspace root is skipped rather than inferred stale. Cleanup never abandons commits or propagates bookmark deletion.
 
-Primary, active, dirty, locked, conflicted, unmerged, out-of-scope, and ambiguous workspaces remain protected. Apply mode repeats the audit and rechecks each candidate immediately before removal.
+Primary, canonical, active, dirty, locked, conflicted, detached, changed, stale, unmerged, out-of-scope, and ambiguous lane targets remain protected. Apply mode repeats the audit and rechecks each candidate immediately before removal.
 
 ## Tests
 

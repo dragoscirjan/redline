@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent asset synchronization selection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["selectedSkills", "rootFiles"],
+  "properties": {
+    "selectedSkills": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/skillName" }
+    },
+    "declinedSkills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "reason"],
+        "properties": {
+          "name": { "$ref": "#/$defs/skillName" },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "rootFiles": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/relativePath" }
+    },
+    "adaptations": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "propertyNames": { "$ref": "#/$defs/relativePath" }
+    },
+    "retainedFiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "reason"],
+        "properties": {
+          "path": { "$ref": "#/$defs/relativePath" },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "skillName": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    }
+  }
+}

@@ -1,6 +1,6 @@
 ---
 name: cleanup-workspaces
-description: Plan and safely remove clean integrated Git worktrees or Jujutsu workspaces and prune stale registrations. Use only when the owner explicitly asks to clean finished isolated workspaces. Requires explicit VCS selection and confirmed apply mode.
+description: Plan and safely remove clean integrated Git worktrees or Jujutsu workspaces, including one exact temporary orchestration lane, and prune safe stale registrations. Use for owner-authorized cleanup or current-task lane cleanup authorized by the orchestration workflow.
 disable-model-invocation: true
 compatibility: Requires Bun and either Git with worktree support or Jujutsu 0.38 or newer with workspace support.
 metadata:
@@ -13,7 +13,9 @@ metadata:
 
 Audit isolated workspaces with deterministic TypeScript automation. Show the complete plan before removal. Loading or invoking this skill authorizes an audit only; it does not authorize mutation.
 
-Run cleanup from the primary checkout or another workspace that will survive. Read the nearest `AGENTS.md` and the `isolated-workspace` skill first.
+Ordinary cleanup requires explicit owner authorization. For one current-task temporary lane created under the approved `subagent-orchestration` workflow, the owner's initial lane authorization permits the parent to confirm the exact lane plan without another owner round trip. It does not authorize another task, ordinary cleanup, or a broader target.
+
+Run ordinary cleanup from the primary checkout or another workspace that will survive. Run exact lane cleanup from the surviving canonical sibling workspace. Read the nearest `AGENTS.md` and the `isolated-workspace` skill first.
 
 This skill depends on `isolated-workspace` and imports its advertised `scripts/lib.ts` helper through the sibling skill path. If that skill or helper is unavailable, stop. Do not install a missing dependency without owner approval and do not recreate it from memory.
 
@@ -50,11 +52,40 @@ The plan reports:
 
 Do not add force flags or manually widen the eligible set.
 
+## Clean one orchestration lane
+
+Use `--lane WORKSPACE_NAME` only for one temporary lane created for the current task. The lane ref must be `${CANONICAL_REF}--lane-${LANE_KEY}` and `WORKSPACE_NAME` must be its basename. Pass the surviving canonical branch or bookmark exactly as `--base` and run the command from its canonical workspace:
+
+```sh
+bun <skill-directory>/scripts/cleanup.ts \
+  --vcs git \
+  --lane issue-44--lane-worker-a \
+  --base change/issue-44
+```
+
+Use `--vcs jj` for Jujutsu. `--lane` accepts the non-empty workspace name, not a branch or bookmark path. The `--lane-` marker is reserved for temporary lane refs; canonical refs containing it are rejected as callers.
+
+Lane mode:
+
+- selects only the exact registered sibling workspace at `<repository>--workspaces/WORKSPACE_NAME`
+- disables unrelated candidate scanning, stale pruning, and global cleanup
+- requires the current workspace to be the surviving non-primary canonical workspace
+- requires `--base` to name the canonical workspace's attached Git branch or matching Jujutsu bookmark at its exact current tip
+- requires the target Git branch or Jujutsu bookmark to equal `${CANONICAL_REF}--lane-${LANE_KEY}` and the workspace leaf to match its basename
+- rejects a temporary lane caller, the canonical workspace as target, sibling lanes presented under a fake canonical base, and nested lane provenance
+- binds lane mode, target, current canonical workspace and ref, canonical tip, and resolved base into `planId`
+- requires the target tip or eligible empty Jujutsu child to be integrated into that canonical base
+- rejects active, dirty, locked, conflicted, detached, changed, stale, inaccessible, mismatched, or unintegrated targets
+
+For Git, worktree removal and `git branch -d` run from the surviving canonical workspace. This lets safe branch deletion use the canonical `HEAD` after ancestry proves the lane tip is integrated there; it does not weaken primary-checkout protection or use force deletion.
+
+For Jujutsu, workspace and bookmark forgetting run from the surviving canonical workspace. The original registered path, directory identity, non-symlink state, and in-root location are revalidated before each destructive step; removal uses that exact original path without dereferencing it and without force.
+
 ## Protected state
 
 The automation never selects:
 
-- the primary checkout or default Jujutsu workspace
+- the primary checkout, canonical lane-cleanup workspace, or default Jujutsu workspace
 - the current process directory or a workspace that contains it
 - a workspace outside the derived workspace root
 - a locked, detached, conflicted, inaccessible, or ambiguous workspace
@@ -79,6 +110,8 @@ A registered Git worktree is eligible only when:
 
 The plan includes `git clean -ndX` output as a warning only. The script never runs `git clean -f`.
 
+In exact lane mode, Git requires the registered path to equal the named sibling target and proves the target tip is an ancestor of canonical `HEAD`/base. It does not run repository-wide pruning. Branch deletion runs from the canonical workspace rather than the primary checkout.
+
 Missing registered worktrees are stale. Git pruning is repository-wide, so the script runs `git worktree prune --expire now --verbose` only when every currently prunable registration is inside the derived workspace root. If any prunable registration is out of scope, all automatic Git pruning is disabled and the limit is reported.
 
 After pruning, a stale branch is deleted only when its recorded tip is unchanged and integrated.
@@ -97,11 +130,11 @@ The ancestry query must select exactly the candidate commit through `<tip> & ::<
 
 `jj status` refreshes Jujutsu's working-copy snapshot during audit. This can update repository metadata but does not edit workspace files or refs. If the snapshot changes the audited commit, the current run skips that workspace and requires another audit.
 
-Treat a Jujutsu registration as stale only when `jj workspace root --name` resolves its registered root and that path is missing. If Jujutsu cannot resolve the root, classify the workspace as inaccessible and skip it. Never infer staleness from the derived path alone. Forgetting a proven stale registration preserves its bookmark and commit unless the normal eligible-workspace checks independently authorize bookmark cleanup.
+Treat a Jujutsu registration as stale only when `jj workspace root --name` resolves its registered root and that path is missing. If Jujutsu cannot resolve the root, classify the workspace as inaccessible and skip it. Never infer staleness from the derived path alone. Forgetting a proven stale registration preserves its bookmark and commit unless the normal eligible-workspace checks independently authorize bookmark cleanup. Exact lane mode rejects stale registrations and never broadens cleanup beyond the named target.
 
 ## Confirm and apply
 
-Show the complete plan to the owner. Confirmation must refer to that plan and occur after it is shown.
+Show the complete plan before mutation. For ordinary cleanup, the owner confirms that exact plan. For a current-task lane covered by the orchestration authorization above, the parent may confirm the exact plan after reviewing it.
 
 Then rerun the same command with both mutation gates:
 
@@ -114,7 +147,7 @@ bun <skill-directory>/scripts/cleanup.ts \
   --plan-id PLAN_ID
 ```
 
-Replace `PLAN_ID` with the value emitted by the approved plan-mode run. Apply mode requires `--apply`, `--confirm`, and the matching `--plan-id`. It audits twice before mutation and compares the VCS, base, candidate and skipped sets, canonical paths, refs, tips, ignored-file previews, limits, and operations. It also re-audits each eligible workspace immediately before removal. Any changed state stops the operation or candidate.
+Replace `PLAN_ID` with the value emitted by the approved plan-mode run. For lane mode, repeat `--lane WORKSPACE_NAME` and the canonical `--base`. Apply mode requires `--apply`, `--confirm`, and the matching `--plan-id`. It audits twice before mutation and compares the cleanup mode, target, current canonical workspace and ref, VCS, base, candidate and skipped sets, canonical paths, refs, tips, ignored-file previews, limits, and operations. It also re-audits each eligible workspace immediately before removal. Any changed state stops the operation or candidate.
 
 Git removal uses only:
 
@@ -123,7 +156,9 @@ git worktree remove <workspace-path>
 git branch -d <branch>
 ```
 
-Jujutsu removal uses `jj workspace forget`, then `jj bookmark forget` for an eligible local bookmark, then removes the exact confirmed directory without force.
+Ordinary mode runs these commands from the primary repository. Exact lane mode runs them from the surviving canonical workspace recorded in the plan.
+
+Jujutsu removal uses `jj workspace forget`, then `jj bookmark forget` for an eligible local bookmark, then removes the exact confirmed original directory without force. It revalidates the original path and directory identity immediately before each destructive step and reports partial failures without following a substituted symlink.
 
 Never retry with `git worktree remove --force`, `git branch -D`, `git clean -f`, `jj abandon`, `jj bookmark delete`, or `rm -rf`.
 

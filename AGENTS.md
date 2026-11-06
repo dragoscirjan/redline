@@ -19,6 +19,29 @@
 - `src.old/` and `github/action.yaml.old` hold the previous design and
   remain as references only. Nothing imports from them.
 
+## Instruction routing
+
+Load only the instructions required for the current phase.
+
+| Trigger | Required instructions |
+|---|---|
+| Before planning or performing a repository architecture, design, code, documentation, configuration, policy, or publication change | Read and follow `CONTRIBUTING.md`. |
+| Before any repository mutation | Follow `.agents/skills/isolated-workspace/SKILL.md` and the workspace configuration below. |
+| Before delegating to child agents | Follow `.agents/skills/subagent-orchestration/SKILL.md`. This route does not authorize delegation; an operator request or applicable workflow must authorize it. |
+| Before validating, committing, pushing, or publishing | Read and follow `VALIDATION.md`. |
+| Before auditing or removing workspaces | Follow `.agents/skills/cleanup-workspaces/SKILL.md`. |
+| When instructions or skill routes are missing, stale, conflicting, duplicated, or unsuitable | Follow `.agents/skills/instruction-maintenance/SKILL.md` for a read-only audit and exact proposal. |
+
+Stop before a gated phase if its required instructions are unavailable. Use
+skill frontmatter to select task-specific skills; do not preload every skill.
+Read-only inspection does not require deferred contribution instructions unless
+the task needs them.
+
+Every workspace cleanup, including removal of a current-task temporary lane,
+requires explicit owner approval of the exact cleanup plan. Permission to create
+or use a lane is not permission to remove it. This target rule overrides the
+imported lane-cleanup exception.
+
 ## Development workflow
 
 - For any architecture, design, implementation, or coding request that does
@@ -29,14 +52,24 @@
 - Apply `unslop` to every user-facing response, including questions, progress
   updates, review replies, and final answers.
 - Read `CONTRIBUTING.md` before changing the repository.
-- For every new feature or issue, create a focused branch from `main`, check
-  it out in a dedicated worktree at
-  `../redline--workspaces/<branch-name>`, and work there.
+- For every new feature or issue, create a focused branch from `main` and
+  work in its dedicated sibling worktree. Use the full issue-focused branch
+  name selected for the task; the final branch component names the worktree.
 - Commit with Conventional Commits. Run `mise run validate` before pushing.
 - Open a pull request linked to the issue. Never merge without explicit
   owner instruction; approval or a green review is not permission to merge.
-- Inform the owner and get permission before changing `AGENTS.md` or
-  `CONTRIBUTING.md`.
+- Present the exact proposal and get owner approval before changing
+  `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, or `VALIDATION.md`.
+
+### Workspace configuration
+
+- VCS: Git. Pass `--vcs git` explicitly.
+- Base revision: `origin/main`.
+- Pass the full branch name explicitly. Do not import an upstream branch prefix.
+- Detect the primary repository and derive its sibling
+  `<repository>--workspaces/<final-branch-component>` path through the workspace skill.
+- Review the helper's exact plan and obtain owner approval before applying it.
+- State the active branch and absolute worktree path in every final repository-work report.
 
 ## Architecture
 

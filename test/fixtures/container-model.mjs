@@ -7,6 +7,24 @@ const server = createServer(async (req, res) => {
   let raw = ''; for await (const part of req) raw += String(part);
   const body = JSON.parse(raw || '{}');
   console.log(JSON.stringify({ type: 'request', path: req.url ?? '', authorization: req.headers.authorization, body }));
+  let warmup;
+  for (const message of body.messages ?? []) {
+    if (message.role !== 'user') continue;
+    const content = typeof message.content === 'string' ? message.content : Array.isArray(message.content) ? message.content.map(part => part.text ?? '').join('') : '';
+    try { const value = JSON.parse(content); if (value.kind === 'REDLINE_NATIVE_WARMUP') warmup = value; } catch { /* Not a warmup request. */ }
+  }
+  if (warmup !== undefined) {
+    const reply = JSON.stringify({ kind: 'REDLINE_NATIVE_WARMUP', head: warmup.head, sourceDirectory: warmup.sourceDirectory,
+      integrations: ['cgc', 'gitnexus', 'context-mode', 'sequential-thinking'].map(component => ({ component, availability: 'unavailable', tools: [], indexStatus: 'unavailable', indexedFiles: null, persistence: 'unknown', queryTool: null, reason: 'No native MCPs configured in this review-only fixture.' })) });
+    if (body.stream === true) {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end('data: ' + JSON.stringify({ id: 'warmup', object: 'chat.completion.chunk', model: 'test-model', choices: [{ index: 0, delta: { role: 'assistant', content: reply }, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n');
+    } else {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ id: 'warmup', object: 'chat.completion', model: 'test-model', choices: [{ index: 0, message: { role: 'assistant', content: reply }, finish_reason: 'stop' }] }));
+    }
+    return;
+  }
   if (mode === 'hang') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write(': waiting for cancellation\n\n'); return; }
   if (mode === 'busy' || mode === 'unauthorized') {
     res.writeHead(mode === 'busy' ? 503 : 401, { 'content-type': 'application/json', 'retry-after-ms': '1', 'retry-after': '0' });

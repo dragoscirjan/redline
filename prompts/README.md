@@ -1,12 +1,14 @@
 # Review prompts
 
-The trusted per-file assembler in `src/review/prompt.ts` loads `v10/` in this order:
+The trusted per-file assembler in `src/review/prompt.ts` loads `v11/` in this order:
 
 1. `core-policy.md`
 2. `review-phases.md`
 3. `file-reporting.md`
 
-The assembler contract ID is `redline-file-review/v10`. Contract v10 distinguishes native CLI/Docker execution from isolated Actions execution. Native prompts use the harness's actual global and checkout-local tool catalog and permissions; an empty Redline tool list does not disable configured MCPs. Isolated prompts retain the verified read-only allowlist and captured-source confinement. Both modes preserve bounded `retry-enriched-v1` source context, authoritative diff/evidence checks and the version-4 JSON finding contract. Tool availability, successful calls and semantic correctness are separate claims. Independent verification remains disabled.
+Native CLI/Docker additionally loads `native-warmup.md`; isolated execution does not receive native-only warmup instructions.
+
+The assembler contract ID is `redline-file-review/v11`. Contract v11 distinguishes native CLI/Docker execution from isolated Actions execution. Native prompts use bounded, normalized model-warmup hints for the captured source/head, confirm graph queries in each fresh file process, and avoid unavailable/session-only indexes. Warmup does not change permissions or authoritative finding validation. Native prompts use the harness's actual global and checkout-local tool catalog and permissions; an empty Redline tool list does not disable configured MCPs. Isolated prompts retain the verified read-only allowlist and captured-source confinement. Both modes preserve bounded `retry-enriched-v1` source context, authoritative diff/evidence checks and the version-4 JSON finding contract. Tool availability, successful calls and semantic correctness are separate claims. Independent verification remains disabled.
 
 Directory numbers identify fixed policy-text revisions. The assembler contract ID versions prompt assembly separately; its numeric suffix need not equal the directory number. Contract tests check the documented ID against the assembler and the loaded modules, not by deriving a directory name from that suffix.
 

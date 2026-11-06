@@ -1,7 +1,7 @@
 /**
  * Builds the fixed, versioned per-file review prompts.
  *
- * The system prompt is the review policy (loaded from `prompts/v10/`) plus a
+ * The system prompt is the review policy (loaded from `prompts/v11/`) plus a
  * trusted run configuration; it never contains repository content. The user
  * prompt embeds exactly one file's untrusted context — manifest entry, the
  * authoritative diff, bounded revision-pinned source excerpts, and optional
@@ -25,10 +25,11 @@ import type { PromptCodeContext } from './indexed-context.ts';
 import { ANALYSIS_COMPONENTS, analysisTools } from '../harness-executor/analysis-policy.ts';
 import { FILE_REVIEW_GENERATION_SCHEMA } from './generation-schema.ts';
 import { buildFocusedSourceContext } from './source-context.ts';
+import type { WarmupGuidance } from './warmup.ts';
 import type { FindingScope } from './types.ts';
 
-export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v10' as const;
-export const FILE_REVIEW_PROMPT_VERSION = 10 as const;
+export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v11' as const;
+export const FILE_REVIEW_PROMPT_VERSION = 11 as const;
 
 export const SOURCE_CONTEXT_STRATEGIES = ['full-files-v1', 'focused-v1', 'retry-enriched-v1'] as const;
 export type SourceContextStrategy = (typeof SOURCE_CONTEXT_STRATEGIES)[number];
@@ -38,7 +39,7 @@ const PROMPT_MODULES = ['core-policy.md', 'review-phases.md', 'file-reporting.md
 /** Resolves the fixed policy directory from the TypeScript source module. */
 function defaultPromptRoot(): string {
   const moduleDirectory = fileURLToPath(new URL('.', import.meta.url));
-  return resolve(moduleDirectory, '../../prompts/v10/');
+  return resolve(moduleDirectory, '../../prompts/v11/');
 }
 const DEFAULT_PROMPT_ROOT = defaultPromptRoot();
 const MAX_PROMPT_MODULE_BYTES = 64 * 1024;
@@ -69,6 +70,7 @@ export interface FileReviewPromptOptions {
   /** Only factory-verified native tool names, never repository-selected capabilities. */
   readonly tools?: readonly string[];
   readonly executionMode?: 'native' | 'isolated';
+  readonly warmup?: WarmupGuidance;
   readonly promptRoot?: string;
 }
 
@@ -80,11 +82,11 @@ function normalizeModule(value: string): string {
   return `${value.replaceAll('\r\n', '\n').trimEnd()}\n`;
 }
 
-export async function loadReviewPolicy(promptRoot = DEFAULT_PROMPT_ROOT): Promise<{ text: string; digest: string }> {
+export async function loadReviewPolicy(promptRoot = DEFAULT_PROMPT_ROOT, native = false): Promise<{ text: string; digest: string }> {
   const root = await checkedDirectory(promptRoot, 'prompt policy directory');
   const modules: string[] = [];
   let totalBytes = 0;
-  for (const moduleName of PROMPT_MODULES) {
+  for (const moduleName of [...PROMPT_MODULES, ...(native ? ['native-warmup.md'] : [])]) {
     const content = normalizeModule(
       await readCheckedText(root, moduleName, MAX_PROMPT_MODULE_BYTES, `prompt module ${moduleName}`),
     );
@@ -231,7 +233,7 @@ export async function buildFileReviewPrompt(options: FileReviewPromptOptions): P
     options.harness === 'pi' ? 'mcp__redline_' + component.replaceAll('-', '_') + '__' + tool.name
       : options.harness === 'opencode' ? 'redline_' + component.replaceAll('-', '_') + '_' + tool.name : ''));
   if (options.executionMode !== 'native' && tools.some(tool => !allowedTools.includes(tool) || tool === '')) throw new Error('unsupported analysis capability');
-  const policy = await loadReviewPolicy(options.promptRoot);
+  const policy = await loadReviewPolicy(options.promptRoot, options.executionMode === 'native');
   const trustedConfiguration = JSON.stringify(
     {
       policyId: FILE_REVIEW_PROMPT_ID,
@@ -243,6 +245,7 @@ export async function buildFileReviewPrompt(options: FileReviewPromptOptions): P
       capabilities: {
         inspection: options.executionMode === 'native' ? 'native-harness-configuration' : 'read-only',
         executionMode: options.executionMode ?? 'isolated',
+        ...(options.executionMode !== 'native' || options.warmup === undefined ? {} : { warmup: options.warmup }),
         followUp: options.followUpAvailable === true ? 'action-owned' : 'unavailable',
         tools: options.executionMode === 'native' ? 'native-harness-catalogue' : tools,
         vulnerabilityLookup: options.executionMode === 'native' ? 'harness-configured' : false,

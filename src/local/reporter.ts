@@ -99,6 +99,19 @@ export class CliReporter implements ReviewReporter {
       if (event.fileOnlyFiles > 0) {
         this.stderr(`Indexed context: ${terminalText(event.status)}; ${event.relatedSpans} related spans; ${event.fileOnlyFiles} required ${event.fileOnlyFiles === 1 ? 'file remains' : 'files remain'} file-only.`);
       }
+    } else if (event.kind === 'warmup-started') {
+      this.clearLine();
+      this.stderr('Native warmup: discovering tools and preparing captured-head indexes, up to 2m within the run deadline…');
+    } else if (event.kind === 'warmup-ready') {
+      this.clearLine();
+      this.stderr(`Native warmup: ${event.report.status}; ${Math.ceil(event.report.durationMs / 1000)}s. Model reports are advisory, not proof of graph completeness.`);
+      for (const row of event.report.integrations) {
+        this.stderr(`  ${row.component}: tools ${row.availability}; index ${row.indexStatus}; ${row.indexedFiles === null ? 'unknown' : row.indexedFiles} files reported; persistence ${row.persistence}; query ${row.queryObserved ? 'observed' : 'not observed'}.`);
+        if (row.availability === 'not-observed' || row.availability === 'unknown' || row.indexStatus === 'unavailable' || row.indexStatus === 'unverified') {
+          this.stderr(`Warning: ${row.component} warmup did not establish usable indexing/tools. ${terminalText(row.reason, this.credential)}`);
+        }
+      }
+      if (event.report.status !== 'completed') this.stderr(`Warning: ${terminalText(event.report.reason, this.credential)} ${event.report.fatal ? 'File reviews will not start after this shared failure.' : 'Review continues with non-indexed guidance.'}`);
     } else if (event.kind === 'analysis-status') {
       this.clearLine();
       for (const integration of event.integrations) {
@@ -255,7 +268,7 @@ export class CliReporter implements ReviewReporter {
       this.row('Tool calls:', `${tools.calls.reduce((n, call) => n + call.started, 0)} started; ${tools.calls.reduce((n, call) => n + call.succeeded, 0)} succeeded; ${tools.calls.reduce((n, call) => n + call.failed, 0)} failed`);
       for (const call of tools.calls.slice(0, 20)) this.row(safe(call.name) + ':', `${call.started} calls; ${call.succeeded} succeeded; ${call.failed} failed`);
       for (const server of tools.servers ?? []) this.row('MCP ' + safe(server.name) + ':', server.status);
-      if (tools.catalogueSource === 'harness-catalogue' || tools.discovery === 'complete') {
+      if (result.summary.warmup === undefined && (tools.catalogueSource === 'harness-catalogue' || tools.discovery === 'complete')) {
         for (const requested of nativeRequestedTools(tools).filter(row => row.observation === 'not-observed')) {
           this.stderr(`Warning: requested ${requested.component} MCP tools were not observed under expected native names. They may be missing, aliased, disabled, deferred or still connecting; Redline did not filter the configured servers.`);
         }

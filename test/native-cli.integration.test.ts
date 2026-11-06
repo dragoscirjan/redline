@@ -32,26 +32,62 @@ async function body(request: IncomingMessage): Promise<Record<string, unknown>> 
 function json(response: ServerResponse, data: unknown, status = 200) {
   response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(data));
 }
-async function fixture() {
+function warmupTarget(model: ModelBody): { head: string; sourceDirectory: string } | undefined {
+  for (const message of model.messages ?? []) {
+    if (message.role !== 'user') continue;
+    const content = typeof message.content === 'string' ? message.content : Array.isArray(message.content)
+      ? message.content.map(part => typeof part?.text === 'string' ? part.text : '').join('') : '';
+    try {
+      const parsed = JSON.parse(content);
+      if (parsed.kind === 'REDLINE_NATIVE_WARMUP') return { head: parsed.head, sourceDirectory: parsed.sourceDirectory };
+    } catch { /* Normal file payloads are length-delimited rather than plain JSON. */ }
+  }
+  return undefined;
+}
+function stream(response: ServerResponse, delta: unknown, stop: string) {
+  response.writeHead(200, { 'content-type': 'text/event-stream' });
+  response.write('data: ' + JSON.stringify({ id: 'native-response', object: 'chat.completion.chunk', model: 'test-model', choices: [{ index: 0, delta, finish_reason: null }] }) + '\n\n');
+  response.write('data: ' + JSON.stringify({ id: 'native-response', object: 'chat.completion.chunk', model: 'test-model', choices: [{ index: 0, delta: {}, finish_reason: stop }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) + '\n\n');
+  response.end('data: [DONE]\n\n');
+}
+async function fixture(graph: 'failed' | 'missing' | 'ready' = 'failed') {
   const root = await mkdtemp(join(tmpdir(), 'redline-native-cli-'));
   const repo = join(root, 'repo'), home = join(root, 'home'), output = join(root, 'output');
   await Promise.all([repo, home].map(path => mkdir(path)));
   const requests: ModelBody[] = [], calls: string[] = [];
+  const graphCalls: string[] = [];
+  let indexedRoot: string | undefined;
+  let graphSessions = 0;
   const server = createServer(async (request, response) => {
     try {
       if (request.method !== 'POST') { json(response, { error: 'method not allowed' }, 405); return; }
       const value = await body(request);
       if (request.url?.startsWith('/mcp/')) {
         const tool = request.url.slice('/mcp/'.length);
-        if (!toolNames.includes(tool)) { json(response, {}, 404); return; }
+        if (!toolNames.includes(tool) && tool !== 'cgc') { json(response, {}, 404); return; }
         const id = value['id'];
         if (value['method'] === 'initialize') {
+          if (tool === 'cgc') graphSessions++;
           json(response, { jsonrpc: '2.0', id, result: { protocolVersion: '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: tool, version: '1.0.0' } } });
         } else if (value['method'] === 'tools/list') {
-          json(response, { jsonrpc: '2.0', id, result: { tools: [{ name: tool, description: 'Synthetic native configuration check', inputSchema: { type: 'object', properties: {} } }] } });
+          json(response, { jsonrpc: '2.0', id, result: { tools: (tool === 'cgc' ? ['cgc_index', 'cgc_query'] : [tool]).map(name => ({ name, description: 'Synthetic native configuration check',
+            inputSchema: tool === 'cgc' ? { type: 'object', properties: { sourceDirectory: { type: 'string' } }, required: ['sourceDirectory'], additionalProperties: false } : { type: 'object', properties: {} } })) } });
         } else if (value['method'] === 'tools/call') {
-          calls.push(tool);
-          json(response, { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: tool + '-ok' }] } });
+          if (tool === 'cgc') {
+            const params = value['params'] as { name: string; arguments: { sourceDirectory: string } };
+            const directory = params.arguments.sourceDirectory;
+            const hostDirectory = directory.startsWith('/output/') ? join(output, directory.slice('/output/'.length)) : directory;
+            if (!hostDirectory.startsWith(root + '/output/')) throw new Error('synthetic graph escaped captured output');
+            if (params.name === 'cgc_index') {
+              expect(await readFile(join(hostDirectory, 'sample.ts'), 'utf8')).toBe('export const value = 2;\n');
+              indexedRoot = directory;
+            } else expect(indexedRoot).toBe(directory);
+            graphCalls.push(params.name);
+            json(response, { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: 'captured sample indexed; files=1; ' + params.name + '-ok' }] } });
+          } else {
+            calls.push(tool);
+            json(response, { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: tool + '-ok' }] } });
+          }
         } else if (id === undefined) { response.writeHead(202); response.end(); }
         else json(response, { jsonrpc: '2.0', id, error: { code: -32601, message: 'unsupported synthetic method' } });
         return;
@@ -60,16 +96,36 @@ async function fixture() {
       expect(request.headers.authorization).toBe('Bearer ' + key);
       const model = value as ModelBody;
       requests.push(model);
+      const target = warmupTarget(model);
+      const query = model.tools?.find(tool => tool.function.name.endsWith('cgc_query'))?.function.name;
+      const index = model.tools?.find(tool => tool.function.name.endsWith('cgc_index'))?.function.name;
+      if (target !== undefined) {
+        const resultCount = model.messages?.filter(message => message.role === 'tool').length ?? 0;
+        if (graph === 'ready' && resultCount < 2) {
+          const name = resultCount === 0 ? index : query;
+          if (name === undefined) throw new Error('native graph tool missing');
+          stream(response, { role: 'assistant', tool_calls: [{ index: 0, id: 'warmup-' + resultCount, type: 'function', function: { name, arguments: JSON.stringify({ sourceDirectory: target.sourceDirectory }) } }] }, 'tool_calls');
+          return;
+        }
+        const report = { kind: 'REDLINE_NATIVE_WARMUP', ...target, integrations: ['cgc', 'gitnexus', 'context-mode', 'sequential-thinking'].map(component => ({
+          component, availability: component === 'cgc' && graph === 'ready' ? 'available' : 'unavailable',
+          tools: component === 'cgc' && graph === 'ready' ? [index, query] : [],
+          indexStatus: component === 'cgc' && graph === 'ready' ? 'ready' : 'unavailable',
+          indexedFiles: component === 'cgc' && graph === 'ready' ? 1 : null,
+          persistence: component === 'cgc' && graph === 'ready' ? 'shared' : 'unknown',
+          queryTool: component === 'cgc' && graph === 'ready' ? query : null, reason: component === 'cgc' && graph === 'ready' ? 'Captured source indexed and queried.' : 'Not available in this synthetic native configuration.',
+        })) };
+        stream(response, { role: 'assistant', content: JSON.stringify(report) }, 'stop'); return;
+      }
       const hasResults = model.messages?.some(message => message.role === 'tool');
       const selected = toolNames.map(suffix => model.tools?.find(tool => tool.function.name.endsWith(suffix))?.function.name);
       if (!hasResults && selected.some(name => name === undefined)) { json(response, { error: { message: 'native global/local/extra MCP declarations missing; observed: ' + JSON.stringify(model.tools?.map(tool => tool.function.name) ?? []) } }, 400); return; }
       const document = JSON.stringify({ version: 4, fileId: '000001', outcome: 'findings', contextRequests: [], findings: [reviewFinding({ evidence: 'export const value = 2;' })] });
-      const delta = hasResults ? { role: 'assistant', content: document }
-        : { role: 'assistant', tool_calls: selected.map((name, index) => ({ index, id: 'native-' + index, type: 'function', function: { name, arguments: '{}' } })) };
-      response.writeHead(200, { 'content-type': 'text/event-stream' });
-      response.write('data: ' + JSON.stringify({ id: 'native-response', object: 'chat.completion.chunk', model: 'test-model', choices: [{ index: 0, delta, finish_reason: null }] }) + '\n\n');
-      response.write('data: ' + JSON.stringify({ id: 'native-response', object: 'chat.completion.chunk', model: 'test-model', choices: [{ index: 0, delta: {}, finish_reason: hasResults ? 'stop' : 'tool_calls' }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) + '\n\n');
-      response.end('data: [DONE]\n\n');
+      if (graph === 'ready') expect(JSON.stringify(model.messages)).toContain('reported-ready');
+      const selectedCalls = selected.map((name, index) => ({ index, id: 'native-' + index, type: 'function', function: { name, arguments: '{}' } }));
+      if (graph === 'ready') selectedCalls.push({ index: 3, id: 'native-query', type: 'function', function: { name: query, arguments: JSON.stringify({ sourceDirectory: indexedRoot }) } });
+      const delta = hasResults ? { role: 'assistant', content: document } : { role: 'assistant', tool_calls: selectedCalls };
+      stream(response, delta, hasResults ? 'stop' : 'tool_calls');
     } catch { json(response, { error: { message: 'synthetic fixture failed' } }, 500); }
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -90,37 +146,38 @@ async function fixture() {
   await mkdir(join(home, '.pi/agent'), { recursive: true }); await mkdir(join(repo, '.pi'), { recursive: true });
   const piServer = (tool: string) => ({ url: endpoint + '/mcp/' + tool, exposure: 'direct' });
   await writeFile(join(home, '.pi/agent/settings.json'), JSON.stringify({ defaultTools: ['read'], quietStartup: true, retry: { enabled: false } }));
-  await writeFile(join(home, '.pi/agent/mcp.json'), JSON.stringify({ mcpServers: { global_fixture: piServer('global_ping'), cgc: { command: '/redline-synthetic-missing-mcp', args: [] } } }));
+  await writeFile(join(home, '.pi/agent/mcp.json'), JSON.stringify({ mcpServers: { global_fixture: piServer('global_ping'), ...(graph === 'ready' ? { cgc: piServer('cgc') } : graph === 'failed' ? { cgc: { command: '/redline-synthetic-missing-mcp', args: [] } } : {}) } }));
   await writeFile(join(repo, '.pi/mcp.json'), JSON.stringify({ mcpServers: { local_fixture: piServer('local_ping'), extra_fixture: piServer('extra_ping') } }));
   await writeFile(join(home, '.pi/agent/models.json'), JSON.stringify({ providers: { openrouter: { baseUrl: endpoint + '/v1', api: 'openai-completions', apiKey: '$REDLINE_MODEL_API_KEY', models: [{ id: 'test-model', name: 'Native test', reasoning: true, contextWindow: 128000, maxTokens: 4096 }] } } }));
   await mkdir(join(home, '.config/opencode'), { recursive: true });
   const ocServer = (tool: string) => ({ type: 'remote', url: endpoint + '/mcp/' + tool });
-  await writeFile(join(home, '.config/opencode/opencode.json'), JSON.stringify({ $schema: 'https://opencode.ai/config.json', mcp: { global_fixture: ocServer('global_ping'), cgc: { type: 'local', command: ['/redline-synthetic-missing-mcp'], enabled: true } } }));
+  await writeFile(join(home, '.config/opencode/opencode.json'), JSON.stringify({ $schema: 'https://opencode.ai/config.json', mcp: { global_fixture: ocServer('global_ping'), ...(graph === 'ready' ? { cgc: ocServer('cgc') } : graph === 'failed' ? { cgc: { type: 'local', command: ['/redline-synthetic-missing-mcp'], enabled: true } } : {}) } }));
   await writeFile(join(repo, 'opencode.json'), JSON.stringify({ $schema: 'https://opencode.ai/config.json', mcp: { local_fixture: ocServer('local_ping'), extra_fixture: ocServer('extra_ping') } }));
-  return { root, repo, home, output, env, endpoint, base, requests, calls,
+  return { root, repo, home, output, env, endpoint, base, requests, calls, graphCalls, get graphSessions() { return graphSessions; },
     async close() { await new Promise<void>(resolve => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); } };
 }
 
 for (const runtime of ['cli', 'docker'] as const) {
 describe.runIf(runtime === 'cli' ? enabled : containerEnabled)('full native ' + runtime + ' integration', () => {
   for (const harness of ['pi', 'opencode'] as const) {
-    it(harness + ' loads global/local MCPs, exposes extras, calls them and returns a validated finding', async () => {
-      const f = await fixture();
+    for (const { graph, tty } of [{ graph: 'missing', tty: false }, { graph: 'ready', tty: false }, { graph: 'missing', tty: true }] as const) it(harness + ' warms up ' + graph + ' CGC before reviewing' + (tty ? ' with live PTY progress through tee' : ' with global/local/extra MCPs'), async () => {
+      const f = await fixture(graph);
       try {
         const configuredFiles = [
           ...['.pi/agent/settings.json', '.pi/agent/models.json', '.pi/agent/mcp.json', '.config/opencode/opencode.json'].map(path => join(f.home, path)),
           join(f.repo, '.pi/mcp.json'), join(f.repo, 'opencode.json'),
         ];
         const before = await Promise.all(configuredFiles.map(path => readFile(path, 'utf8')));
-        const child = spawn('bash', [join(packageRoot, 'test-cli.sh'), ...(runtime === 'docker' ? ['--docker'] : []), harness],
-        { cwd: f.repo, env: { ...f.env, TEST_NODE: process.execPath,
+        const command = ['bash', join(packageRoot, 'test-cli.sh'), ...(runtime === 'docker' ? ['--docker'] : []), harness];
+        const child = spawn(tty ? 'python3' : command[0]!, tty ? [join(packageRoot, 'test/fixtures/pty-run.py'), ...command] : command.slice(1),
+        { cwd: f.repo, env: { ...f.env, TERM: 'xterm-256color', TEST_NODE: process.execPath,
           TEST_LOG_DIR: join(f.root, 'logs'), TEST_OUTPUT_DIR: f.output,
           TEST_DOCKER_IMAGE: process.env.REDLINE_NATIVE_IMAGE ?? 'redline-native209:dev',
           TEST_SKIP_BUILD: '1', TEST_DOCKER_HOME: f.home, TEST_DOCKER_NETWORK: 'host',
           REDLINE_PROVIDER: 'openrouter', REDLINE_ENDPOINT: f.endpoint + '/v1', REDLINE_MODEL: 'test-model',
           REDLINE_BASE: f.base, REDLINE_INDEXING: 'disabled', REDLINE_RETRIES: '0',
           REDLINE_REVIEW_CONCURRENCY: '1', REDLINE_TIMEOUT: '1m', REDLINE_RUN_TIMEOUT: '2m',
-          REDLINE_MAX_OUTPUT_TOKENS: '4096', REDLINE_MODEL_PROTOCOL: harness === 'pi' ? 'openrouter-json' : 'compatible',
+          REDLINE_MAX_OUTPUT_TOKENS: '8192', REDLINE_MODEL_PROTOCOL: harness === 'pi' ? 'openrouter-json' : 'compatible',
         }, stdio: ['ignore', 'pipe', 'pipe'] });
         let stdout = '', stderr = '';
         child.stdout.on('data', chunk => { stdout = (stdout + String(chunk)).slice(-20000); });
@@ -131,6 +188,7 @@ describe.runIf(runtime === 'cli' ? enabled : containerEnabled)('full native ' + 
           child.once('exit', code => { clearTimeout(timer); resolve(code); });
         });
         expect(code, stdout + '\n' + stderr).toBe(0);
+        expect(stdout.includes('\u001b[2K')).toBe(tty);
         expect(stdout).toContain(runtime === 'cli' ? 'UNSANDBOXED NATIVE CLI' : 'Docker is the execution isolation boundary');
         const logFiles = await readdir(join(f.root, 'logs'));
         expect(logFiles).toHaveLength(1);
@@ -139,9 +197,21 @@ describe.runIf(runtime === 'cli' ? enabled : containerEnabled)('full native ' + 
         expect(outputDirs).toHaveLength(1);
         const output = join(f.output, outputDirs[0]!);
         expect(f.calls.sort()).toEqual(toolNames.slice().sort());
-        expect(f.requests.length).toBeGreaterThanOrEqual(2);
+        expect(f.requests.length).toBeGreaterThanOrEqual(3);
+        expect(warmupTarget(f.requests[0]!)).toBeDefined();
+        expect(stdout.indexOf('Native warmup: completed')).toBeLessThan(stdout.indexOf('Workload:'));
+        const warmup = JSON.parse(await readFile(join(output, 'reviews/warmup.json'), 'utf8'));
+        expect(warmup.status).toBe('completed');
+        if (graph === 'ready') {
+          expect(warmup.integrations[0]).toMatchObject({ indexStatus: 'reported-ready', queryObserved: true, indexedFiles: 1 });
+          expect(f.graphCalls).toEqual(['cgc_index', 'cgc_query', 'cgc_query']);
+          expect(f.graphSessions).toBeGreaterThanOrEqual(2);
+        } else {
+          expect(warmup.integrations[0].availability).toBe('not-observed');
+          expect(stdout.indexOf('Warning: cgc warmup')).toBeLessThan(stdout.indexOf('Workload:'));
+        }
         for (const request of f.requests) {
-          expect(request.max_tokens ?? request.max_completion_tokens).toBe(4096);
+          expect(request.max_tokens ?? request.max_completion_tokens).toBe(warmupTarget(request) === undefined ? 8192 : 4096);
           expect(request.reasoning?.enabled).not.toBe(false);
           expect(request.reasoning?.effort).not.toBe('none');
           if (harness === 'pi') {
@@ -166,10 +236,11 @@ describe.runIf(runtime === 'cli' ? enabled : containerEnabled)('full native ' + 
           expect(result.tools.catalogue).toContain('read');
           expect(result.tools.catalogue).not.toContain('write');
         }
-        expect(result.tools.calls.reduce((n: number, call: { succeeded: number }) => n + call.succeeded, 0)).toBe(3);
-        if (harness === 'opencode') expect(result.tools.servers.find((server: { name: string }) => server.name === 'cgc')?.status).toBe('failed');
+        expect(result.tools.calls.reduce((n: number, call: { succeeded: number }) => n + call.succeeded, 0)).toBe(graph === 'ready' ? 4 : 3);
         const report = await readFile(join(output, 'reviews/native-tools.json'), 'utf8');
         expect(report).toContain('extra_ping');
+        expect(JSON.parse(report).requestedMcp.find((row: { component: string }) => row.component === 'cgc').observation).toBe(graph === 'ready' ? 'observed' : 'not-observed');
+        expect(JSON.parse(report).warmupReport).toBe('warmup.json');
         expect(report + stdout + stderr + JSON.stringify(result)).not.toContain(key);
       } finally { await f.close(); }
     }, 80000);

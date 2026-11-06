@@ -8,6 +8,7 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { NativeWarmupReport } from './warmup.ts';
 import type { IntegrationStatus } from '../harness-executor/analysis.ts';
 import { nativeRequestedTools, type NativeToolEvidence } from '../harness-executor/native.ts';
 import type { FollowUpRequestBatch } from '../code-context/follow-up.ts';
@@ -179,6 +180,10 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
       `- **Execution deadlines:** ${summary.executionBudget.fileTimeoutMs} ms per file, ${summary.executionBudget.runTimeoutMs} ms whole run`,
       `- **Deadline result:** ${summary.executionBudget.deadlineExhausted ? 'exhausted' : 'completed within budget'}; ${summary.executionBudget.deadlineOmittedFiles} files omitted, ${summary.executionBudget.elapsedMs} ms elapsed`,
     ]),
+    ...(summary.warmup === undefined ? [] : [
+      `- **Native warmup:** ${summary.warmup.status}; ${summary.warmup.durationMs} ms; ${summary.warmup.budgetMs} ms allowance. Index readiness is model-reported, not complete-coverage proof.`,
+      ...summary.warmup.integrations.map(row => `- **Warmup ${row.component}:** tools ${row.availability}; index ${row.indexStatus}; ${row.indexedFiles ?? 'unknown'} files reported; persistence ${row.persistence}; query ${row.queryObserved ? 'observed' : 'not observed'}.`),
+    ]),
     ...(summary.retries === undefined ? [] : [
       `- **Review retries:** ${summary.retries.limit} additional attempts per file; ${summary.retries.attempts} total review attempts; ${summary.retries.retriedFiles} files retried; ${summary.retries.recoveredFiles} recovered`,
       `- **Retry limits:** ${summary.retries.exhaustedFiles} files exhausted attempts; ${summary.retries.deadlineSkippedFiles} files lacked time for remaining attempts; timeout increment ${summary.retries.timeoutIncrementMs} ms`,
@@ -263,7 +268,8 @@ function renderPullRequestReviewMarkdown(review: PullRequestReviewRecord): strin
 
 export interface ReviewWriter {
   writeAnalysisReport?(integrations: readonly IntegrationStatus[]): Promise<void>;
-  writeNativeToolsReport?(evidence: NativeToolEvidence): Promise<void>;
+  writeNativeToolsReport?(evidence: NativeToolEvidence, warmup?: NativeWarmupReport): Promise<void>;
+  writeWarmupReport?(report: NativeWarmupReport): Promise<void>;
   writeFileReview(record: FileReviewRecordWithRaw): Promise<void>;
   writeSummary(summary: ReviewRunSummary): Promise<void>;
   writePullRequestReview(review: PullRequestReviewRecord): Promise<void>;
@@ -285,11 +291,17 @@ export function createReviewWriter(outputDirectory: string): ReviewWriter {
       await prepare();
       await writeFile(join(reviewsDirectory, 'analysis-tools.json'), JSON.stringify({ version: 1, integrations }, null, 2) + '\n', { mode: 0o600 });
     },
-    async writeNativeToolsReport(evidence: NativeToolEvidence): Promise<void> {
+    async writeWarmupReport(report: NativeWarmupReport): Promise<void> {
+      await prepare();
+      await writeFile(join(reviewsDirectory, 'warmup.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
+    },
+    async writeNativeToolsReport(evidence: NativeToolEvidence, warmup?: NativeWarmupReport): Promise<void> {
       await prepare();
       await writeFile(join(reviewsDirectory, 'native-tools.json'), JSON.stringify({
         version: 1, executionMode: 'native', configuration: 'harness-global-and-checkout-local',
-        ...evidence, requestedMcp: nativeRequestedTools(evidence),
+        ...evidence, requestedMcp: warmup === undefined ? nativeRequestedTools(evidence)
+          : warmup.integrations.map(row => ({ component: row.component, observation: row.availability, indexStatus: row.indexStatus })),
+        ...(warmup === undefined ? {} : { warmupReport: 'warmup.json' }),
       }, null, 2) + '\n', { mode: 0o600 });
     },
     async writeFileReview(record: FileReviewRecordWithRaw): Promise<void> {

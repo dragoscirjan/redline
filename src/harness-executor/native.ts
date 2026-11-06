@@ -74,20 +74,6 @@ export function nativeRequestedTools(evidence: NativeToolEvidence) {
   });
 }
 
-/** Parse only server names/states from OpenCode's native command, discarding commands, URLs and errors. */
-export function nativeOpenCodeServers(stdout: string): { servers: NativeServerObservation[]; discovery: 'complete' | 'incomplete' } {
-  const text = stdout.replace(/\u001b\[[0-9;]*m/gu, '');
-  const servers: NativeServerObservation[] = [];
-  let truncated = false;
-  for (const line of text.split('\n')) {
-    const match = /^\s*(?:[│┃]\s*)?(?:[●○]\s*)?(?:[✓✗✕×!]\s*)?([A-Za-z0-9_.-]{1,128})\s+(connected|failed|disabled)\s*$/u.exec(line);
-    if (match === null) continue;
-    if (servers.length < 256) servers.push({ name: match[1] as string, status: match[2] as NativeServerObservation['status'] });
-    else truncated = true;
-  }
-  return { servers, discovery: !truncated && (servers.length > 0 || text.includes('No MCP servers configured')) ? 'complete' : 'incomplete' };
-}
-
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }

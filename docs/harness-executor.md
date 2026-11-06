@@ -10,7 +10,7 @@ Both harnesses keep their normal global and checkout-local configuration, MCP se
 
 Precomputed CGC context is independent of native MCP configuration. A failed base-index build does not disable the harness's configured CGC server. Conversely, an installed or connected server does not prove an indexed repository, a successful query or correct findings.
 
-`reviews/native-tools.json` and per-file records distinguish observed tool names, native server states where the harness exposes them, calls started, successful calls and failures. Pi supplies a runtime tool catalog. OpenCode supplies its native MCP listing plus observed calls. Missing or unobserved requested integrations warn without filtering the remaining configured servers. Tool arguments, results and reasoning are not retained in these diagnostics.
+`reviews/native-tools.json` and per-file records distinguish observed tool names, native server states where the harness exposes them, calls started, successful calls and failures. Pi supplies a runtime tool catalog. OpenCode supplies observed native calls. Both use a bounded model-mediated warmup report before file work, not a separate manual MCP-list command. Missing or unobserved requested integrations warn without filtering the remaining configured servers. Tool arguments, results and reasoning are not retained in these diagnostics.
 
 The current GitHub Action keeps its isolated execution described below. Moving it to the image is a separate milestone.
 
@@ -90,7 +90,7 @@ The following configuration rules apply to isolated Actions:
 
 ### OpenCode
 
-Native CLI/Docker runs `opencode run --dir <checkout> --format json --agent redline-review --model provider/model` without `--pure` or redirected home/XDG paths. A final `OPENCODE_CONFIG_CONTENT` merge adds only the selected provider request settings and review-agent prompt, preserving global/local MCPs, plugins, permissions and existing inline configuration. The credential is referenced as `{env:REDLINE_MODEL_API_KEY}`. Redline does not add `--auto` or override the user's permission decisions. The native MCP listing reports connection state without prebuilding a second Redline-owned graph.
+Native CLI/Docker runs `opencode run --dir <checkout> --format json --agent redline-review --model provider/model` without `--pure` or redirected home/XDG paths. A final `OPENCODE_CONFIG_CONTENT` merge adds only the selected provider request settings and review-agent prompt, preserving global/local MCPs, plugins, permissions and existing inline configuration. The credential is referenced as `{env:REDLINE_MODEL_API_KEY}`. Redline does not add `--auto` or override the user's permission decisions. The native model-mediated warmup discovers tools and prepares/queries captured-source indexes; Redline does not run a separate MCP listing probe.
 
 The following configuration rules apply to isolated Actions:
 

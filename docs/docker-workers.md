@@ -21,7 +21,7 @@ Current source builds use Docker as the execution isolation boundary and run nat
 
 Host configuration and credentials are not mounted automatically. Supply them explicitly when needed, and use commands and paths that exist inside the image. Configured tools can access the container's network and permitted mounts. Docker hardening is separate follow-up work; the current GitHub Action has not migrated to this image.
 
-Native tool observations are in `reviews/native-tools.json`. Server connection, an indexed repository and a successful tool call are different states. Precomputed `--indexing` coverage does not determine which native MCPs are enabled. A connected graph server can still have no index. Prepare native indexes using the provider's own tooling and storage rules; a read-only repository mount cannot accept repository-local index writes. The precomputed Redline context does not populate native MCP graphs.
+A bounded native model warmup discovers tools and prepares/queries captured-head indexes before file work, printing warnings immediately and saving `reviews/warmup.json`. Its two-minute ceiling and 4,096-token response cap consume the existing run budget. Native tool observations, including warmup calls, are in `reviews/native-tools.json`. Server connection, an indexed repository and a successful tool call are different states. Precomputed `--indexing` coverage does not determine which native MCPs are enabled. A connected graph server can still have no index. Prepare native indexes using the provider's own tooling and storage rules; a read-only repository mount cannot accept repository-local index writes. The precomputed Redline context does not populate native MCP graphs.
 
 ## Review a repository
 

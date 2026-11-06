@@ -50,7 +50,7 @@ function stream(response: ServerResponse, delta: unknown, stop: string) {
   response.write('data: ' + JSON.stringify({ id: 'native-response', object: 'chat.completion.chunk', model: 'test-model', choices: [{ index: 0, delta: {}, finish_reason: stop }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) + '\n\n');
   response.end('data: [DONE]\n\n');
 }
-async function fixture(graph: 'failed' | 'missing' | 'ready' = 'failed') {
+async function fixture(graph: 'failed' | 'missing' | 'ready' | 'deferred' = 'failed') {
   const root = await mkdtemp(join(tmpdir(), 'redline-native-cli-'));
   const repo = join(root, 'repo'), home = join(root, 'home'), output = join(root, 'output');
   await Promise.all([repo, home].map(path => mkdir(path)));
@@ -64,13 +64,14 @@ async function fixture(graph: 'failed' | 'missing' | 'ready' = 'failed') {
       const value = await body(request);
       if (request.url?.startsWith('/mcp/')) {
         const tool = request.url.slice('/mcp/'.length);
-        if (!toolNames.includes(tool) && tool !== 'cgc') { json(response, {}, 404); return; }
+        if (!toolNames.includes(tool) && tool !== 'cgc' && tool !== 'gitnexus') { json(response, {}, 404); return; }
         const id = value['id'];
         if (value['method'] === 'initialize') {
           if (tool === 'cgc') graphSessions++;
+          if (tool === 'gitnexus') await new Promise(resolve => setTimeout(resolve, 1500));
           json(response, { jsonrpc: '2.0', id, result: { protocolVersion: '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: tool, version: '1.0.0' } } });
         } else if (value['method'] === 'tools/list') {
-          json(response, { jsonrpc: '2.0', id, result: { tools: (tool === 'cgc' ? ['cgc_index', 'cgc_query'] : [tool]).map(name => ({ name, description: 'Synthetic native configuration check',
+          json(response, { jsonrpc: '2.0', id, result: { tools: (tool === 'cgc' ? ['cgc_index', 'cgc_query'] : tool === 'gitnexus' ? ['query'] : [tool]).map(name => ({ name, description: 'Synthetic native configuration check',
             inputSchema: tool === 'cgc' ? { type: 'object', properties: { sourceDirectory: { type: 'string' } }, required: ['sourceDirectory'], additionalProperties: false } : { type: 'object', properties: {} } })) } });
         } else if (value['method'] === 'tools/call') {
           if (tool === 'cgc') {
@@ -101,6 +102,16 @@ async function fixture(graph: 'failed' | 'missing' | 'ready' = 'failed') {
       const index = model.tools?.find(tool => tool.function.name.endsWith('cgc_index'))?.function.name;
       if (target !== undefined) {
         const resultCount = model.messages?.filter(message => message.role === 'tool').length ?? 0;
+        if (graph === 'deferred' && resultCount === 0) {
+          expect(JSON.stringify(model.messages)).toContain('First perform native tool discovery');
+          const tool = model.tools?.find(tool => tool.function.name === 'codemode');
+          if (tool === undefined) throw new Error('native codemode missing');
+          const script = 'text(ALL_TOOLS.filter(tool => tool.name.includes("gitnexus")).map(tool => tool.name));';
+          const schema = (tool.function as { parameters?: { properties?: Record<string, unknown> } }).parameters;
+          const key = Object.keys(schema?.properties ?? {})[0] ?? 'code';
+          stream(response, { role: 'assistant', tool_calls: [{ index: 0, id: 'warmup-discovery', type: 'function', function: { name: 'codemode', arguments: JSON.stringify({ [key]: script }) } }] }, 'tool_calls');
+          return;
+        }
         if (graph === 'ready' && resultCount < 2) {
           const name = resultCount === 0 ? index : query;
           if (name === undefined) throw new Error('native graph tool missing');
@@ -108,8 +119,8 @@ async function fixture(graph: 'failed' | 'missing' | 'ready' = 'failed') {
           return;
         }
         const report = { kind: 'REDLINE_NATIVE_WARMUP', ...target, integrations: ['cgc', 'gitnexus', 'context-mode', 'sequential-thinking'].map(component => ({
-          component, availability: component === 'cgc' && graph === 'ready' ? 'available' : 'unavailable',
-          tools: component === 'cgc' && graph === 'ready' ? [index, query] : [],
+          component, availability: component === 'cgc' && graph === 'ready' || component === 'gitnexus' && graph === 'deferred' ? 'available' : 'unavailable',
+          tools: component === 'cgc' && graph === 'ready' ? [index, query] : component === 'gitnexus' && graph === 'deferred' ? ['mcp__codeindex_gitnexus__query'] : [],
           indexStatus: component === 'cgc' && graph === 'ready' ? 'ready' : 'unavailable',
           indexedFiles: component === 'cgc' && graph === 'ready' ? 1 : null,
           persistence: component === 'cgc' && graph === 'ready' ? 'shared' : 'unknown',
@@ -145,8 +156,8 @@ async function fixture(graph: 'failed' | 'missing' | 'ready' = 'failed') {
   };
   await mkdir(join(home, '.pi/agent'), { recursive: true }); await mkdir(join(repo, '.pi'), { recursive: true });
   const piServer = (tool: string) => ({ url: endpoint + '/mcp/' + tool, exposure: 'direct' });
-  await writeFile(join(home, '.pi/agent/settings.json'), JSON.stringify({ defaultTools: ['read'], quietStartup: true, retry: { enabled: false } }));
-  await writeFile(join(home, '.pi/agent/mcp.json'), JSON.stringify({ mcpServers: { global_fixture: piServer('global_ping'), ...(graph === 'ready' ? { cgc: piServer('cgc') } : graph === 'failed' ? { cgc: { command: '/redline-synthetic-missing-mcp', args: [] } } : {}) } }));
+  await writeFile(join(home, '.pi/agent/settings.json'), JSON.stringify({ defaultTools: graph === 'deferred' ? ['read', 'codemode'] : ['read'], quietStartup: true, retry: { enabled: false } }));
+  await writeFile(join(home, '.pi/agent/mcp.json'), JSON.stringify({ mcpServers: { global_fixture: piServer('global_ping'), ...(graph === 'deferred' ? { codeindex_gitnexus: { url: endpoint + '/mcp/gitnexus', exposure: 'codemode' } } : {}), ...(graph === 'ready' ? { cgc: piServer('cgc') } : graph === 'failed' ? { cgc: { command: '/redline-synthetic-missing-mcp', args: [] } } : {}) } }));
   await writeFile(join(repo, '.pi/mcp.json'), JSON.stringify({ mcpServers: { local_fixture: piServer('local_ping'), extra_fixture: piServer('extra_ping') } }));
   await writeFile(join(home, '.pi/agent/models.json'), JSON.stringify({ providers: { openrouter: { baseUrl: endpoint + '/v1', api: 'openai-completions', apiKey: '$REDLINE_MODEL_API_KEY', models: [{ id: 'test-model', name: 'Native test', reasoning: true, contextWindow: 128000, maxTokens: 4096 }] } } }));
   await mkdir(join(home, '.config/opencode'), { recursive: true });
@@ -160,7 +171,7 @@ async function fixture(graph: 'failed' | 'missing' | 'ready' = 'failed') {
 for (const runtime of ['cli', 'docker'] as const) {
 describe.runIf(runtime === 'cli' ? enabled : containerEnabled)('full native ' + runtime + ' integration', () => {
   for (const harness of ['pi', 'opencode'] as const) {
-    for (const { graph, tty } of [{ graph: 'missing', tty: false }, { graph: 'ready', tty: false }, { graph: 'missing', tty: true }] as const) it(harness + ' warms up ' + graph + ' CGC before reviewing' + (tty ? ' with live PTY progress through tee' : ' with global/local/extra MCPs'), async () => {
+    for (const { graph, tty } of [{ graph: 'missing', tty: false }, { graph: 'ready', tty: false }, { graph: 'missing', tty: true }, ...(harness === 'pi' ? [{ graph: 'deferred', tty: false }] as const : [])] as const) it(harness + ' warms up ' + (graph === 'deferred' ? 'deferred GitNexus discovery' : graph + ' CGC') + ' before reviewing' + (tty ? ' with live PTY progress through tee' : ' with global/local/extra MCPs'), async () => {
       const f = await fixture(graph);
       try {
         const configuredFiles = [
@@ -202,6 +213,13 @@ describe.runIf(runtime === 'cli' ? enabled : containerEnabled)('full native ' + 
         expect(stdout.indexOf('Native warmup: completed')).toBeLessThan(stdout.indexOf('Workload:'));
         const warmup = JSON.parse(await readFile(join(output, 'reviews/warmup.json'), 'utf8'));
         expect(warmup.status).toBe('completed');
+        if (graph === 'deferred') {
+          expect(warmup.integrations.find((row: { component: string }) => row.component === 'gitnexus').availability).toBe('observed');
+          expect(warmup.tools.catalogue).toContain('mcp__codeindex_gitnexus__query');
+          const discovery = JSON.stringify(f.requests.filter(request => warmupTarget(request) !== undefined).flatMap(request => request.messages?.filter(message => message.role === 'tool') ?? []));
+          expect(discovery).toContain('mcp__codeindex_gitnexus__query');
+          expect(warmup.tools.calls.find((call: { name: string }) => call.name === 'codemode')?.succeeded).toBe(1);
+        }
         if (graph === 'ready') {
           expect(warmup.integrations[0]).toMatchObject({ indexStatus: 'reported-ready', queryObserved: true, indexedFiles: 1 });
           expect(f.graphCalls).toEqual(['cgc_index', 'cgc_query', 'cgc_query']);

@@ -29,6 +29,28 @@ describe('native model warmup report', () => {
   it.each(['head', 'sourceDirectory', 'unknown'] as const)('rejects identity/schema mismatch %s', key => {
     expect(validateWarmup(run({ ...report(), [key]: 'wrong' }), head, source, 1000).status).toBe('invalid');
   });
+  it('retains native CGC and sequential-thinking visibility when model JSON is invalid', () => {
+    const original = run();
+    const catalogue = ['mcp__codeindex_cgc__find_code', 'mcp__codeindex_cgc__get_repository_stats', 'mcp__sequential_thinking__sequentialthinking'];
+    const invalid = { ...original, text: '{"broken":true}', telemetry: { ...original.telemetry!, tools: { ...original.telemetry!.tools!, catalogue, calls: [] } } };
+    const result = validateWarmup(invalid, head, source, 1000);
+    expect(result.status).toBe('invalid');
+    expect(result.integrations.find(row => row.component === 'cgc')).toMatchObject({ availability: 'observed', indexStatus: 'unverified', queryObserved: false });
+    expect(result.integrations.find(row => row.component === 'sequential-thinking')).toMatchObject({ availability: 'observed', indexStatus: 'not-required' });
+    expect(result.integrations.find(row => row.component === 'gitnexus')?.availability).not.toBe('observed');
+  });
+  it('does not let a model deny tools present in the native catalog', () => {
+    const value = report(); value.integrations[0]!.availability = 'unavailable'; value.integrations[0]!.tools = [];
+    value.integrations[0]!.indexStatus = 'not-required'; value.integrations[0]!.indexedFiles = null;
+    const result = validateWarmup(run(value), head, source, 1000);
+    expect(result.integrations[0]).toMatchObject({ availability: 'observed', indexStatus: 'unverified' });
+  });
+  it('identifies the invalid schema field without retaining its value', () => {
+    const value = report(); value.integrations[1]!.availability = 'private-invalid-value';
+    const result = validateWarmup(run(value), head, source, 1000);
+    expect(result.reason).toContain('integrations[1].availability');
+    expect(JSON.stringify(result)).not.toContain('private-invalid-value');
+  });
   it('rejects duplicate or absent component rows', () => {
     const value = report(); value.integrations[1] = value.integrations[0]!;
     expect(validateWarmup(run(value), head, source, 1000).status).toBe('invalid');
@@ -43,6 +65,11 @@ describe('native model warmup report', () => {
     const original = run();
     const failed = { ...original, telemetry: { ...original.telemetry!, tools: { ...original.telemetry!.tools!, calls: [{ name: 'cgc_query', started: 1, succeeded: 0, failed: 1 }] } } };
     expect(validateWarmup(failed, head, source, 1000).integrations[0]?.indexStatus).toBe('unverified');
+  });
+  it('does not promote an index claim when no query was observed', () => {
+    const original = run();
+    const noCalls = { ...original, telemetry: { ...original.telemetry!, tools: { ...original.telemetry!.tools!, calls: [] } } };
+    expect(validateWarmup(noCalls, head, source, 1000).integrations[0]).toMatchObject({ availability: 'observed', indexStatus: 'unverified', queryObserved: false });
   });
   it('rejects fenced, oversized, malformed JSON without persisting raw output', () => {
     for (const text of ['```json\n' + run().text + '\n```', 'bad sensitive text', 'x'.repeat(32769)]) {
@@ -79,6 +106,10 @@ describe('bounded warmup execution', () => {
       return { harness: 'pi', model: actual.model, description: 'synthetic', executionMode: 'native' };
     }, async execute(_prepared, prompt, options) {
       expect(prompt.user).toContain('REDLINE_NATIVE_WARMUP'); expect(prompt.system).toContain('fresh harness/MCP processes');
+      expect(prompt.system).toContain('redline-native-warmup/v2');
+      expect(prompt.system).toContain('"required"'); expect(prompt.system).toContain('"indexStatus"');
+      expect(prompt.system).toContain('"queryTool"');
+      expect(prompt.system).toContain('ALL_TOOLS'); expect(prompt.system).toContain('background MCP connections');
       expect(options!.timeoutMs).toBeLessThanOrEqual(4000); expect(options!.streamMode).toBe('off');
       return run();
     } };

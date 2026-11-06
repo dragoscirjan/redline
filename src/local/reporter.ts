@@ -105,10 +105,13 @@ export class CliReporter implements ReviewReporter {
     } else if (event.kind === 'warmup-ready') {
       this.clearLine();
       this.stderr(`Native warmup: ${event.report.status}; ${Math.ceil(event.report.durationMs / 1000)}s. Model reports are advisory, not proof of graph completeness.`);
+      if (event.report.tools.calls.length === 0) this.stderr('Warmup made no observed tool calls; an initial deferred-server catalog may still be incomplete.');
       for (const row of event.report.integrations) {
         this.stderr(`  ${row.component}: tools ${row.availability}; index ${row.indexStatus}; ${row.indexedFiles === null ? 'unknown' : row.indexedFiles} files reported; persistence ${row.persistence}; query ${row.queryObserved ? 'observed' : 'not observed'}.`);
-        if (row.availability === 'not-observed' || row.availability === 'unknown' || row.indexStatus === 'unavailable' || row.indexStatus === 'unverified') {
-          this.stderr(`Warning: ${row.component} warmup did not establish usable indexing/tools. ${terminalText(row.reason, this.credential)}`);
+        if (row.availability === 'not-observed' || row.availability === 'unknown') {
+          this.stderr(`Warning: ${row.component} warmup: native tool visibility ${row.availability}. ${terminalText(row.reason, this.credential)}`);
+        } else if (row.indexStatus === 'unavailable' || row.indexStatus === 'unverified') {
+          this.stderr(`Warning: ${row.component} warmup: index ${row.indexStatus}; native tools ${row.availability}. ${terminalText(row.reason, this.credential)}`);
         }
       }
       if (event.report.status !== 'completed') this.stderr(`Warning: ${terminalText(event.report.reason, this.credential)} ${event.report.fatal ? 'File reviews will not start after this shared failure.' : 'Review continues with non-indexed guidance.'}`);

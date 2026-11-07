@@ -9,7 +9,8 @@
   },
   "publishing": {
     "before": [
-      "release:preflight"
+      "release:preflight",
+      "build"
     ],
     "create_github_releases": false,
     "push_git_tags": false

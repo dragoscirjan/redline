@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -11,19 +11,10 @@ import { RpcClient } from './helpers/rpc-client.ts';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
 
-it.each(['redline.mjs', 'redline-review.mjs'])('%s reports the supported Node version before using missing module exports', (entry) => {
-  const runtime = new URL('../bin/runtime.mjs', import.meta.url).href;
+it.each(['redline.mjs', 'redline-review.mjs'])('%s reports the supported Node version before loading compiled modules', (entry) => {
   const binary = new URL('../bin/' + entry, import.meta.url).href;
-  // Simulate an older Node module namespace through the real ESM linker.
-  // No legacy runtime is downloaded, and each hook stays in its child process.
+  // No legacy runtime is downloaded; the guard runs before the dynamic entry import.
   const script = `
-    import { registerHooks } from 'node:module';
-    registerHooks({ resolve(specifier, context, nextResolve) {
-      if (specifier === 'node:module' && context.parentURL === ${JSON.stringify(runtime)}) {
-        return { url: 'data:text/javascript,export const fixture = true;', shortCircuit: true };
-      }
-      return nextResolve(specifier, context);
-    } });
     Object.defineProperty(process.versions, 'node', { value: '18.20.0' });
     await import(${JSON.stringify(binary)});
   `;
@@ -35,7 +26,9 @@ it.each(['redline.mjs', 'redline-review.mjs'])('%s reports the supported Node ve
   expect(result.stdout).toBe('');
 });
 
-it('installs the packed package offline and runs both CLIs without source checkout dependencies', async () => {
+const bunAvailable = spawnSync('bun', ['--version'], { stdio: 'ignore' }).status === 0;
+
+it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package offline and runs both CLIs with %s', async (runtime) => {
   const root = await mkdtemp(join(tmpdir(), 'redline-package-test-'));
   const fixture = await createBundleFixture();
   try {
@@ -44,17 +37,29 @@ it('installs the packed package offline and runs both CLIs without source checko
       npm_config_registry: 'https://registry.npmjs.org', npm_config_offline: 'true',
       XDG_CONFIG_HOME: join(root, 'config'), XDG_STATE_HOME: join(root, 'state'),
     };
+    // Stage and compile only in a temporary directory; tests never generate checkout files.
+    const staged = join(root, 'package'); await mkdir(staged);
+    for (const name of ['package.json', 'LICENSE', 'bin', 'src', 'prompts', 'schemas']) {
+      await cp(join(project, name), join(staged, name), { recursive: true });
+    }
+    await mkdir(join(staged, 'docs'));
+    for (const name of ['local-cli.md', 'portable-architecture.md', 'docker-workers.md', 'stdio-protocol.md']) {
+      await cp(join(project, 'docs', name), join(staged, 'docs', name));
+    }
+    execFileSync(process.execPath, [join(project, 'scripts/build.js'), join(staged, 'dist')], { cwd: project, env, encoding: 'utf8' });
     const packed: { filename: string; files: { path: string }[] }[] = JSON.parse(execFileSync(process.execPath,
-      npmArguments(['pack', '--ignore-scripts', '--json', '--pack-destination', root]), { cwd: project, env, encoding: 'utf8' }));
+      npmArguments(['pack', '--ignore-scripts', '--json', '--pack-destination', root]), { cwd: staged, env, encoding: 'utf8' }));
     const archive = packed[0]!;
     const paths = archive.files.map((entry) => entry.path);
     expect(paths).toContain('prompts/v8/core-policy.md');
     expect(paths).toContain('bin/redline.mjs');
+    expect(paths.some(path => /^bin\/.*\.(?:sh|ps1|cmd)$/u.test(path))).toBe(false);
+    for (const entry of ['local/cli.js', 'review/cli.js', 'rpc/main.js', 'code-index/export.py', 'code-index/lock.py', 'code-index/gitnexus-query.mjs']) expect(paths).toContain(`dist/${entry}`);
     expect(paths).toContain('src/rpc/main.ts');
     expect(paths).toContain('schemas/rpc/v1/protocol.schema.json');
     expect(paths).toContain('docs/stdio-protocol.md');
     for (const file of ['context.ts', 'cache.ts', 'lock.py', 'export.py', 'gitnexus-query.mjs']) expect(paths).toContain(`src/code-index/${file}`);
-    expect(paths.some((path) => /^(?:test|benchmark|src\.old|node_modules|\.agents|\.github|dist)\//u.test(path))).toBe(false);
+    expect(paths.some((path) => /^(?:test|benchmark|src\.old|node_modules|\.agents|\.github|scripts)\//u.test(path))).toBe(false);
     const installation = join(root, 'installation'); await mkdir(installation);
     // Install the real runtime dependency without network access or checkout symlinks.
     const commander = dirname(createRequire(import.meta.url).resolve('commander'));
@@ -68,8 +73,13 @@ it('installs the packed package offline and runs both CLIs without source checko
     const protocolLink = /\[stdio JSON-RPC protocol\]\(([^)]+)\)/u.exec(await readFile(reference, 'utf8'))?.[1];
     expect(protocolLink).toBe('./stdio-protocol.md');
     if (protocolLink !== undefined) expect(await readFile(join(dirname(reference), protocolLink), 'utf8')).toContain('# Stdio JSON-RPC protocol');
-    const run = (args: string[], cwd = root) => spawnSync(process.execPath, [binary, ...args], { env, cwd, encoding: 'utf8' });
+    const runtimeEnv = { ...env, REDLINE_ENV: runtime, ...(runtime === 'node' ? { NODE_OPTIONS: '--no-strip-types' } : {}) };
+    const run = (args: string[], cwd = root) => spawnSync(process.execPath, [binary, ...args], { env: runtimeEnv, cwd, encoding: 'utf8' });
     const help = run(['--help']); expect(help.status, help.stderr).toBe(0); expect(help.stdout).toContain('--worktree');
+    const shimHelp = spawnSync(process.execPath, npmArguments(['exec', '--prefix', installation, '--offline', '--', 'redline', '--help']), {
+      env: runtimeEnv, cwd: root, encoding: 'utf8',
+    });
+    expect(shimHelp.status, shimHelp.stderr).toBe(0); expect(shimHelp.stdout).toContain('--worktree');
     const version = JSON.parse(await readFile(join(project, 'package.json'), 'utf8')).version;
     expect(run(['--version']).stdout.trim()).toBe(`redline ${version}`);
     expect(run(['review', '--vcs', 'jj']).status).toBe(4);
@@ -102,7 +112,7 @@ if(a[0]==='query'){const source=fs.readFileSync(db,'utf8');console.log(JSON.stri
     expect(working.status, working.stderr).toBe(0);
     const corpus: { method: string; params: Record<string, unknown>; code: number }[] = JSON.parse(await readFile(new URL('./fixtures/rpc/conformance.json', import.meta.url), 'utf8'));
     for (const once of [true, false]) {
-      const client = new RpcClient(binary, [...(once ? ['--once'] : []), '--harness', 'echo', '--indexing', 'disabled', '--reuse', 'disabled'], env, root);
+      const client = new RpcClient(binary, [...(once ? ['--once'] : []), '--harness', 'echo', '--indexing', 'disabled', '--reuse', 'disabled'], runtimeEnv, root);
       try {
         expect((await client.call('initialize', { protocolVersion: '1.0' })).protocolVersion).toBe('1.0');
         for (const entry of corpus) await expect(client.call(entry.method, entry.params)).rejects.toMatchObject({ code: entry.code });
@@ -113,8 +123,12 @@ if(a[0]==='query'){const source=fs.readFileSync(db,'utf8');console.log(JSON.stri
         await client.call('shutdown'); client.eof(); expect((await client.exit).code).toBe(0);
       } finally { await client.close(); }
     }
-    const old = spawnSync(process.execPath, [legacy], { env: { ...env, ...cleanReviewEnvironment(fixture, 'echo') }, cwd: root, encoding: 'utf8' });
+    const old = spawnSync(process.execPath, [legacy], { env: { ...runtimeEnv, ...cleanReviewEnvironment(fixture, 'echo') }, cwd: root, encoding: 'utf8' });
     expect(old.status, old.stderr).toBe(0); expect(JSON.parse(old.stdout).harness).toBe('echo');
+    const legacyShim = spawnSync(process.execPath, npmArguments(['exec', '--prefix', installation, '--offline', '--', 'redline-review', '--validate-only']), {
+      env: { ...runtimeEnv, ...cleanReviewEnvironment(fixture, 'echo') }, cwd: root, encoding: 'utf8',
+    });
+    expect(legacyShim.status, legacyShim.stderr).toBe(0); expect(JSON.parse(legacyShim.stdout).mode).toBe('review');
     const installed = JSON.parse(await readFile(join(installation, 'node_modules/@dragoscirjan/redline/package.json'), 'utf8'));
     expect(installed.dependencies).toEqual({ commander: expect.any(String) });
     expect(installed.scripts.install).toBeUndefined(); expect(installed.scripts.postinstall).toBeUndefined();

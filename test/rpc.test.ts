@@ -11,7 +11,7 @@ import { CODES, object } from '../src/rpc/contract.ts';
 import { frame } from '../src/rpc/framing.ts';
 import { reviewFinding } from './helpers/finding.ts';
 
-const binary = fileURLToPath(new URL('../bin/redline.mjs', import.meta.url));
+const binary = fileURLToPath(new URL('./helpers/rpc-source.ts', import.meta.url));
 const roots: string[] = []; const clients: RpcClient[] = [];
 afterEach(async () => {
   await Promise.all(clients.splice(0).map(client => client.close()));

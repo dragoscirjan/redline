@@ -2,7 +2,7 @@
 
 Run these from the Git repository you want to review. [Configure a model](/get-started/configuration) before a model-based review. The `echo` harness needs no model service or credentials. These commands perform model-based review unless you explicitly select `echo`.
 
-For a source checkout, replace `redline` with `node /path/to/redline/bin/redline.mjs`. Keep the current directory set to the target repository, or select it with `--repository`.
+For a source checkout, install its locked dependencies and run `pnpm run build` first, then replace `redline` with `node /path/to/redline/bin/redline.mjs`. Keep the current directory set to the target repository, or select it with `--repository`.
 
 ## Review your current changes
 

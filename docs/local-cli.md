@@ -15,7 +15,7 @@ npm install --global --ignore-scripts @dragoscirjan/redline@VERSION
 redline --help
 ```
 
-Replace `VERSION` with an existing immutable package version. Eligible versions are published by main CI; passing local tests alone does not publish a package. For a source-checkout trial, use `node bin/redline.mjs` instead of `redline`.
+Replace `VERSION` with an existing immutable package version. Eligible versions are published by main CI; passing local tests alone does not publish a package. For a source-checkout trial, install the locked dependencies and run `pnpm run build`, then use `node bin/redline.mjs` instead of `redline`. `REDLINE_ENV=node` is the default and runs compiled JavaScript. `REDLINE_ENV=bun` selects Bun source execution through the same JavaScript entrypoint. See [runtime selection](/get-started/#choose-the-runtime).
 
 Pi or OpenCode must be installed separately on a trusted PATH outside the reviewed repository. Redline never installs a harness or project dependency. The `echo` harness needs neither a model service nor a credential and always returns a clean review; use it only to check integration, not review quality.
 

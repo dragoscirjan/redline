@@ -1,6 +1,15 @@
 FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS bun
 FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS python
 
+FROM node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS build
+WORKDIR /build
+RUN npm install --global --ignore-scripts pnpm@10.33.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json tsconfig.build.json ./
+RUN pnpm install --frozen-lockfile --ignore-scripts
+COPY scripts/build.js ./scripts/build.js
+COPY src/ ./src/
+RUN pnpm run build
+
 FROM node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=python /usr/local/ /usr/local/
@@ -37,6 +46,7 @@ RUN ln -sf ../gitnexus/dist/cli/index.js /opt/harness/node_modules/.bin/gitnexus
 WORKDIR /opt/redline
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml LICENSE ./
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts
+COPY --from=build /build/dist/ ./dist/
 COPY bin/ ./bin/
 COPY src/ ./src/
 COPY prompts/ ./prompts/

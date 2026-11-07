@@ -56,7 +56,7 @@ describe('RPC resource and security boundaries', () => {
   });
   it('releases a real blocked stdout pipe so the process can exit', async () => {
     const { fileURLToPath } = await import('node:url');
-    const binary = fileURLToPath(new URL('../bin/redline.mjs', import.meta.url));
+    const binary = fileURLToPath(new URL('./helpers/rpc-source.ts', import.meta.url));
     const child = spawn(process.execPath, [binary, 'rpc'], {
       env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
     });

@@ -57,7 +57,7 @@ Pi's internal retries are disabled. Redline permits one retry only for a classif
 
 A ten-sample local probe measured fresh Pi process execution at 173 ms p50 and 211 ms p95, including Pi startup, configuration loading, a loopback streamed response, and JSON event extraction.
 
-Fresh processes remain selected because they preserve the current per-file configuration, session, queue, tool, and credential boundary. Pi RPC is not selected because the current protocol does not prove a complete reset of all mutable state between untrusted files. Direct SDK execution is not selected because the production action intentionally installs no project dependencies; adding the SDK would expand the trusted runtime and credential surface without a measured model-bound benefit.
+Fresh processes remain selected because they preserve the current per-file configuration, session, queue, tool, and credential boundary. Pi RPC is not selected because the current protocol does not prove a complete reset of all mutable state between untrusted files. Direct SDK execution is not selected: adding harness-specific SDK dependencies would expand the trusted runtime and credential surface without a measured model-bound benefit. The action now installs its own locked production dependencies, including Execa; it still does not install pull request dependencies.
 
 ## Artifact safety
 

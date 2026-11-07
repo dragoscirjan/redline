@@ -6,7 +6,7 @@ import {
 import { arch, tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
+import { execa } from 'execa';
 import {
   buildCheckoutBenchmarkAggregate,
   CHECKOUT_BENCHMARK_VERSION,
@@ -65,6 +65,13 @@ function safeEnvironment(home: string): NodeJS.ProcessEnv {
   return environment;
 }
 
+/** Preserve only known OS cause codes; Execa's full error can contain arguments and captured data. */
+function launchFailure(command: string, code: string | undefined): string {
+  const safeCode = ['ENOENT', 'EACCES', 'EPERM', 'ENOEXEC'].find(value => value === code);
+  return `${basename(command)} failed to start${safeCode === undefined ? '' : ` (${safeCode})`}`;
+}
+
+/** Use only the supplied environment; capture bounded output and reject launch, deadline, or capture failures. */
 async function runProcess(
   command: string,
   args: readonly string[],
@@ -74,7 +81,8 @@ async function runProcess(
   allowFailure = false,
 ): Promise<ProcessResult> {
   return await new Promise<ProcessResult>((resolvePromise, rejectPromise) => {
-    const child = spawn(command, [...args], {
+    const child = execa(command, [...args], {
+      reject: false, buffer: false, extendEnv: false, preferLocal: false, shell: false, verbose: 'none',
       cwd,
       env: environment,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -97,12 +105,12 @@ async function runProcess(
       child.kill('SIGKILL');
       rejectPromise(new Error(`${basename(command)} exceeded ${timeoutMs} ms`));
     }, timeoutMs);
-    child.once('error', (error) => {
+    void child.then(processResult => {
       clearTimeout(timeout);
-      rejectPromise(error);
-    });
-    child.once('close', (status, signal) => {
-      clearTimeout(timeout);
+      if (processResult.exitCode === undefined && processResult.signal === undefined) {
+        rejectPromise(new Error(launchFailure(command, processResult.failed ? processResult.code : undefined)));
+        return;
+      }
       const stdoutBuffer = Buffer.concat(stdout);
       const stderrBuffer = Buffer.concat(stderr);
       if (exceeded) {
@@ -110,7 +118,7 @@ async function runProcess(
         return;
       }
       const result = {
-        status: status ?? (signal === null ? 1 : 128),
+        status: processResult.exitCode ?? (processResult.signal === undefined ? 1 : 128),
         stdout: stdoutBuffer.toString('utf8'),
         stderr: stderrBuffer.toString('utf8'),
       };
@@ -223,6 +231,7 @@ async function removeSymbolicLinks(root: string): Promise<void> {
   await visit(root);
 }
 
+/** Export an exact Git revision through bounded git/tar processes, then remove links and indexer metadata. */
 async function archiveRevision(
   repository: string,
   revision: string,
@@ -232,17 +241,18 @@ async function archiveRevision(
 ): Promise<void> {
   await mkdir(destination, { recursive: true });
   await new Promise<void>((resolvePromise, rejectPromise) => {
-    const git = spawn('git', ['-c', 'core.hooksPath=/dev/null', 'archive', '--format=tar', revision], {
-      cwd: repository,
-      env: environment,
+    const git = execa('git', ['-c', 'core.hooksPath=/dev/null', 'archive', '--format=tar', revision], {
+      cwd: repository, env: environment,
+      reject: false, buffer: false, extendEnv: false, preferLocal: false, shell: false, verbose: 'none',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    const tar = spawn('tar', ['-x', '-C', destination], {
-      cwd: repository,
-      env: environment,
+    const tar = execa('tar', ['-x', '-C', destination], {
+      cwd: repository, env: environment,
+      reject: false, buffer: false, extendEnv: false, preferLocal: false, shell: false, verbose: 'none',
       stdio: ['pipe', 'ignore', 'pipe'],
     });
     const diagnostics: Buffer[] = [];
+    const launchFailures: string[] = [];
     let diagnosticBytes = 0;
     let gitStatus: number | null = null;
     let tarStatus: number | null = null;
@@ -259,18 +269,17 @@ async function archiveRevision(
       settled = true;
       clearTimeout(timer);
       if (gitStatus !== 0 || tarStatus !== 0 || diagnosticBytes > MAX_DIAGNOSTIC_BYTES) {
-        rejectPromise(new Error(`git archive pipeline failed (${gitStatus}/${tarStatus}): ${bounded(Buffer.concat(diagnostics))}`));
+        const diagnostic = [...launchFailures, bounded(Buffer.concat(diagnostics))].filter(Boolean).join('; ');
+        rejectPromise(new Error(`git archive pipeline failed (${gitStatus}/${tarStatus}): ${diagnostic}`));
       } else resolvePromise();
     };
-    git.once('error', rejectPromise);
-    tar.once('error', rejectPromise);
-    git.once('close', (status) => {
-      gitStatus = status ?? 1;
-      finish();
+    void git.then(result => {
+      if (result.failed && result.exitCode === undefined && result.signal === undefined) launchFailures.push(launchFailure('git', result.code));
+      gitStatus = result.exitCode ?? 1; finish();
     });
-    tar.once('close', (status) => {
-      tarStatus = status ?? 1;
-      finish();
+    void tar.then(result => {
+      if (result.failed && result.exitCode === undefined && result.signal === undefined) launchFailures.push(launchFailure('tar', result.code));
+      tarStatus = result.exitCode ?? 1; finish();
     });
     const timer = setTimeout(() => {
       if (settled) return;

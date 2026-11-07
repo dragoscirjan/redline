@@ -9,7 +9,7 @@
  * binary (default `pi`). Skipped unless the endpoint answers on `/v1/models`.
  */
 
-import { spawn } from 'node:child_process';
+import { execa } from 'execa';
 import { describe, expect, it } from 'vitest';
 import { parseReviewEnvironment } from '../src/review/environment.ts';
 import { runFileReviews } from '../src/review/runner.ts';
@@ -28,19 +28,29 @@ const MODEL_ENDPOINT = (() => {
 })();
 const HARNESS_BIN = process.env.REDLINE_LOCAL_MODEL_BIN ?? 'pi';
 
+/** Probe the explicitly selected local harness before an opt-in model test; launch failures mean unavailable. */
 async function binaryAvailable(command: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const probe = spawn(command, ['--version'], { stdio: 'ignore' });
+    const probe = execa(command, ['--version'], {
+      reject: false,
+      buffer: false,
+      stdio: 'ignore',
+    }).nodeChildProcess;
     probe.on('error', () => resolve(false));
     probe.on('close', (code) => resolve(code === 0 || code === 1));
   });
 }
 
+/** Require a successful /models response within curl's three-second bound before using the local endpoint. */
 async function endpointAlive(endpoint: string): Promise<boolean> {
   if (endpoint.length === 0) return false;
   return new Promise((resolve) => {
     // --fail rejects HTTP errors (404 on a wrong path is not "alive").
-    const probe = spawn('curl', ['-s', '--fail', '-m', '3', `${endpoint}/models`], { stdio: 'ignore' });
+    const probe = execa('curl', ['-s', '--fail', '-m', '3', `${endpoint}/models`], {
+      reject: false,
+      buffer: false,
+      stdio: 'ignore',
+    }).nodeChildProcess;
     probe.on('error', () => resolve(false));
     probe.on('close', (code) => resolve(code === 0));
   });

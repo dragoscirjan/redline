@@ -1,5 +1,5 @@
 /** Private exact-base state; retained graphs select context but never supply review evidence. */
-import { spawn } from 'node:child_process';
+import { execa } from 'execa';
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, open, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
@@ -70,16 +70,18 @@ async function treeBytes(root: string): Promise<number> {
   return bytes;
 }
 
+/** Hold the kernel cache lock through a Python helper; the caller must await the returned release function. */
 async function lock(root: string, python: string, environment: NodeJS.ProcessEnv, signal: AbortSignal, waitMs: number): Promise<() => Promise<void>> {
   const path = join(root, 'index.lock');
   const info = await lstat(path).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; return undefined; });
   if (info !== undefined && (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size > 1)) throw new Error('unsafe index lock');
-  const child = spawn(python, ['-I', '-B', fileURLToPath(new URL('./lock.py', import.meta.url)), path, String(Math.max(1, waitMs) / 1000)], {
+  const child = execa(python, ['-I', '-B', fileURLToPath(new URL('./lock.py', import.meta.url)), path, String(Math.max(1, waitMs) / 1000)], {
+    reject: false, buffer: false, extendEnv: false, preferLocal: false, shell: false, verbose: 'none',
     env: environment, cwd: root, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
   });
   child.stdin.on('error', () => undefined);
   child.stderr.resume();
-  const exit = new Promise<void>((resolve) => { child.once('error', () => resolve()); child.once('close', () => resolve()); });
+  const exit = child.then(() => undefined);
   try {
     await new Promise<void>((resolve, reject) => {
       let text = ''; let settled = false;
@@ -90,8 +92,8 @@ async function lock(root: string, python: string, environment: NodeJS.ProcessEnv
       };
       const abort = (): void => finish(new Error('index-cache wait cancelled'));
       signal.addEventListener('abort', abort, { once: true });
-      child.once('error', () => finish(new Error('index lock unavailable')));
-      child.once('close', () => finish(new Error('index cache busy or unavailable')));
+      void child.then(result => finish(new Error(result.exitCode === undefined && result.signal === undefined
+        ? 'index lock unavailable' : 'index cache busy or unavailable')));
       child.stdout.on('data', (data: Buffer) => {
         text += data.toString('utf8');
         if (text === 'locked\n' || text === 'locked\r\n') finish();

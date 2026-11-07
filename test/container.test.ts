@@ -1,4 +1,5 @@
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { execa, execaSync } from 'execa';
+import { type ChildProcess } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,8 +17,16 @@ function image(): string {
   if (value === undefined) throw new Error('Set REDLINE_CONTAINER_IMAGE to test the Redline image');
   return value;
 }
+/** Execute opt-in Docker setup with the fixture environment and bounded synchronous diagnostics. */
 function docker(args: string[], env: NodeJS.ProcessEnv): string {
-  return execFileSync('docker', args, { env, encoding: 'utf8', timeout: 30_000, maxBuffer: 2 * 1024 * 1024 }).trim();
+  return execaSync('docker', args, {
+    extendEnv: false,
+    stripFinalNewline: false,
+    env,
+    encoding: 'utf8',
+    timeout: 30_000,
+    maxBuffer: 2 * 1024 * 1024,
+  }).stdout.trim();
 }
 function named(env: NodeJS.ProcessEnv): string {
   const name = 'redline-test-' + randomUUID(); containers.push({ name, env }); return name;
@@ -37,13 +46,20 @@ async function environment() {
 }
 const profile = ['--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--memory', '2g',
   '--pids-limit', '256', '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777'];
+/** Own a mock-model container and disposable Git state; register children and containers for teardown. */
 async function fixture(mode = 'finding') {
   const { root, env } = await environment();
   const repository = join(root, 'repository'), output = join(root, 'output');
   const cache = process.env.REDLINE_CONTAINER_CACHE ?? join(root, 'cache');
   await Promise.all([mkdir(repository), mkdir(output), mkdir(cache, { recursive: true, mode: 0o700 })]);
-  const git = (...args: string[]) => execFileSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null',
-    '-c', 'commit.gpgSign=false', ...args], { env: { ...env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' }, encoding: 'utf8' }).trim();
+  const git = (...args: string[]) => execaSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null',
+    '-c', 'commit.gpgSign=false', ...args], {
+      extendEnv: false,
+      stripFinalNewline: false,
+      env: { ...env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' },
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    }).stdout.trim();
   git('init', '--quiet', '-b', 'main'); git('config', 'user.name', 'Image fixture'); git('config', 'user.email', 'fixture@example.invalid');
   await mkdir(join(repository, 'src')); await writeFile(join(repository, 'src/example.ts'), 'old\n');
   git('add', '.'); git('commit', '--quiet', '-m', 'base'); const base = git('rev-parse', 'HEAD');
@@ -55,7 +71,14 @@ async function fixture(mode = 'finding') {
   let readyDone: (() => void) | undefined, requested: (() => void) | undefined;
   const ready = new Promise<void>(resolve => { readyDone = resolve; });
   const firstRequest = new Promise<void>(resolve => { requested = resolve; });
-  const logs = spawn('docker', ['logs', '--follow', model], { env, stdio: ['ignore', 'pipe', 'pipe'] }); children.push(logs);
+  const logs = execa('docker', ['logs', '--follow', model], {
+    extendEnv: false,
+    reject: false,
+    buffer: false,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).nodeChildProcess; children.push(logs);
+  if (logs.stdout === null || logs.stderr === null) throw new Error('Container logs require piped output');
   let pending = '', bytes = 0;
   logs.stdout.on('data', (chunk: Buffer) => {
     bytes += chunk.length; if (bytes > 2 * 1024 * 1024) { logs.kill(); return; }
@@ -85,11 +108,19 @@ async function fixture(mode = 'finding') {
   return { root, env, repository, output, cache, git, base, common, runArgs, firstRequest,
     get requests() { return docker(['logs', model], env).split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(value => value.type === 'request') as typeof requests; } };
 }
+/** Bound Docker client logs and lifetime; container removal remains the fixture teardown's responsibility. */
 function run(args: string[], env: NodeJS.ProcessEnv, timeoutMs = 30_000): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn('docker', args, { env, stdio: ['ignore', 'pipe', 'pipe'] }); children.push(child);
+    const child = execa('docker', args, {
+      extendEnv: false,
+      reject: false,
+      buffer: false,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).nodeChildProcess; children.push(child);
     let stdout = '', stderr = '', bytes = 0;
     for (const [stream, collect] of [[child.stdout, (s: string) => { stdout += s; }], [child.stderr, (s: string) => { stderr += s; }]] as const) {
+      if (stream === null) throw new Error('Container fixture requires piped output');
       stream.on('data', (data: Buffer) => { bytes += data.length; if (bytes > 8 * 1024 * 1024) child.kill(); else collect(data.toString()); });
     }
     const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
@@ -203,7 +234,7 @@ describe.runIf(enabled)('Redline runs inside Docker', () => {
   it('contains Redline, not Docker orchestration or a Docker socket', async () => {
     const { env } = await environment();
     const raw = docker(['run', '--rm', ...profile, '--network', 'none', '--entrypoint', 'node', image(), '-e',
-      "const f=require('node:fs'),c=require('node:child_process');console.log(JSON.stringify({redline:f.existsSync('/opt/redline/bin/redline.mjs'),client:f.existsSync('/opt/redline/src/harness-executor/docker-client.ts'),socket:f.existsSync('/var/run/docker.sock'),docker:c.spawnSync('docker',['--version']).error?.code,node:process.version,bun:c.execFileSync('bun',['--version'],{encoding:'utf8'}).trim(),uid:process.getuid()}))"], env);
+      "import(require.resolve('execa',{paths:['/opt/redline']})).then(({execaSync}) => { const f=require('node:fs'); console.log(JSON.stringify({redline:f.existsSync('/opt/redline/bin/redline.mjs'),client:f.existsSync('/opt/redline/src/harness-executor/docker-client.ts'),socket:f.existsSync('/var/run/docker.sock'),docker:execaSync('docker',['--version'],{reject:false}).code,node:process.version,bun:execaSync('bun',['--version']).stdout.trim(),uid:process.getuid()})); })"], env);
     expect(JSON.parse(raw)).toMatchObject({ redline: true, client: false, socket: false, docker: 'ENOENT', node: 'v24.21.0', bun: '1.4.4', uid: 10001 });
   }, 40_000);
 });

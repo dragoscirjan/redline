@@ -56,7 +56,7 @@ for expected in [
     'Build bounded code index',
     'Build review context bundle',
     'Upload review context artifact',
-    'Set up fixed harness Node runtime',
+    'Install trusted runtime dependencies',
     'Ensure harness binary',
     'Announce review start',
     'Run harness review',
@@ -74,10 +74,9 @@ PY
 
 @test "action pins the selectable TypeScript runtimes" {
   grep -Fq 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0' "$ACTION"
-  grep -Fq "if: \${{ inputs.runtime == 'node' }}" "$ACTION"
+  [ "$(grep -Fc 'uses: actions/setup-node@' "$ACTION")" -eq 1 ]
   grep -Fq 'node-version: 24' "$ACTION"
   grep -Fq 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2' "$ACTION"
-  grep -Fq "if: \${{ inputs.runtime == 'bun' && (inputs.backend == 'pi' || inputs.backend == 'opencode') }}" "$ACTION"
   grep -Fq "if: \${{ inputs.runtime == 'bun' }}" "$ACTION"
   grep -Fq 'bun-version: 1.4.4' "$ACTION"
 }
@@ -268,11 +267,24 @@ PY
   ! grep -Eq 'credential-isolation|container-engine|report-style' "$ACTION"
 }
 
-@test "review action executes trusted TypeScript source without project dependency installation" {
+@test "review action installs only frozen trusted dependencies before minting tokens" {
   grep -Fq 'test -f src/review/cli.ts' "$ACTION"
   grep -Fq 'test -f src/context-bundle.ts' "$ACTION"
-  ! grep -Fq 'corepack' "$ACTION"
-  ! grep -Fq 'pnpm install' "$ACTION"
+  run python3 - "$ACTION" <<'PY'
+from pathlib import Path
+import sys
+source = Path(sys.argv[1]).read_text()
+install = source.index('    - name: Install trusted runtime dependencies')
+end = source.index('    - name: Generate Redline App token', install)
+step = source[install:end]
+assert 'working-directory: ${{ github.action_path }}/../' in step
+assert 'corepack pnpm@10.33.0 install --frozen-lockfile --prod --ignore-scripts' in step
+assert 'github.workspace' not in step
+assert 'REDLINE_MODEL_AUTH' not in step
+assert 'REDLINE_PUBLISH_TOKEN' not in step
+assert install < source.index('    - name: Validate action inputs with trusted TypeScript')
+PY
+  [ "$status" -eq 0 ]
   ! grep -Fq 'pnpm run typecheck' "$ACTION"
   ! grep -Fq 'pnpm run build' "$ACTION"
   ! grep -Fq 'dist/src/' "$ACTION"

@@ -1,9 +1,9 @@
-import { execFileSync } from 'node:child_process';
+import { execaSync } from 'execa';
 import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runCheckoutBenchmark, runCheckoutBenchmarkSample } from '../src/benchmark/checkout-live.ts';
 import type {
   CheckoutBenchmarkProfile,
@@ -20,13 +20,17 @@ const gitEnvironment = {
   GIT_COMMITTER_EMAIL: 'redline@example.invalid',
 };
 
+/** Run fixture Git commands with fixed commit identities, no stdin, and a bounded capture. */
 function git(cwd: string, ...args: string[]): string {
-  return execFileSync('git', args, {
+  return execaSync('git', args, {
+    extendEnv: false,
+    stripFinalNewline: false,
     cwd,
     env: gitEnvironment,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
-  }).trim();
+    maxBuffer: 1024 * 1024,
+  }).stdout.trim();
 }
 
 async function root(): Promise<string> {
@@ -159,6 +163,19 @@ afterEach(async () => {
 });
 
 describe('checkout benchmark strategy correctness', () => {
+  it('retains a safe OS cause when the Git executable is unavailable', async () => {
+    const parent = await root();
+    const repository: CheckoutBenchmarkRepository = {
+      id: 'missing-tool', label: 'Missing tool fixture', sizeClass: 'small', repository: 'fixture/missing-tool',
+      baseUrl: pathToFileURL(join(parent, 'base.git')).href, headUrl: pathToFileURL(join(parent, 'head.git')).href,
+      base: 'a'.repeat(40), head: 'b'.repeat(40),
+    };
+    vi.stubEnv('PATH', join(parent, 'no-tools'));
+    try {
+      await expect(runCheckoutBenchmarkSample(profile(repository), repository, 'full', 1, join(parent, 'sample')))
+        .rejects.toThrow('git failed to start (ENOENT)');
+    } finally { vi.unstubAllEnvs(); }
+  });
   it('preserves merge history and bundle bytes through shallow and blobless fetches', async () => {
     const parent = await root();
     await assertEquivalent(await createMergeRepository(parent), parent);

@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execaSync } from 'execa';
 import { watch } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -12,6 +12,7 @@ import { buildFileReviewPrompt } from '../src/review/prompt.ts';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
+/** Use sentinel host credentials and a rejecting fake indexer to verify captured-source and environment isolation. */
 async function fixture(xdgCache = false) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'redline-context-test-'))); roots.push(root);
   const repository = join(root, 'repo'); await mkdir(join(repository, 'src'), { recursive: true }); await mkdir(join(repository, 'test'));
@@ -19,9 +20,13 @@ async function fixture(xdgCache = false) {
     HOME: root, XDG_CONFIG_HOME: join(root, 'config'), XDG_STATE_HOME: join(root, 'state'),
     ...(xdgCache ? { XDG_CACHE_HOME: join(root, 'cache-volume') } : {}),
     GH_TOKEN: 'must-not-reach-indexer', OPENROUTER_API_KEY: 'must-not-reach-indexer' };
-  const git = (...args: string[]) => execFileSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], {
-    encoding: 'utf8', env: { ...env, GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
-  }).trim();
+  const git = (...args: string[]) => execaSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], {
+    extendEnv: false,
+    stripFinalNewline: false,
+    encoding: 'utf8',
+    env: { ...env, GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
+    maxBuffer: 1024 * 1024,
+  }).stdout.trim();
   git('init', '--quiet', '-b', 'main'); git('config', 'core.autocrlf', 'false'); git('config', 'user.name', 'test'); git('config', 'user.email', 'test@localhost');
   await writeFile(join(repository, 'src/service.ts'), 'export function normalize(input: string) { return input; }\n');
   await writeFile(join(repository, 'test/service.test.ts'), "import { normalize } from '../src/service';\n// TEST_CONTRACT_SENTINEL\nexport function testContract() { return normalize('value'); }\n");
@@ -269,6 +274,7 @@ fs.mkdirSync(process.env.GITNEXUS_STORAGE_PATH,{recursive:true});fs.writeFileSyn
 });
 
 describe('GitHub exporter compatibility entrypoint', () => {
+  /** Copy the Python compatibility entrypoint into temporary source layouts and probe Python 3.12 without user modules. */
   async function exporter(source?: string) {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'redline-export-entrypoint-'))); roots.push(root);
     const wrapper = join(root, 'github/code-index/export.py');
@@ -281,15 +287,30 @@ describe('GitHub exporter compatibility entrypoint', () => {
     const env = { PATH: process.env.PATH ?? process.env.Path, SystemRoot: process.env.SystemRoot ?? process.env.SYSTEMROOT,
       HOME: root, TEMP: root, TMP: root };
     const python = (process.platform === 'win32' ? ['python', 'python3'] : ['python3', 'python']).find((command) =>
-      spawnSync(command, ['-I', '-B', '-c', 'import sys; assert sys.version_info >= (3, 12)'], { env, timeout: 5000 }).status === 0);
+      execaSync(command, ['-I', '-B', '-c', 'import sys; assert sys.version_info >= (3, 12)'], {
+        extendEnv: false,
+        stripFinalNewline: false,
+        reject: false,
+        env,
+        timeout: 5000,
+        maxBuffer: 1024 * 1024,
+      }).exitCode === 0);
     if (python === undefined) throw new Error('Python 3.12+ is required for code-index entrypoint tests');
-    return (code?: string) => spawnSync(python, code === undefined ? ['-I', '-B', wrapper] : ['-I', '-B', '-c', code, wrapper],
-      { env, cwd: root, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 });
+    return (code?: string) => execaSync(python, code === undefined ? ['-I', '-B', wrapper] : ['-I', '-B', '-c', code, wrapper], {
+      extendEnv: false,
+      stripFinalNewline: false,
+      reject: false,
+      env,
+      cwd: root,
+      encoding: 'utf8',
+      timeout: 10000,
+      maxBuffer: 1024 * 1024,
+    });
   }
 
   it('reports a missing shared module with the existing diagnostic prefix and exit code', async () => {
     const run = await exporter(); const result = run();
-    expect(result.status, result.stderr).toBe(2);
+    expect(result.exitCode, result.stderr).toBe(2);
     expect(result.stderr).toMatch(/^redline code-index: /u);
     expect(result.stderr).not.toContain('Traceback'); expect(result.stdout).toBe('');
   });
@@ -298,7 +319,7 @@ describe('GitHub exporter compatibility entrypoint', () => {
     for (const source of ['raise ' + error + '("controlled fixture failure")\n',
       'def main():\n    raise ' + error + '("controlled fixture failure")\n']) {
       const run = await exporter(source); const result = run();
-      expect(result.status, result.stderr).toBe(2);
+      expect(result.exitCode, result.stderr).toBe(2);
       expect(result.stderr).toBe('redline code-index: controlled fixture failure' + EOL);
       expect(result.stdout).toBe('');
     }
@@ -306,9 +327,9 @@ describe('GitHub exporter compatibility entrypoint', () => {
 
   it('preserves successful CLI execution and delegated imports used by follow-up queries', async () => {
     const run = await exporter('fixture_value = 7\ndef main():\n    return 0\n');
-    const cli = run(); expect(cli.status, cli.stderr).toBe(0);
+    const cli = run(); expect(cli.exitCode, cli.stderr).toBe(0);
     const imported = run('import importlib.util, sys\nspec = importlib.util.spec_from_file_location("compat", sys.argv[1])\nmodule = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\nassert module.fixture_value == 7\nassert module.main() == 0\n');
-    expect(imported.status, imported.stderr).toBe(0);
+    expect(imported.exitCode, imported.stderr).toBe(0);
     expect(imported.stdout).toBe('');
   });
 });

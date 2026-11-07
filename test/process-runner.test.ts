@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   MAX_INPUT_BYTES,
@@ -75,6 +77,39 @@ describe('runBoundedProcess', () => {
     })).rejects.toThrow('input exceeds its byte limit');
   });
 
+  it('keeps argument boundaries without interpreting shell syntax', async () => {
+    const args = ['space value', '', '"quoted"', '$(echo injected)', '*.ts', 'a;b'];
+    const result = await runBoundedProcess(nodeProcessSpawner, {
+      command: process.execPath, args: ['-e', 'process.stdout.write(JSON.stringify(process.argv.slice(1)))', '--', ...args], timeoutMs: 10_000,
+    });
+    expect(result.code).toBe(0); expect(JSON.parse(result.stdout)).toEqual(args);
+  });
+
+  it('truncates and drains excess output without killing a successful process', async () => {
+    const result = await runBoundedProcess(nodeProcessSpawner, {
+      command: process.execPath,
+      args: ['-e', 'process.stdout.write("x".repeat(1024 * 1024), () => process.stderr.write("finished"))'],
+      stdoutLimitBytes: 64, timeoutMs: 10_000,
+    });
+    expect(result).toMatchObject({ code: 0, timedOut: false, stdout: 'x'.repeat(64),
+      stdoutBytes: 1024 * 1024, stdoutTruncated: true, stderr: 'finished' });
+  });
+
+  it('does not replace the exit status with an early stdin closure error', async () => {
+    const result = await runBoundedProcess(nodeProcessSpawner, {
+      command: process.execPath, args: ['-e', 'process.exit(0)'], stdin: 'x'.repeat(256 * 1024), timeoutMs: 10_000,
+    });
+    expect(result.code).toBe(0); expect(result.timedOut).toBe(false);
+  });
+
+  it('normalizes launch diagnostics instead of exposing Execa arguments', async () => {
+    const result = await runBoundedProcess(nodeProcessSpawner, {
+      command: 'redline-definitely-missing-binary', args: ['private-argument-value'], timeoutMs: 10_000,
+    });
+    expect(result.error).toBe('process launch failed');
+    expect(JSON.stringify(result)).not.toContain('private-argument-value');
+  });
+
   it('reports a non-zero exit code', async () => {
     const result = await runBoundedProcess(nodeProcessSpawner, {
       command: process.execPath,
@@ -122,9 +157,9 @@ describe('runBoundedProcess', () => {
       args: [
         '-e',
         [
-          "const { spawn } = require('node:child_process');",
-          "spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000);'],",
-          "  { stdio: ['ignore', process.stdout, process.stderr] });",
+          `import(${JSON.stringify(pathToFileURL(createRequire(import.meta.url).resolve('execa')).href)}).then(({ execa }) => {`,
+          "execa(process.execPath, ['-e', 'setTimeout(() => {}, 60000);'],",
+          "  { stdio: ['ignore', process.stdout, process.stderr], buffer: false, reject: false }); });",
         ].join(' '),
       ],
       timeoutMs: 500,
@@ -164,6 +199,22 @@ describe('runBoundedProcess', () => {
     });
     expect(result.code).toBeNull();
     expect(result.error).toBeDefined();
+  });
+
+  it('does not merge ambient credentials into a constructed environment', async () => {
+    const previous = process.env.REDLINE_TEST_AMBIENT_SECRET;
+    process.env.REDLINE_TEST_AMBIENT_SECRET = 'private-ambient-value';
+    try {
+      const result = await runBoundedProcess(nodeProcessSpawner, {
+        command: process.execPath,
+        args: ['-e', 'process.stdout.write(process.env.REDLINE_TEST_AMBIENT_SECRET ?? "absent")'],
+        env: { REDLINE_TEST_VALUE: 'present' }, timeoutMs: 10_000,
+      });
+      expect(result.code).toBe(0); expect(result.stdout).toBe('absent');
+    } finally {
+      if (previous === undefined) delete process.env.REDLINE_TEST_AMBIENT_SECRET;
+      else process.env.REDLINE_TEST_AMBIENT_SECRET = previous;
+    }
   });
 
   it('runs with a minimal constructed environment', async () => {

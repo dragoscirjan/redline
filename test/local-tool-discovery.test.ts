@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { providerCommand } from '../src/local/context.ts';
 import { parseLocalOptions } from '../src/local/options.ts';
-import { execFileSync } from 'node:child_process';
+import { execaSync } from 'execa';
 
 describe('automatic managed CGC discovery', () => {
   it.skipIf(process.platform !== 'linux' || process.arch !== 'x64').each(['realpath', 'readFile'] as const)(
@@ -12,7 +12,10 @@ describe('automatic managed CGC discovery', () => {
       const root = await realpath(await mkdtemp(join(tmpdir(), 'redline-tool-test-')));
       try {
         const repository = join(root, 'repository'); await mkdir(repository);
-        execFileSync('git', ['init', '--quiet', repository]);
+        execaSync('git', ['init', '--quiet', repository], {
+          stripFinalNewline: false,
+          maxBuffer: 1024 * 1024,
+        });
         const bin = join(root, 'bin'); await mkdir(bin);
         const command = join(bin, 'cgc'); await writeFile(command, '#!/bin/sh\nexit 0\n'); await chmod(command, 0o755);
         const managed = join(root, 'state/redline/tools/cgc/0.5.7/linux-x64/cgc');

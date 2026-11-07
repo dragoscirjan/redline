@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawnSync } from 'node:child_process';
+import { execaSync } from 'execa';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { arch, platform } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -60,17 +60,25 @@ function boundedDiagnostic(value: string): string {
   return value.slice(-2_000).replaceAll(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]+/gu, ' ');
 }
 
+/** Keep benchmark failures diagnosable without exposing Execa's command-bearing error messages. */
 function run(command: string, args: readonly string[], environment: NodeJS.ProcessEnv, timeout: number): string {
-  const result = spawnSync(command, [...args], {
+  const result = execaSync(command, [...args], {
+    reject: false, extendEnv: false, preferLocal: false, shell: false, verbose: 'none', stripFinalNewline: false,
     cwd: ROOT,
     env: environment,
     encoding: 'utf8',
     maxBuffer: MAX_OUTPUT_BYTES,
     timeout,
   });
-  if (result.error !== undefined) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(`${command} exited ${result.status ?? 'without status'}: ${boundedDiagnostic(result.stderr)}`);
+  if (result.failed) {
+    let diagnostic = boundedDiagnostic(result.stderr ?? '');
+    if (result.timedOut) diagnostic = 'process deadline exceeded';
+    else if (result.isMaxBuffer) diagnostic = 'process output exceeded its byte limit';
+    else if (result.exitCode === undefined && result.signal === undefined) {
+      const code = ['ENOENT', 'EACCES', 'EPERM', 'ENOEXEC'].find(value => value === result.code);
+      diagnostic = `process launch failed${code === undefined ? '' : ` (${code})`}`;
+    }
+    throw new Error(`${command} exited ${result.exitCode ?? 'without status'}: ${diagnostic}`);
   }
   return result.stdout.trim();
 }

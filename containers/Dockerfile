@@ -35,7 +35,8 @@ ENV PATH="/opt/cgc/bin:/opt/harness/node_modules/.bin:${PATH}" \
 RUN ln -sf ../gitnexus/dist/cli/index.js /opt/harness/node_modules/.bin/gitnexus
 
 WORKDIR /opt/redline
-COPY package.json LICENSE ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml LICENSE ./
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 COPY bin/ ./bin/
 COPY src/ ./src/
 COPY prompts/ ./prompts/

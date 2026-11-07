@@ -1,4 +1,4 @@
-import { parseArgs } from 'node:util';
+import { Command } from 'commander';
 import { constants } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -9,9 +9,6 @@ import { DEFAULT_REVIEW_RETRIES, parseReviewRetries } from '../review/retries.ts
 import { parseReviewEnvironment, type ReviewEnvironment } from '../review/environment.ts';
 import { executable, GitCommand, gitEnvironment, inside, repositoryBoundary } from './process.ts';
 
-const KEYS = ['repository', 'output', 'vcs', 'base', 'head', 'worktree', 'comparison', 'untracked', 'harness',
-  'provider', 'endpoint', 'model', 'auth', 'reuse', 'scheduling', 'head-context', 'model-protocol', 'max-output-tokens', 'timeout', 'run-timeout', 'retries', 'concurrency', 'finding-scope', 'fail-on', 'color', 'indexing', 'indexing-provider', 'index-executable', 'index-runtime', 'code-context', 'code-context-repository'] as const;
-type Key = (typeof KEYS)[number];
 export interface LocalOptions {
   readonly repository: string;
   readonly output: string | undefined;
@@ -36,51 +33,137 @@ export interface LocalOptions {
 
 export class UsageError extends Error {}
 
-export const HELP = `Usage: redline review [options]
-       redline rpc [--once] [trusted settings]  See redline rpc --help
+export function createReviewCommand(command: Command = new Command('review')): Command {
+  return command
+    .description('Review local Git changes. With no target, review staged and unstaged tracked changes against HEAD.')
+    .allowExcessArguments(false)
+    .exitOverride()
+    // Commander errors can contain raw argument values. Report trusted classifications instead.
+    .configureOutput({ writeErr: () => {}, outputError: () => {} })
+    // Defaults are resolved after parsing so flags do not mask environment or user configuration.
+    .optionsGroup('Repository and target:')
+    // Review another checkout without requiring the caller to change its working directory.
+    .option('--repository <path>', 'Repository path; default current directory')
+    // Select the source-control adapter explicitly. Only Git is implemented;
+    // jj and mercurial are reserved capability IDs and currently fail.
+    .option('--vcs <git|jj|mercurial>', 'Version control; default git; other values reserved')
+    // Supply the history reference for the review diff instead of always using HEAD.
+    // Merge-base comparison and unstaged capture derive their effective base from it.
+    .option('--base <rev>', 'Base revision; default HEAD')
+    // Review a committed revision rather than including local staged or unstaged edits.
+    .option('--head <rev>', 'Committed revision comparison; mutually exclusive with --worktree')
+    // Choose branch changes since the common ancestor, or compare the exact base and head trees.
+    // This applies only to committed targets.
+    .option('--comparison <merge-base|direct>', 'Revision comparison; default merge-base; requires --head')
+    // Review staged content, unstaged edits, or both without modifying the user's index or commits.
+    // Unstaged mode compares working files with the captured index.
+    .option('--worktree <staged|unstaged|all>', 'Working-tree target; default all; mutually exclusive with --head')
+    // Opt new, non-ignored files into a working-tree review before they are added to Git.
+    // Exclude them by default so unrelated local files do not enter the review.
+    .option('--untracked <exclude|include>', 'Untracked files; default exclude; worktree only')
 
-No target: review staged and unstaged tracked changes against HEAD.
-  --repository PATH                  Current directory by default
-  --vcs git|jj|mercurial              git implemented; other values reserved
-  --base REV                         HEAD by default
-  --head REV                         Committed revision comparison
-  --comparison merge-base|direct     merge-base by default (revisions only)
-  --worktree staged|unstaged|all      Mutually exclusive with --head
-  --untracked exclude|include        exclude by default (worktree only)
-  --reporter ID                      Repeatable; cli implemented
-                                    github|forgejo|gitea|gitlab|bitbucket reserved
-  --output PATH                      New directory; default user state directory
-  --color auto|always|never           Default auto; NO_COLOR disables colors
-  --indexing enabled|disabled|required  Default enabled; required rejects file-only fallback
-  --indexing-provider cgc|gitnexus     Default cgc; external provider installed separately
-  --index-executable PATH            Trusted existing indexer override
-  --index-runtime PATH               Trusted Python helper runtime override
-  --code-context PATH                Import an existing revision-matched context artifact
-  --code-context-repository ID        Expected artifact namespace; default local identity
-  --config PATH                      Trusted user JSON; never repository config
-  --harness pi|opencode|echo          pi by default; binaries installed separately
-  --provider ID --endpoint URL --model ID
-  --auth none                        Credential-less endpoint; otherwise use
-                                    REDLINE_MODEL_AUTH provider-keyed JSON
-  --reuse enabled|disabled           Default enabled; revalidate exact cached results
-  --scheduling largest-first|mixed    Default largest-first; mixed alternates size extremes
-  --head-context enabled|disabled    Default enabled; bounded static head import candidates
-  --model-protocol compatible|openrouter-json  Default compatible; explicit Pi/OpenRouter request controls
-  --max-output-tokens COUNT           Per model call; Pi default 16384; range 1024..262144
-  --timeout DURATION                 Initial per-file attempt; default 4m
-  --retries COUNT                    Additional attempts, 0–10; default 3
-                                     Timeouts add 2m; total deadline never grows
-  --run-timeout DURATION             Whole review; default 10m
-  --concurrency 1..8                 Default 4
-  --finding-scope defects|defects-and-risks
-  --fail-on none|findings|high|critical  Default none; incomplete reviews still fail
-  --help | --version
+    .optionsGroup('Configuration:')
+    // Load reusable trusted user settings instead of repeating flags for each run.
+    // The file must be outside the reviewed repository so repository content cannot configure execution.
+    .option('--config <path>', 'Trusted user JSON; never repository configuration')
 
+    .optionsGroup('Harness and model:')
+    // Choose the program that executes review prompts. Pi and OpenCode use model services;
+    // echo is a deterministic harness for tests and smoke runs, not an AI reviewer.
+    .option('--harness <pi|opencode|echo>', 'Review harness; default pi; binaries installed separately')
+    // Choose the model-service configuration and the matching entry in the credential map.
+    // This is separate from the harness and the code indexer.
+    .option('--provider <id>', 'Model provider')
+    // Direct model requests to the configured service or a compatible local endpoint.
+    // Credentials cannot be embedded in the URL.
+    .option('--endpoint <url>', 'Model endpoint without credentials, query parameters, or fragments')
+    // Choose the model identifier passed to the selected harness and provider.
+    .option('--model <id>', 'Model identifier')
+    // Allow an explicitly credential-less endpoint with auth=none.
+    // Never accept an API key on the command line; credentials come from environment or trusted config.
+    .option('--auth <none>', 'Credential-less endpoint; otherwise use provider-keyed REDLINE_MODEL_AUTH JSON')
+    // Opt into explicit Pi/OpenRouter JSON request controls instead of the compatible request mode.
+    // The special mode requires Pi with OpenRouter and does not silently fall back.
+    .option('--model-protocol <compatible|openrouter-json>', 'Model request protocol; default compatible; explicit Pi/OpenRouter controls')
+
+    .optionsGroup('Harness tools and context:')
+    // Choose whether to prepare indexed related-source context or allow file-only review.
+    // Required mode stops before review if a reviewed file lacks validated related spans.
+    .option('--indexing <enabled|disabled|required>', 'Indexed context; default enabled; required rejects file-only fallback')
+    // Choose which external code indexer supplies relationships, independently of the model provider.
+    // Redline resolves related source from the capture rather than trusting graph text.
+    .option('--indexing-provider <cgc|gitnexus>', 'Indexer provider; default cgc; installed separately')
+    // Use a specific trusted indexer program instead of automatic tool discovery.
+    // Repository-local programs are rejected; this does not install an indexer.
+    .option('--index-executable <path>', 'Trusted existing indexer override')
+    // Choose the Python interpreter for code-context preparation when automatic discovery is unsuitable.
+    // This is not the runtime for Redline or the review harness.
+    .option('--index-runtime <path>', 'Trusted Python helper runtime override')
+    // Import an existing context artifact instead of preparing one through the local indexer.
+    // The artifact must pass repository and revision checks before it can supply context.
+    .option('--code-context <path>', 'Import an existing revision-matched context artifact')
+    // Set the expected owner/name identity used to prepare or validate context artifacts.
+    // This identifies the artifact namespace; it does not choose the checkout to review.
+    .option('--code-context-repository <id>', 'Expected artifact namespace; default local identity')
+    // Allow bounded static import-related source candidates from the captured head without an indexer.
+    // This controls static context separately from the indexed-context setting.
+    .option('--head-context <enabled|disabled>', 'Bounded static head import candidates; default enabled')
+
+    .optionsGroup('Execution limits and reuse:')
+    // Bound each model call's generated-token allowance independently of its time limit.
+    // This is not an input-context limit or a control for disabling reasoning.
+    .option('--max-output-tokens <count>', 'Per model call; Pi default 16384; range 1024..262144')
+    // Bound the initial attempt for one reviewed file so a stalled harness cannot block it indefinitely.
+    // Timed-out retries can receive longer attempts, but remain inside the run deadline.
+    .option('--timeout <duration>', 'Initial per-file attempt; default 4m')
+    // Allow additional file-review attempts after retryable failures, invalid output, or inadequate excerpts.
+    // This counts review attempts, not a provider's internal HTTP retries.
+    .option('--retries <count>', `Additional attempts, 0..10; default ${DEFAULT_REVIEW_RETRIES}; timeouts add 2m; total deadline never grows`)
+    // Bound context preparation and review execution with one deadline shared by all files and retries.
+    // The timer starts after harness preflight and output-directory creation.
+    .option('--run-timeout <duration>', 'Whole review deadline; default 10m')
+    // Limit simultaneous file reviews to control model-service load and local resource use.
+    .option('--concurrency <1..8>', 'Concurrent file reviews; default 4')
+    // Choose the order in which files compete for bounded workers and the run deadline.
+    // Largest-first starts large files first; mixed alternates large and small files.
+    .option('--scheduling <largest-first|mixed>', 'File scheduling; default largest-first; mixed alternates size extremes')
+    // Avoid repeating model work when cached per-file results still pass exact reuse validation.
+    // Disabled mode requests fresh execution rather than accepting those cached results.
+    .option('--reuse <enabled|disabled>', 'Revalidate exact cached results; default enabled')
+
+    .optionsGroup('Output and finding policy:')
+    // Select the review output adapter. Only cli works today;
+    // the repeatable interface and forge IDs do not yet enable other destinations.
+    .option('--reporter <id>', 'Repeatable; cli implemented; github|forgejo|gitea|gitlab|bitbucket reserved',
+      (value: string, previous: readonly string[] = []) => [...previous, value])
+    // Keep the captured source, bundle, reports, and run status at a caller-chosen location.
+    // The directory must be new and outside the reviewed checkout to avoid overwriting data.
+    .option('--output <path>', 'New output directory; default user state directory')
+    // Control terminal presentation for interactive output or redirected logs.
+    // This does not change findings or review policy.
+    .option('--color <auto|always|never>', 'Terminal color; default auto; NO_COLOR disables colors')
+    // Choose whether the review policy permits only defects or also risks.
+    // This changes what the model is asked to report, not just the process exit status.
+    .option('--finding-scope <defects|defects-and-risks>', 'Finding policy; default defects')
+    // Make validated findings at the selected severity fail automation even when review completed.
+    // This changes the exit policy, not which findings are retained; incomplete reviews still fail.
+    .option('--fail-on <none|findings|high|critical>', 'Finding exit policy; default none; incomplete reviews still fail')
+    .optionsGroup('Options:')
+    .addHelpText('after', `
 Model defaults can use REDLINE_MODEL_CONFIG JSON. Non-secret flags override
 REDLINE_* environment values, which override trusted user configuration.
 Exit: 0 success, 1 incomplete/failure, 2 usage, 3 finding policy,
       4 unavailable capability, 5 reporter failure, 130 interrupted.
-`;
+`);
+}
+
+export function reviewOptionValues(command: Command): Record<string, unknown> {
+  const values = command.opts<Record<string, unknown>>();
+  return Object.fromEntries(command.options.map((option) => [option.name(), values[option.attributeName()]]));
+}
+
+const KEYS = createReviewCommand().options.map((option) => option.name())
+  .filter((key) => key !== 'config' && key !== 'reporter');
 
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -120,13 +203,15 @@ export async function parseLocalOptions(args: readonly string[], env: NodeJS.Pro
   signal.throwIfAborted();
   let values: Record<string, unknown>;
   try {
-    values = parseArgs({ args: [...args], strict: true, allowPositionals: false,
-      options: Object.fromEntries([
-        ...KEYS.map((key) => [key, { type: 'string' as const }]),
-        ['config', { type: 'string' as const }], ['reporter', { type: 'string' as const, multiple: true }],
-      ]),
-    }).values;
+    const command = createReviewCommand().helpOption(false);
+    command.parse([...args], { from: 'user' });
+    values = reviewOptionValues(command);
   } catch { throw new UsageError('invalid arguments; use redline review --help (credentials are not command-line options)'); }
+  return resolveLocalOptions(values, env, cwd, signal);
+}
+
+export async function resolveLocalOptions(values: Readonly<Record<string, unknown>>, env: NodeJS.ProcessEnv, cwd: string, signal: AbortSignal): Promise<LocalOptions> {
+  signal.throwIfAborted();
   const flag = (key: string): string | undefined => typeof values[key] === 'string' ? values[key] : undefined;
   // Reject known unsupported values even before reading configuration or discovering Git.
   const selectedVcs = flag('vcs') ?? env.REDLINE_VCS;
@@ -145,7 +230,7 @@ export async function parseLocalOptions(args: readonly string[], env: NodeJS.Pro
   const repository = await realpath((await discovery.run(['rev-parse', '--show-toplevel'])).toString('utf8').trim());
   const configPath = flag('config') ?? join(env.XDG_CONFIG_HOME ?? join(env.HOME ?? homedir(), '.config'), 'redline/config.json');
   const defaults = await config(resolve(cwd, configPath), flag('config') !== undefined, repository);
-  const get = (key: Key, fallback: string): string => {
+  const get = (key: string, fallback: string): string => {
     const environmentKey = key === 'head' ? 'REDLINE_HEAD_REVISION' : key === 'harness' ? 'REDLINE_HARNESS'
       : key === 'concurrency' ? 'REDLINE_REVIEW_CONCURRENCY' : `REDLINE_${key.toUpperCase().replaceAll('-', '_')}`;
     const value = flag(key) ?? env[environmentKey] ?? defaults[key] ?? fallback;
@@ -217,7 +302,7 @@ export async function parseLocalOptions(args: readonly string[], env: NodeJS.Pro
     REDLINE_REVIEW_CONCURRENCY: get('concurrency', '4'), REDLINE_FINDING_SCOPE: get('finding-scope', 'defects'),
   });
   if (parsed.review === undefined) throw new UsageError('review configuration is incomplete');
-  const optional = (key: Key): string | undefined => {
+  const optional = (key: string): string | undefined => {
     const value = flag(key) ?? env[`REDLINE_${key.toUpperCase().replaceAll('-', '_')}`] ?? defaults[key];
     return value === undefined ? undefined : get(key, '');
   };

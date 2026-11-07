@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { main } from '../src/local/cli.ts';
-import { parseLocalOptions } from '../src/local/options.ts';
+import { createReviewCommand, parseLocalOptions } from '../src/local/options.ts';
 import { GitRevisionSource } from '../src/local/git-source.ts';
 import { terminalText } from '../src/local/reporter.ts';
 
@@ -43,6 +43,81 @@ async function manifest(output: string) { return JSON.parse(await readFile(join(
 async function capture(output: string) { return JSON.parse(await readFile(join(output, 'capture.json'), 'utf8')); }
 
 describe('local Git review CLI', () => {
+  it.each([['--help'], ['review', '--help'], ['help', 'review']])('generates help without repository discovery: %j', async (...args) => {
+    const stdout: string[] = []; const stderr: string[] = [];
+    const interrupts = process.listenerCount('SIGINT'); const terminations = process.listenerCount('SIGTERM');
+    const code = await main(args, {}, {
+      cwd: join(tmpdir(), 'redline-missing-repository'),
+      stdout: (line) => { stdout.push(line); }, stderr: (line) => { stderr.push(line); },
+    });
+    expect(code).toBe(0); expect(stderr).toEqual([]);
+    const help = stdout.join('\n');
+    expect(help).toContain('Usage: redline review [options]');
+    for (const option of createReviewCommand().options) expect(help).toContain(option.flags);
+    expect(help).toContain('REDLINE_MODEL_AUTH'); expect(help).toContain('Exit:');
+    expect(process.listenerCount('SIGINT')).toBe(interrupts);
+    expect(process.listenerCount('SIGTERM')).toBe(terminations);
+  });
+
+  it.each([
+    { heading: 'Repository and target:', flags: ['repository', 'vcs', 'base', 'head', 'comparison', 'worktree', 'untracked'] },
+    { heading: 'Configuration:', flags: ['config'] },
+    { heading: 'Harness and model:', flags: ['harness', 'provider', 'endpoint', 'model', 'auth', 'model-protocol'] },
+    { heading: 'Harness tools and context:', flags: ['indexing', 'indexing-provider', 'index-executable', 'index-runtime', 'code-context', 'code-context-repository', 'head-context'] },
+    { heading: 'Execution limits and reuse:', flags: ['max-output-tokens', 'timeout', 'retries', 'run-timeout', 'concurrency', 'scheduling', 'reuse'] },
+    { heading: 'Output and finding policy:', flags: ['reporter', 'output', 'color', 'finding-scope', 'fail-on'] },
+  ])('groups related arguments under $heading in generated help', ({ heading, flags }) => {
+    const help = createReviewCommand().helpInformation();
+    const section = help.split(heading + '\n')[1]?.split('\n\n')[0];
+    expect(section).toBeDefined();
+    for (const flag of flags) expect(section).toContain(`--${flag} `);
+  });
+
+  it('generates version output without repository discovery', async () => {
+    const stdout: string[] = []; const stderr: string[] = [];
+    const code = await main(['--version'], {}, {
+      cwd: join(tmpdir(), 'redline-missing-repository'),
+      stdout: (line) => { stdout.push(line); }, stderr: (line) => { stderr.push(line); },
+    });
+    const metadata = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    expect(code).toBe(0); expect(stdout).toEqual([`redline ${metadata.version}`]); expect(stderr).toEqual([]);
+  });
+
+  it.each([
+    [], ['private-command'], ['review', 'private-positional'], ['review', '--model'],
+    ['review', '--api-key=private-value'], ['review', '--private-flag'], ['review', '--', 'private-positional'],
+  ])('rejects invalid command syntax without printing raw arguments: %j', async (...args) => {
+    const stdout: string[] = []; const stderr: string[] = [];
+    const code = await main(args, {}, {
+      cwd: join(tmpdir(), 'redline-missing-repository'),
+      stdout: (line) => { stdout.push(line); }, stderr: (line) => { stderr.push(line); },
+    });
+    expect(code).toBe(2); expect(stdout).toEqual([]);
+    expect(stderr.join('\n')).toContain('use '); expect(stderr.join('\n')).not.toContain('private-');
+  });
+
+  it('normalizes dashed Commander options and keeps repeated options compatible', async () => {
+    const f = await fixture();
+    const options = await parseLocalOptions(['--harness=echo', '--head', 'HEAD', '--finding-scope', 'defects-and-risks',
+      '--run-timeout', '12m', '--head-context', 'disabled', '--concurrency', '1', '--concurrency', '2', '--reporter', 'cli'], f.env, f.repository);
+    expect(options.environment).toMatchObject({ findingScope: 'defects-and-risks', reviewConcurrency: 2, headContext: false });
+    expect(options.reporters).toEqual(['cli']);
+    await expect(parseLocalOptions(['--harness', 'echo', '--reporter', 'cli', '--reporter', 'cli'], f.env, f.repository)).rejects.toThrow('duplicate reporter');
+  });
+
+  it('returns interruption status and removes signal handlers after option resolution is cancelled', async () => {
+    const f = await fixture(); const controller = new AbortController(); controller.abort();
+    const stdout: string[] = []; const stderr: string[] = [];
+    const interrupts = process.listenerCount('SIGINT'); const terminations = process.listenerCount('SIGTERM');
+    const code = await main(['review', '--harness', 'echo'], f.env, {
+      cwd: f.repository, signal: controller.signal,
+      stdout: (line) => { stdout.push(line); }, stderr: (line) => { stderr.push(line); },
+    });
+    expect(code).toBe(130); expect(stdout).toEqual([]); expect(stderr).toEqual(['redline: cancelled']);
+    expect(process.listenerCount('SIGINT')).toBe(interrupts);
+    expect(process.listenerCount('SIGTERM')).toBe(terminations);
+  });
+
   it('automatically resumes exact validated results and invalidates budget and source changes', async () => {
     const f = await fixture();
     const args = ['--base', f.base, '--head', 'HEAD'];

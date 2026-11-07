@@ -28,6 +28,10 @@ RUN apt-get update \
     && apt-get purge -y --auto-remove build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+COPY containers/preload-cgc-parsers.py /opt/harness/preload-cgc-parsers.py
+RUN /opt/cgc/bin/python /opt/harness/preload-cgc-parsers.py
+
+ENV TREE_SITTER_LANGUAGE_PACK_LIBS_DIR=/opt/cgc-parsers/v1.22.1
 ENV PATH="/opt/cgc/bin:/opt/harness/node_modules/.bin:${PATH}" \
     LANG=C.UTF-8 DO_NOT_TRACK=1 PI_SKIP_VERSION_CHECK=1 \
     OPENCODE_DISABLE_AUTOUPDATE=1 OPENCODE_DISABLE_MODELS_FETCH=1 \
@@ -40,9 +44,12 @@ COPY bin/ ./bin/
 COPY src/ ./src/
 COPY prompts/ ./prompts/
 COPY schemas/ ./schemas/
+COPY containers/native-pi-mcp.json ./native-config/pi-mcp.json
+COPY containers/native-opencode.json ./native-config/opencode.json
+COPY --chmod=755 containers/entrypoint.sh ./container-entrypoint.sh
 RUN mkdir -p /cache /output && chown 10001:10001 /cache /output
-ENV HOME=/tmp/redline/home XDG_STATE_HOME=/tmp/redline/state XDG_CACHE_HOME=/cache
+ENV HOME=/tmp/redline/home XDG_STATE_HOME=/tmp/redline/state XDG_CACHE_HOME=/cache container=redline
 VOLUME ["/cache", "/output"]
 USER 10001:10001
 WORKDIR /tmp
-ENTRYPOINT ["node", "/opt/redline/bin/redline.mjs"]
+ENTRYPOINT ["/opt/redline/container-entrypoint.sh"]

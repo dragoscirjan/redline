@@ -183,6 +183,8 @@ export async function buildReviewSemanticFingerprint(options: {
   readonly indexedContext: LoadedReviewCodeContext;
   readonly verifyCandidates: boolean;
   readonly followUpAvailable: boolean;
+  readonly tools?: readonly string[];
+  readonly analysisIdentity?: string;
 }): Promise<string> {
   const fileContext = codeContextForFile(options.indexedContext, options.file);
   const prompt = await buildFileReviewPrompt({
@@ -193,6 +195,7 @@ export async function buildReviewSemanticFingerprint(options: {
     model: options.environment.model.model,
     indexedContext: fileContext.prompt,
     followUpAvailable: options.followUpAvailable,
+    ...(options.tools === undefined ? {} : { tools: options.tools }),
   });
   const context = JSON.parse(await buildFileContextPayload(
     options.bundle,
@@ -218,6 +221,7 @@ export async function buildReviewSemanticFingerprint(options: {
     policyDigest: prompt.policyDigest,
     verificationPolicyDigest: verificationPolicy?.digest ?? null,
     harness: options.environment.harness,
+    analysisIdentity: options.analysisIdentity ?? null,
     model: {
       provider: options.environment.model.provider,
       endpoint: options.environment.model.endpoint,

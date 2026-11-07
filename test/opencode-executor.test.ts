@@ -127,9 +127,10 @@ describe('createOpenCodeExecutor', () => {
       expect(request.env?.XDG_DATA_HOME).toContain(join('opencode', 'invocation-'));
       expect(request.env?.XDG_STATE_HOME).toContain(join('opencode', 'invocation-'));
       expect(request.env?.HOME).toContain(join('opencode', 'invocation-'));
+      expect(request.env?.USERPROFILE).toBe(request.env?.HOME);
       // No ambient credentials leak into the child environment.
       expect(Object.keys(request.env ?? {}).sort()).toEqual(
-        ['HOME', 'LANG', 'OPENCODE_CONFIG', 'PATH', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME'].sort(),
+        ['HOME', 'USERPROFILE', 'LANG', 'OPENCODE_CONFIG', 'PATH', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME'].sort(),
       );
       expect(prepared.description).not.toContain('test-key');
     } finally {

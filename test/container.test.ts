@@ -11,6 +11,10 @@ const roots: string[] = [];
 const containers: { name: string; env: NodeJS.ProcessEnv }[] = [];
 const children: ChildProcess[] = [];
 const key = 'synthetic-container-model-key-do-not-persist';
+function runtimeMount(): string[] {
+  const source = process.env.REDLINE_CONTAINER_RUNTIME;
+  return source === undefined ? [] : ['--mount', 'type=bind,src=' + source + ',dst=/opt/redline,readonly'];
+}
 function image(): string {
   const value = process.env.REDLINE_CONTAINER_IMAGE;
   if (value === undefined) throw new Error('Set REDLINE_CONTAINER_IMAGE to test the Redline image');
@@ -39,9 +43,18 @@ const profile = ['--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-p
   '--pids-limit', '256', '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777'];
 async function fixture(mode = 'finding') {
   const { root, env } = await environment();
-  const repository = join(root, 'repository'), output = join(root, 'output');
+  const repository = join(root, 'repository'), output = join(root, 'output'), home = join(root, 'home');
   const cache = process.env.REDLINE_CONTAINER_CACHE ?? join(root, 'cache');
-  await Promise.all([mkdir(repository), mkdir(output), mkdir(cache, { recursive: true, mode: 0o700 })]);
+  await Promise.all([mkdir(repository), mkdir(output), mkdir(cache, { recursive: true, mode: 0o700 }),
+    mkdir(join(home, '.pi/agent'), { recursive: true }), mkdir(join(home, '.config/opencode'), { recursive: true })]);
+  // Native harness settings are fixture-owned; no owner configuration or automatic image MCP defaults load here.
+  await writeFile(join(home, '.pi/agent/models.json'), JSON.stringify({ providers: { openrouter: {
+    baseUrl: 'http://127.0.0.1:1/v1', api: 'openai-completions', apiKey: '$REDLINE_MODEL_API_KEY',
+    models: [{ id: 'test-model', name: 'Synthetic container model', reasoning: true, contextWindow: 128000, maxTokens: 4096 }],
+  } } }));
+  await writeFile(join(home, '.pi/agent/settings.json'), JSON.stringify({ defaultTools: [], retry: { enabled: false } }));
+  await writeFile(join(home, '.pi/agent/mcp.json'), '{"mcpServers":{}}');
+  await writeFile(join(home, '.config/opencode/opencode.json'), '{"mcp":{},"plugin":[]}');
   const git = (...args: string[]) => execFileSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null',
     '-c', 'commit.gpgSign=false', ...args], { env: { ...env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' }, encoding: 'utf8' }).trim();
   git('init', '--quiet', '-b', 'main'); git('config', 'user.name', 'Image fixture'); git('config', 'user.email', 'fixture@example.invalid');
@@ -64,7 +77,7 @@ async function fixture(mode = 'finding') {
       const end = pending.indexOf('\n'); if (end < 0) break;
       const value = JSON.parse(pending.slice(0, end)); pending = pending.slice(end + 1);
       if (value.type === 'ready') readyDone?.();
-      if (value.type === 'request') { requests.push(value); requested?.(); }
+      if (value.type === 'request' && !JSON.stringify(value.body).includes('REDLINE_NATIVE_WARMUP')) { requests.push(value); requested?.(); }
     }
   });
   logs.stderr.resume();
@@ -74,16 +87,17 @@ async function fixture(mode = 'finding') {
   } finally { clearTimeout(timer); }
   const address = docker(['inspect', '--format', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', model], env);
   const common = ['--repository', '/repository', '--base', base, '--head', 'HEAD', '--indexing', 'disabled', '--reuse', 'disabled',
-    '--provider', 'mock', '--endpoint', 'http://' + address + ':3000/v1', '--model', 'test-model', '--max-output-tokens', '4096', '--retries', '0'];
+    '--provider', 'openrouter', '--endpoint', 'http://' + address + ':3000/v1', '--model', 'test-model', '--max-output-tokens', '4096', '--retries', '0'];
   function runArgs() {
     return ['run', '--rm', '--name', named(env), ...profile, '--user', String(process.getuid?.() ?? 10001) + ':' + String(process.getgid?.() ?? 10001),
       '--mount', 'type=bind,src=' + repository + ',dst=/repository,readonly',
       '--mount', 'type=bind,src=' + output + ',dst=/output',
       '--mount', 'type=bind,src=' + cache + ',dst=/cache',
-      '--env', 'REDLINE_MODEL_AUTH=' + JSON.stringify({ mock: key }), image()];
+      '--mount', 'type=bind,src=' + home + ',dst=/native-home', '--env', 'HOME=/native-home',
+      ...runtimeMount(), '--env', 'REDLINE_MODEL_AUTH=' + JSON.stringify({ openrouter: key }), image()];
   }
   return { root, env, repository, output, cache, git, base, common, runArgs, firstRequest,
-    get requests() { return docker(['logs', model], env).split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(value => value.type === 'request') as typeof requests; } };
+    get requests() { return docker(['logs', model], env).split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(value => value.type === 'request' && !JSON.stringify(value.body).includes('REDLINE_NATIVE_WARMUP')) as typeof requests; } };
 }
 function run(args: string[], env: NodeJS.ProcessEnv, timeoutMs = 30_000): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
@@ -105,7 +119,57 @@ describe.runIf(enabled)('Redline runs inside Docker', () => {
     expect(result.code, result.stderr).toBe(0); expect(result.stdout).toContain('Usage: redline review');
     expect(result.stdout).not.toContain('--isolation'); expect(result.stdout).not.toContain('--container-image');
   }, 40_000);
+  it('continues CLI startup when optional native defaults cannot be written', async () => {
+    const { env } = await environment();
+    const result = await run(['run', '--rm', ...profile, '--env', 'HOME=/opt/redline', image(), '--help'], env);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain('Usage: redline review');
+    expect(result.stderr).toContain('continuing with native harness configuration');
+  }, 40_000);
+  it('probes every shipped MCP against bounded captured head source, including usable graph queries', async () => {
+    const { env } = await environment();
+    const script = await readFile(new URL('./fixtures/container-analysis.mjs', import.meta.url), 'utf8');
+    const result = await run(['run', '--rm', ...profile, ...runtimeMount(), '--network', 'none', '--entrypoint', 'node', image(), '--input-type=module', '-e', script], env);
+    expect(result.code, result.stderr).toBe(0);
+    const statuses = JSON.parse(result.stdout) as {component:string; status:string; reason:string}[];
+    for (const component of ['cgc','gitnexus','context-mode','sequential-thinking']) {
+      expect(statuses.find(item => item.component === component)?.status, result.stdout).toBe('ready');
+    }
+  }, 50_000);
   for (const harness of ['pi', 'opencode'] as const) {
+    it(`${harness} keeps isolated Actions tools read-only and rejects out-of-scope requests`, async () => {
+      const f = await fixture('analysis');
+      const launch = f.runArgs(); launch.splice(launch.length - 1, 0, '--entrypoint', 'node');
+      const script = await readFile(new URL('./fixtures/container-isolated.mjs', import.meta.url), 'utf8');
+      const result = await run([...launch, '--input-type=module', '-e', script, '--', 'isolated-fixture', ...f.common, '--harness', harness, '--output', '/output/analysis'], f.env);
+      expect(result.code, result.stdout + result.stderr).toBe(0);
+      expect(f.requests).toHaveLength(4);
+      const requests = JSON.stringify(f.requests);
+      expect(requests).toContain('ctx_index'); expect(requests).toContain('ctx_search'); expect(requests).toContain('denied');
+      const statuses = JSON.parse(await readFile(join(f.output, 'analysis/reviews/analysis-tools.json'), 'utf8')).integrations as {component:string;status:string}[];
+      expect(statuses.find(item => item.component === 'context-mode')?.status).toBe('ready');
+      const record = await readFile(join(f.output, 'analysis/reviews/000001.json'), 'utf8');
+      expect(JSON.parse(record).outcome).toBe('findings'); expect(record + result.stderr + result.stdout).not.toContain(key);
+    }, 50_000);
+    it(`${harness} isolated Actions report missing context-mode MCP and plugin without blocking a prompt`, async () => {
+      const f = await fixture('analysis');
+      const directory = docker(['run', '--rm', ...profile, '--entrypoint', 'node', image(), '-p',
+        "require('node:fs').realpathSync('/opt/harness/node_modules/context-mode')"], f.env);
+      if (!directory.startsWith('/opt/harness/node_modules/')) throw new Error('unexpected dependency location');
+      const empty = join(f.root, 'missing-context-mode'); await mkdir(empty);
+      const launch = f.runArgs(); launch.splice(launch.length - 1, 0, '--mount', 'type=bind,src=' + empty + ',dst=' + directory + ',readonly', '--entrypoint', 'node');
+      const script = await readFile(new URL('./fixtures/container-isolated.mjs', import.meta.url), 'utf8');
+      const result = await run([...launch, '--input-type=module', '-e', script, '--', 'isolated-fixture', ...f.common, '--harness', harness, '--output', '/output/missing'], f.env);
+      expect(result.code, result.stdout + result.stderr).toBe(0);
+      expect(f.requests).toHaveLength(1);
+      const report = await readFile(join(f.output, 'missing/reviews/analysis-tools.json'), 'utf8');
+      const statuses = JSON.parse(report).integrations as {component:string;status:string}[];
+      expect(statuses.find(item => item.component === 'context-mode')?.status).toBe('missing');
+      expect(statuses.find(item => item.component === 'context-mode-plugin')?.status).toBe('missing');
+      expect(result.stderr).toContain('context-mode missing');
+      expect(JSON.parse(await readFile(join(f.output, 'missing/reviews/000001.json'), 'utf8')).outcome).toBe('findings');
+      expect(report + result.stdout + result.stderr).not.toContain(key);
+    }, 50_000);
     it(`${harness} reviews a read-only repository with the controller inside the image`, async () => {
       const f = await fixture(); const before = f.git('status', '--porcelain=v1');
       const result = await run([...f.runArgs(), 'review', ...f.common, '--harness', harness, '--output', '/output/run'], f.env);

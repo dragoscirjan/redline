@@ -43,9 +43,9 @@ jobs:
         uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: ${{ runner.temp }}/redline-code-index/cache
-          key: redline-image-index-${{ matrix.arch }}-${{ hashFiles('containers/Dockerfile', 'containers/package.json', 'containers/pnpm-lock.yaml', 'containers/requirements.txt', 'src/code-index/**') }}-${{ github.sha }}
+          key: redline-image-index-${{ matrix.arch }}-${{ hashFiles('containers/Dockerfile', 'containers/package.json', 'containers/pnpm-lock.yaml', 'containers/requirements.txt', 'containers/preload-cgc-parsers.py', 'src/code-index/**') }}-${{ github.sha }}
           restore-keys: |
-            redline-image-index-${{ matrix.arch }}-${{ hashFiles('containers/Dockerfile', 'containers/package.json', 'containers/pnpm-lock.yaml', 'containers/requirements.txt', 'src/code-index/**') }}-
+            redline-image-index-${{ matrix.arch }}-${{ hashFiles('containers/Dockerfile', 'containers/package.json', 'containers/pnpm-lock.yaml', 'containers/requirements.txt', 'containers/preload-cgc-parsers.py', 'src/code-index/**') }}-
       - name: Check the published version against the release source
         id: version
         shell: bash
@@ -74,7 +74,9 @@ jobs:
           REDLINE_CONTAINER_TESTS: '1'
           REDLINE_CONTAINER_IMAGE: redline:test
           REDLINE_CONTAINER_CACHE: ${{ runner.temp }}/redline-code-index/cache
-        run: pnpm exec vitest run test/container.test.ts
+          REDLINE_NATIVE_CONTAINER_TESTS: '1'
+          REDLINE_NATIVE_IMAGE: redline:test
+        run: pnpm exec vitest run test/container.test.ts test/native-cli.integration.test.ts
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io

@@ -9,6 +9,9 @@
  * specifics and only sees this interface (Strategy pattern).
  */
 
+import type { AnalysisRequest, PreparedAnalysis } from './analysis.ts';
+import type { NativeToolEvidence } from './native.ts';
+
 export type HarnessName = 'echo' | 'pi' | 'opencode';
 
 export const HARNESS_NAMES: readonly HarnessName[] = ['echo', 'pi', 'opencode'];
@@ -39,9 +42,15 @@ export interface HarnessSettings {
   readonly modelProtocol?: 'compatible' | 'openrouter-json' | undefined;
   /** Caller-managed scratch directory for generated harness configuration. */
   readonly workDirectory: string;
+  /** Optional analysis is confined to authoritative captured source and never blocks model execution. */
+  readonly analysis?: AnalysisRequest;
 }
 
 export interface HarnessPrompt {
+  /** Warmup must execute tools before returning a report; do not force final-answer JSON during that work. */
+  readonly toolUse?: 'required-first';
+  /** Selected native index query to perform in a fresh file process, if directly callable. */
+  readonly requiredTool?: string;
   /** Trusted fixed schema supplied by the caller, never derived from repository content. */
   readonly responseSchema?: Readonly<Record<string, unknown>>;
   readonly system: string;
@@ -73,6 +82,8 @@ export interface HarnessRunTelemetry {
   readonly usage?: HarnessUsageTelemetry | undefined;
   /** Number of Redline-controlled retries after the initial attempt. */
   readonly retryCount?: number | undefined;
+  /** Observed native tool metadata only; never arguments, results or credentials. */
+  readonly tools?: NativeToolEvidence | undefined;
 }
 
 export interface HarnessRun {
@@ -101,6 +112,9 @@ export interface PreparedHarness {
    * summaries and diagnostics. Must never contain credential values.
    */
   readonly description: string;
+  readonly analysis?: PreparedAnalysis;
+  /** Native configuration is controlled by the harness, not the isolated MCP allowlist. */
+  readonly executionMode?: 'native' | 'isolated';
 }
 
 export interface HarnessOutputLine {

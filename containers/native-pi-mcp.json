@@ -1,0 +1,53 @@
+{
+  "mcpServers": {
+    "cgc": {
+      "command": "/opt/cgc/bin/cgc",
+      "args": [
+        "mcp",
+        "start"
+      ],
+      "env": {
+        "CGC_IGNORE_PROJECT_ENV": "1",
+        "ENABLE_AUTO_WATCH": "false",
+        "DEFAULT_DATABASE": "falkordb",
+        "CGC_RUNTIME_DB_TYPE": "falkordb",
+        "CGC_RUNTIME_DB_PATH": "/cache/redline/native/cgc/graph.db",
+        "FALKORDB_PATH": "/cache/redline/native/cgc/graph.db",
+        "FALKORDB_SOCKET_PATH": "/tmp/redline/native/cgc.sock",
+        "TREE_SITTER_LANGUAGE_PACK_CACHE_DIR": "/tmp/redline/native/parsers",
+        "TREE_SITTER_LANGUAGE_PACK_MANIFEST_URL": "file:///opt/cgc-parsers/no-remote-manifest.json"
+      },
+      "description": "Inspect code and relationships. Index the relevant repository with this server's native tools when its graph is unavailable."
+    },
+    "gitnexus": {
+      "command": "/opt/harness/node_modules/.bin/gitnexus",
+      "args": [
+        "mcp"
+      ],
+      "env": {
+        "GITNEXUS_HOME": "/cache/redline/native/gitnexus"
+      },
+      "description": "Query indexed code, callers and impact. An installed server does not mean this repository has an index."
+    },
+    "context-mode": {
+      "command": "/usr/local/bin/bun",
+      "args": [
+        "/opt/harness/node_modules/context-mode/cli.bundle.mjs"
+      ],
+      "env": {
+        "CONTEXT_MODE_PROJECT_DIR": "/tmp/redline/native/context-mode"
+      },
+      "description": "Index and search code context, and process large tool output without expanding the conversation."
+    },
+    "sequential-thinking": {
+      "command": "/usr/local/bin/node",
+      "args": [
+        "/opt/harness/node_modules/@modelcontextprotocol/server-sequential-thinking/dist/index.js"
+      ],
+      "env": {
+        "DISABLE_THOUGHT_LOGGING": "true"
+      },
+      "description": "Reason through nontrivial review questions and counter-evidence."
+    }
+  }
+}

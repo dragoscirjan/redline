@@ -64,6 +64,18 @@ if(args[0]==='query') {
 async function summary(output: string) { return JSON.parse(await readFile(join(output, 'reviews/summary.json'), 'utf8')); }
 
 describe('local indexed-context parity', () => {
+  it('does not report a failed base-index build as a rebuilt cache', async () => {
+    const f = await fixture();
+    await writeFile(join(f.repository, 'README.md'), 'An unsupported graph language is still reviewable.\n');
+    f.git('add', 'README.md'); f.git('commit', '--quiet', '-m', 'documentation');
+    await writeFile(f.provider, (await readFile(f.provider, 'utf8')).replace("if(args[0]==='index') {", "if(args[0]==='index') { process.exit(42);"));
+    const result = await f.run();
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stderr).not.toContain('Base index: rebuilt');
+    const status = JSON.parse(await readFile(join(result.output, 'index/status.json'), 'utf8'));
+    expect(status.indexCache).toBe('unavailable');
+    expect(status.diagnosticCodes).toContain('cgc-index-failed');
+  });
   it('retains provider data under XDG_CACHE_HOME independently of per-run state', async () => {
     const f = await fixture(true);
     const first = await f.run(['--indexing', 'required']); expect(first.code, first.stderr).toBe(0);

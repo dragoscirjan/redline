@@ -162,7 +162,8 @@ describe('real stdio reference-client conformance', () => {
   it('projects validated findings, source evidence, suggestions and deterministic fix prompts', async () => {
     const f = await fixture(); const bin = join(f.root, 'bin'); await mkdir(bin);
     const finding = reviewFinding({ evidence: 'export const value = 2;', suggestedChange: 'export const value = 3;' });
-    const answer = JSON.stringify({ version: 4, fileId: '000001', outcome: 'findings', findings: [finding], contextRequests: [] });
+    const answer = JSON.stringify({ version: 4, fileId: '000001', outcome: 'findings', findings: [finding], contextRequests: [],
+      impactAnalysis: { status: 'checked', changedSymbols: ['value'], callers: [], summary: 'Synthetic source-only impact check.', limitation: '' } });
     await writeFile(join(bin, 'pi'), '#!/usr/bin/env node\n' +
       'console.log(JSON.stringify({type:"message_update",assistantMessageEvent:{type:"thinking_delta",delta:"PRIVATE_RAW_MARKER"}}));' +
       'console.log(JSON.stringify({type:"turn_end",message:{role:"assistant",content:[{type:"text",text:' + JSON.stringify(answer) + '}],stopReason:"stop"}}));', { mode: 0o755 });

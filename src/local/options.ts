@@ -10,7 +10,7 @@ import { parseReviewEnvironment, type ReviewEnvironment } from '../review/enviro
 import { executable, GitCommand, gitEnvironment, inside, repositoryBoundary } from './process.ts';
 
 const KEYS = ['repository', 'output', 'vcs', 'base', 'head', 'worktree', 'comparison', 'untracked', 'harness',
-  'provider', 'endpoint', 'model', 'auth', 'reuse', 'scheduling', 'head-context', 'model-protocol', 'max-output-tokens', 'timeout', 'run-timeout', 'retries', 'concurrency', 'finding-scope', 'fail-on', 'color', 'indexing', 'indexing-provider', 'index-executable', 'index-runtime', 'code-context', 'code-context-repository'] as const;
+  'provider', 'endpoint', 'model', 'auth', 'reuse', 'scheduling', 'head-context', 'model-protocol', 'max-output-tokens', 'timeout', 'run-timeout', 'retries', 'concurrency', 'finding-scope', 'fail-on', 'color', 'progress', 'indexing', 'indexing-provider', 'index-executable', 'index-runtime', 'code-context', 'code-context-repository'] as const;
 type Key = (typeof KEYS)[number];
 export interface LocalOptions {
   readonly repository: string;
@@ -22,6 +22,7 @@ export interface LocalOptions {
     | { readonly kind: 'worktree'; readonly mode: 'staged' | 'unstaged' | 'all'; readonly untracked: boolean };
   readonly reporters: readonly string[];
   readonly color: 'auto' | 'always' | 'never';
+  readonly progress: 'auto' | 'always' | 'never';
   readonly indexing: {
     readonly mode: 'enabled' | 'disabled' | 'required';
     readonly provider: 'cgc' | 'gitnexus';
@@ -51,6 +52,7 @@ No target: review staged and unstaged tracked changes against HEAD.
                                     github|forgejo|gitea|gitlab|bitbucket reserved
   --output PATH                      New directory; default user state directory
   --color auto|always|never           Default auto; NO_COLOR disables colors
+  --progress auto|always|never        Default auto; always keeps the live bar through tee
   --indexing enabled|disabled|required  Default enabled; required rejects file-only fallback
   --indexing-provider cgc|gitnexus     Default cgc; external provider installed separately
   --index-executable PATH            Trusted existing indexer override
@@ -239,6 +241,7 @@ export async function parseLocalOptions(args: readonly string[], env: NodeJS.Pro
       artifact: artifact === undefined ? undefined : resolve(cwd, artifact),
       executable: indexExecutable === undefined ? undefined : resolve(cwd, indexExecutable),
       runtime: indexRuntime === undefined ? undefined : resolve(cwd, indexRuntime), repository: contextRepository },
+    progress: choice(get('progress', 'auto'), ['auto', 'always', 'never'], 'progress'),
     reporters, color: choice(get('color', 'auto'), ['auto', 'always', 'never'], 'color'), failOn: choice(get('fail-on', 'none'), ['none', 'findings', 'high', 'critical'], 'fail-on'), environment: { ...parsed.review,
       retries,
       scheduling: choice(get('scheduling', 'largest-first'), ['largest-first', 'mixed'] as const, 'scheduling'),

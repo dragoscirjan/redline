@@ -1,7 +1,7 @@
 /**
  * Builds the fixed, versioned per-file review prompts.
  *
- * The system prompt is the review policy (loaded from `prompts/v8/`) plus a
+ * The system prompt is the review policy (loaded from `prompts/v12/`) plus a
  * trusted run configuration; it never contains repository content. The user
  * prompt embeds exactly one file's untrusted context — manifest entry, the
  * authoritative diff, bounded revision-pinned source excerpts, and optional
@@ -22,12 +22,14 @@ import {
   type ReviewManifestFile,
 } from './bundle.ts';
 import type { PromptCodeContext } from './indexed-context.ts';
-import { FILE_REVIEW_GENERATION_SCHEMA } from './generation-schema.ts';
+import { ANALYSIS_COMPONENTS, analysisTools } from '../harness-executor/analysis-policy.ts';
+import { FILE_REVIEW_GENERATION_SCHEMA, NATIVE_FILE_REVIEW_GENERATION_SCHEMA } from './generation-schema.ts';
 import { buildFocusedSourceContext } from './source-context.ts';
+import type { WarmupGuidance } from './warmup.ts';
 import type { FindingScope } from './types.ts';
 
-export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v7' as const;
-export const FILE_REVIEW_PROMPT_VERSION = 7 as const;
+export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v12' as const;
+export const FILE_REVIEW_PROMPT_VERSION = 12 as const;
 
 export const SOURCE_CONTEXT_STRATEGIES = ['full-files-v1', 'focused-v1', 'retry-enriched-v1'] as const;
 export type SourceContextStrategy = (typeof SOURCE_CONTEXT_STRATEGIES)[number];
@@ -37,7 +39,7 @@ const PROMPT_MODULES = ['core-policy.md', 'review-phases.md', 'file-reporting.md
 /** Resolves the fixed policy directory from the TypeScript source module. */
 function defaultPromptRoot(): string {
   const moduleDirectory = fileURLToPath(new URL('.', import.meta.url));
-  return resolve(moduleDirectory, '../../prompts/v8/');
+  return resolve(moduleDirectory, '../../prompts/v12/');
 }
 const DEFAULT_PROMPT_ROOT = defaultPromptRoot();
 const MAX_PROMPT_MODULE_BYTES = 64 * 1024;
@@ -65,6 +67,10 @@ export interface FileReviewPromptOptions {
   readonly sourceContextStrategy?: SourceContextStrategy | undefined;
   /** Trusted execution capability; repository content must not select this value. */
   readonly followUpAvailable?: boolean;
+  /** Only factory-verified native tool names, never repository-selected capabilities. */
+  readonly tools?: readonly string[];
+  readonly executionMode?: 'native' | 'isolated';
+  readonly warmup?: WarmupGuidance;
   readonly promptRoot?: string;
 }
 
@@ -76,11 +82,11 @@ function normalizeModule(value: string): string {
   return `${value.replaceAll('\r\n', '\n').trimEnd()}\n`;
 }
 
-export async function loadReviewPolicy(promptRoot = DEFAULT_PROMPT_ROOT): Promise<{ text: string; digest: string }> {
+export async function loadReviewPolicy(promptRoot = DEFAULT_PROMPT_ROOT, native = false): Promise<{ text: string; digest: string }> {
   const root = await checkedDirectory(promptRoot, 'prompt policy directory');
   const modules: string[] = [];
   let totalBytes = 0;
-  for (const moduleName of PROMPT_MODULES) {
+  for (const moduleName of [...PROMPT_MODULES, ...(native ? ['native-warmup.md'] : [])]) {
     const content = normalizeModule(
       await readCheckedText(root, moduleName, MAX_PROMPT_MODULE_BYTES, `prompt module ${moduleName}`),
     );
@@ -222,7 +228,12 @@ export async function buildFileReviewPrompt(options: FileReviewPromptOptions): P
   const { bundle, file } = options;
   if (!bundle.manifest.files.includes(file)) throw new Error('prompt file is not part of the review manifest');
 
-  const policy = await loadReviewPolicy(options.promptRoot);
+  const tools = [...new Set(options.tools ?? [])].sort();
+  const allowedTools = ANALYSIS_COMPONENTS.flatMap(component => analysisTools(component).map(tool =>
+    options.harness === 'pi' ? 'mcp__redline_' + component.replaceAll('-', '_') + '__' + tool.name
+      : options.harness === 'opencode' ? 'redline_' + component.replaceAll('-', '_') + '_' + tool.name : ''));
+  if (options.executionMode !== 'native' && tools.some(tool => !allowedTools.includes(tool) || tool === '')) throw new Error('unsupported analysis capability');
+  const policy = await loadReviewPolicy(options.promptRoot, options.executionMode === 'native');
   const trustedConfiguration = JSON.stringify(
     {
       policyId: FILE_REVIEW_PROMPT_ID,
@@ -232,11 +243,13 @@ export async function buildFileReviewPrompt(options: FileReviewPromptOptions): P
       harness: options.harness,
       model: options.model,
       capabilities: {
-        inspection: 'read-only',
+        inspection: options.executionMode === 'native' ? 'native-harness-configuration' : 'read-only',
+        executionMode: options.executionMode ?? 'isolated',
+        ...(options.executionMode !== 'native' || options.warmup === undefined ? {} : { warmup: options.warmup }),
         followUp: options.followUpAvailable === true ? 'action-owned' : 'unavailable',
-        tools: [],
-        vulnerabilityLookup: false,
-        subagents: false,
+        tools: options.executionMode === 'native' ? 'native-harness-catalogue' : tools,
+        vulnerabilityLookup: options.executionMode === 'native' ? 'harness-configured' : false,
+        subagents: options.executionMode === 'native' ? 'harness-configured' : false,
       },
     },
     null,
@@ -268,10 +281,12 @@ export async function buildFileReviewPrompt(options: FileReviewPromptOptions): P
     'Return the review document for this one file now, following the reporting protocol exactly.',
   ].join('\n');
 
+  const indexer = options.warmup?.integrations.find(row => row.category === 'indexer' && row.indexStatus === 'reported-ready');
   return {
     system,
     user,
-    responseSchema: FILE_REVIEW_GENERATION_SCHEMA,
+    ...(options.executionMode === 'native' && indexer?.category === 'indexer' && indexer.queryTool !== null ? { requiredTool: indexer.queryTool } : {}),
+    responseSchema: options.executionMode === 'native' ? NATIVE_FILE_REVIEW_GENERATION_SCHEMA : FILE_REVIEW_GENERATION_SCHEMA,
     policyDigest: policy.digest,
     promptDigest: sha256(`${system}\n${user}`),
   };

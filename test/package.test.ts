@@ -47,12 +47,14 @@ it('installs the packed package offline and runs both CLIs without source checko
       npmArguments(['pack', '--ignore-scripts', '--json', '--pack-destination', root]), { cwd: project, env, encoding: 'utf8' }));
     const archive = packed[0]!;
     const paths = archive.files.map((entry) => entry.path);
-    expect(paths).toContain('prompts/v8/core-policy.md');
+    expect(paths).toContain('prompts/v12/core-policy.md');
+    expect(paths).toContain('bin/redline-analysis.mjs');
+    expect(paths).toContain('src/harness-executor/analysis-server.ts');
     expect(paths).toContain('bin/redline.mjs');
     expect(paths).toContain('src/rpc/main.ts');
     expect(paths).toContain('schemas/rpc/v1/protocol.schema.json');
     expect(paths).toContain('docs/stdio-protocol.md');
-    for (const file of ['context.ts', 'cache.ts', 'lock.py', 'export.py', 'gitnexus-query.mjs']) expect(paths).toContain(`src/code-index/${file}`);
+    for (const file of ['context.ts', 'cache.ts', 'cgc-grammars.ts', 'lock.py', 'export.py', 'gitnexus-query.mjs']) expect(paths).toContain(`src/code-index/${file}`);
     expect(paths.some((path) => /^(?:test|benchmark|src\.old|node_modules|\.agents|\.github|dist)\//u.test(path))).toBe(false);
     const installation = join(root, 'installation'); await mkdir(installation);
     execFileSync(process.execPath, npmArguments(['install', '--prefix', installation, '--ignore-scripts', '--offline', '--no-audit', '--no-fund', '--package-lock=false', join(root, archive.filename)]), { env, encoding: 'utf8' });

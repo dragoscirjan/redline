@@ -31,7 +31,7 @@ const finding = {
   verification: object({ status: { const: 'unverified', type: 'string' }, reason: text(500) }),
 };
 
-export const FILE_REVIEW_GENERATION_SCHEMA: Readonly<Record<string, unknown>> = object({
+const reviewProperties = {
   version: { type: 'integer', const: 4 },
   fileId: { type: 'string', pattern: '^[0-9]{6}$' }, outcome: enumeration('clean', 'findings', 'omitted'),
   reason: text(500),
@@ -40,4 +40,10 @@ export const FILE_REVIEW_GENERATION_SCHEMA: Readonly<Record<string, unknown>> = 
     object({ ...finding, remediationStatus: enumeration('guidance') }),
     object({ ...finding, remediationStatus: enumeration('proposed'), suggestedChange: text(8192) }),
   ] }, 10),
+};
+export const FILE_REVIEW_GENERATION_SCHEMA: Readonly<Record<string, unknown>> = object(reviewProperties);
+/** Native-only impact notes do not change the isolated v4 finding document. */
+export const NATIVE_FILE_REVIEW_GENERATION_SCHEMA: Readonly<Record<string, unknown>> = object({ ...reviewProperties,
+  impactAnalysis: object({ status: enumeration('checked', 'partial', 'not-applicable'), changedSymbols: array(text(160), 32),
+    callers: array(source, 16), summary: text(2000), limitation: text(500, 0) }),
 });

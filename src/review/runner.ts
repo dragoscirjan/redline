@@ -39,6 +39,7 @@ import {
   type SourceContextStrategy,
 } from './prompt.ts';
 import { buildPullRequestReview, validateFindingReferences } from './pr-contract.ts';
+import { extractNativeImpact, type FileImpactAnalysis } from './impact.ts';
 import { FileReviewValidator, parseFileReviewDocument } from './report.ts';
 import { buildRemediation, formatSpan } from './remediation.ts';
 import {
@@ -354,8 +355,16 @@ async function reviewOneFile(
   }
 
   let document;
+  let impactAnalysis: FileImpactAnalysis | undefined;
   try {
-    document = parseFileReviewDocument(run.text);
+    let reviewText = run.text;
+    if (prepared.executionMode === 'native') {
+      const extracted = await extractNativeImpact(run.text, bundle,
+        sharedFailure.warmup === undefined ? undefined : warmupGuidance(sharedFailure.warmup), run.telemetry?.tools);
+      reviewText = extracted.text;
+      impactAnalysis = JSON.parse(redact(JSON.stringify(extracted.impactAnalysis))) as FileImpactAnalysis;
+    }
+    document = parseFileReviewDocument(reviewText);
   } catch (error) {
     return {
       ...described,
@@ -701,6 +710,7 @@ async function reviewOneFile(
           : undefined,
     findings: published,
     rejectedCandidates,
+    ...(impactAnalysis === undefined ? {} : { impactAnalysis }),
     ...(verification === undefined ? {} : { verification }),
     ...(verificationArtifact === undefined ? {} : { verificationArtifact }),
     ...(followUp === undefined ? {} : { followUp }),
@@ -818,6 +828,9 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
         input.onWarmupStarted?.();
         warmup = await runNativeWarmup(executor, settings, {
           head: bundle.manifest.head, sourceDirectory: bundle.sourceRoot,
+          indexingProvider: environment.nativeIndexing?.provider ?? null,
+          required: environment.nativeIndexing?.required ?? false,
+          ...(environment.nativeIndexing?.executable === undefined ? {} : { indexingExecutable: environment.nativeIndexing.executable }),
           paths: bundle.manifest.files.flatMap(file => file.reviewed && file.newPath !== null ? [file.newPath] : []),
         }, Math.floor(remainingRunMs(runDeadlineAtMs, now) / 4));
         await writer.writeWarmupReport?.(warmup);
@@ -900,7 +913,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       file.reviewed && !recordsByManifestIndex.has(manifestIndex) ? [manifestIndex] : []));
     const scheduling = environment.scheduling ?? 'largest-first';
     const tasks = await reviewTasks(bundle, concurrency, selectedManifestIndexes, scheduling);
-    input.onWorkload?.({ ...workloadBound(tasks.length, concurrency, maximumFileAttemptTimeMs(environment.timeout.milliseconds, retryLimit), remainingRunMs(runDeadlineAtMs, now)),
+    if (warmup?.fatal !== true) input.onWorkload?.({ ...workloadBound(tasks.length, concurrency, maximumFileAttemptTimeMs(environment.timeout.milliseconds, retryLimit), remainingRunMs(runDeadlineAtMs, now)),
       scheduling: concurrency === 1 ? 'manifest-order' : scheduling,
       staticHeadFiles: [...indexedContext.files.values()].filter((file) => file.coverage.provider?.id === 'static-head').length });
     const followUpBudget = new FollowUpBudget();
@@ -1118,6 +1131,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
         execution: record.execution,
         savedDurationMs: record.savedDurationMs,
         findingCount: record.findings.length,
+        ...(record.impactAnalysis === undefined ? {} : { impactAnalysis: record.impactAnalysis }),
         findingSpans: record.findings.map((finding) => formatSpan(finding.startLine, finding.endLine)),
       })),
     };

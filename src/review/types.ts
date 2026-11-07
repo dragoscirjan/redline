@@ -209,6 +209,7 @@ export interface ReviewRetryTelemetry {
 }
 
 export interface FileReviewRecord {
+  readonly impactAnalysis?: import('./impact.ts').FileImpactAnalysis;
   /** Native harness observations, not a claim that every configured tool was used. */
   readonly tools?: NativeToolEvidence;
   readonly version: typeof FILE_REVIEW_RECORD_VERSION;
@@ -238,6 +239,7 @@ export interface FileReviewRecord {
 export const REVIEW_RUN_SUMMARY_VERSION = 3 as const;
 
 export interface ReviewRunSummaryFile {
+  readonly impactAnalysis?: import('./impact.ts').FileImpactAnalysis;
   readonly fileId: string;
   readonly path: string;
   readonly outcome: FileReviewOutcome;

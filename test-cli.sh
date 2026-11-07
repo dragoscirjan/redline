@@ -100,13 +100,13 @@ for harness in "${HARNESSES[@]}"; do
   review_args=(review --progress "$PROGRESS" --repository "$REPO" --base "${REDLINE_BASE:-origin/main}" --head "$REVIEW_HEAD"
     --harness "$harness" --provider "$PROVIDER" --endpoint "$ENDPOINT" --model "$MODEL"
     --max-output-tokens "${REDLINE_MAX_OUTPUT_TOKENS:-32768}" --model-protocol "$protocol"
-    --scheduling mixed --indexing "${REDLINE_INDEXING:-disabled}"
+    --scheduling mixed --indexing "${REDLINE_INDEXING:-enabled}" --indexing-provider "${REDLINE_INDEXING_PROVIDER:-cgc}"
     --concurrency "${REDLINE_REVIEW_CONCURRENCY:-4}" --retries "${REDLINE_RETRIES:-3}"
     --timeout "${REDLINE_TIMEOUT:-4m}" --run-timeout "${REDLINE_RUN_TIMEOUT:-20m}"
     --output "$target_output")
   run_review() {
     printf 'Repository: %s\nHead: %s\nHarness: %s\nLog: %s\nArtifacts: %s\n' "$REPO" "$REVIEW_HEAD" "$harness" "$log" "$output"
-    printf 'Precomputed context: %s. MCP configuration is loaded by the native harness.\n' "${REDLINE_INDEXING:-disabled}"
+    printf 'Native indexing: %s, provider %s. Checks and indexing run in model warmup.\n' "${REDLINE_INDEXING:-enabled}" "${REDLINE_INDEXING_PROVIDER:-cgc}"
     if [[ "$MODE" == docker ]]; then
       docker run "${container_args[@]}" "$IMAGE" "${review_args[@]}"
     else

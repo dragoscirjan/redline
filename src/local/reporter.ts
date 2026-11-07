@@ -105,16 +105,17 @@ export class CliReporter implements ReviewReporter {
     } else if (event.kind === 'warmup-ready') {
       this.clearLine();
       this.stderr(`Native warmup: ${event.report.status}; ${Math.ceil(event.report.durationMs / 1000)}s. Model reports are advisory, not proof of graph completeness.`);
-      if (event.report.tools.calls.length === 0) this.stderr('Warmup made no observed tool calls; an initial deferred-server catalog may still be incomplete.');
+      if (event.report.tools.calls.length === 0) this.stderr('Warning: warmup executed no observed tools. No indexing claim or file count was accepted.');
       for (const row of event.report.integrations) {
-        this.stderr(`  ${row.component}: tools ${row.availability}; index ${row.indexStatus}; ${row.indexedFiles === null ? 'unknown' : row.indexedFiles} files reported; persistence ${row.persistence}; query ${row.queryObserved ? 'observed' : 'not observed'}.`);
-        if (row.availability === 'not-observed' || row.availability === 'unknown') {
-          this.stderr(`Warning: ${row.component} warmup: native tool visibility ${row.availability}. ${terminalText(row.reason, this.credential)}`);
-        } else if (row.indexStatus === 'unavailable' || row.indexStatus === 'unverified') {
-          this.stderr(`Warning: ${row.component} warmup: index ${row.indexStatus}; native tools ${row.availability}. ${terminalText(row.reason, this.credential)}`);
+        if (row.category === 'tool') {
+          this.stderr(`  ${row.component}: optional tool ${row.availability}.`);
+          if (row.availability === 'unknown' || row.availability === 'not-observed') this.stderr(`Warning: ${row.component} is not confirmed available to the native harness; it may be missing, disabled or disconnected. Review can continue without it.`);
+          continue;
         }
+        this.stderr(`  ${row.component}: indexer ${row.availability}; index ${row.indexStatus}; ${row.indexedFiles === null ? 'no accepted file count' : row.indexedFiles + ' files reported'}; index/reuse ${row.indexObserved ? 'observed' : 'not observed'}; query ${row.queryObserved ? 'observed' : 'not observed'}.`);
+        if (row.indexStatus !== 'reported-ready') this.stderr(`Warning: ${row.component} warmup: ${terminalText(row.reason, this.credential)}`);
       }
-      if (event.report.status !== 'completed') this.stderr(`Warning: ${terminalText(event.report.reason, this.credential)} ${event.report.fatal ? 'File reviews will not start after this shared failure.' : 'Review continues with non-indexed guidance.'}`);
+      if (event.report.status !== 'completed') this.stderr(`Warning: ${terminalText(event.report.reason, this.credential)} ${event.report.fatal ? 'File reviews will not start because required warmup work was not established.' : 'Review continues with non-indexed guidance.'}`);
     } else if (event.kind === 'analysis-status') {
       this.clearLine();
       for (const integration of event.integrations) {

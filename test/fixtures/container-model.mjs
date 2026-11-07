@@ -15,7 +15,7 @@ const server = createServer(async (req, res) => {
   }
   if (warmup !== undefined) {
     const reply = JSON.stringify({ kind: 'REDLINE_NATIVE_WARMUP', head: warmup.head, sourceDirectory: warmup.sourceDirectory,
-      integrations: ['cgc', 'gitnexus', 'context-mode', 'sequential-thinking'].map(component => ({ component, availability: 'unavailable', tools: [], indexStatus: 'unavailable', indexedFiles: null, persistence: 'unknown', queryTool: null, reason: 'No native MCPs configured in this review-only fixture.' })) });
+      integrations: ['context-mode', 'sequential-thinking'].map(component => ({ component, availability: 'unavailable', tools: [], reason: 'No native MCPs configured in this review-only fixture.' })) });
     if (body.stream === true) {
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.end('data: ' + JSON.stringify({ id: 'warmup', object: 'chat.completion.chunk', model: 'test-model', choices: [{ index: 0, delta: { role: 'assistant', content: reply }, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n');
@@ -61,7 +61,9 @@ const server = createServer(async (req, res) => {
     }
   }
   const fileId = /\\?"fileId\\?"\s*:\s*\\?"(\d{6})\\?"/u.exec(raw)?.[1] ?? '000001';
-  const reply = JSON.stringify({ version: 4, fileId, outcome: 'findings', reason: 'Scripted supported defect.', contextRequests: [], findings: [{
+  const native = raw.includes('Native tools, indexing and change impact');
+  const reply = JSON.stringify({ version: 4, fileId, outcome: 'findings', reason: 'Scripted supported defect.', contextRequests: [],
+    ...(native ? { impactAnalysis: { status: 'not-applicable', changedSymbols: [], callers: [], summary: 'The synthetic text fixture has no function callers.', limitation: '' } } : {}), findings: [{
     title: 'Fixture contract changed', dimensions: ['correctness'], category: 'correctness', classification: 'defect', severity: 'high', confidence: 0.9,
     side: 'RIGHT', startLine: 1, endLine: 1, evidence: 'new', supportingEvidence: [], graphReferences: [],
     impactPath: { status: 'partial', steps: [], limitation: 'This deterministic fixture uses file-only evidence.' },

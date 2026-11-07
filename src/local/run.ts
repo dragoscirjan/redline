@@ -45,6 +45,12 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
         : 'WARNING: UNSANDBOXED NATIVE CLI. Configured tools and plugins can execute commands, modify files, access the network and use available credentials. Use a container, VM or other isolation when needed.');
     }
     const command = native ? await executable(options.environment.harness, env.PATH ?? '', options.repository) : undefined;
+    if (native && options.indexing.mode !== 'disabled' && options.indexing.executable !== undefined) {
+      const canonical = await realpath(options.indexing.executable).catch(() => undefined);
+      if (inside(options.repository, options.indexing.executable) || canonical !== undefined && inside(options.repository, canonical)) {
+        throw new LocalOperationError('indexer executable must be outside the reviewed repository');
+      }
+    }
     const executor = createHarnessExecutor(options.environment.harness, {
       ...(command === undefined ? {} : { command }), spawner: cancellableSpawner(signal),
       ...(native ? { native: { directory: options.repository, environment: env, container: env.container === 'redline' } } : {}),
@@ -111,6 +117,10 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
         stderr(native ? 'Review reuse: disabled for native configuration and external tool data'
           : `Review reuse: ${options.reuse === 'disabled' ? 'disabled' : reuse === undefined ? 'unavailable' : 'enabled'}`);
         if (options.indexing.mode === 'disabled') return undefined;
+        if (native && options.indexing.artifact === undefined) {
+          stderr(`Native indexing: ${options.indexing.provider}; installation checks and indexing will run in model warmup.`);
+          return undefined;
+        }
         reporter.progress({ kind: 'context-started', provider: options.indexing.artifact === undefined ? options.indexing.provider : 'imported' });
         const context = await prepareLocalContext(capture, options, env, destination, contextSignal,
           Math.max(1, options.environment.runTimeout.milliseconds - (performance.now() - start)));
@@ -136,7 +146,12 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
       },
     });
     failureKind = 'revision';
-    const result = await application.run({ environment: { ...options.environment, outputDirectory: destination } }, signal);
+    const result = await application.run({ environment: { ...options.environment, outputDirectory: destination,
+      ...(native && options.indexing.mode !== 'disabled' ? { nativeIndexing: { provider: options.indexing.provider,
+        required: options.indexing.mode === 'required',
+        ...(options.indexing.executable === undefined ? {} : { executable: options.indexing.executable }),
+      } } : {}),
+    } }, signal);
     const incomplete = result.summary.omittedFiles > 0 || ['incomplete', 'unavailable'].includes(result.review.coverage.files.status);
     let code = incomplete ? 1 : result.exitCode;
     if (code === 0 && options.failOn !== 'none') {

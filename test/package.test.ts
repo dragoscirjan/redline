@@ -1,6 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
@@ -55,6 +56,11 @@ it('installs the packed package offline and runs both CLIs without source checko
     for (const file of ['context.ts', 'cache.ts', 'lock.py', 'export.py', 'gitnexus-query.mjs']) expect(paths).toContain(`src/code-index/${file}`);
     expect(paths.some((path) => /^(?:test|benchmark|src\.old|node_modules|\.agents|\.github|dist)\//u.test(path))).toBe(false);
     const installation = join(root, 'installation'); await mkdir(installation);
+    // Install the real runtime dependency without network access or checkout symlinks.
+    const commander = dirname(createRequire(import.meta.url).resolve('commander'));
+    const dependency: { filename: string }[] = JSON.parse(execFileSync(process.execPath,
+      npmArguments(['pack', commander, '--ignore-scripts', '--json', '--pack-destination', root]), { cwd: root, env, encoding: 'utf8' }));
+    execFileSync(process.execPath, npmArguments(['install', '--prefix', installation, '--ignore-scripts', '--offline', '--no-audit', '--no-fund', '--package-lock=false', join(root, dependency[0]!.filename)]), { env, encoding: 'utf8' });
     execFileSync(process.execPath, npmArguments(['install', '--prefix', installation, '--ignore-scripts', '--offline', '--no-audit', '--no-fund', '--package-lock=false', join(root, archive.filename)]), { env, encoding: 'utf8' });
     const binary = join(installation, 'node_modules/@dragoscirjan/redline/bin/redline.mjs');
     const legacy = join(dirname(binary), 'redline-review.mjs');
@@ -110,7 +116,7 @@ if(a[0]==='query'){const source=fs.readFileSync(db,'utf8');console.log(JSON.stri
     const old = spawnSync(process.execPath, [legacy], { env: { ...env, ...cleanReviewEnvironment(fixture, 'echo') }, cwd: root, encoding: 'utf8' });
     expect(old.status, old.stderr).toBe(0); expect(JSON.parse(old.stdout).harness).toBe('echo');
     const installed = JSON.parse(await readFile(join(installation, 'node_modules/@dragoscirjan/redline/package.json'), 'utf8'));
-    expect(installed.dependencies).toBeUndefined();
+    expect(installed.dependencies).toEqual({ commander: expect.any(String) });
     expect(installed.scripts.install).toBeUndefined(); expect(installed.scripts.postinstall).toBeUndefined();
   } finally { await fixture.cleanup(); await rm(root, { recursive: true, force: true }); }
 }, 60_000);

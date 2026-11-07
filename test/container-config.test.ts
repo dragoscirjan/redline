@@ -25,6 +25,13 @@ describe('Docker build-context contract', () => {
     expect(manifest.pnpm.ignoredBuiltDependencies).toEqual(['esbuild']);
   });
 
+  it('installs Redline runtime dependencies from the root lockfile without package scripts', async () => {
+    const source = await readFile(new URL('../containers/Dockerfile', import.meta.url), 'utf8');
+    const redline = source.slice(source.indexOf('WORKDIR /opt/redline'));
+    expect(redline).toContain('COPY package.json pnpm-lock.yaml pnpm-workspace.yaml LICENSE ./');
+    expect(redline).toContain('RUN pnpm install --frozen-lockfile --prod --ignore-scripts');
+  });
+
   it('admits only the required container build files, not the whole subtree', async () => {
     const lines = await patterns();
     expect(lines[0]).toBe('**');
@@ -44,7 +51,7 @@ describe('Docker build-context contract', () => {
 
   it('includes the complete Redline runtime copied by the Dockerfile', async () => {
     const lines = await patterns();
-    for (const file of ['package.json', 'LICENSE']) expect(lines).toContain('!' + file);
+    for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'LICENSE']) expect(lines).toContain('!' + file);
     for (const directory of ['bin', 'src', 'prompts', 'schemas']) {
       expect(lines).toContain('!' + directory + '/');
       expect(lines).toContain('!' + directory + (directory === 'bin' ? '/*.mjs' : '/**'));

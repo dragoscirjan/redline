@@ -1,10 +1,11 @@
 #!/usr/bin/env node
+import { Command, CommanderError } from 'commander';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { CapabilityError } from '../application/capabilities.ts';
 import { CompositeReporter } from '../application/review.ts';
-import { HELP, parseLocalOptions, UsageError } from './options.ts';
+import { createReviewCommand, resolveLocalOptions, reviewOptionValues, UsageError } from './options.ts';
 import { runLocalReview } from './run.ts';
 import { FindingDiffReader } from './finding-diff.ts';
 import { CliReporter, terminalColors } from './reporter.ts';
@@ -23,14 +24,50 @@ export async function main(
 ): Promise<number> {
   const stdout = dependencies.stdout ?? ((line: string) => { process.stdout.write(`${line}\n`); });
   const stderr = dependencies.stderr ?? ((line: string) => { process.stderr.write(`${line}\n`); });
-  if (args.length === 1 && args[0] === '--version') {
-    const metadata: { version: string } = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
-    stdout(`redline ${metadata.version}`); return 0;
+  const metadata: { version: string } = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
+  const program = new Command('redline')
+    .description('Local Git code reviews')
+    .version(`redline ${metadata.version}`)
+    .addHelpCommand()
+    .exitOverride()
+    .configureOutput({
+      writeOut: (text) => stdout(text.trimEnd()),
+      writeErr: () => {},
+      outputError: () => {},
+    })
+    .action(() => { throw new UsageError('expected review; use --help'); });
+  const review = createReviewCommand(program.command('review'));
+  // Preserve the detailed root help without maintaining a second set of option descriptions.
+  program.on('afterHelp', () => {
+    stdout('');
+    review.outputHelp();
+    stdout('Use redline rpc --help for the stdio JSON-RPC command.');
+  });
+  let exitCode = 2;
+  review.action(async () => {
+    exitCode = await executeReview(reviewOptionValues(review), env, dependencies);
+  });
+  try {
+    await program.parseAsync([...args], { from: 'user' });
+    return exitCode;
+  } catch (error) {
+    if (error instanceof CommanderError) {
+      if (error.exitCode === 0) return 0;
+      stderr('redline: invalid arguments; use redline review --help (credentials are not command-line options)');
+      return 2;
+    }
+    if (error instanceof UsageError) { stderr(`redline: ${error.message}`); return 2; }
+    throw error;
   }
-  if ((args.length === 1 && args[0] === '--help') || (args.length === 2 && args[0] === 'review' && args[1] === '--help')) {
-    stdout(HELP); return 0;
-  }
-  if (args[0] !== 'review') { stderr('redline: expected review; use --help'); return 2; }
+}
+
+async function executeReview(
+  values: Readonly<Record<string, unknown>>,
+  env: NodeJS.ProcessEnv,
+  dependencies: LocalCliDependencies,
+): Promise<number> {
+  const stdout = dependencies.stdout ?? ((line: string) => { process.stdout.write(`${line}\n`); });
+  const stderr = dependencies.stderr ?? ((line: string) => { process.stderr.write(`${line}\n`); });
   const controller = new AbortController();
   const interrupt = (): void => controller.abort();
   const interrupted = dependencies.signal ?? controller.signal;
@@ -38,7 +75,7 @@ export async function main(
   process.once('SIGTERM', interrupt);
   const signal = AbortSignal.any([interrupted, controller.signal]);
   let options;
-  try { options = await parseLocalOptions(args.slice(1), env, dependencies.cwd ?? process.cwd(), signal); }
+  try { options = await resolveLocalOptions(values, env, dependencies.cwd ?? process.cwd(), signal); }
   catch (error) {
     process.removeListener('SIGINT', interrupt);
     process.removeListener('SIGTERM', interrupt);

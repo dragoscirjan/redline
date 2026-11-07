@@ -5,6 +5,8 @@
 !containers/pnpm-lock.yaml
 !containers/requirements.txt
 !package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
 !LICENSE
 !bin/
 !bin/*.mjs

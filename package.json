@@ -54,5 +54,8 @@
     "typescript": "5.9.3",
     "vitepress": "^1.6.4",
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "commander": "^15.0.0"
   }
 }

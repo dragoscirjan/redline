@@ -3,7 +3,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, it, onTestFailed } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest';
 import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
 import { npmArguments } from './helpers/npm.ts';
 import { packOfflinePackage } from './helpers/package-dependencies.ts';
@@ -38,19 +38,28 @@ const bunAvailable = execaSync('bun', ['--version'], {
   maxBuffer: 1024 * 1024,
 }).exitCode === 0;
 
-it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package offline and runs both CLIs with %s', async (runtime) => {
-  const started = performance.now();
+describe.each(['node', ...(bunAvailable ? ['bun'] : [])])('offline installed package with %s', (runtime) => {
+  let started = 0;
   const phases: Record<string, number> = {};
   const completed = (phase: string): void => { phases[phase] = Math.round(performance.now() - started); };
-  onTestFailed(() => console.error('Offline package completed phases in ms', JSON.stringify(phases)));
-  const root = await mkdtemp(join(tmpdir(), 'redline-package-test-'));
-  const fixture = await createBundleFixture();
-  try {
+  const state: {
+    root?: string;
+    fixture?: Awaited<ReturnType<typeof createBundleFixture>>;
+    env?: NodeJS.ProcessEnv;
+    packed?: ReturnType<typeof packOfflinePackage>;
+  } = {};
+
+  // Compiler/archive work is fixture preparation, not installed-runtime latency.
+  beforeAll(async () => {
+    started = performance.now();
+    const root = state.root = await mkdtemp(join(tmpdir(), 'redline-package-test-'));
+    state.fixture = await createBundleFixture();
     const env = { PATH: process.env.PATH, HOME: root, SystemRoot: process.env.SystemRoot,
       TEMP: root, TMP: root, TMPDIR: root, npm_config_cache: join(root, 'cache'), npm_config_userconfig: join(root, 'absent-npmrc'),
       npm_config_registry: 'https://registry.npmjs.org', npm_config_offline: 'true',
       XDG_CONFIG_HOME: join(root, 'config'), XDG_STATE_HOME: join(root, 'state'),
     };
+    state.env = env;
     // Stage and compile only in a temporary directory; tests never generate checkout files.
     const staged = join(root, 'package'); await mkdir(staged);
     for (const name of ['package.json', 'LICENSE', 'bin', 'src', 'prompts', 'schemas']) {
@@ -84,6 +93,20 @@ it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package
     expect(paths).toContain('docs/stdio-protocol.md');
     for (const file of ['context.ts', 'cache.ts', 'lock.py', 'export.py', 'gitnexus-query.mjs']) expect(paths).toContain(`src/code-index/${file}`);
     expect(paths.some((path) => /^(?:test|benchmark|src\.old|node_modules|\.agents|\.github|scripts)\//u.test(path))).toBe(false);
+    state.packed = packed;
+  }, 60_000);
+
+  afterAll(async () => {
+    completed('cleanup-started');
+    try { await state.fixture?.cleanup(); }
+    finally { if (state.root !== undefined) await rm(state.root, { recursive: true, force: true }); }
+    completed('cleanup-finished');
+  }, 60_000);
+
+  it('installs offline and verifies both CLIs and RPC', async () => {
+    onTestFailed(() => console.error('Offline package completed phases in ms', JSON.stringify(phases)));
+    const { root, fixture, env, packed } = state;
+    if (root === undefined || fixture === undefined || env === undefined || packed === undefined) throw new Error('Package fixture is unavailable');
     const installation = join(root, 'installation'); await mkdir(installation);
     // Install the package and its complete closure in one offline transaction.
     execaSync(process.execPath, npmArguments(['install', '--prefix', installation, '--ignore-scripts', '--offline', '--no-audit', '--no-fund', '--package-lock=false', ...packed.map(entry => join(root, entry.filename))]), {
@@ -194,9 +217,5 @@ if(a[0]==='query'){const source=fs.readFileSync(db,'utf8');console.log(JSON.stri
     expect(installed.dependencies).toEqual({ commander: expect.any(String), execa: expect.any(String) });
     expect(installed.scripts.install).toBeUndefined(); expect(installed.scripts.postinstall).toBeUndefined();
     completed('legacy-cli-validated');
-  } finally {
-    completed('cleanup-started');
-    await fixture.cleanup(); await rm(root, { recursive: true, force: true });
-    completed('cleanup-finished');
-  }
-}, 60_000);
+  }, 60_000);
+});

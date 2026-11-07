@@ -1,23 +1,58 @@
-/** Load only this trusted package's erasable TypeScript, including under node_modules. */
-import * as nodeModule from 'node:module';
-import { readFileSync } from 'node:fs';
+/** Select a packaged runtime. No TypeScript loader hooks or runtime compilation. */
+import { spawn } from 'node:child_process';
+import { access } from 'node:fs/promises';
+import { constants } from 'node:os';
+
+async function delegate(runtime) {
+  return new Promise((resolve) => {
+    const child = spawn(runtime, process.argv.slice(1), { stdio: 'inherit', windowsHide: true });
+    const interrupt = () => { child.kill('SIGINT'); };
+    const terminate = () => { child.kill('SIGTERM'); };
+    process.on('SIGINT', interrupt);
+    process.on('SIGTERM', terminate);
+    const finish = (code) => {
+      process.removeListener('SIGINT', interrupt);
+      process.removeListener('SIGTERM', terminate);
+      resolve(code);
+    };
+    child.once('error', () => {
+      process.stderr.write(`redline: selected runtime ${runtime} is unavailable\n`);
+      finish(2);
+    });
+    child.once('close', (code, signal) => finish(code ?? (signal === null ? 1 : 128 + (constants.signals[signal] ?? 0))));
+  });
+}
 
 export async function run(entry) {
-  if (Number(process.versions.node.split('.')[0]) < 24) {
+  const runtime = process.env.REDLINE_ENV || 'node';
+  if (runtime !== 'node' && runtime !== 'bun') {
+    process.stderr.write('redline: REDLINE_ENV must be node or bun\n');
+    process.exitCode = 2;
+    return;
+  }
+  const actual = process.versions.bun === undefined ? 'node' : 'bun';
+  if (runtime !== actual) {
+    // npm generates Node-based command shims. Re-exec Bun without a shell when selected.
+    process.exitCode = await delegate(runtime);
+    return;
+  }
+  if (runtime === 'node' && Number(process.versions.node.split('.')[0]) < 24) {
     process.stderr.write('redline requires Node.js 24 or newer\n');
     process.exitCode = 2;
     return;
   }
-  const sourceRoot = new URL('../src/', import.meta.url).href;
-  const hook = nodeModule.registerHooks({
-    load(url, context, nextLoad) {
-      if (!url.startsWith(sourceRoot) || !url.endsWith('.ts')) return nextLoad(url, context);
-      const source = nodeModule.stripTypeScriptTypes(readFileSync(new URL(url), 'utf8'), { mode: 'strip', sourceUrl: url });
-      return { format: 'module', source, shortCircuit: true };
-    },
-  });
-  try {
-    const { main } = await import(new URL(entry, import.meta.url).href);
-    process.exitCode = await main();
-  } finally { hook.deregister(); }
+  const target = new URL(runtime === 'node' ? entry.replace('../src/', '../dist/').replace(/\.ts$/u, '.js') : entry, import.meta.url);
+  try { await access(target); }
+  catch {
+    process.stderr.write(runtime === 'node'
+      ? 'redline: compiled entrypoint is missing; run pnpm run build before using this checkout\n'
+      : 'redline: packaged TypeScript entrypoint is missing\n');
+    process.exitCode = 2;
+    return;
+  }
+  // The selector belongs to the launcher, not the strict review environment contract.
+  const env = { ...process.env };
+  delete env.REDLINE_ENV;
+  const { main } = await import(target.href);
+  process.exitCode = await main(undefined, env);
 }

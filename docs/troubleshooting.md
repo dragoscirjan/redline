@@ -11,7 +11,7 @@ node --version
 git --version
 ```
 
-Use Node.js 24. If Redline is installed, run `redline --help`. Otherwise use `node bin/redline.mjs --help` from its source checkout. When you are in another repository, use the source binary's full path or `--repository`; do not assume `bin/redline.mjs` exists in the project being reviewed.
+Use Node.js 24. If Redline is installed, run `redline --help`. Otherwise run `pnpm install --frozen-lockfile` and `pnpm run build` in the Redline source checkout, then use `node bin/redline.mjs --help`. The error `compiled entrypoint is missing` means that checkout needs a build. When you are in another repository, use the source binary's full path or `--repository`; do not assume `bin/redline.mjs` exists in the project being reviewed.
 
 If npm installation returns `E404`, the requested package/version may not be published or accessible. Use the [source-checkout instructions](/get-started/#use-a-source-checkout). A package-publishing token is not needed to review source.
 

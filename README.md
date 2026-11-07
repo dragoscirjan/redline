@@ -44,9 +44,11 @@ See the [project roadmap](docs/roadmap.md) for upcoming work, integration target
 
 ## A safe source-checkout trial
 
-To check setup without a model or API key, use the [optional no-key example](docs/get-started/first-review.md#_3-run-the-safe-review). From a Redline source checkout:
+To check setup without a model or API key, use the [optional no-key example](docs/get-started/first-review.md#_3-run-the-safe-review). From a Redline source checkout, install the locked dependencies and build the Node distribution first:
 
 ```sh
+pnpm install --frozen-lockfile
+pnpm run build
 node bin/redline.mjs review --repository /path/to/your/repository --harness echo --indexing disabled
 ```
 

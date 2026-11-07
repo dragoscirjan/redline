@@ -16,7 +16,7 @@ These local diagrams use [Archify](https://tt-a1i.github.io/archify/). Their [so
 
 ## Start the process
 
-Use Node.js 24 and the installed Redline command. The installed version must include `redline rpc`; version 1.0.0 predates this command. For an updated source checkout, replace `redline` with `node /path/to/redline/bin/redline.mjs`.
+Use Node.js 24 and the installed Redline command. The installed version must include `redline rpc`; version 1.0.0 predates this command. For a source checkout, install its locked dependencies and run `pnpm run build`, then replace `redline` with `node /path/to/redline/bin/redline.mjs`. Set `REDLINE_ENV=bun` to select Bun TypeScript execution instead of the default compiled Node runtime.
 
 ```sh
 redline rpc --help

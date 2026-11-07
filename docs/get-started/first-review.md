@@ -82,7 +82,7 @@ git status --short
 
 Git should show `example.ts` as modified. Run the `echo` command above from this directory. It should complete one required file with no findings. `git status --short` should still show your modified file afterward.
 
-If you use a source checkout, run this from the demo directory, replacing the path with the full path to Redline:
+If you use a source checkout, install the locked dependencies and run `pnpm run build` in that checkout first. Then run this from the demo directory, replacing the path with the full path to Redline:
 
 ```sh
 node /path/to/redline/bin/redline.mjs review --harness echo --indexing disabled

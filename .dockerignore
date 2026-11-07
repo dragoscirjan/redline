@@ -7,6 +7,10 @@
 !package.json
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
+!tsconfig.json
+!tsconfig.build.json
+!scripts/
+!scripts/build.js
 !LICENSE
 !bin/
 !bin/*.mjs

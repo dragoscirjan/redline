@@ -26,6 +26,18 @@ redline --help
 
 Use the scoped package `@dragoscirjan/redline`. To choose a published version, append `@VERSION`, replacing `VERSION` with its version number.
 
+## Choose the runtime
+
+`REDLINE_ENV` defaults to `node`, which runs the published JavaScript in `dist/`. Set it to `bun` to run the retained TypeScript source with Bun 1.4.4:
+
+```sh
+REDLINE_ENV=bun redline --help
+```
+
+In PowerShell, use `$env:REDLINE_ENV = 'bun'` before the command. In CMD, use `set REDLINE_ENV=bun`. Unset the variable or set it to `node` to select Node again. Unknown values and missing selected runtimes fail without fallback.
+
+The selector also applies to `redline-review`. Running `bun bin/redline.mjs` without setting the selector still selects Node. npm supplies the platform-specific command shims; Redline ships only JavaScript entrypoints, not shell wrappers. Runtime selection does not change the Pi or OpenCode harness runtime.
+
 ## Start a review {#_3-run-your-first-review}
 
 1. [Install Pi or OpenCode and connect a model](/get-started/configuration).
@@ -41,13 +53,15 @@ You can run the CLI directly from trusted source instead of installing the npm p
 ```sh
 git clone https://github.com/dragoscirjan/redline.git
 cd redline
+pnpm install --frozen-lockfile
+pnpm run build
 node bin/redline.mjs --help
 ```
 
-Node.js 24 runs the CLI without installing development dependencies. After model setup, select the repository you want to review:
+Node.js 24 runs the compiled distribution. A source checkout needs the locked development dependencies to compile it; a published npm installation does not compile anything. After model setup, select the repository you want to review:
 
 ```sh
 node bin/redline.mjs review --repository /path/to/your/repository --indexing disabled
 ```
 
-Replace the path with your repository's full path and quote it if it contains spaces. Development dependencies are needed only to run Redline's tests or build its documentation.
+Replace the path with your repository's full path and quote it if it contains spaces. Rebuild after changing TypeScript when using Node. For Bun source execution without a Node build, use `REDLINE_ENV=bun bun bin/redline.mjs --help` after installing dependencies.

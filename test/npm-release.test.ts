@@ -294,7 +294,7 @@ require('node:fs').appendFileSync(process.env.FIXTURE_ROOT + '/delays', process.
     expect(source).not.toContain('gh pr review');
     const config = JSON.parse(await readFile(new URL('../.github/release.json', import.meta.url), 'utf8'));
     expect(config).toMatchObject({ version: 1, engine: 'changesets', publishing: {
-      before: ['release:preflight'], create_github_releases: false, push_git_tags: false,
+      before: ['release:preflight', 'build'], create_github_releases: false, push_git_tags: false,
     }, pull_request: { title: 'chore(release): version package', commit_message: 'chore(release): version package', base_branch: 'main' } });
     const changesets = JSON.parse(await readFile(new URL('../.changeset/config.json', import.meta.url), 'utf8'));
     expect(changesets).toMatchObject({ access: 'public', baseBranch: 'main', commit: false });

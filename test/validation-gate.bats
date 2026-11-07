@@ -19,7 +19,8 @@ assert config['tasks']['validate']['run'] == [
 ]
 assert scripts['test'].strip() == 'vitest run && bats test/*.bats'
 assert scripts['typecheck'].strip() == 'tsc --noEmit -p tsconfig.json'
-assert 'build' not in scripts
+assert scripts['build'].strip() == 'node scripts/build.js'
+assert scripts['prepack'].strip() == 'pnpm run build'
 PY
   printf '%s\n' "$output"
   [ "$status" -eq 0 ]

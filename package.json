@@ -10,6 +10,7 @@
   "exports": {},
   "files": [
     "bin/*.mjs",
+    "dist/**",
     "src/application/*.ts", "src/local/*.ts", "src/review/*.ts",
     "src/rpc/*.ts",
     "schemas/rpc/v1/*.json", "docs/stdio-protocol.md",
@@ -26,6 +27,8 @@
     "redline-review": "bin/redline-review.mjs"
   },
   "scripts": {
+    "build": "node scripts/build.js",
+    "prepack": "pnpm run build",
     "benchmark": "node src/benchmark/cli.ts",
     "benchmark:live-model": "node src/benchmark/live-cli.ts",
     "benchmark:performance": "node src/benchmark/performance-cli.ts",

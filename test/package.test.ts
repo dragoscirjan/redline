@@ -3,7 +3,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, it } from 'vitest';
+import { expect, it, onTestFailed } from 'vitest';
 import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
 import { npmArguments } from './helpers/npm.ts';
 import { installOfflineDependencies } from './helpers/package-dependencies.ts';
@@ -39,6 +39,10 @@ const bunAvailable = execaSync('bun', ['--version'], {
 }).exitCode === 0;
 
 it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package offline and runs both CLIs with %s', async (runtime) => {
+  const started = performance.now();
+  const phases: Record<string, number> = {};
+  const completed = (phase: string): void => { phases[phase] = Math.round(performance.now() - started); };
+  onTestFailed(() => console.error('Offline package completed phases in ms', JSON.stringify(phases)));
   const root = await mkdtemp(join(tmpdir(), 'redline-package-test-'));
   const fixture = await createBundleFixture();
   try {
@@ -56,6 +60,7 @@ it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package
     for (const name of ['local-cli.md', 'portable-architecture.md', 'docker-workers.md', 'stdio-protocol.md']) {
       await cp(join(project, 'docs', name), join(staged, 'docs', name));
     }
+    completed('staged');
     execaSync(process.execPath, [join(project, 'scripts/build.js'), join(staged, 'dist')], {
       extendEnv: false,
       stripFinalNewline: false,
@@ -64,6 +69,7 @@ it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package
       encoding: 'utf8',
       maxBuffer: 1024 * 1024,
     });
+    completed('compiled');
     const packed: { filename: string; files: { path: string }[] }[] = JSON.parse(execaSync(process.execPath, npmArguments(['pack', '--ignore-scripts', '--json', '--pack-destination', root]), {
       extendEnv: false,
       stripFinalNewline: false,
@@ -72,6 +78,7 @@ it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package
       encoding: 'utf8',
       maxBuffer: 1024 * 1024,
     }).stdout);
+    completed('packed');
     const archive = packed[0]!;
     const paths = archive.files.map((entry) => entry.path);
     expect(paths).toContain('prompts/v8/core-policy.md');
@@ -85,6 +92,7 @@ it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package
     expect(paths.some((path) => /^(?:test|benchmark|src\.old|node_modules|\.agents|\.github|scripts)\//u.test(path))).toBe(false);
     const installation = join(root, 'installation'); await mkdir(installation);
     installOfflineDependencies(project, installation, root, env);
+    completed('dependencies-installed');
     execaSync(process.execPath, npmArguments(['install', '--prefix', installation, '--ignore-scripts', '--offline', '--no-audit', '--no-fund', '--package-lock=false', join(root, archive.filename)]), {
       extendEnv: false,
       stripFinalNewline: false,
@@ -92,6 +100,7 @@ it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package
       encoding: 'utf8',
       maxBuffer: 1024 * 1024,
     });
+    completed('package-installed');
     const binary = join(installation, 'node_modules/@dragoscirjan/redline/bin/redline.mjs');
     const legacy = join(dirname(binary), 'redline-review.mjs');
     const reference = join(dirname(binary), '../docs/local-cli.md');
@@ -153,6 +162,7 @@ if(a[0]==='query'){const source=fs.readFileSync(db,'utf8');console.log(JSON.stri
     await writeFile(join(repository, 'example.ts'), 'working\n');
     const working = run(['review', '--harness', 'echo', '--indexing', 'disabled'], repository);
     expect(working.exitCode, working.stderr).toBe(0);
+    completed('cli-validated');
     const corpus: { method: string; params: Record<string, unknown>; code: number }[] = JSON.parse(await readFile(new URL('./fixtures/rpc/conformance.json', import.meta.url), 'utf8'));
     for (const once of [true, false]) {
       const client = new RpcClient(binary, [...(once ? ['--once'] : []), '--harness', 'echo', '--indexing', 'disabled', '--reuse', 'disabled'], runtimeEnv, root);
@@ -166,6 +176,7 @@ if(a[0]==='query'){const source=fs.readFileSync(db,'utf8');console.log(JSON.stri
         await client.call('shutdown'); client.eof(); expect((await client.exit).code).toBe(0);
       } finally { await client.close(); }
     }
+    completed('rpc-validated');
     const old = execaSync(process.execPath, [legacy], {
       extendEnv: false,
       stripFinalNewline: false,
@@ -189,5 +200,10 @@ if(a[0]==='query'){const source=fs.readFileSync(db,'utf8');console.log(JSON.stri
     const installed = JSON.parse(await readFile(join(installation, 'node_modules/@dragoscirjan/redline/package.json'), 'utf8'));
     expect(installed.dependencies).toEqual({ commander: expect.any(String), execa: expect.any(String) });
     expect(installed.scripts.install).toBeUndefined(); expect(installed.scripts.postinstall).toBeUndefined();
-  } finally { await fixture.cleanup(); await rm(root, { recursive: true, force: true }); }
+    completed('legacy-cli-validated');
+  } finally {
+    completed('cleanup-started');
+    await fixture.cleanup(); await rm(root, { recursive: true, force: true });
+    completed('cleanup-finished');
+  }
 }, 60_000);

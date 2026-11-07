@@ -1,5 +1,5 @@
 import { execa, execaSync } from 'execa';
-import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +16,8 @@ const bunAvailable = execaSync('bun', ['--version'], {
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'redline runtime ')); roots.push(root);
+  // macOS temporary paths can use /var, while process.cwd() reports /private/var.
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'redline runtime '))); roots.push(root);
   const cwd = join(root, 'caller directory'); await mkdir(cwd);
   await cp(join(project, 'bin'), join(root, 'bin'), { recursive: true });
   await symlink(join(project, 'node_modules'), join(root, 'node_modules'), 'junction');

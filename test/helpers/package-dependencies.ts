@@ -1,4 +1,4 @@
-/** Install the real production dependency closure without registry access or checkout symlinks. */
+/** Pack the staged package and its production dependency closure without registry access or checkout symlinks. */
 import { execaSync } from 'execa';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -7,7 +7,13 @@ import { npmArguments } from './npm.ts';
 
 interface Metadata { readonly name: string; readonly dependencies?: Readonly<Record<string, string>> }
 
-export function installOfflineDependencies(project: string, installation: string, archives: string, env: NodeJS.ProcessEnv): void {
+interface PackedPackage {
+  readonly name: string;
+  readonly filename: string;
+  readonly files: readonly { readonly path: string }[];
+}
+
+export function packOfflinePackage(project: string, staged: string, archives: string, env: NodeJS.ProcessEnv): readonly PackedPackage[] {
   const metadata: Metadata = JSON.parse(readFileSync(join(project, 'package.json'), 'utf8'));
   const pending = Object.keys(metadata.dependencies ?? {}).map(name => ({ name, from: project }));
   const directories = new Set<string>();
@@ -24,13 +30,9 @@ export function installOfflineDependencies(project: string, installation: string
     directories.add(directory);
     for (const name of Object.keys(manifest.dependencies ?? {})) pending.push({ name, from: directory });
   }
-  if (directories.size === 0) return;
-  const packed: { filename: string }[] = JSON.parse(execaSync(process.execPath,
-    npmArguments(['pack', ...directories, '--ignore-scripts', '--json', '--pack-destination', archives]), {
+  // One npm startup for the entire closure matters on native Windows runners.
+  return JSON.parse(execaSync(process.execPath,
+    npmArguments(['pack', staged, ...directories, '--ignore-scripts', '--json', '--pack-destination', archives]), {
       cwd: project, env, extendEnv: false, stripFinalNewline: false, maxBuffer: 1024 * 1024,
     }).stdout);
-  execaSync(process.execPath, npmArguments(['install', '--prefix', installation, '--ignore-scripts', '--offline',
-    '--no-audit', '--no-fund', '--package-lock=false', ...packed.map(archive => join(archives, archive.filename))]), {
-    env, extendEnv: false, maxBuffer: 1024 * 1024,
-  });
 }

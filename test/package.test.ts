@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, it, onTestFailed } from 'vitest';
 import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
 import { npmArguments } from './helpers/npm.ts';
-import { installOfflineDependencies } from './helpers/package-dependencies.ts';
+import { packOfflinePackage } from './helpers/package-dependencies.ts';
 import { RpcClient } from './helpers/rpc-client.ts';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
@@ -70,16 +70,10 @@ it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package
       maxBuffer: 1024 * 1024,
     });
     completed('compiled');
-    const packed: { filename: string; files: { path: string }[] }[] = JSON.parse(execaSync(process.execPath, npmArguments(['pack', '--ignore-scripts', '--json', '--pack-destination', root]), {
-      extendEnv: false,
-      stripFinalNewline: false,
-      cwd: staged,
-      env,
-      encoding: 'utf8',
-      maxBuffer: 1024 * 1024,
-    }).stdout);
+    const packed = packOfflinePackage(project, staged, root, env);
     completed('packed');
-    const archive = packed[0]!;
+    const archive = packed.find(entry => entry.name === '@dragoscirjan/redline');
+    if (archive === undefined) throw new Error('Redline package archive is missing');
     const paths = archive.files.map((entry) => entry.path);
     expect(paths).toContain('prompts/v8/core-policy.md');
     expect(paths).toContain('bin/redline.mjs');
@@ -91,9 +85,8 @@ it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package
     for (const file of ['context.ts', 'cache.ts', 'lock.py', 'export.py', 'gitnexus-query.mjs']) expect(paths).toContain(`src/code-index/${file}`);
     expect(paths.some((path) => /^(?:test|benchmark|src\.old|node_modules|\.agents|\.github|scripts)\//u.test(path))).toBe(false);
     const installation = join(root, 'installation'); await mkdir(installation);
-    installOfflineDependencies(project, installation, root, env);
-    completed('dependencies-installed');
-    execaSync(process.execPath, npmArguments(['install', '--prefix', installation, '--ignore-scripts', '--offline', '--no-audit', '--no-fund', '--package-lock=false', join(root, archive.filename)]), {
+    // Install the package and its complete closure in one offline transaction.
+    execaSync(process.execPath, npmArguments(['install', '--prefix', installation, '--ignore-scripts', '--offline', '--no-audit', '--no-fund', '--package-lock=false', ...packed.map(entry => join(root, entry.filename))]), {
       extendEnv: false,
       stripFinalNewline: false,
       env,

@@ -2,9 +2,15 @@
 import { access } from 'node:fs/promises';
 import { constants } from 'node:os';
 
+/** Re-exec the selected runtime without fallback or dependency error details. */
 async function delegate(runtime) {
   // Keep the Node-version guard usable before loading dependencies with newer engine requirements.
-  const { execa } = await import('execa');
+  let execa;
+  try { ({ execa } = await import('execa')); }
+  catch {
+    process.stderr.write('redline: runtime delegation dependency is unavailable; reinstall Redline\n');
+    return 2;
+  }
   const child = execa(runtime, process.argv.slice(1), {
     stdio: 'inherit', windowsHide: true, reject: false, buffer: false,
     preferLocal: false, shell: false, verbose: 'none',

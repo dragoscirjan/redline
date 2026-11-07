@@ -83,6 +83,23 @@ for (const bootstrap of ['node', 'bun']) {
       expect(JSON.parse(result.stdout)).toMatchObject({ entry: 'rpc/main', args: ['--help'], runtime: 'node', mode: 'compiled' });
     });
 
+    it('reports delegation dependency load failures without exposing module errors', async () => {
+      const f = await fixture();
+      await rm(join(f.root, 'node_modules'), { recursive: true, force: true });
+      const dependency = join(f.root, 'node_modules/execa'); await mkdir(dependency, { recursive: true });
+      await writeFile(join(dependency, 'package.json'), JSON.stringify({ type: 'module', exports: './index.js' }));
+      await writeFile(join(dependency, 'index.js'), 'throw new Error("private-dependency-load-detail");');
+      const result = execaSync(command, [join(f.root, 'bin/redline.mjs')], {
+        cwd: f.cwd, env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
+          REDLINE_ENV: bootstrap === 'node' ? 'bun' : 'node' },
+        extendEnv: false, reject: false, stripFinalNewline: false, timeout: 10_000, maxBuffer: 1024 * 1024,
+      });
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toBe('redline: runtime delegation dependency is unavailable; reinstall Redline\n');
+      expect(result.stderr).not.toContain('private-dependency-load-detail');
+    });
+
     it('rejects an unknown selector without printing or executing its contents', async () => {
       const f = await fixture();
       const result = execaSync(command, [join(f.root, 'bin/redline.mjs')], {

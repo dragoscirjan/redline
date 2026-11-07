@@ -8,6 +8,7 @@ export class RemoteError extends Error {
   constructor(code: number, message: string) { super(message); this.code = code; }
 }
 interface Pending { resolve: (value: Record<string, unknown>) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }
+/** Fail fixture setup before attaching protocol handlers if any required stdio pipe is unavailable. */
 function requirePipedStreams(child: ChildProcess): asserts child is ChildProcessWithoutNullStreams {
   if (child.stdin === null || child.stdout === null || child.stderr === null) throw new Error('RPC fixture requires piped stdio');
 }
@@ -23,6 +24,7 @@ export class RpcClient {
   private messageBytes = 0;
   private readonly finished = new Map<string, Record<string, unknown>>();
   private readonly waiting = new Map<string, Pending>();
+  /** Own one RPC process and its pending calls; keep framed stdout separate from bounded diagnostic stderr. */
   constructor(binary: string, args: readonly string[], env: NodeJS.ProcessEnv, cwd: string,
     launcher?: { readonly command: string; readonly args: readonly string[] }) {
     const child = execa(launcher?.command ?? process.execPath, launcher === undefined ? [binary, 'rpc', ...args] : [...launcher.args, 'rpc', ...args], {

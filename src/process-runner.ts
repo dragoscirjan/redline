@@ -43,6 +43,7 @@ function emptyStream(): AsyncIterable<Uint8Array> {
 
 /** Execa handles spawning; bounded readers retain Redline's truncate-and-drain policy. */
 export const nodeProcessSpawner: ProcessSpawner = {
+  /** Start unbuffered pipes and a reusable safe exit promise; output retention and draining belong to the caller. */
   spawn(request) {
     const child = execa(request.command, [...request.args], {
       reject: false, buffer: false, extendEnv: false, preferLocal: false, shell: false, verbose: 'none',

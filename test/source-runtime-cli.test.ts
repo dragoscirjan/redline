@@ -10,6 +10,7 @@ const cli = fileURLToPath(new URL('../src/benchmark/source-runtime-cli.ts', impo
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
+/** Restrict PATH to test-owned executables so missing tools and permission errors cannot use an ambient Bun install. */
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'redline-source-runtime-test-')); roots.push(root);
   const bin = join(root, 'bin'); await mkdir(bin);

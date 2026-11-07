@@ -101,6 +101,7 @@ function appendBounded(chunks: Buffer[], chunk: Buffer, state: { bytes: number }
   chunks.push(chunk);
 }
 
+/** Capture bounded bytes or stream stdout with backpressure; overflow and sink errors terminate the child. */
 async function waitForProcess(
   command: string,
   args: readonly string[],
@@ -205,12 +206,14 @@ async function runGitToFile(
   return runToFile('git', ['-C', repo, ...args], destination, allowFailure);
 }
 
+/** Extract captured Git data, never repository scripts; reject either pipeline failure or diagnostic overflow. */
 async function extractSource(repo: string, head: string, destination: string): Promise<void> {
   await mkdir(destination, { recursive: true });
   const archive = execa('git', ['-C', repo, 'archive', head], { stdio: ['ignore', 'pipe', 'pipe'], reject: false, buffer: false, preferLocal: false, shell: false, verbose: 'none' });
   const extractor = execa('tar', ['-x', '-C', destination], { stdio: ['pipe', 'ignore', 'pipe'], reject: false, buffer: false, preferLocal: false, shell: false, verbose: 'none' });
   archive.stdout.pipe(extractor.stdin);
 
+  /** Drain one archive process with a diagnostic cap and reject unsuccessful or signalled exits. */
   const collect = async (child: typeof archive | typeof extractor, name: string): Promise<void> => {
     if (child.stderr === null) throw new Error(`${name} has no diagnostic stream`);
     const stderrChunks: Buffer[] = [];

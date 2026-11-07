@@ -65,6 +65,13 @@ function safeEnvironment(home: string): NodeJS.ProcessEnv {
   return environment;
 }
 
+/** Preserve only known OS cause codes; Execa's full error can contain arguments and captured data. */
+function launchFailure(command: string, code: string | undefined): string {
+  const safeCode = ['ENOENT', 'EACCES', 'EPERM', 'ENOEXEC'].find(value => value === code);
+  return `${basename(command)} failed to start${safeCode === undefined ? '' : ` (${safeCode})`}`;
+}
+
+/** Use only the supplied environment; capture bounded output and reject launch, deadline, or capture failures. */
 async function runProcess(
   command: string,
   args: readonly string[],
@@ -101,7 +108,7 @@ async function runProcess(
     void child.then(processResult => {
       clearTimeout(timeout);
       if (processResult.exitCode === undefined && processResult.signal === undefined) {
-        rejectPromise(new Error(`${basename(command)} failed to start`));
+        rejectPromise(new Error(launchFailure(command, processResult.failed ? processResult.code : undefined)));
         return;
       }
       const stdoutBuffer = Buffer.concat(stdout);
@@ -224,6 +231,7 @@ async function removeSymbolicLinks(root: string): Promise<void> {
   await visit(root);
 }
 
+/** Export an exact Git revision through bounded git/tar processes, then remove links and indexer metadata. */
 async function archiveRevision(
   repository: string,
   revision: string,
@@ -244,6 +252,7 @@ async function archiveRevision(
       stdio: ['pipe', 'ignore', 'pipe'],
     });
     const diagnostics: Buffer[] = [];
+    const launchFailures: string[] = [];
     let diagnosticBytes = 0;
     let gitStatus: number | null = null;
     let tarStatus: number | null = null;
@@ -260,11 +269,18 @@ async function archiveRevision(
       settled = true;
       clearTimeout(timer);
       if (gitStatus !== 0 || tarStatus !== 0 || diagnosticBytes > MAX_DIAGNOSTIC_BYTES) {
-        rejectPromise(new Error(`git archive pipeline failed (${gitStatus}/${tarStatus}): ${bounded(Buffer.concat(diagnostics))}`));
+        const diagnostic = [...launchFailures, bounded(Buffer.concat(diagnostics))].filter(Boolean).join('; ');
+        rejectPromise(new Error(`git archive pipeline failed (${gitStatus}/${tarStatus}): ${diagnostic}`));
       } else resolvePromise();
     };
-    void git.then(result => { gitStatus = result.exitCode ?? 1; finish(); });
-    void tar.then(result => { tarStatus = result.exitCode ?? 1; finish(); });
+    void git.then(result => {
+      if (result.failed && result.exitCode === undefined && result.signal === undefined) launchFailures.push(launchFailure('git', result.code));
+      gitStatus = result.exitCode ?? 1; finish();
+    });
+    void tar.then(result => {
+      if (result.failed && result.exitCode === undefined && result.signal === undefined) launchFailures.push(launchFailure('tar', result.code));
+      tarStatus = result.exitCode ?? 1; finish();
+    });
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;

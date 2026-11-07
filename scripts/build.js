@@ -12,6 +12,11 @@ const result = execaSync(process.execPath, [compiler, '-p', join(root, 'tsconfig
   cwd: root, stdio: 'inherit', reject: false, preferLocal: false, shell: false, verbose: 'none',
 });
 if (result.failed) {
+  if (result.exitCode === undefined) {
+    const code = ['ENOENT', 'EACCES', 'EPERM', 'ENOEXEC'].find(value => value === result.code);
+    const reason = result.signal === undefined ? 'failed to start' : 'terminated before completion';
+    process.stderr.write(`redline build: compiler process ${reason}${code === undefined ? '' : ` (${code})`}\n`);
+  }
   process.exitCode = result.exitCode ?? 1;
 } else {
   // These helpers are resolved relative to compiled code-index modules.

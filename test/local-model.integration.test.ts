@@ -28,6 +28,7 @@ const MODEL_ENDPOINT = (() => {
 })();
 const HARNESS_BIN = process.env.REDLINE_LOCAL_MODEL_BIN ?? 'pi';
 
+/** Probe the explicitly selected local harness before an opt-in model test; launch failures mean unavailable. */
 async function binaryAvailable(command: string): Promise<boolean> {
   return new Promise((resolve) => {
     const probe = execa(command, ['--version'], {
@@ -40,6 +41,7 @@ async function binaryAvailable(command: string): Promise<boolean> {
   });
 }
 
+/** Require a successful /models response within curl's three-second bound before using the local endpoint. */
 async function endpointAlive(endpoint: string): Promise<boolean> {
   if (endpoint.length === 0) return false;
   return new Promise((resolve) => {

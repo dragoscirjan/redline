@@ -12,6 +12,7 @@ import { buildFileReviewPrompt } from '../src/review/prompt.ts';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
+/** Use sentinel host credentials and a rejecting fake indexer to verify captured-source and environment isolation. */
 async function fixture(xdgCache = false) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'redline-context-test-'))); roots.push(root);
   const repository = join(root, 'repo'); await mkdir(join(repository, 'src'), { recursive: true }); await mkdir(join(repository, 'test'));
@@ -273,6 +274,7 @@ fs.mkdirSync(process.env.GITNEXUS_STORAGE_PATH,{recursive:true});fs.writeFileSyn
 });
 
 describe('GitHub exporter compatibility entrypoint', () => {
+  /** Copy the Python compatibility entrypoint into temporary source layouts and probe Python 3.12 without user modules. */
   async function exporter(source?: string) {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'redline-export-entrypoint-'))); roots.push(root);
     const wrapper = join(root, 'github/code-index/export.py');

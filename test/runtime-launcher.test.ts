@@ -15,6 +15,7 @@ const bunAvailable = execaSync('bun', ['--version'], {
 }).exitCode === 0;
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
+/** Provide distinguishable source/compiled entrypoints in a canonical temporary directory with caller-owned cleanup. */
 async function fixture() {
   // macOS temporary paths can use /var, while process.cwd() reports /private/var.
   const root = await realpath(await mkdtemp(join(tmpdir(), 'redline runtime '))); roots.push(root);

@@ -12,6 +12,7 @@ async function doc(path: string): Promise<string> {
   return (await readFile(new URL('../docs/' + path, import.meta.url), 'utf8')).replace(/\r\n?/gu, '\n');
 }
 
+/** Exercise documentation recipes against isolated Git history and staged/unstaged changes, not the user's config. */
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'redline-docs-')); roots.push(root);
   const repository = join(root, 'repo'); await mkdir(repository);

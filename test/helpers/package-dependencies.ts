@@ -13,6 +13,7 @@ interface PackedPackage {
   readonly files: readonly { readonly path: string }[];
 }
 
+/** Archive the staged distribution and real dependency closure together; never fetch packages or link the checkout. */
 export function packOfflinePackage(project: string, staged: string, archives: string, env: NodeJS.ProcessEnv): readonly PackedPackage[] {
   const metadata: Metadata = JSON.parse(readFileSync(join(project, 'package.json'), 'utf8'));
   const pending = Object.keys(metadata.dependencies ?? {}).map(name => ({ name, from: project }));

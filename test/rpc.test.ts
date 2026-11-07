@@ -17,6 +17,7 @@ afterEach(async () => {
   await Promise.all(clients.splice(0).map(client => client.close()));
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
+/** Own disposable Git history and tracked RPC clients; teardown closes clients before removing their working files. */
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'redline-rpc-')); roots.push(root);
   const repository = join(root, 'repo'); await mkdir(repository);

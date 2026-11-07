@@ -14,6 +14,7 @@ import { terminalText } from '../src/local/reporter.ts';
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true }))); });
+/** Keep each local-review scenario's Git object format, home, output, and configuration independent of the host. */
 async function fixture(objectFormat: 'sha1' | 'sha256' = 'sha1') {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'redline-local-test-'))); roots.push(root);
   const repository = join(root, 'repo'); await mkdir(repository);

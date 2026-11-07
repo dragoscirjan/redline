@@ -17,6 +17,7 @@ function image(): string {
   if (value === undefined) throw new Error('Set REDLINE_CONTAINER_IMAGE to test the Redline image');
   return value;
 }
+/** Execute opt-in Docker setup with the fixture environment and bounded synchronous diagnostics. */
 function docker(args: string[], env: NodeJS.ProcessEnv): string {
   return execaSync('docker', args, {
     extendEnv: false,
@@ -45,6 +46,7 @@ async function environment() {
 }
 const profile = ['--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--memory', '2g',
   '--pids-limit', '256', '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777'];
+/** Own a mock-model container and disposable Git state; register children and containers for teardown. */
 async function fixture(mode = 'finding') {
   const { root, env } = await environment();
   const repository = join(root, 'repository'), output = join(root, 'output');
@@ -106,6 +108,7 @@ async function fixture(mode = 'finding') {
   return { root, env, repository, output, cache, git, base, common, runArgs, firstRequest,
     get requests() { return docker(['logs', model], env).split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(value => value.type === 'request') as typeof requests; } };
 }
+/** Bound Docker client logs and lifetime; container removal remains the fixture teardown's responsibility. */
 function run(args: string[], env: NodeJS.ProcessEnv, timeoutMs = 30_000): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = execa('docker', args, {

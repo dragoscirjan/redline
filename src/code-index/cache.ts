@@ -70,6 +70,7 @@ async function treeBytes(root: string): Promise<number> {
   return bytes;
 }
 
+/** Hold the kernel cache lock through a Python helper; the caller must await the returned release function. */
 async function lock(root: string, python: string, environment: NodeJS.ProcessEnv, signal: AbortSignal, waitMs: number): Promise<() => Promise<void>> {
   const path = join(root, 'index.lock');
   const info = await lstat(path).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; return undefined; });

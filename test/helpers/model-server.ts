@@ -14,6 +14,7 @@ interface MockServerStartOptions {
   readonly timeoutMs?: number;
 }
 
+/** Require a bounded port handshake, reap failed startups, and return an idempotent owner-only stop operation. */
 export async function startMockServer(overrides: Record<string, string> = {}, options: MockServerStartOptions = {}): Promise<MockServer> {
   const script = fileURLToPath(new URL('../fixtures/mock-model-server.mjs', import.meta.url));
   const child = options.spawn?.() ?? execa(process.execPath, [script, '0'], {

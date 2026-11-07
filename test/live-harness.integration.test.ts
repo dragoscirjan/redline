@@ -19,6 +19,7 @@ import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts
 
 const ENABLED = process.env.REDLINE_LIVE_HARNESS_TESTS === '1';
 
+/** Gate opt-in harness tests on a version probe; accept CLIs that report their version with exit 1. */
 async function binaryAvailable(command: string): Promise<boolean> {
   return new Promise((resolve) => {
     const probe = execa(command, ['--version'], {

@@ -45,6 +45,7 @@ export async function executable(name: string, path: string, repository: string)
   throw new LocalOperationError(`trusted ${name} executable not found outside the reviewed repository`);
 }
 
+/** Terminate the owned Unix process group or Windows descendants, falling back to the direct child. */
 function kill(child: Pick<Subprocess, 'pid' | 'kill'>): void {
   try {
     if (process.platform !== 'win32' && child.pid !== undefined) process.kill(-child.pid, 'SIGKILL');
@@ -106,8 +107,10 @@ export function harnessCommand(name: 'pi' | 'opencode', path: string, repository
   return hostToolCommand(name, path, repository);
 }
 
+/** Bind caller cancellation to owned process trees while preserving the runner's streaming interface. */
 export function cancellableSpawner(signal: AbortSignal, launch?: LaunchCommand): ProcessSpawner {
   return {
+    /** Pipe the request with its explicit environment; reuse a sanitized exit result and remove abort listeners on exit. */
     spawn(request) {
       signal.throwIfAborted();
       const child = execa(request.command, [...(request.command === launch?.command ? launch.prefix : []), ...request.args], {
@@ -138,6 +141,7 @@ export class GitCommand {
   constructor(command: string, cwd: string, env: NodeJS.ProcessEnv, signal: AbortSignal) {
     this.command = command; this.cwd = cwd; this.env = env; this.signal = signal;
   }
+  /** Return raw Git bytes with hooks and external diff disabled; cancellation, deadline, or overflow kills the tree. */
   async run(args: readonly string[], input?: Buffer, extra: NodeJS.ProcessEnv = {}): Promise<Buffer> {
     this.signal.throwIfAborted();
     const child = execa(this.command, [

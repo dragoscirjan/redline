@@ -1,5 +1,5 @@
 import { PassThrough, Writable } from 'node:stream';
-import { spawn } from 'node:child_process';
+import { execa } from 'execa';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 afterEach(() => vi.useRealTimers());
 import { redactCredentialText } from '../src/harness-executor/model-failure.ts';
@@ -57,9 +57,15 @@ describe('RPC resource and security boundaries', () => {
   it('releases a real blocked stdout pipe so the process can exit', async () => {
     const { fileURLToPath } = await import('node:url');
     const binary = fileURLToPath(new URL('./helpers/rpc-source.ts', import.meta.url));
-    const child = spawn(process.execPath, [binary, 'rpc'], {
-      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
-    });
+    const child = execa(process.execPath, [binary, 'rpc'], {
+      extendEnv: false,
+      reject: false,
+      buffer: false,
+      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+    }).nodeChildProcess;
+    if (child.stdin === null || child.stdout === null || child.stderr === null) throw new Error('RPC fixture requires piped stdio');
     let diagnostic = '';
     child.stderr.on('data', (bytes: Buffer) => { diagnostic = (diagnostic + bytes.toString()).slice(-8192); });
     child.stdin.on('error', () => {});

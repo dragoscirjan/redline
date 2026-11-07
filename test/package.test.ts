@@ -1,12 +1,12 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execaSync } from 'execa';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
 import { npmArguments } from './helpers/npm.ts';
+import { installOfflineDependencies } from './helpers/package-dependencies.ts';
 import { RpcClient } from './helpers/rpc-client.ts';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
@@ -18,15 +18,25 @@ it.each(['redline.mjs', 'redline-review.mjs'])('%s reports the supported Node ve
     Object.defineProperty(process.versions, 'node', { value: '18.20.0' });
     await import(${JSON.stringify(binary)});
   `;
-  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
-    env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot }, encoding: 'utf8',
+  const result = execaSync(process.execPath, ['--input-type=module', '-e', script], {
+    extendEnv: false,
+    stripFinalNewline: false,
+    reject: false,
+    env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
+    encoding: 'utf8',
+    maxBuffer: 1024 * 1024,
   });
-  expect(result.status, result.stderr).toBe(2);
+  expect(result.exitCode, result.stderr).toBe(2);
   expect(result.stderr).toBe('redline requires Node.js 24 or newer\n');
   expect(result.stdout).toBe('');
 });
 
-const bunAvailable = spawnSync('bun', ['--version'], { stdio: 'ignore' }).status === 0;
+const bunAvailable = execaSync('bun', ['--version'], {
+  stripFinalNewline: false,
+  reject: false,
+  stdio: 'ignore',
+  maxBuffer: 1024 * 1024,
+}).exitCode === 0;
 
 it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package offline and runs both CLIs with %s', async (runtime) => {
   const root = await mkdtemp(join(tmpdir(), 'redline-package-test-'));
@@ -46,9 +56,22 @@ it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package
     for (const name of ['local-cli.md', 'portable-architecture.md', 'docker-workers.md', 'stdio-protocol.md']) {
       await cp(join(project, 'docs', name), join(staged, 'docs', name));
     }
-    execFileSync(process.execPath, [join(project, 'scripts/build.js'), join(staged, 'dist')], { cwd: project, env, encoding: 'utf8' });
-    const packed: { filename: string; files: { path: string }[] }[] = JSON.parse(execFileSync(process.execPath,
-      npmArguments(['pack', '--ignore-scripts', '--json', '--pack-destination', root]), { cwd: staged, env, encoding: 'utf8' }));
+    execaSync(process.execPath, [join(project, 'scripts/build.js'), join(staged, 'dist')], {
+      extendEnv: false,
+      stripFinalNewline: false,
+      cwd: project,
+      env,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
+    const packed: { filename: string; files: { path: string }[] }[] = JSON.parse(execaSync(process.execPath, npmArguments(['pack', '--ignore-scripts', '--json', '--pack-destination', root]), {
+      extendEnv: false,
+      stripFinalNewline: false,
+      cwd: staged,
+      env,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    }).stdout);
     const archive = packed[0]!;
     const paths = archive.files.map((entry) => entry.path);
     expect(paths).toContain('prompts/v8/core-policy.md');
@@ -61,12 +84,14 @@ it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package
     for (const file of ['context.ts', 'cache.ts', 'lock.py', 'export.py', 'gitnexus-query.mjs']) expect(paths).toContain(`src/code-index/${file}`);
     expect(paths.some((path) => /^(?:test|benchmark|src\.old|node_modules|\.agents|\.github|scripts)\//u.test(path))).toBe(false);
     const installation = join(root, 'installation'); await mkdir(installation);
-    // Install the real runtime dependency without network access or checkout symlinks.
-    const commander = dirname(createRequire(import.meta.url).resolve('commander'));
-    const dependency: { filename: string }[] = JSON.parse(execFileSync(process.execPath,
-      npmArguments(['pack', commander, '--ignore-scripts', '--json', '--pack-destination', root]), { cwd: root, env, encoding: 'utf8' }));
-    execFileSync(process.execPath, npmArguments(['install', '--prefix', installation, '--ignore-scripts', '--offline', '--no-audit', '--no-fund', '--package-lock=false', join(root, dependency[0]!.filename)]), { env, encoding: 'utf8' });
-    execFileSync(process.execPath, npmArguments(['install', '--prefix', installation, '--ignore-scripts', '--offline', '--no-audit', '--no-fund', '--package-lock=false', join(root, archive.filename)]), { env, encoding: 'utf8' });
+    installOfflineDependencies(project, installation, root, env);
+    execaSync(process.execPath, npmArguments(['install', '--prefix', installation, '--ignore-scripts', '--offline', '--no-audit', '--no-fund', '--package-lock=false', join(root, archive.filename)]), {
+      extendEnv: false,
+      stripFinalNewline: false,
+      env,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
     const binary = join(installation, 'node_modules/@dragoscirjan/redline/bin/redline.mjs');
     const legacy = join(dirname(binary), 'redline-review.mjs');
     const reference = join(dirname(binary), '../docs/local-cli.md');
@@ -74,26 +99,44 @@ it.each(['node', ...(bunAvailable ? ['bun'] : [])])('installs the packed package
     expect(protocolLink).toBe('./stdio-protocol.md');
     if (protocolLink !== undefined) expect(await readFile(join(dirname(reference), protocolLink), 'utf8')).toContain('# Stdio JSON-RPC protocol');
     const runtimeEnv = { ...env, REDLINE_ENV: runtime, ...(runtime === 'node' ? { NODE_OPTIONS: '--no-strip-types' } : {}) };
-    const run = (args: string[], cwd = root) => spawnSync(process.execPath, [binary, ...args], { env: runtimeEnv, cwd, encoding: 'utf8' });
-    const help = run(['--help']); expect(help.status, help.stderr).toBe(0); expect(help.stdout).toContain('--worktree');
-    const shimHelp = spawnSync(process.execPath, npmArguments(['exec', '--prefix', installation, '--offline', '--', 'redline', '--help']), {
-      env: runtimeEnv, cwd: root, encoding: 'utf8',
+    const run = (args: string[], cwd = root) => execaSync(process.execPath, [binary, ...args], {
+      extendEnv: false,
+      stripFinalNewline: false,
+      reject: false,
+      env: runtimeEnv,
+      cwd,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
     });
-    expect(shimHelp.status, shimHelp.stderr).toBe(0); expect(shimHelp.stdout).toContain('--worktree');
+    const help = run(['--help']); expect(help.exitCode, help.stderr).toBe(0); expect(help.stdout).toContain('--worktree');
+    const shimHelp = execaSync(process.execPath, npmArguments(['exec', '--prefix', installation, '--offline', '--', 'redline', '--help']), {
+      extendEnv: false,
+      stripFinalNewline: false,
+      reject: false,
+      env: runtimeEnv,
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
+    expect(shimHelp.exitCode, shimHelp.stderr).toBe(0); expect(shimHelp.stdout).toContain('--worktree');
     const version = JSON.parse(await readFile(join(project, 'package.json'), 'utf8')).version;
     expect(run(['--version']).stdout.trim()).toBe(`redline ${version}`);
-    expect(run(['review', '--vcs', 'jj']).status).toBe(4);
+    expect(run(['review', '--vcs', 'jj']).exitCode).toBe(4);
     const repository = join(root, 'repo'); await mkdir(repository);
-    const git = (...args: string[]) => execFileSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], {
-      encoding: 'utf8', env: { ...env, GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
-    }).trim();
+    const git = (...args: string[]) => execaSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], {
+      extendEnv: false,
+      stripFinalNewline: false,
+      encoding: 'utf8',
+      env: { ...env, GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
+      maxBuffer: 1024 * 1024,
+    }).stdout.trim();
     git('init', '--quiet', '-b', 'main'); git('config', 'core.autocrlf', 'false'); git('config', 'user.name', 'test'); git('config', 'user.email', 'test@localhost');
     await writeFile(join(repository, 'example.ts'), 'old\n');
     await writeFile(join(repository, 'caller.ts'), 'export const contract = "CALLER_SENTINEL";\n'); git('add', '.'); git('commit', '--quiet', '-m', 'base');
     const base = git('rev-parse', 'HEAD');
     await writeFile(join(repository, 'example.ts'), 'new\n'); git('commit', '--quiet', '-am', 'head');
     const revisions = run(['review', '--harness', 'echo', '--indexing', 'disabled', '--base', base, '--head', 'HEAD', '--max-output-tokens', '32768'], repository);
-    expect(revisions.status, revisions.stderr).toBe(0); expect(revisions.stdout).toContain('Artifacts:');
+    expect(revisions.exitCode, revisions.stderr).toBe(0); expect(revisions.stdout).toContain('Artifacts:');
     expect(revisions.stdout).toContain('Output budget: 32768 tokens per model call');
     const indexer = join(root, 'package-cgc.mjs');
     await writeFile(indexer, `import fs from 'node:fs'; import path from 'node:path'; const a=process.argv.slice(2);
@@ -102,14 +145,14 @@ const db=process.env.CGC_RUNTIME_DB_PATH;
 if(a[0]==='index'){fs.mkdirSync(path.dirname(db),{recursive:true});fs.writeFileSync(db,a[1]);process.exit(0);}
 if(a[0]==='query'){const source=fs.readFileSync(db,'utf8');console.log(JSON.stringify(a[1].includes('repository_count')?[{repository_count:1}]:a[1].startsWith('MATCH (related)')?[{changed_path:path.join(source,'example.ts'),related_path:path.join(source,'caller.ts'),start_line:1,end_line:1}]:[]));}else process.exit(1);`);
     const indexed = run(['review', '--harness', 'echo', '--base', base, '--head', 'HEAD', '--indexing', 'required', '--index-executable', indexer], repository);
-    expect(indexed.status, indexed.stderr).toBe(0);
+    expect(indexed.exitCode, indexed.stderr).toBe(0);
     expect(indexed.stdout).toMatch(/Indexed context:\s+complete/u);
     expect(indexed.stdout).toMatch(/Related source:\s+1 file with context; 1 related span/u);
     const warm = run(['review', '--harness', 'echo', '--base', base, '--head', 'HEAD', '--indexing', 'required', '--index-executable', indexer], repository);
-    expect(warm.status, warm.stderr).toBe(0); expect(warm.stderr).toContain('Base index: reused');
+    expect(warm.exitCode, warm.stderr).toBe(0); expect(warm.stderr).toContain('Base index: reused');
     await writeFile(join(repository, 'example.ts'), 'working\n');
     const working = run(['review', '--harness', 'echo', '--indexing', 'disabled'], repository);
-    expect(working.status, working.stderr).toBe(0);
+    expect(working.exitCode, working.stderr).toBe(0);
     const corpus: { method: string; params: Record<string, unknown>; code: number }[] = JSON.parse(await readFile(new URL('./fixtures/rpc/conformance.json', import.meta.url), 'utf8'));
     for (const once of [true, false]) {
       const client = new RpcClient(binary, [...(once ? ['--once'] : []), '--harness', 'echo', '--indexing', 'disabled', '--reuse', 'disabled'], runtimeEnv, root);
@@ -123,14 +166,28 @@ if(a[0]==='query'){const source=fs.readFileSync(db,'utf8');console.log(JSON.stri
         await client.call('shutdown'); client.eof(); expect((await client.exit).code).toBe(0);
       } finally { await client.close(); }
     }
-    const old = spawnSync(process.execPath, [legacy], { env: { ...runtimeEnv, ...cleanReviewEnvironment(fixture, 'echo') }, cwd: root, encoding: 'utf8' });
-    expect(old.status, old.stderr).toBe(0); expect(JSON.parse(old.stdout).harness).toBe('echo');
-    const legacyShim = spawnSync(process.execPath, npmArguments(['exec', '--prefix', installation, '--offline', '--', 'redline-review', '--validate-only']), {
-      env: { ...runtimeEnv, ...cleanReviewEnvironment(fixture, 'echo') }, cwd: root, encoding: 'utf8',
+    const old = execaSync(process.execPath, [legacy], {
+      extendEnv: false,
+      stripFinalNewline: false,
+      reject: false,
+      env: { ...runtimeEnv, ...cleanReviewEnvironment(fixture, 'echo') },
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
     });
-    expect(legacyShim.status, legacyShim.stderr).toBe(0); expect(JSON.parse(legacyShim.stdout).mode).toBe('review');
+    expect(old.exitCode, old.stderr).toBe(0); expect(JSON.parse(old.stdout).harness).toBe('echo');
+    const legacyShim = execaSync(process.execPath, npmArguments(['exec', '--prefix', installation, '--offline', '--', 'redline-review', '--validate-only']), {
+      extendEnv: false,
+      stripFinalNewline: false,
+      reject: false,
+      env: { ...runtimeEnv, ...cleanReviewEnvironment(fixture, 'echo') },
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
+    expect(legacyShim.exitCode, legacyShim.stderr).toBe(0); expect(JSON.parse(legacyShim.stdout).mode).toBe('review');
     const installed = JSON.parse(await readFile(join(installation, 'node_modules/@dragoscirjan/redline/package.json'), 'utf8'));
-    expect(installed.dependencies).toEqual({ commander: expect.any(String) });
+    expect(installed.dependencies).toEqual({ commander: expect.any(String), execa: expect.any(String) });
     expect(installed.scripts.install).toBeUndefined(); expect(installed.scripts.postinstall).toBeUndefined();
   } finally { await fixture.cleanup(); await rm(root, { recursive: true, force: true }); }
 }, 60_000);

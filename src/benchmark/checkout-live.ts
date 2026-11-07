@@ -6,7 +6,7 @@ import {
 import { arch, tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
+import { execa } from 'execa';
 import {
   buildCheckoutBenchmarkAggregate,
   CHECKOUT_BENCHMARK_VERSION,
@@ -74,7 +74,8 @@ async function runProcess(
   allowFailure = false,
 ): Promise<ProcessResult> {
   return await new Promise<ProcessResult>((resolvePromise, rejectPromise) => {
-    const child = spawn(command, [...args], {
+    const child = execa(command, [...args], {
+      reject: false, buffer: false, extendEnv: false, preferLocal: false, shell: false, verbose: 'none',
       cwd,
       env: environment,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -97,12 +98,12 @@ async function runProcess(
       child.kill('SIGKILL');
       rejectPromise(new Error(`${basename(command)} exceeded ${timeoutMs} ms`));
     }, timeoutMs);
-    child.once('error', (error) => {
+    void child.then(processResult => {
       clearTimeout(timeout);
-      rejectPromise(error);
-    });
-    child.once('close', (status, signal) => {
-      clearTimeout(timeout);
+      if (processResult.exitCode === undefined && processResult.signal === undefined) {
+        rejectPromise(new Error(`${basename(command)} failed to start`));
+        return;
+      }
       const stdoutBuffer = Buffer.concat(stdout);
       const stderrBuffer = Buffer.concat(stderr);
       if (exceeded) {
@@ -110,7 +111,7 @@ async function runProcess(
         return;
       }
       const result = {
-        status: status ?? (signal === null ? 1 : 128),
+        status: processResult.exitCode ?? (processResult.signal === undefined ? 1 : 128),
         stdout: stdoutBuffer.toString('utf8'),
         stderr: stderrBuffer.toString('utf8'),
       };
@@ -232,14 +233,14 @@ async function archiveRevision(
 ): Promise<void> {
   await mkdir(destination, { recursive: true });
   await new Promise<void>((resolvePromise, rejectPromise) => {
-    const git = spawn('git', ['-c', 'core.hooksPath=/dev/null', 'archive', '--format=tar', revision], {
-      cwd: repository,
-      env: environment,
+    const git = execa('git', ['-c', 'core.hooksPath=/dev/null', 'archive', '--format=tar', revision], {
+      cwd: repository, env: environment,
+      reject: false, buffer: false, extendEnv: false, preferLocal: false, shell: false, verbose: 'none',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    const tar = spawn('tar', ['-x', '-C', destination], {
-      cwd: repository,
-      env: environment,
+    const tar = execa('tar', ['-x', '-C', destination], {
+      cwd: repository, env: environment,
+      reject: false, buffer: false, extendEnv: false, preferLocal: false, shell: false, verbose: 'none',
       stdio: ['pipe', 'ignore', 'pipe'],
     });
     const diagnostics: Buffer[] = [];
@@ -262,16 +263,8 @@ async function archiveRevision(
         rejectPromise(new Error(`git archive pipeline failed (${gitStatus}/${tarStatus}): ${bounded(Buffer.concat(diagnostics))}`));
       } else resolvePromise();
     };
-    git.once('error', rejectPromise);
-    tar.once('error', rejectPromise);
-    git.once('close', (status) => {
-      gitStatus = status ?? 1;
-      finish();
-    });
-    tar.once('close', (status) => {
-      tarStatus = status ?? 1;
-      finish();
-    });
+    void git.then(result => { gitStatus = result.exitCode ?? 1; finish(); });
+    void tar.then(result => { tarStatus = result.exitCode ?? 1; finish(); });
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;

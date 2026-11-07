@@ -1,4 +1,5 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { execa } from 'execa';
+import type { ChildProcess, ChildProcessWithoutNullStreams } from 'node:child_process';
 import { FrameReader, frame } from '../../src/rpc/framing.ts';
 import { object, valid, LIMITS } from '../../src/rpc/contract.ts';
 
@@ -7,6 +8,9 @@ export class RemoteError extends Error {
   constructor(code: number, message: string) { super(message); this.code = code; }
 }
 interface Pending { resolve: (value: Record<string, unknown>) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }
+function requirePipedStreams(child: ChildProcess): asserts child is ChildProcessWithoutNullStreams {
+  if (child.stdin === null || child.stdout === null || child.stderr === null) throw new Error('RPC fixture requires piped stdio');
+}
 /** Internal reference client. No public SDK or editor APIs. */
 export class RpcClient {
   readonly child: ChildProcessWithoutNullStreams;
@@ -21,7 +25,17 @@ export class RpcClient {
   private readonly waiting = new Map<string, Pending>();
   constructor(binary: string, args: readonly string[], env: NodeJS.ProcessEnv, cwd: string,
     launcher?: { readonly command: string; readonly args: readonly string[] }) {
-    this.child = spawn(launcher?.command ?? process.execPath, launcher === undefined ? [binary, 'rpc', ...args] : [...launcher.args, 'rpc', ...args], { cwd, env, stdio: 'pipe', windowsHide: true });
+    const child = execa(launcher?.command ?? process.execPath, launcher === undefined ? [binary, 'rpc', ...args] : [...launcher.args, 'rpc', ...args], {
+      extendEnv: false,
+      reject: false,
+      buffer: false,
+      cwd,
+      env,
+      stdio: 'pipe',
+      windowsHide: true,
+    }).nodeChildProcess;
+    requirePipedStreams(child);
+    this.child = child;
     this.child.stdout.on('data', (chunk: Buffer) => {
       try {
         for (const body of this.reader.push(chunk)) {

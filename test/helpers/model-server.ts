@@ -1,5 +1,6 @@
-/** Trusted loopback-only fixture lifecycle; no package dependencies or ambient credentials. */
-import { spawn, type ChildProcess } from 'node:child_process';
+/** Trusted loopback-only fixture lifecycle with constructed child environments. */
+import { execa } from 'execa';
+import { type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 
@@ -15,10 +16,13 @@ interface MockServerStartOptions {
 
 export async function startMockServer(overrides: Record<string, string> = {}, options: MockServerStartOptions = {}): Promise<MockServer> {
   const script = fileURLToPath(new URL('../fixtures/mock-model-server.mjs', import.meta.url));
-  const child = options.spawn?.() ?? spawn(process.execPath, [script, '0'], {
+  const child = options.spawn?.() ?? execa(process.execPath, [script, '0'], {
+    extendEnv: false,
+    reject: false,
+    buffer: false,
     stdio: ['ignore', 'pipe', 'inherit'],
     env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, ...overrides },
-  });
+  }).nodeChildProcess;
   const closed = new Promise<void>((resolve) => {
     const onError = (): void => { if (child.pid === undefined) resolve(); };
     child.on('error', onError);

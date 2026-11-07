@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawnSync } from 'node:child_process';
+import { execaSync } from 'execa';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { arch, platform } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -61,16 +61,16 @@ function boundedDiagnostic(value: string): string {
 }
 
 function run(command: string, args: readonly string[], environment: NodeJS.ProcessEnv, timeout: number): string {
-  const result = spawnSync(command, [...args], {
+  const result = execaSync(command, [...args], {
+    reject: false, extendEnv: false, preferLocal: false, shell: false, verbose: 'none', stripFinalNewline: false,
     cwd: ROOT,
     env: environment,
     encoding: 'utf8',
     maxBuffer: MAX_OUTPUT_BYTES,
     timeout,
   });
-  if (result.error !== undefined) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(`${command} exited ${result.status ?? 'without status'}: ${boundedDiagnostic(result.stderr)}`);
+  if (result.failed) {
+    throw new Error(`${command} exited ${result.exitCode ?? 'without status'}: ${boundedDiagnostic(result.stderr ?? '')}`);
   }
   return result.stdout.trim();
 }

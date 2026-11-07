@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execaSync } from 'execa';
 import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
@@ -23,8 +23,15 @@ async function fixture() {
   const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: root,
     TMP: root, TEMP: root, TMPDIR: root, XDG_CONFIG_HOME: join(root, 'config'), XDG_STATE_HOME: join(root, 'state'),
     GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
-  const git = (...args: string[]) => execFileSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null',
-    '-c', 'core.fsmonitor=false', '-c', 'commit.gpgSign=false', ...args], { env, encoding: 'utf8', timeout: 10_000 }).trim();
+  const git = (...args: string[]) => execaSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null',
+    '-c', 'core.fsmonitor=false', '-c', 'commit.gpgSign=false', ...args], {
+      extendEnv: false,
+      stripFinalNewline: false,
+      env,
+      encoding: 'utf8',
+      timeout: 10_000,
+      maxBuffer: 1024 * 1024,
+    }).stdout.trim();
   git('init', '--quiet', '-b', 'main'); git('config', 'core.autocrlf', 'false');
   git('config', 'user.name', 'RPC fixture'); git('config', 'user.email', 'rpc@example.invalid');
   await writeFile(join(repository, 'example.ts'), 'export const value = 1;\n'); git('add', '.'); git('commit', '--quiet', '-m', 'base');

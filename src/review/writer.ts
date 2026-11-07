@@ -142,6 +142,13 @@ function renderRecordMarkdown(record: FileReviewRecord): string {
     lines.push(`- **Review attempts:** ${record.attempts.length}`);
     for (const attempt of record.attempts) lines.push(`- Attempt ${attempt.number}: ${attempt.outcome}; ${attempt.timeoutMs} ms effective timeout; ${attempt.durationMs} ms elapsed; ${attempt.sourceContextStrategy}${attempt.errorKind === undefined ? '' : `; ${attempt.errorKind}`}`);
   }
+  if (record.impactAnalysis !== undefined) {
+    const impact = record.impactAnalysis;
+    lines.push('', '## Code impact', '', `- **Status:** ${impact.status}`, `- **Changed symbols:** ${impact.changedSymbols.join(', ') || 'none'}`,
+      `- **Selected index query:** ${impact.indexQueryObserved ? 'observed' : 'not observed'}`, '', impact.summary);
+    for (const caller of impact.callers) lines.push(`- Caller: \`${caller.path}:${caller.startLine}-${caller.endLine}\` at \`${caller.revision.slice(0, 12)}\``);
+    if (impact.limitation !== '') lines.push(`- Limitation: ${impact.limitation}`);
+  }
   lines.push(`- **Rejected candidates:** ${record.rejectedCandidates.length}`);
   lines.push('', '');
   if (record.findings.length === 0) {
@@ -182,7 +189,9 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
     ]),
     ...(summary.warmup === undefined ? [] : [
       `- **Native warmup:** ${summary.warmup.status}; ${summary.warmup.durationMs} ms; ${summary.warmup.budgetMs} ms allowance. Index readiness is model-reported, not complete-coverage proof.`,
-      ...summary.warmup.integrations.map(row => `- **Warmup ${row.component}:** tools ${row.availability}; index ${row.indexStatus}; ${row.indexedFiles ?? 'unknown'} files reported; persistence ${row.persistence}; query ${row.queryObserved ? 'observed' : 'not observed'}.`),
+      ...summary.warmup.integrations.map(row => row.category === 'tool'
+        ? `- **Warmup ${row.component}:** optional tool ${row.availability}.`
+        : `- **Warmup ${row.component}:** indexer ${row.availability}; index ${row.indexStatus}; ${row.indexedFiles ?? 'no accepted count'} files reported; index/reuse ${row.indexObserved ? 'observed' : 'not observed'}; query ${row.queryObserved ? 'observed' : 'not observed'}.`),
     ]),
     ...(summary.retries === undefined ? [] : [
       `- **Review retries:** ${summary.retries.limit} additional attempts per file; ${summary.retries.attempts} total review attempts; ${summary.retries.retriedFiles} files retried; ${summary.retries.recoveredFiles} recovered`,
@@ -206,6 +215,18 @@ function renderSummaryMarkdown(summary: ReviewRunSummary): string {
     lines.push(
       `| ${file.path} | ${file.outcome} | ${file.execution ?? 'executed'} | ${file.findingCount}${spans} | ${file.codeContext.status} (${file.codeContext.relatedSpans} spans) |`,
     );
+  }
+  const impacts = summary.files.filter(file => file.impactAnalysis !== undefined);
+  if (impacts.length > 0) {
+    lines.push('', '## Code impact', '');
+    for (const file of impacts) {
+      const impact = file.impactAnalysis;
+      if (impact === undefined) continue;
+      lines.push(`### ${file.path}`, '', `- Status: ${impact.status}; selected index query ${impact.indexQueryObserved ? 'observed' : 'not observed'}.`, impact.summary);
+      for (const caller of impact.callers) lines.push(`- Caller: \`${caller.path}:${caller.startLine}-${caller.endLine}\` at \`${caller.revision.slice(0, 12)}\``);
+      if (impact.limitation !== '') lines.push(`- Limitation: ${impact.limitation}`);
+      lines.push('');
+    }
   }
   if (excludedFiles.length > 0) {
     lines.push('', '## Excluded by trusted eligibility policy', '');
@@ -300,7 +321,8 @@ export function createReviewWriter(outputDirectory: string): ReviewWriter {
       await writeFile(join(reviewsDirectory, 'native-tools.json'), JSON.stringify({
         version: 1, executionMode: 'native', configuration: 'harness-global-and-checkout-local',
         ...evidence, requestedMcp: warmup === undefined ? nativeRequestedTools(evidence)
-          : warmup.integrations.map(row => ({ component: row.component, observation: row.availability, indexStatus: row.indexStatus })),
+          : warmup.integrations.map(row => ({ component: row.component, category: row.category, observation: row.availability,
+            ...(row.category === 'indexer' ? { indexStatus: row.indexStatus } : {}) })),
         ...(warmup === undefined ? {} : { warmupReport: 'warmup.json' }),
       }, null, 2) + '\n', { mode: 0o600 });
     },

@@ -1,7 +1,7 @@
 /**
  * Builds the fixed, versioned per-file review prompts.
  *
- * The system prompt is the review policy (loaded from `prompts/v11/`) plus a
+ * The system prompt is the review policy (loaded from `prompts/v12/`) plus a
  * trusted run configuration; it never contains repository content. The user
  * prompt embeds exactly one file's untrusted context — manifest entry, the
  * authoritative diff, bounded revision-pinned source excerpts, and optional
@@ -23,13 +23,13 @@ import {
 } from './bundle.ts';
 import type { PromptCodeContext } from './indexed-context.ts';
 import { ANALYSIS_COMPONENTS, analysisTools } from '../harness-executor/analysis-policy.ts';
-import { FILE_REVIEW_GENERATION_SCHEMA } from './generation-schema.ts';
+import { FILE_REVIEW_GENERATION_SCHEMA, NATIVE_FILE_REVIEW_GENERATION_SCHEMA } from './generation-schema.ts';
 import { buildFocusedSourceContext } from './source-context.ts';
 import type { WarmupGuidance } from './warmup.ts';
 import type { FindingScope } from './types.ts';
 
-export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v11' as const;
-export const FILE_REVIEW_PROMPT_VERSION = 11 as const;
+export const FILE_REVIEW_PROMPT_ID = 'redline-file-review/v12' as const;
+export const FILE_REVIEW_PROMPT_VERSION = 12 as const;
 
 export const SOURCE_CONTEXT_STRATEGIES = ['full-files-v1', 'focused-v1', 'retry-enriched-v1'] as const;
 export type SourceContextStrategy = (typeof SOURCE_CONTEXT_STRATEGIES)[number];
@@ -39,7 +39,7 @@ const PROMPT_MODULES = ['core-policy.md', 'review-phases.md', 'file-reporting.md
 /** Resolves the fixed policy directory from the TypeScript source module. */
 function defaultPromptRoot(): string {
   const moduleDirectory = fileURLToPath(new URL('.', import.meta.url));
-  return resolve(moduleDirectory, '../../prompts/v11/');
+  return resolve(moduleDirectory, '../../prompts/v12/');
 }
 const DEFAULT_PROMPT_ROOT = defaultPromptRoot();
 const MAX_PROMPT_MODULE_BYTES = 64 * 1024;
@@ -281,10 +281,12 @@ export async function buildFileReviewPrompt(options: FileReviewPromptOptions): P
     'Return the review document for this one file now, following the reporting protocol exactly.',
   ].join('\n');
 
+  const indexer = options.warmup?.integrations.find(row => row.category === 'indexer' && row.indexStatus === 'reported-ready');
   return {
     system,
     user,
-    responseSchema: FILE_REVIEW_GENERATION_SCHEMA,
+    ...(options.executionMode === 'native' && indexer?.category === 'indexer' && indexer.queryTool !== null ? { requiredTool: indexer.queryTool } : {}),
+    responseSchema: options.executionMode === 'native' ? NATIVE_FILE_REVIEW_GENERATION_SCHEMA : FILE_REVIEW_GENERATION_SCHEMA,
     policyDigest: policy.digest,
     promptDigest: sha256(`${system}\n${user}`),
   };

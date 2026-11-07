@@ -31,10 +31,10 @@ describe('buildFileReviewPrompt', () => {
   it('documents the actual assembler ID and fixed policy modules as separate version counters', async () => {
     const documentation = await readFile(new URL('../prompts/README.md', import.meta.url), 'utf8');
     expect(documentation).toContain('`' + FILE_REVIEW_PROMPT_ID + '`');
-    expect(documentation).toContain('loads `v11/`');
+    expect(documentation).toContain('loads `v12/`');
     expect(documentation).toContain('numeric suffix need not equal the directory number');
     const policy = await loadReviewPolicy();
-    const modules = await Promise.all(['core-policy.md', 'review-phases.md', 'file-reporting.md'].map((name) => readFile(new URL('../prompts/v11/' + name, import.meta.url), 'utf8')));
+    const modules = await Promise.all(['core-policy.md', 'review-phases.md', 'file-reporting.md'].map((name) => readFile(new URL('../prompts/v12/' + name, import.meta.url), 'utf8')));
     for (const text of modules) expect(policy.text).toContain(text.replaceAll('\r\n', '\n').trimEnd());
   });
   it('embeds the file context inside a generated untrusted boundary', async () => {

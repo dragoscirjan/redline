@@ -471,7 +471,8 @@ describe('local Git review CLI', () => {
   it.each([['none', 0], ['findings', 3], ['high', 0], ['critical', 0]])('applies finding exit policy %s to validated findings', async (policy, expected) => {
     const f = await fixture(); const bin = join(f.root, 'bin'); await mkdir(bin);
     const finding = reviewFinding({ evidence: 'export const value = 2;' });
-    const document = { version: 3, fileId: '000001', outcome: 'findings', findings: [finding] };
+    const document = { version: 3, fileId: '000001', outcome: 'findings', findings: [finding],
+      impactAnalysis: { status: 'checked', changedSymbols: ['value'], callers: [], summary: 'Synthetic source-only impact check.', limitation: '' } };
     const event = { type: 'turn_end', message: { role: 'assistant', content: [{ type: 'text', text: JSON.stringify(document) }], stopReason: 'stop' } };
     await writeFile(join(bin, 'pi'), `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(JSON.stringify(event) + '\n')});\n`); await chmod(join(bin, 'pi'), 0o755);
     const result = await f.run(['--harness', 'pi', '--provider', 'mock', '--endpoint', 'http://127.0.0.1:1/v1', '--model', 'fixture', '--auth', 'none',
@@ -481,6 +482,16 @@ describe('local Git review CLI', () => {
     expect(result.stdout).toContain('Reviewed change');
     expect(result.stdout).toContain('+export const value = 2;');
     expect(result.stdout).not.toContain('behavioralContract');
+  });
+
+  it('rejects a repository-local native indexer override before starting warmup', async () => {
+    const f = await fixture(); const bin = join(f.root, 'bin'); await mkdir(bin);
+    const marker = join(f.root, 'unexpected-harness-start');
+    await writeFile(join(bin, 'pi'), `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)}, 'started');\n`, { mode: 0o755 });
+    const result = await f.run(['--harness', 'pi', '--provider', 'mock', '--endpoint', 'http://127.0.0.1:1/v1', '--model', 'fixture', '--auth', 'none',
+      '--indexing', 'enabled', '--index-executable', join(f.repository, 'untrusted-indexer')], { PATH: bin + delimiter + process.env.PATH });
+    expect(result.code).toBe(1); expect(result.stderr).toContain('indexer executable must be outside');
+    expect(await readFile(marker, 'utf8').catch(() => null)).toBeNull();
   });
 
   it('cancels an active harness and records an incomplete local status', async () => {

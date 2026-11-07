@@ -8,7 +8,7 @@ const ORIGINAL = resolve('benchmark/review-quality/v2');
 const EXTENSION = resolve('benchmark/review-quality/verification-v1');
 const DECISIONS = resolve(EXTENSION, 'dispositions.json');
 // The benchmark returns a report; these input corpus directories do not select its reference snapshot.
-const REFERENCE_REPORT = resolve('benchmark/policy-v11/verification/report.json');
+const REFERENCE_REPORT = resolve('benchmark/policy-v12/verification/report.json');
 
 async function recordedDecisions(): Promise<readonly RecordedDecision[]> {
   const parsed = JSON.parse(await readFile(DECISIONS, 'utf8')) as { decisions: RecordedDecision[] };

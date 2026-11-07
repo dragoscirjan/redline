@@ -47,6 +47,10 @@ export interface HarnessSettings {
 }
 
 export interface HarnessPrompt {
+  /** Warmup must execute tools before returning a report; do not force final-answer JSON during that work. */
+  readonly toolUse?: 'required-first';
+  /** Selected native index query to perform in a fresh file process, if directly callable. */
+  readonly requiredTool?: string;
   /** Trusted fixed schema supplied by the caller, never derived from repository content. */
   readonly responseSchema?: Readonly<Record<string, unknown>>;
   readonly system: string;

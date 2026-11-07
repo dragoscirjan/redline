@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execaSync } from 'execa';
 import { watch } from 'node:fs';
 import { delimiter } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -17,10 +17,14 @@ afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).
 async function fixture(objectFormat: 'sha1' | 'sha256' = 'sha1') {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'redline-local-test-'))); roots.push(root);
   const repository = join(root, 'repo'); await mkdir(repository);
-  const git = (...args: string[]): string => execFileSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], {
-    encoding: 'utf8', env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: root, TEMP: root, TMP: root,
+  const git = (...args: string[]): string => execaSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], {
+    extendEnv: false,
+    stripFinalNewline: false,
+    encoding: 'utf8',
+    env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: root, TEMP: root, TMP: root,
       GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
-  }).trim();
+    maxBuffer: 1024 * 1024,
+  }).stdout.trim();
   git('init', '--quiet', '-b', 'main', '--object-format=' + objectFormat); git('config', 'core.autocrlf', 'false'); git('config', 'user.name', 'test'); git('config', 'user.email', 'test@localhost');
   await writeFile(join(repository, 'example.ts'), 'export const value = 1;\n');
   git('add', '.'); git('commit', '--quiet', '-m', 'base');

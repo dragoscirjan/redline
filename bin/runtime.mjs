@@ -1,26 +1,29 @@
 /** Select a packaged runtime. No TypeScript loader hooks or runtime compilation. */
-import { spawn } from 'node:child_process';
 import { access } from 'node:fs/promises';
 import { constants } from 'node:os';
 
 async function delegate(runtime) {
-  return new Promise((resolve) => {
-    const child = spawn(runtime, process.argv.slice(1), { stdio: 'inherit', windowsHide: true });
-    const interrupt = () => { child.kill('SIGINT'); };
-    const terminate = () => { child.kill('SIGTERM'); };
-    process.on('SIGINT', interrupt);
-    process.on('SIGTERM', terminate);
-    const finish = (code) => {
-      process.removeListener('SIGINT', interrupt);
-      process.removeListener('SIGTERM', terminate);
-      resolve(code);
-    };
-    child.once('error', () => {
-      process.stderr.write(`redline: selected runtime ${runtime} is unavailable\n`);
-      finish(2);
-    });
-    child.once('close', (code, signal) => finish(code ?? (signal === null ? 1 : 128 + (constants.signals[signal] ?? 0))));
+  // Keep the Node-version guard usable before loading dependencies with newer engine requirements.
+  const { execa } = await import('execa');
+  const child = execa(runtime, process.argv.slice(1), {
+    stdio: 'inherit', windowsHide: true, reject: false, buffer: false,
+    preferLocal: false, shell: false, verbose: 'none',
   });
+  const interrupt = () => { child.kill('SIGINT'); };
+  const terminate = () => { child.kill('SIGTERM'); };
+  process.on('SIGINT', interrupt);
+  process.on('SIGTERM', terminate);
+  try {
+    const result = await child;
+    if (result.exitCode === undefined && result.signal === undefined) {
+      process.stderr.write(`redline: selected runtime ${runtime} is unavailable\n`);
+      return 2;
+    }
+    return result.exitCode ?? 128 + (constants.signals[result.signal] ?? 0);
+  } finally {
+    process.removeListener('SIGINT', interrupt);
+    process.removeListener('SIGTERM', terminate);
+  }
 }
 
 export async function run(entry) {

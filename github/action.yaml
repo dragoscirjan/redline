@@ -111,7 +111,6 @@ runs:
         (( ARTIFACT_RETENTION_DAYS >= 1 && ARTIFACT_RETENTION_DAYS <= 90 ))
 
     - name: Set up pinned Node runtime
-      if: ${{ inputs.runtime == 'node' }}
       uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
       with:
         node-version: 24
@@ -139,12 +138,20 @@ runs:
             exit 2
           fi
         fi
-        # Direct source execution has no project runtime dependency. Do not
-        # install packages on the review critical path. Pull request code is
+        # Only trusted action source is executable. Pull request code is
         # never installed, built, or executed.
         test -f src/review/cli.ts
         test -f src/action/review.ts
         test -f src/context-bundle.ts
+
+    - name: Install trusted runtime dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../
+      run: |
+        set -euo pipefail
+        # This is the action's locked dependency tree, never the reviewed checkout.
+        # Install before publication tokens are minted; do not run lifecycle scripts.
+        corepack pnpm@10.33.0 install --frozen-lockfile --prod --ignore-scripts
 
     # Two-phase token flow: token 1 exists for the review-start (and
     # failure) notifications minted while the review data is collected;
@@ -277,12 +284,6 @@ runs:
         if-no-files-found: error
         include-hidden-files: true
         retention-days: ${{ inputs.artifact-retention-days }}
-
-    - name: Set up fixed harness Node runtime
-      if: ${{ inputs.runtime == 'bun' && (inputs.backend == 'pi' || inputs.backend == 'opencode') }}
-      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
-      with:
-        node-version: 24
 
     - name: Ensure harness binary
       if: ${{ inputs.backend == 'pi' || inputs.backend == 'opencode' }}

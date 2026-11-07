@@ -8,7 +8,7 @@
  * bounded by a timeout that kills the child.
  */
 
-import { spawn } from 'node:child_process';
+import { execa } from 'execa';
 
 export const MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 export const MAX_DIAGNOSTIC_BYTES = 256 * 1024;
@@ -41,25 +41,21 @@ function emptyStream(): AsyncIterable<Uint8Array> {
   })();
 }
 
-/** Default spawner backed by node:child_process. */
+/** Execa handles spawning; bounded readers retain Redline's truncate-and-drain policy. */
 export const nodeProcessSpawner: ProcessSpawner = {
   spawn(request) {
-    const child = spawn(request.command, [...request.args], {
-      cwd: request.cwd,
-      env: request.env,
+    const child = execa(request.command, [...request.args], {
+      reject: false, buffer: false, extendEnv: false, preferLocal: false, shell: false, verbose: 'none',
+      ...(request.cwd === undefined ? {} : { cwd: request.cwd }),
+      env: request.env ?? process.env,
       stdio: [request.stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
-    // The exit promise is memoized: `close` and `error` fire once, so a
-    // fresh listener per wait() call would hang forever after the first.
-    const exit = new Promise<{ code: number | null; error?: string }>((resolve) => {
-      child.once('error', (error: NodeJS.ErrnoException) => {
-        resolve({ code: null, error: error.message });
-      });
-      child.once('close', (code) => {
-        resolve({ code });
-      });
-    });
+    // Do not persist Execa errors: their messages include arguments and captured output.
+    const exit = child.then((result) => ({
+      code: result.exitCode ?? null,
+      ...(result.failed && result.exitCode === undefined && result.signal === undefined ? { error: 'process launch failed' } : {}),
+    }));
     if (request.stdin !== undefined) {
       // A child that exits before reading can close stdin early. The exit
       // result, rather than a broken pipe, reports the harness failure.

@@ -1,5 +1,5 @@
 /** Local host processes: explicit executable paths, bounded output, no shell. */
-import { spawn } from 'node:child_process';
+import { execa, type Subprocess } from 'execa';
 import { access, lstat, open, readFile, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { delimiter, dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -45,14 +45,13 @@ export async function executable(name: string, path: string, repository: string)
   throw new LocalOperationError(`trusted ${name} executable not found outside the reviewed repository`);
 }
 
-function kill(child: ReturnType<typeof spawn>): void {
+function kill(child: Pick<Subprocess, 'pid' | 'kill'>): void {
   try {
     if (process.platform !== 'win32' && child.pid !== undefined) process.kill(-child.pid, 'SIGKILL');
     else if (child.pid !== undefined) {
-      const taskkill = spawn(join(process.env.SystemRoot ?? process.env.SYSTEMROOT ?? '', 'System32', 'taskkill.exe'), ['/PID', String(child.pid), '/T', '/F'],
-        { stdio: 'ignore', windowsHide: true });
-      taskkill.once('error', () => child.kill('SIGKILL'));
-      taskkill.once('close', (code) => { if (code !== 0) child.kill('SIGKILL'); });
+      const taskkill = execa(join(process.env.SystemRoot ?? process.env.SYSTEMROOT ?? '', 'System32', 'taskkill.exe'), ['/PID', String(child.pid), '/T', '/F'],
+        { stdio: 'ignore', windowsHide: true, reject: false, buffer: false, preferLocal: false, shell: false, verbose: 'none' });
+      void taskkill.then(result => { if (result.failed) child.kill('SIGKILL'); });
     } else child.kill('SIGKILL');
   } catch { child.kill('SIGKILL'); }
 }
@@ -111,18 +110,19 @@ export function cancellableSpawner(signal: AbortSignal, launch?: LaunchCommand):
   return {
     spawn(request) {
       signal.throwIfAborted();
-      const child = spawn(request.command, [...(request.command === launch?.command ? launch.prefix : []), ...request.args], {
-        cwd: request.cwd, env: process.platform === 'win32' ? {
+      const child = execa(request.command, [...(request.command === launch?.command ? launch.prefix : []), ...request.args], {
+        reject: false, buffer: false, extendEnv: false, preferLocal: false, shell: false, verbose: 'none',
+        ...(request.cwd === undefined ? {} : { cwd: request.cwd }), env: process.platform === 'win32' ? {
           ...request.env, SystemRoot: process.env.SystemRoot ?? process.env.SYSTEMROOT ?? request.env?.SystemRoot, TEMP: request.cwd, TMP: request.cwd,
-        } : request.env, stdio: ['pipe', 'pipe', 'pipe'],
+        } : request.env ?? process.env, stdio: ['pipe', 'pipe', 'pipe'],
         detached: process.platform !== 'win32', windowsHide: true,
       });
       const abort = (): void => kill(child);
       signal.addEventListener('abort', abort, { once: true });
-      const exit = new Promise<{ code: number | null; error?: string }>((resolve) => {
-        child.once('error', () => resolve({ code: null, error: 'process launch failed' }));
-        child.once('close', (code) => resolve({ code }));
-      }).finally(() => signal.removeEventListener('abort', abort));
+      const exit = child.then(result => ({
+        code: result.exitCode ?? null,
+        ...(result.failed && result.exitCode === undefined && result.signal === undefined ? { error: 'process launch failed' } : {}),
+      })).finally(() => signal.removeEventListener('abort', abort));
       child.stdin.on('error', () => undefined);
       child.stdin.end(request.stdin);
       return { stdout: child.stdout, stderr: child.stderr, wait: () => exit, kill: abort };
@@ -140,11 +140,12 @@ export class GitCommand {
   }
   async run(args: readonly string[], input?: Buffer, extra: NodeJS.ProcessEnv = {}): Promise<Buffer> {
     this.signal.throwIfAborted();
-    const child = spawn(this.command, [
+    const child = execa(this.command, [
       '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false',
       '-c', 'diff.external=', '-c', 'core.attributesFile=/dev/null', '-c', 'core.pager=cat',
       ...args,
-    ], { cwd: this.cwd, env: { ...this.env, ...extra }, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+    ], { reject: false, buffer: false, extendEnv: false, preferLocal: false, shell: false, verbose: 'none',
+      cwd: this.cwd, env: { ...this.env, ...extra }, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
     const abort = (): void => kill(child);
     this.signal.addEventListener('abort', abort, { once: true });
     let bytes = 0;
@@ -160,13 +161,11 @@ export class GitCommand {
     child.stdin.end(input);
     const timer = setTimeout(abort, 30_000);
     try {
-      const code = await new Promise<number | null>((resolve, reject) => {
-        child.once('error', () => reject(new Error('Git launch failed')));
-        child.once('close', resolve);
-      });
+      const result = await child;
       this.signal.throwIfAborted();
+      if (result.failed && result.exitCode === undefined && result.signal === undefined) throw new Error('Git launch failed');
       if (overflow) throw new LocalOperationError('Git capture exceeded its byte limit');
-      if (code !== 0) throw new LocalOperationError(`Git ${args[0] ?? 'operation'} failed (invalid revision, unsupported state, or capture timeout)`);
+      if (result.exitCode !== 0) throw new LocalOperationError(`Git ${args[0] ?? 'operation'} failed (invalid revision, unsupported state, or capture timeout)`);
       return Buffer.concat(chunks);
     } finally { clearTimeout(timer); this.signal.removeEventListener('abort', abort); }
   }

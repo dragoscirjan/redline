@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execaSync } from 'execa';
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -18,8 +18,15 @@ async function fixture() {
   const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: root,
     XDG_CONFIG_HOME: join(root, 'config'), XDG_STATE_HOME: join(root, 'state'),
     GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
-  const git = (...args: string[]): string => execFileSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null',
-    '-c', 'core.fsmonitor=false', '-c', 'commit.gpgSign=false', ...args], { env, encoding: 'utf8', timeout: 10_000 }).trim();
+  const git = (...args: string[]): string => execaSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null',
+    '-c', 'core.fsmonitor=false', '-c', 'commit.gpgSign=false', ...args], {
+      extendEnv: false,
+      stripFinalNewline: false,
+      env,
+      encoding: 'utf8',
+      timeout: 10_000,
+      maxBuffer: 1024 * 1024,
+    }).stdout.trim();
   git('init', '--quiet', '-b', 'main'); git('config', 'user.name', 'Demo'); git('config', 'user.email', 'demo@example.invalid');
   git('config', 'core.autocrlf', 'false');
   await writeFile(join(repository, 'example.ts'), 'export const value = 1;\n');
@@ -100,9 +107,14 @@ describe('task-first documentation', () => {
     const stub = join(f.root, 'docker-stub.cjs'); const calls = join(f.root, 'docker-calls.json');
     await writeFile(stub, "require('node:fs').writeFileSync(process.env.DOCKER_CALLS, JSON.stringify(process.argv.slice(2)));");
     const prelude = 'docker() { "$NODE" "$DOCKER_STUB" "$@"; };\n';
-    execFileSync('bash', ['-eu', '-o', 'pipefail', '-c', prelude + command], {
-      cwd: f.repository, env: { ...f.env, HOME: home, NODE: process.execPath, DOCKER_STUB: stub, DOCKER_CALLS: calls,
-        REDLINE_MODEL_AUTH: '{"openrouter":"synthetic-doc-key"}' }, timeout: 5000,
+    execaSync('bash', ['-eu', '-o', 'pipefail', '-c', prelude + command], {
+      extendEnv: false,
+      stripFinalNewline: false,
+      cwd: f.repository,
+      env: { ...f.env, HOME: home, NODE: process.execPath, DOCKER_STUB: stub, DOCKER_CALLS: calls,
+        REDLINE_MODEL_AUTH: '{"openrouter":"synthetic-doc-key"}' },
+      timeout: 5000,
+      maxBuffer: 1024 * 1024,
     });
     const args: string[] = JSON.parse(await readFile(calls, 'utf8'));
     expect(args.slice(0, 3)).toEqual(['run', '--rm', '--init']);
@@ -142,9 +154,15 @@ describe('task-first documentation', () => {
   it('makes the disposable setup commit without inherited signing', async () => {
     expect(await doc('get-started/first-review.md')).toContain('git commit --no-gpg-sign -m "Add demo file"');
     const f = await fixture();
-    const git = (...args: string[]): string => execFileSync('git', ['-C', f.repository,
-      '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args],
-    { env: f.env, encoding: 'utf8', timeout: 10_000 }).trim();
+    const git = (...args: string[]): string => execaSync('git', ['-C', f.repository,
+      '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], {
+        extendEnv: false,
+        stripFinalNewline: false,
+        env: f.env,
+        encoding: 'utf8',
+        timeout: 10_000,
+        maxBuffer: 1024 * 1024,
+      }).stdout.trim();
     git('config', 'commit.gpgSign', 'true');
     git('config', 'gpg.format', 'openpgp');
     git('config', 'gpg.program', join(f.root, 'missing-signing-program'));

@@ -1,4 +1,5 @@
-import { ChildProcess, spawn } from 'node:child_process';
+import { execa } from 'execa';
+import { ChildProcess } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 import { afterEach, expect, it, vi } from 'vitest';
 import { startErrorServer, startMockServer } from './helpers/model-server.ts';
@@ -26,18 +27,26 @@ it.each(['close', 'error', 'invalid JSON', 'invalid port', 'oversized metadata']
 it('kills and awaits a real hung child when startup times out', async () => {
   let child: ChildProcess | undefined;
   await expect(startMockServer({}, { timeoutMs: 100, spawn: () => {
-    child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
-      stdio: ['ignore', 'pipe', 'ignore'], env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
-    }); return child;
+    child = execa(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+      extendEnv: false,
+      reject: false,
+      buffer: false,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
+    }).nodeChildProcess; return child;
   } })).rejects.toThrow('mock server did not start');
   if (child === undefined) throw new Error('child not created');
   expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
 });
 
 it('rejects promptly when a real fixture exits before its handshake', async () => {
-  await expect(startMockServer({}, { spawn: () => spawn(process.execPath, ['-e', 'process.exit(0)'], {
-    stdio: ['ignore', 'pipe', 'ignore'], env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
-  }) })).rejects.toThrow('exited before printing its port');
+  await expect(startMockServer({}, { spawn: () => execa(process.execPath, ['-e', 'process.exit(0)'], {
+    extendEnv: false,
+    reject: false,
+    buffer: false,
+    stdio: ['ignore', 'pipe', 'ignore'],
+    env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
+  }).nodeChildProcess })).rejects.toThrow('exited before printing its port');
 });
 
 it('accepts a fragmented bounded handshake and removes its startup timer', async () => {
@@ -122,9 +131,13 @@ it('bounds forced cleanup after startup fails and preserves both errors', async 
 it('terminates an owned real fixture that ignores SIGTERM', async () => {
   let child: ChildProcess | undefined;
   const server = await startMockServer({}, { spawn: () => {
-    child = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); console.log(JSON.stringify({port:8787})); setInterval(() => {}, 1000)'], {
-      stdio: ['ignore', 'pipe', 'ignore'], env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
-    }); return child;
+    child = execa(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); console.log(JSON.stringify({port:8787})); setInterval(() => {}, 1000)'], {
+      extendEnv: false,
+      reject: false,
+      buffer: false,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
+    }).nodeChildProcess; return child;
   } });
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

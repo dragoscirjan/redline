@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { execaSync } from 'execa';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -102,16 +102,43 @@ describe('npm release boundary', () => {
       ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'core.hooksPath=/dev/null',
         '-c', 'commit.gpgSign=false', 'commit', '-m', 'test: seed main'],
     ]) {
-      const result = spawnSync('git', args, { cwd: root, env, encoding: 'utf8', timeout: 10_000 });
-      expect(result.status, result.stderr).toBe(0);
+      const result = execaSync('git', args, {
+        extendEnv: false,
+        stripFinalNewline: false,
+        reject: false,
+        cwd: root,
+        env,
+        encoding: 'utf8',
+        timeout: 10_000,
+        maxBuffer: 1024 * 1024,
+      });
+      expect(result.exitCode, result.stderr).toBe(0);
     }
     const cli = fileURLToPath(new URL('../node_modules/@changesets/cli/bin.js', import.meta.url));
-    const result = spawnSync(process.execPath, [cli, 'status'], { cwd: root, env, encoding: 'utf8', timeout: 10_000 });
-    expect(result.status, result.stderr + result.stdout).toBe(0);
+    const result = execaSync(process.execPath, [cli, 'status'], {
+      extendEnv: false,
+      stripFinalNewline: false,
+      reject: false,
+      cwd: root,
+      env,
+      encoding: 'utf8',
+      timeout: 10_000,
+      maxBuffer: 1024 * 1024,
+    });
+    expect(result.exitCode, result.stderr + result.stdout).toBe(0);
     await writeFile(join(root, '.changeset/release-test.md'), '---\n"@dragoscirjan/redline": patch\n---\nFixture automated release.\n');
     await expect(assertPublishOnlyChangesets(join(root, '.changeset'))).rejects.toThrow('consume pending Changesets');
-    const versioned = spawnSync(process.execPath, [cli, 'version'], { cwd: root, env, encoding: 'utf8', timeout: 10_000 });
-    expect(versioned.status, versioned.stderr + versioned.stdout).toBe(0);
+    const versioned = execaSync(process.execPath, [cli, 'version'], {
+      extendEnv: false,
+      stripFinalNewline: false,
+      reject: false,
+      cwd: root,
+      env,
+      encoding: 'utf8',
+      timeout: 10_000,
+      maxBuffer: 1024 * 1024,
+    });
+    expect(versioned.exitCode, versioned.stderr + versioned.stdout).toBe(0);
     expect(JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version).toBe('1.0.1');
     expect(await readFile(join(root, 'CHANGELOG.md'), 'utf8')).toContain('Fixture automated release.');
     await expect(assertPublishOnlyChangesets(join(root, '.changeset'))).resolves.toBeUndefined();
@@ -130,11 +157,16 @@ describe('npm release boundary', () => {
       const script = `globalThis.fetch = async () => new Response('', { status: 404 });
         process.argv = [process.execPath, ${JSON.stringify(fileURLToPath(file))}${explicit ? ', ' + JSON.stringify(metadata.version) : ''}];
         await import(${JSON.stringify(file.href)});`;
-      const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
+      const result = execaSync(process.execPath, ['--input-type=module', '--eval', script], {
+        extendEnv: false,
+        stripFinalNewline: false,
+        reject: false,
         env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, VERSION: 'invalid' },
-        encoding: 'utf8', timeout: 10_000,
+        encoding: 'utf8',
+        timeout: 10_000,
+        maxBuffer: 1024 * 1024,
       });
-      expect(result.status, result.stderr).toBe(0);
+      expect(result.exitCode, result.stderr).toBe(0);
     }
   });
 
@@ -205,13 +237,20 @@ fs.writeFileSync(path.join(bin, 'redline.mjs'), 'process.exit(0);');
 require('node:fs').appendFileSync(process.env.FIXTURE_ROOT + '/delays', process.argv[2] + '\\n');
 `, { mode: 0o700 });
     const prelude = 'npm() { "$FIXTURE_ROOT/bin/npm" "$@"; }; sleep() { "$FIXTURE_ROOT/bin/sleep" "$@"; };\n';
-    const result = spawnSync('bash', ['-c', prelude + (script ?? 'exit 99')], { cwd: root,
+    const result = execaSync('bash', ['-c', prelude + (script ?? 'exit 99')], {
+      extendEnv: false,
+      stripFinalNewline: false,
+      reject: false,
+      cwd: root,
       env: { PATH: process.env.PATH, HOME: root, RUNNER_TEMP: root,
         GITHUB_OUTPUT: join(root, 'output'), FIXTURE_ROOT: root, VISIBLE_AFTER: String(visibleAfter),
         RELEASE_MODE: 'publish', PUBLISHED: 'true', NODE_AUTH_TOKEN: '',
         GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: join(root, 'missing-git-config') },
-      encoding: 'utf8', timeout: 10_000 });
-    expect(result.status, result.stdout + result.stderr).toBe(success ? 0 : 1);
+      encoding: 'utf8',
+      timeout: 10_000,
+      maxBuffer: 1024 * 1024,
+    });
+    expect(result.exitCode, result.stdout + result.stderr).toBe(success ? 0 : 1);
     expect(Number(await readFile(join(root, 'attempts'), 'utf8'))).toBe(attempts);
     expect((await readFile(join(root, 'delays'), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean))
       .toEqual(Array.from({ length: attempts - 1 }, () => '15'));

@@ -7,7 +7,7 @@
  * beyond loopback and no real credentials are used.
  */
 
-import { spawn } from 'node:child_process';
+import { execa } from 'execa';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { startMockServer } from './helpers/model-server.ts';
@@ -21,7 +21,11 @@ const ENABLED = process.env.REDLINE_LIVE_HARNESS_TESTS === '1';
 
 async function binaryAvailable(command: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const probe = spawn(command, ['--version'], { stdio: 'ignore' });
+    const probe = execa(command, ['--version'], {
+      reject: false,
+      buffer: false,
+      stdio: 'ignore',
+    }).nodeChildProcess;
     probe.on('error', () => resolve(false));
     probe.on('close', (code) => resolve(code === 0 || code === 1));
   });

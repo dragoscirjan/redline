@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execaSync } from 'execa';
 import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,12 +21,15 @@ const gitEnvironment = {
 };
 
 function git(cwd: string, ...args: string[]): string {
-  return execFileSync('git', args, {
+  return execaSync('git', args, {
+    extendEnv: false,
+    stripFinalNewline: false,
     cwd,
     env: gitEnvironment,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
-  }).trim();
+    maxBuffer: 1024 * 1024,
+  }).stdout.trim();
 }
 
 async function root(): Promise<string> {

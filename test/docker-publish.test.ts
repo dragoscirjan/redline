@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { execaSync } from 'execa';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -52,15 +52,20 @@ const value = ref.endsWith('@' + process.env.DIGEST)
 console.log(JSON.stringify(value));
 `, { mode: 0o700 });
     const prelude = 'docker() { "$FIXTURE_ROOT/docker" "$@"; };\n';
-    const result = spawnSync('bash', ['-c', prelude + script(await workflow(), 'Record the tested image digest')], {
+    const result = execaSync('bash', ['-c', prelude + script(await workflow(), 'Record the tested image digest')], {
+      extendEnv: false,
+      stripFinalNewline: false,
+      reject: false,
       env: { PATH: process.env.PATH, FIXTURE_ROOT: root, TESTED_ID: mode === 'empty' ? '' : digest('a'),
         PUBLISHED_ID: mode === 'different' ? digest('b') : digest('a'),
         DIGEST: mode === 'invalid' ? '--malformed' : digest('c'), DIGEST_DIR: join(root, 'digests'), ARCH: 'amd64',
         IMAGE: 'ghcr.io/example/redline', PLATFORM: mode === 'missing-platform' ? 'unknown' : 'amd64' },
-      encoding: 'utf8', timeout: 3000,
+      encoding: 'utf8',
+      timeout: 3000,
+      maxBuffer: 1024 * 1024,
     });
-    if (mode === 'matching') expect(result.status, result.stderr).toBe(0);
-    else expect(result.status, result.stderr).not.toBe(0);
+    if (mode === 'matching') expect(result.exitCode, result.stderr).toBe(0);
+    else expect(result.exitCode, result.stderr).not.toBe(0);
     expect(await readFile(join(root, 'digests/amd64'), 'utf8').catch(() => '')).toBe(mode === 'matching' ? digest('c') + '\n' : '');
   });
 
@@ -73,11 +78,16 @@ console.log(JSON.stringify(value));
 require('node:fs').appendFileSync(process.env.FIXTURE_ROOT + '/calls', JSON.stringify(process.argv.slice(2)) + '\\n');
 `, { mode: 0o700 });
     const prelude = 'docker() { "$FIXTURE_ROOT/docker" "$@"; };\n';
-    const result = spawnSync('bash', ['-c', prelude + script(await workflow(), 'Publish the multi-platform version tag')], {
+    const result = execaSync('bash', ['-c', prelude + script(await workflow(), 'Publish the multi-platform version tag')], {
+      extendEnv: false,
+      stripFinalNewline: false,
+      reject: false,
       env: { PATH: process.env.PATH, FIXTURE_ROOT: root, DIGEST_DIR: join(root, 'digests'), IMAGE: 'ghcr.io/example/redline', VERSION: '1.2.1' },
-      encoding: 'utf8', timeout: 3000,
+      encoding: 'utf8',
+      timeout: 3000,
+      maxBuffer: 1024 * 1024,
     });
-    expect(result.status, result.stderr).toBe(mode === 'valid' ? 0 : 1);
+    expect(result.exitCode, result.stderr).toBe(mode === 'valid' ? 0 : 1);
     const calls = (await readFile(join(root, 'calls'), 'utf8').catch(() => '')).trim();
     if (mode !== 'valid') expect(calls).toBe('');
     else expect(JSON.parse(calls.split('\n')[0] ?? 'null')).toEqual([

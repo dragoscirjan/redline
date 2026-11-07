@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Builds the deterministic, untrusted-data-only pull request review bundle. */
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execa } from 'execa';
 import { constants, createWriteStream } from 'node:fs';
 import {
   mkdir,
@@ -106,7 +106,8 @@ async function waitForProcess(
   args: readonly string[],
   options: { readonly cwd?: string; readonly stdout?: Writable } = {},
 ): Promise<{ readonly status: number; readonly stdout: Buffer; readonly stderr: string }> {
-  const child = spawn(command, [...args], {
+  const child = execa(command, [...args], {
+    reject: false, buffer: false, preferLocal: false, shell: false, verbose: 'none',
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -142,13 +143,10 @@ async function waitForProcess(
       child.kill('SIGKILL');
     }
   });
-  const status = await new Promise<number>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('close', (code, signal) => {
-      if (signal !== null) reject(new Error(`${command} terminated by ${signal}`));
-      else resolve(code ?? 1);
-    });
-  });
+  const result = await child;
+  if (result.signal !== undefined) throw new Error(`${command} terminated by ${result.signal}`);
+  if (result.exitCode === undefined) throw new Error(`${command} failed to start`);
+  const status = result.exitCode;
   if (overflow !== undefined) throw overflow;
   if (outputError !== undefined) throw outputError;
   return {
@@ -209,11 +207,11 @@ async function runGitToFile(
 
 async function extractSource(repo: string, head: string, destination: string): Promise<void> {
   await mkdir(destination, { recursive: true });
-  const archive = spawn('git', ['-C', repo, 'archive', head], { stdio: ['ignore', 'pipe', 'pipe'] });
-  const extractor = spawn('tar', ['-x', '-C', destination], { stdio: ['pipe', 'ignore', 'pipe'] });
+  const archive = execa('git', ['-C', repo, 'archive', head], { stdio: ['ignore', 'pipe', 'pipe'], reject: false, buffer: false, preferLocal: false, shell: false, verbose: 'none' });
+  const extractor = execa('tar', ['-x', '-C', destination], { stdio: ['pipe', 'ignore', 'pipe'], reject: false, buffer: false, preferLocal: false, shell: false, verbose: 'none' });
   archive.stdout.pipe(extractor.stdin);
 
-  const collect = async (child: ChildProcess, name: string): Promise<void> => {
+  const collect = async (child: typeof archive | typeof extractor, name: string): Promise<void> => {
     if (child.stderr === null) throw new Error(`${name} has no diagnostic stream`);
     const stderrChunks: Buffer[] = [];
     const state = { bytes: 0 };
@@ -227,13 +225,10 @@ async function extractSource(repo: string, head: string, destination: string): P
         child.kill('SIGKILL');
       }
     });
-    const status = await new Promise<number>((resolve, reject) => {
-      child.once('error', reject);
-      child.once('close', (code, signal) => {
-        if (signal !== null) reject(new Error(`${name} terminated by ${signal}`));
-        else resolve(code ?? 1);
-      });
-    });
+    const result = await child;
+    if (result.signal !== undefined) throw new Error(`${name} terminated by ${result.signal}`);
+    if (result.exitCode === undefined) throw new Error(`${name} failed to start`);
+    const status = result.exitCode;
     if (overflow !== undefined) throw overflow;
     if (status !== 0) {
       const diagnostic = Buffer.concat(stderrChunks).toString('utf8').trim();

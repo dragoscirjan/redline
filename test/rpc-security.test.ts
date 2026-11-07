@@ -66,6 +66,8 @@ describe('RPC resource and security boundaries', () => {
       windowsHide: true,
     }).nodeChildProcess;
     if (child.stdin === null || child.stdout === null || child.stderr === null) throw new Error('RPC fixture requires piped stdio');
+    // Execa auto-drains untouched streams with buffer:false. This client must not read.
+    child.stdout.pause();
     let diagnostic = '';
     child.stderr.on('data', (bytes: Buffer) => { diagnostic = (diagnostic + bytes.toString()).slice(-8192); });
     child.stdin.on('error', () => {});

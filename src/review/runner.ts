@@ -16,7 +16,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { disposeAnalysis, integrationToolNames, type IntegrationStatus } from '../harness-executor/analysis.ts';
+import { mergeNativeToolEvidence } from '../harness-executor/native.ts';
 import { createHarnessExecutor } from '../harness-executor/registry.ts';
+import { runNativeWarmup, warmupGuidance, type NativeWarmupReport } from './warmup.ts';
 import { augmentHeadContext } from './head-context.ts';
 import { scheduleBySize, workloadBound } from './scheduling.ts';
 import { maximumFileAttemptTimeMs, parseReviewRetries, RETRY_TIMEOUT_INCREMENT_MS, reviewRetryReason, upstreamRetryDelayMs, type ReviewRetryReason } from './retries.ts';
@@ -36,6 +39,7 @@ import {
   type SourceContextStrategy,
 } from './prompt.ts';
 import { buildPullRequestReview, validateFindingReferences } from './pr-contract.ts';
+import { extractNativeImpact, type FileImpactAnalysis } from './impact.ts';
 import { FileReviewValidator, parseFileReviewDocument } from './report.ts';
 import { buildRemediation, formatSpan } from './remediation.ts';
 import {
@@ -80,6 +84,10 @@ export interface FileHarnessOutputEvent extends HarnessOutputLine, FileReviewIde
 
 export interface ReviewRunInput {
   readonly environment: ReviewEnvironment;
+  readonly repositoryDirectory?: string;
+  readonly onAnalysisStatus?: (integrations: readonly IntegrationStatus[]) => void;
+  readonly onWarmupStarted?: () => void;
+  readonly onWarmup?: (report: NativeWarmupReport) => void;
   /** Artifact port; defaults to the deterministic filesystem writer. */
   readonly writer?: ReviewWriter;
   /** Bounded metadata only: counts, explicit limits and policy, never source or credentials. */
@@ -197,6 +205,7 @@ function deadlineOmissionRecord(
 }
 
 interface RunHarnessState {
+  readonly warmup?: NativeWarmupReport;
   readonly runs: Map<string, { readonly run: HarnessRun; readonly timeoutMs: number }>;
   failure?: { readonly scope: 'file' | 'run'; readonly diagnostic: string };
   fatalReason?: string;
@@ -219,6 +228,7 @@ function notStartedRecord(environment: ReviewEnvironment, context: LoadedReviewC
     errorKind: 'harness-failed', execution: 'not-started' };
 }
 
+/** Run bounded file attempts and follow-ups, accepting findings only after authoritative source and diff validation. */
 async function reviewOneFile(
   executor: HarnessExecutor,
   prepared: Awaited<ReturnType<HarnessExecutor['prepare']>>,
@@ -286,6 +296,9 @@ async function reviewOneFile(
       findingScope: environment.findingScope,
       harness: environment.harness,
       model: environment.model.model,
+      tools: integrationToolNames(prepared.analysis, environment.harness === 'opencode' ? 'opencode' : 'pi'),
+      executionMode: prepared.executionMode ?? 'isolated',
+      ...(sharedFailure.warmup === undefined ? {} : { warmup: warmupGuidance(sharedFailure.warmup) }),
       indexedContext: fileContext.prompt,
       sourceContextStrategy,
       followUpAvailable: verifyCandidates && environment.codeContext !== undefined
@@ -343,8 +356,16 @@ async function reviewOneFile(
   }
 
   let document;
+  let impactAnalysis: FileImpactAnalysis | undefined;
   try {
-    document = parseFileReviewDocument(run.text);
+    let reviewText = run.text;
+    if (prepared.executionMode === 'native') {
+      const extracted = await extractNativeImpact(run.text, bundle,
+        sharedFailure.warmup === undefined ? undefined : warmupGuidance(sharedFailure.warmup), run.telemetry?.tools);
+      reviewText = extracted.text;
+      impactAnalysis = JSON.parse(redact(JSON.stringify(extracted.impactAnalysis))) as FileImpactAnalysis;
+    }
+    document = parseFileReviewDocument(reviewText);
   } catch (error) {
     return {
       ...described,
@@ -690,6 +711,7 @@ async function reviewOneFile(
           : undefined,
     findings: published,
     rejectedCandidates,
+    ...(impactAnalysis === undefined ? {} : { impactAnalysis }),
     ...(verification === undefined ? {} : { verification }),
     ...(verificationArtifact === undefined ? {} : { verificationArtifact }),
     ...(followUp === undefined ? {} : { followUp }),
@@ -781,92 +803,125 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
   // separately measured parallel verifier path.
   const verifyCandidates = input.verifyCandidates === true;
   const concurrency = verifyCandidates ? 1 : environment.reviewConcurrency;
-  const reuseCache = environment.reuse === undefined
-    ? undefined
-    : await loadReviewReuseCache(environment.reuse);
-  const recordsByManifestIndex = new Map<number, WritableFileReviewRecord>();
-  const fingerprintsByManifestIndex = new Map<number, string>();
-  let rejectedReuseCandidates = 0;
-
-  // Restored data is processed before the worker queue exists. A cache
-  // failure or current-evidence mismatch is only a miss: the file proceeds
-  // through the normal harness path.
-  if (reuseCache !== undefined) {
-    for (const [manifestIndex, file] of bundle.manifest.files.entries()) {
-      if (!file.reviewed || file.binary) continue;
-      const fileContext = codeContextForFile(indexedContext, file);
-      const followUpAvailable = verifyCandidates && environment.codeContext !== undefined
-        && input.followUpExecutor !== undefined && fileContext.coverage.provider !== null
-        && fileContext.coverage.provider.id !== 'static-head';
-      let fingerprint: string;
-      try {
-        fingerprint = await buildReviewSemanticFingerprint({
-          bundle,
-          file,
-          environment,
-          indexedContext,
-          verifyCandidates,
-          followUpAvailable,
-        });
-        fingerprintsByManifestIndex.set(manifestIndex, fingerprint);
-      } catch {
-        continue;
-      }
-      const candidate = reuseCache.match(fileReviewPath(file), fingerprint);
-      if (candidate === undefined) continue;
-      try {
-        const record = await restoreReusableFileReview({
-          candidate,
-          bundle,
-          file,
-          environment,
-          indexedContext,
-          verifyCandidates,
-        });
-        await writer.writeFileReview(record);
-        recordsByManifestIndex.set(manifestIndex, record);
-        await reuseCache.write(
-          record.path,
-          fingerprint,
-          bundle.manifest.base,
-          bundle.manifest.head,
-          record,
-          record.savedDurationMs ?? 0,
-          verifyCandidates,
-        ).catch(() => undefined);
-        input.onFileDone?.(record);
-      } catch {
-        // Cache content is untrusted and optional. A current-evidence
-        // validation failure is counted and falls through to normal review.
-        rejectedReuseCandidates += 1;
+  let workDirectory: string | undefined;
+  let prepared: Awaited<ReturnType<HarnessExecutor['prepare']>> | undefined;
+  let warmup: NativeWarmupReport | undefined;
+  try {
+    if (bundle.manifest.files.some(file => file.reviewed)) {
+      workDirectory = await mkdtemp(join(tmpdir(), 'redline-review-'));
+      const settings = {
+        model: environment.model, credential: environment.credential, timeoutMs: environment.timeout.milliseconds,
+        ...(environment.retries === undefined ? {} : { retryOwnership: 'caller' as const }),
+        ...(environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: environment.maxOutputTokens }),
+        ...(environment.modelProtocol === undefined ? {} : { modelProtocol: environment.modelProtocol }),
+        workDirectory,
+        ...(environment.harness === 'echo' ? {} : { analysis: {
+          sourceDirectory: bundle.sourceRoot,
+          ...(input.repositoryDirectory === undefined ? {} : { repositoryDirectory: input.repositoryDirectory }),
+          files: [...new Set([...bundle.manifest.files.flatMap(file => !file.reviewed || file.binary || file.newPath === null ? [] : [file.newPath]),
+            ...[...indexedContext.files.values()].flatMap(file => file.prompt?.related.map(span => span.path) ?? [])])],
+          head: bundle.manifest.head, graphEnabled: environment.codeContext !== undefined,
+          timeoutMs: remainingRunMs(runDeadlineAtMs, now),
+        } }),
+      };
+      prepared = await executor.prepare(settings);
+      if (prepared.executionMode === 'native') {
+        input.onWarmupStarted?.();
+        warmup = await runNativeWarmup(executor, settings, {
+          head: bundle.manifest.head, sourceDirectory: bundle.sourceRoot,
+          indexingProvider: environment.nativeIndexing?.provider ?? null,
+          required: environment.nativeIndexing?.required ?? false,
+          ...(environment.nativeIndexing?.executable === undefined ? {} : { indexingExecutable: environment.nativeIndexing.executable }),
+          paths: bundle.manifest.files.flatMap(file => file.reviewed && file.newPath !== null ? [file.newPath] : []),
+        }, Math.floor(remainingRunMs(runDeadlineAtMs, now) / 4));
+        await writer.writeWarmupReport?.(warmup);
+        input.onWarmup?.(warmup);
       }
     }
-  }
-
-  const selectedManifestIndexes = new Set(bundle.manifest.files.flatMap((file, manifestIndex) =>
-    file.reviewed && !recordsByManifestIndex.has(manifestIndex) ? [manifestIndex] : []));
-  const scheduling = environment.scheduling ?? 'largest-first';
-  const tasks = await reviewTasks(bundle, concurrency, selectedManifestIndexes, scheduling);
-  input.onWorkload?.({ ...workloadBound(tasks.length, concurrency, maximumFileAttemptTimeMs(environment.timeout.milliseconds, retryLimit), remainingRunMs(runDeadlineAtMs, now)),
-    scheduling: concurrency === 1 ? 'manifest-order' : scheduling,
-    staticHeadFiles: [...indexedContext.files.values()].filter((file) => file.coverage.provider?.id === 'static-head').length });
-  let workDirectory: string | undefined;
-  try {
-    if (tasks.length > 0) workDirectory = await mkdtemp(join(tmpdir(), 'redline-review-'));
-    const prepared = tasks.length === 0
+    const tools = integrationToolNames(prepared?.analysis, environment.harness === 'opencode' ? 'opencode' : 'pi');
+    const analysisIdentity = prepared?.analysis?.identity;
+    if (prepared?.analysis !== undefined) {
+      const integrations = prepared.analysis.statuses.map(row => ({ ...row,
+        version: row.version === null ? null : redactCredential(row.version, environment.credential) }));
+      await writer.writeAnalysisReport?.(integrations);
+      input.onAnalysisStatus?.(integrations);
+    }
+    const reuseCache = environment.reuse === undefined
       ? undefined
-      : await executor.prepare({
-          model: environment.model,
-          credential: environment.credential,
-          timeoutMs: environment.timeout.milliseconds,
-          ...(environment.retries === undefined ? {} : { retryOwnership: 'caller' as const }),
-          ...(environment.maxOutputTokens === undefined ? {} : { maxOutputTokens: environment.maxOutputTokens }),
-          ...(environment.modelProtocol === undefined ? {} : { modelProtocol: environment.modelProtocol }),
-          workDirectory: workDirectory as string,
-        });
+      : await loadReviewReuseCache(environment.reuse);
+    const recordsByManifestIndex = new Map<number, WritableFileReviewRecord>();
+    const fingerprintsByManifestIndex = new Map<number, string>();
+    let rejectedReuseCandidates = 0;
 
+    // Restored data is processed before the worker queue exists. A cache
+    // failure or current-evidence mismatch is only a miss: the file proceeds
+    // through the normal harness path.
+    if (reuseCache !== undefined) {
+      for (const [manifestIndex, file] of bundle.manifest.files.entries()) {
+        if (!file.reviewed || file.binary) continue;
+        const fileContext = codeContextForFile(indexedContext, file);
+        const followUpAvailable = verifyCandidates && environment.codeContext !== undefined
+          && input.followUpExecutor !== undefined && fileContext.coverage.provider !== null
+          && fileContext.coverage.provider.id !== 'static-head';
+        let fingerprint: string;
+        try {
+          fingerprint = await buildReviewSemanticFingerprint({
+            bundle,
+            file,
+            environment,
+            indexedContext,
+            verifyCandidates,
+            followUpAvailable,
+            tools,
+            ...(analysisIdentity === undefined ? {} : { analysisIdentity }),
+          });
+          fingerprintsByManifestIndex.set(manifestIndex, fingerprint);
+        } catch {
+          continue;
+        }
+        const candidate = reuseCache.match(fileReviewPath(file), fingerprint);
+        if (candidate === undefined) continue;
+        try {
+          const record = await restoreReusableFileReview({
+            candidate,
+            bundle,
+            file,
+            environment,
+            indexedContext,
+            verifyCandidates,
+          });
+          await writer.writeFileReview(record);
+          recordsByManifestIndex.set(manifestIndex, record);
+          await reuseCache.write(
+            record.path,
+            fingerprint,
+            bundle.manifest.base,
+            bundle.manifest.head,
+            record,
+            record.savedDurationMs ?? 0,
+            verifyCandidates,
+          ).catch(() => undefined);
+          input.onFileDone?.(record);
+        } catch {
+          // Cache content is untrusted and optional. A current-evidence
+          // validation failure is counted and falls through to normal review.
+          rejectedReuseCandidates += 1;
+        }
+      }
+    }
+
+    const selectedManifestIndexes = new Set(bundle.manifest.files.flatMap((file, manifestIndex) =>
+      file.reviewed && !recordsByManifestIndex.has(manifestIndex) ? [manifestIndex] : []));
+    const scheduling = environment.scheduling ?? 'largest-first';
+    const tasks = await reviewTasks(bundle, concurrency, selectedManifestIndexes, scheduling);
+    if (warmup?.fatal !== true) input.onWorkload?.({ ...workloadBound(tasks.length, concurrency, maximumFileAttemptTimeMs(environment.timeout.milliseconds, retryLimit), remainingRunMs(runDeadlineAtMs, now)),
+      scheduling: concurrency === 1 ? 'manifest-order' : scheduling,
+      staticHeadFiles: [...indexedContext.files.values()].filter((file) => file.coverage.provider?.id === 'static-head').length });
     const followUpBudget = new FollowUpBudget();
-    const sharedFailure: RunHarnessState = { runs: new Map() };
+    const sharedFailure: RunHarnessState = { runs: new Map(),
+      ...(warmup === undefined ? {} : { warmup }),
+      ...(warmup?.fatal === true ? { fatalReason: warmup.reason, failure: { scope: 'run', diagnostic: warmup.reason } } : {}),
+    };
     const timeoutByFile = new Map<number, number>();
     const contextByFile = new Map<number, SourceContextStrategy>();
     const retryReasons = new Map<number, ReviewRetryReason>();
@@ -952,12 +1007,21 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
           });
         }
         const invocation = sharedFailure.runs.get(file.id);
+        const observed = invocation?.run.telemetry?.tools;
+        if (observed !== undefined) {
+          record = { ...record, tools: { ...observed,
+            catalogue: observed.catalogue.map(name => redactCredential(name, environment.credential)),
+            ...(observed.servers === undefined ? {} : { servers: observed.servers.map(server => ({ ...server, name: redactCredential(server.name, environment.credential) })) }),
+            calls: observed.calls.map(call => ({ ...call, name: redactCredential(call.name, environment.credential) })),
+          } };
+        }
         if (environment.retries !== undefined) {
           const attempts = [...(previous?.attempts ?? []), ...(invocation === undefined ? [] : [{
             number: (previous?.attempts?.length ?? 0) + 1,
             timeoutMs: invocation.timeoutMs, sourceContextStrategy,
             outcome: record.outcome, errorKind: record.errorKind, reason: record.reason,
             durationMs: record.durationMs,
+            ...(record.tools === undefined ? {} : { tools: record.tools }),
           }])];
           record = { ...record, attempts, durationMs: (previous?.durationMs ?? 0) + record.durationMs };
         }
@@ -997,6 +1061,10 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       if (record === undefined) throw new Error('review run did not produce a file record');
       return [record];
     });
+    const nativeTools = prepared?.executionMode === 'native' ? mergeNativeToolEvidence([...(warmup === undefined ? [] : [warmup.tools]), ...records.flatMap(record =>
+      record.attempts === undefined ? record.tools === undefined ? [] : [record.tools]
+        : record.attempts.flatMap(attempt => attempt.tools === undefined ? [] : [attempt.tools]))]) : undefined;
+    if (nativeTools !== undefined) await writer.writeNativeToolsReport?.(nativeTools, warmup);
     const excludedFiles = bundle.manifest.files.flatMap((file) => !file.reviewed ? [{
       fileId: file.id,
       path: fileReviewPath(file),
@@ -1008,6 +1076,8 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
     const harnessFailure = finalFailure === undefined ? undefined : 'scope' in finalFailure ? finalFailure
       : { scope: 'file' as const, diagnostic: finalFailure.reason ?? 'harness failed' };
     const summary: ReviewRunSummary = {
+      ...(warmup === undefined ? {} : { warmup }),
+      ...(nativeTools === undefined ? {} : { tools: nativeTools }),
       version: REVIEW_RUN_SUMMARY_VERSION,
       harness: environment.harness,
       model: environment.model.model,
@@ -1062,6 +1132,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
         execution: record.execution,
         savedDurationMs: record.savedDurationMs,
         findingCount: record.findings.length,
+        ...(record.impactAnalysis === undefined ? {} : { impactAnalysis: record.impactAnalysis }),
         findingSpans: record.findings.map((finding) => formatSpan(finding.startLine, finding.endLine)),
       })),
     };
@@ -1085,6 +1156,7 @@ export async function runFileReviews(input: ReviewRunInput): Promise<ReviewRunRe
       exitCode: sharedFailure.fatalReason === undefined && (validatedReviews > 0 || records.length === 0) ? 0 : 1,
     };
   } finally {
+    await disposeAnalysis(prepared?.analysis);
     if (workDirectory !== undefined) await rm(workDirectory, { recursive: true, force: true });
   }
 }

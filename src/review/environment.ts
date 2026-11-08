@@ -126,6 +126,8 @@ export interface ReviewEnvironment {
   /** Local CLI opt-in. Unset preserves legacy Action retry behavior; zero disables retries. */
   readonly retries?: number | undefined;
   readonly headContext?: boolean | undefined;
+  /** Trusted native CLI selection. Indexer installation and execution belong to model warmup, not preflight. */
+  readonly nativeIndexing?: { readonly provider: 'cgc' | 'gitnexus'; readonly required: boolean; readonly executable?: string };
   /** Optional action-owned cross-run record cache; restored contents remain untrusted. */
   readonly reuse?: ReviewReuseEnvironment | undefined;
 }

@@ -115,6 +115,7 @@ export class GitRevisionSource implements RevisionSource {
   constructor(options: LocalOptions, environment: NodeJS.ProcessEnv, output: string) {
     this.options = options; this.environment = environment; this.output = output;
   }
+  /** Capture the selected Git or worktree state without repository hooks or filters, rejecting mixed snapshots and honoring cancellation. */
   async capture(signal: AbortSignal): Promise<CapturedRevision> {
     const { options, output } = this;
     const command = await executable('git', this.environment.PATH ?? '', options.repository);
@@ -282,7 +283,7 @@ export class GitRevisionSource implements RevisionSource {
       }, null, 2)}\n`);
       let prepared: Promise<{ baseDirectory: string; headDirectory: string }> | undefined;
       return {
-        reviewDirectory: bundleDirectory, sourceDirectory, coverage,
+        reviewDirectory: bundleDirectory, sourceDirectory, repositoryDirectory: root, coverage,
         contextSnapshot: {
           repository: repositoryIdentity, base, head,
           prepareSources: (persistentBase) => prepared ??= (async () => {

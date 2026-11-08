@@ -1,17 +1,18 @@
 /**
  * Pi harness executor.
  *
- * Runs Pi non-interactively: one `pi --print` child process per prompt with
- * all tools disabled and no session persistence. Model access is configured
- * through a dedicated generated agent directory (`PI_CODING_AGENT_DIR`), so
- * the host user's own Pi configuration, extensions, and credentials are
- * never loaded or modified. The provider credential travels through the
- * `REDLINE_MODEL_API_KEY` environment variable, which `models.json`
- * references by interpolation; the credential value never appears in any
- * generated file.
+ * Runs one non-interactive `pi --print` process per prompt without session
+ * persistence. Native CLI/Docker appends the review policy and request controls
+ * while preserving normal global/local configuration and tools. Isolated
+ * Actions retain generated agent configuration and exact read-only MCP tools.
+ * Both profiles reference the selected credential through an environment
+ * variable rather than writing its value into generated configuration.
  */
 
+import { prepareAnalysis, integrationServers, integrationToolNames } from './analysis.ts';
 import { MAX_OUTPUT_TOKENS, outputCaptureBytes } from './output-budget.ts';
+import { nativeEnvironment, nativeToolEvidence, mergeNativeToolEvidence, type NativeToolEvidence, type NativeHarnessContext } from './native.ts';
+import { nativePiExtension } from './native-pi.ts';
 import { piFailureDiagnostic, readPiFailure } from './pi-failure.ts';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -133,6 +134,7 @@ function sanitizeWorkflowCommands(chunk: string, atLineStart: boolean): string {
 export const PI_CREDENTIAL_ENV_NAME = 'REDLINE_MODEL_API_KEY' as const;
 
 export interface PiExecutorOptions {
+  readonly native?: NativeHarnessContext | undefined;
   /** Executable override; defaults to the `pi` found on PATH. */
   readonly command?: string | undefined;
   readonly spawner?: ProcessSpawner | undefined;
@@ -157,6 +159,8 @@ export interface PreparedPi extends PreparedHarness {
   readonly agentConfig: string;
   readonly modelProtocol: 'compatible' | 'openrouter-json';
   readonly settingsConfig: string;
+  readonly authenticated: boolean;
+  readonly native?: NativeHarnessContext;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly timeoutMs: number;
   readonly transientRetries: 0 | 1;
@@ -472,12 +476,14 @@ function noAssistantTextDiagnostic(
   return JSON.stringify({ ...diagnostic, events: [], parts: [] });
 }
 
+/** Accept only completed assistant output and project bounded failure, usage, retry, and native tool evidence into the harness result. */
 function toHarnessRun(
   result: BoundedRunResult,
   timeToFirstTextMs: number | null,
   retryCount = 0,
   credential?: string,
   callerManaged = false,
+  native = false,
 ): HarnessRun {
   const inspection = result.code === 0 ? inspectPiAssistantOutput(result.stdout, result.stdoutTruncated) : undefined;
   const text = inspection?.text;
@@ -499,6 +505,7 @@ function toHarnessRun(
       },
     }),
     retryCount,
+    ...(native ? { tools: nativeToolEvidence(result.stdout, 'pi', result.stdoutTruncated) } : {}),
   };
   if (result.timedOut) {
     return {
@@ -573,12 +580,14 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+/** Construct a Pi executor with injected launch dependencies while keeping native and isolated configuration paths distinct. */
 export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecutor {
   const command = options.command ?? 'pi';
   const spawner = options.spawner ?? nodeProcessSpawner;
   const policy = validatePolicy(options);
   return {
     harness: 'pi',
+    /** Validate model controls and prepare native settings or isolated agent configuration without executing repository code. */
     async prepare(settings: HarnessSettings): Promise<PreparedPi> {
       if (settings.modelProtocol === 'openrouter-json' && settings.model.provider !== 'openrouter') {
         throw new Error('openrouter-json requires the openrouter provider');
@@ -588,38 +597,47 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         transientRetries: settings.retryOwnership === 'caller' ? 0 : policy.transientRetries });
       const rootDirectory = join(settings.workDirectory, 'pi-agent');
       await mkdir(rootDirectory, { recursive: true });
+      const analysis = options.native === undefined
+        ? await prepareAnalysis(settings.analysis, settings.workDirectory, 'pi', command) : undefined;
+      const tools = integrationToolNames(analysis, 'pi');
       const args = [
         '--print',
         '--mode',
         'json',
         '--no-session',
-        '--no-tools',
+        ...(options.native !== undefined ? ['--approve'] : tools.length === 0 ? ['--no-tools'] : ['--tools', tools.join(','), '--no-extensions', '--extension', 'builtin:mcp',
+          '--no-context-files', '--no-skills', '--no-prompt-templates', '--no-themes', '--offline', '--no-approve']),
         ...(effectivePolicy.thinkingLevel === undefined ? [] : ['--thinking', effectivePolicy.thinkingLevel]),
         '--provider',
         settings.model.provider,
         '--model',
         settings.model.model,
       ];
-      const env: Record<string, string | undefined> = {
+      const env: Record<string, string | undefined> = options.native === undefined ? {
         PATH: process.env.PATH,
         HOME: process.env.HOME,
         LANG: process.env.LANG,
         PI_SKIP_VERSION_CHECK: '1',
-      };
+      } : { ...nativeEnvironment(options.native.environment), PI_SKIP_VERSION_CHECK: '1',
+        [PI_CREDENTIAL_ENV_NAME]: settings.credential?.value ?? 'redline-unauthenticated' };
       if (settings.credential !== undefined) {
         env[PI_CREDENTIAL_ENV_NAME] = settings.credential.value;
       }
       return Object.freeze({
         harness: 'pi',
         model: settings.model,
-        description: `pi with isolated per-invocation agent directories under ${rootDirectory}; thinking=${effectivePolicy.thinkingLevel ?? 'provider-default'}, max-output-tokens=${effectivePolicy.maxOutputTokens}, temperature=${effectivePolicy.temperature ?? 'provider-default'}, structured-output=${effectivePolicy.structuredOutput}, model-protocol=${settings.modelProtocol ?? 'compatible'}, transient-retries=${effectivePolicy.transientRetries} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
+        executionMode: options.native === undefined ? 'isolated' : 'native',
+        ...(options.native === undefined ? {} : { native: options.native }),
+        ...(analysis === undefined ? {} : { analysis }),
+        description: options.native !== undefined ? 'pi with native global and checkout-local configuration; configured tools and plugins remain enabled' : `pi with isolated per-invocation agent directories under ${rootDirectory}; thinking=${effectivePolicy.thinkingLevel ?? 'provider-default'}, max-output-tokens=${effectivePolicy.maxOutputTokens}, temperature=${effectivePolicy.temperature ?? 'provider-default'}, structured-output=${effectivePolicy.structuredOutput}, model-protocol=${settings.modelProtocol ?? 'compatible'}, transient-retries=${effectivePolicy.transientRetries} (credential via ${PI_CREDENTIAL_ENV_NAME} interpolation)`,
         command,
         args,
-        cwd: settings.workDirectory,
+        cwd: options.native?.directory ?? settings.workDirectory,
         rootDirectory,
         agentConfig: buildAgentConfig(settings, effectivePolicy),
         modelProtocol: settings.modelProtocol ?? 'compatible',
         settingsConfig: buildSettingsConfig(effectivePolicy),
+        authenticated: settings.credential !== undefined,
         env,
         timeoutMs: settings.timeoutMs,
         transientRetries: effectivePolicy.transientRetries,
@@ -627,6 +645,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         maxOutputTokens: effectivePolicy.maxOutputTokens,
       });
     },
+    /** Bound each invocation and retry by the shared deadline, preserve prompt argument boundaries, and redact bounded live output. */
     async execute(prepared: PreparedHarness, prompt: HarnessPrompt, options?: HarnessExecuteOptions): Promise<HarnessRun> {
       const state = prepared as PreparedPi;
       const totalTimeoutMs = options?.timeoutMs ?? state.timeoutMs;
@@ -640,6 +659,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
       let capReported = false;
       let retryCount = 0;
       let accumulatedUsage: HarnessUsageTelemetry | undefined;
+      const accumulatedTools: NativeToolEvidence[] = [];
 
       const forwardText = (text: string): void => {
         const rendered = streamMode === 'dots' ? (text === '\n' ? '\n' : '.') : text;
@@ -677,13 +697,21 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         );
         const invocationDirectory = await mkdtemp(join(state.rootDirectory, 'invocation-'));
         const systemPromptFile = join(invocationDirectory, 'system-prompt.md');
-        await Promise.all([
+        const nativeExtension = join(invocationDirectory, 'redline-request.mjs');
+        await Promise.all(state.native === undefined ? [
           writeFile(join(invocationDirectory, 'models.json'), invocationAgentConfig(state, prompt), { mode: 0o600 }),
           writeFile(join(invocationDirectory, 'settings.json'), state.settingsConfig, { mode: 0o600 }),
           writeFile(systemPromptFile, prompt.system, { mode: 0o600 }),
+          writeFile(join(invocationDirectory, 'mcp.json'), JSON.stringify({ autoEnableCodemode: false, mcpServers: integrationServers(state.analysis, 'pi') }), { mode: 0o600 }),
+        ] : [
+          writeFile(systemPromptFile, prompt.system, { mode: 0o600 }),
+          writeFile(nativeExtension, nativePiExtension(state.model, state.maxOutputTokens, state.modelProtocol, prompt, state.authenticated), { mode: 0o600 }),
         ]);
-        const args = [...state.args, '--system-prompt', systemPromptFile];
-        const env: NodeJS.ProcessEnv = { ...state.env, PI_CODING_AGENT_DIR: invocationDirectory };
+        const args = state.native === undefined ? [...state.args, '--system-prompt', systemPromptFile]
+          : [...state.args, '--append-system-prompt', systemPromptFile, '--extension', nativeExtension];
+        const env: NodeJS.ProcessEnv = state.native === undefined
+          ? { ...state.env, HOME: invocationDirectory, USERPROFILE: invocationDirectory, PI_CODING_AGENT_DIR: invocationDirectory }
+          : { ...state.env };
         let timeToFirstTextMs: number | null = null;
         const result = await runBoundedProcess(spawner, {
           command: state.command,
@@ -713,8 +741,9 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
             }
           },
         });
-        const run = toHarnessRun(result, timeToFirstTextMs, retryCount, credential, state.retryOwnership === 'caller');
+        const run = toHarnessRun(result, timeToFirstTextMs, retryCount, credential, state.retryOwnership === 'caller', state.native !== undefined);
         accumulatedUsage = mergeUsage(accumulatedUsage, run.telemetry?.usage);
+        if (run.telemetry?.tools !== undefined) accumulatedTools.push(run.telemetry.tools);
         const elapsedMs = Math.max(0, Math.ceil(performance.now() - invocationStartedAt));
         if (run.status === 'succeeded'
           || attempt >= state.transientRetries
@@ -726,6 +755,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
             telemetry: run.telemetry === undefined ? undefined : {
               ...run.telemetry,
               ...(accumulatedUsage === undefined ? {} : { usage: accumulatedUsage }),
+              ...(accumulatedTools.length === 0 ? {} : { tools: mergeNativeToolEvidence(accumulatedTools) }),
             },
           };
         }

@@ -29,6 +29,7 @@ function parseRuns(value: string): number {
   return parsed;
 }
 
+/** Resolve benchmark inputs and require an explicit output directory before any opt-in live capture. */
 function parseArguments(args: readonly string[]): CliOptions {
   let corpusPath = 'benchmark/performance/v1/corpus.json';
   let profilePath = 'benchmark/performance/v1/profile.json';
@@ -58,7 +59,7 @@ function parseArguments(args: readonly string[]): CliOptions {
   return {
     corpusPath: resolve(corpusPath),
     profilePath: resolve(profilePath),
-    outputDirectory: resolve(outputDirectory ?? 'benchmark/policy-v8/performance'),
+    outputDirectory: resolve(outputDirectory ?? 'benchmark/policy-v12/performance'),
     runs,
     source,
   };

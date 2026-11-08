@@ -61,6 +61,7 @@ export async function main(
   }
 }
 
+/** Resolve trusted options before execution, own interrupt handlers, and return classified failures without echoing raw argument values. */
 async function executeReview(
   values: Readonly<Record<string, unknown>>,
   env: NodeJS.ProcessEnv,
@@ -90,7 +91,8 @@ async function executeReview(
         const diffReader = new FindingDiffReader(join(destination, 'bundle'), join(destination, 'source'));
         return new CompositeReporter(options.reporters.map(() => new CliReporter(stdout, stderr, options.environment.credential?.value, {
           color: terminalColors(options.color, dependencies.stdout === undefined && process.stdout.isTTY === true, env),
-          ...(dependencies.stderr === undefined && process.stderr.isTTY === true && env.TERM !== 'dumb' ? {
+          ...(dependencies.stderr === undefined && options.progress !== 'never'
+            && (options.progress === 'always' || process.stderr.isTTY === true && env.TERM !== 'dumb') ? {
             terminal: {
               write: (text: string) => { process.stderr.write(text); }, columns: () => process.stderr.columns || 80,
               color: terminalColors(options.color, true, env),

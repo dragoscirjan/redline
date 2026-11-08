@@ -9,6 +9,9 @@ import type {
   CodeContextTimings,
 } from '../code-context/artifact.ts';
 
+import type { NativeWarmupReport } from './warmup.ts';
+import type { NativeToolEvidence } from '../harness-executor/native.ts';
+
 export type FindingScope = 'defects' | 'defects-and-risks';
 export const FINDING_SCOPES: readonly FindingScope[] = ['defects', 'defects-and-risks'];
 
@@ -183,6 +186,7 @@ export interface FileFollowUpCoverage {
 }
 
 export interface FileReviewAttempt {
+  readonly tools?: NativeToolEvidence;
   readonly number: number;
   /** Effective invocation limit after clamping to the remaining run budget. */
   readonly timeoutMs: number;
@@ -205,6 +209,9 @@ export interface ReviewRetryTelemetry {
 }
 
 export interface FileReviewRecord {
+  readonly impactAnalysis?: import('./impact.ts').FileImpactAnalysis;
+  /** Native harness observations, not a claim that every configured tool was used. */
+  readonly tools?: NativeToolEvidence;
   readonly version: typeof FILE_REVIEW_RECORD_VERSION;
   readonly fileId: string;
   readonly path: string;
@@ -232,6 +239,7 @@ export interface FileReviewRecord {
 export const REVIEW_RUN_SUMMARY_VERSION = 3 as const;
 
 export interface ReviewRunSummaryFile {
+  readonly impactAnalysis?: import('./impact.ts').FileImpactAnalysis;
   readonly fileId: string;
   readonly path: string;
   readonly outcome: FileReviewOutcome;
@@ -269,6 +277,8 @@ export interface ReviewExcludedFile {
 }
 
 export interface ReviewRunSummary {
+  readonly warmup?: NativeWarmupReport;
+  readonly tools?: NativeToolEvidence;
   readonly version: typeof REVIEW_RUN_SUMMARY_VERSION;
   readonly harness: string;
   readonly model: string;

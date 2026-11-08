@@ -167,9 +167,10 @@ describe('createPiExecutor', () => {
       expect((await stat(systemPromptFile)).mode & 0o777).toBe(0o600);
       expect(request.env?.PI_CODING_AGENT_DIR).toContain(join('pi-agent', 'invocation-'));
       expect(request.env?.[PI_CREDENTIAL_ENV_NAME]).toBe('test-key');
+      expect(request.env?.USERPROFILE).toBe(request.env?.HOME);
       // No ambient credentials leak into the child environment.
       expect(Object.keys(request.env ?? {}).sort()).toEqual(
-        ['HOME', 'LANG', 'PATH', 'PI_CODING_AGENT_DIR', 'PI_SKIP_VERSION_CHECK', PI_CREDENTIAL_ENV_NAME].sort(),
+        ['HOME', 'USERPROFILE', 'LANG', 'PATH', 'PI_CODING_AGENT_DIR', 'PI_SKIP_VERSION_CHECK', PI_CREDENTIAL_ENV_NAME].sort(),
       );
     } finally {
       await settings.cleanup();
@@ -815,6 +816,35 @@ describe('extractPiAssistantText', () => {
     } finally {
       await settings.cleanup();
     }
+  });
+
+  it('retains native tool calls across an adapter-managed transient retry', async () => {
+    const settings = await createSettings();
+    try {
+      const tool = (id: string) => JSON.stringify({ type: 'tool_execution_end', toolName: 'mcp__extra__ping', toolCallId: id, isError: false });
+      /** Produce a completed assistant event so a later failure can test that partial output is not accepted. */
+      const turn = (text: string) => JSON.stringify({ type: 'turn_end', message: { role: 'assistant', content: [{ type: 'text', text }], stopReason: 'stop', usage: { input: 10, output: text === '' ? 0 : 2 } } });
+      const spawner = new SequenceSpawner([{ code: 0, stdout: tool('one') + '\n' + turn('') }, { code: 0, stdout: tool('two') + '\n' + turn('done') }]);
+      const executor = createPiExecutor({ spawner, transientRetries: 1,
+        native: { directory: settings.workDirectory, environment: { HOME: settings.workDirectory } } });
+      const run = await executor.execute(await executor.prepare(settings), { system: 'SYS', user: 'USER' });
+      expect(run.status).toBe('succeeded');
+      expect(spawner.requests).toHaveLength(2);
+      expect(run.telemetry?.tools?.calls).toEqual([{ name: 'mcp__extra__ping', started: 2, succeeded: 2, failed: 0 }]);
+    } finally { await settings.cleanup(); }
+  });
+
+  it('does not enable native Pi authentication when auth is deliberately absent', async () => {
+    const settings = await createSettings({ credential: undefined });
+    try {
+      const spawner = new RecordingSpawner(); spawner.script('', 0);
+      const executor = createPiExecutor({ spawner, transientRetries: 0,
+        native: { directory: settings.workDirectory, environment: { HOME: settings.workDirectory } } });
+      await executor.execute(await executor.prepare(settings), { system: 'SYS', user: 'USER' });
+      const extension = await readFile(spawner.requests[0]!.args.at(-1)!, 'utf8');
+      expect(extension).toContain('"authenticated":false');
+      expect(extension).toContain('authHeader: config.authenticated');
+    } finally { await settings.cleanup(); }
   });
 
   it('caps the streamed text and reports truncation', async () => {

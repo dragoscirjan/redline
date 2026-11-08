@@ -15,6 +15,14 @@ Docker selects the matching architecture. Browse available versions on [GitHub P
 
 The image runs Redline itself and includes Node, Bun, Python, Pi, OpenCode and the requested MCP packages. Redline does not start containers, and no Docker daemon or socket is needed inside the image. The bundled GitNexus package uses the PolyForm Noncommercial license; check its terms before use.
 
+## Native configuration in current source
+
+Current source builds use Docker as the execution isolation boundary and run native Pi/OpenCode configuration. This is not the published 1.2.2 behavior. The image seeds standard global MCP configuration for CGC, GitNexus, context-mode and sequential-thinking only when no supplied global configuration exists. Project-local configuration loads normally, and additional configured MCPs and plugins remain enabled. Redline does not impose its isolated Actions MCP allowlist here.
+
+Host configuration and credentials are not mounted automatically. Supply them explicitly when needed, and use commands and paths that exist inside the image. Configured tools can access the container's network and permitted mounts. Docker hardening is separate follow-up work; the current GitHub Action has not migrated to this image.
+
+A bounded native model warmup discovers tools and prepares/queries captured-head indexes before file work, printing warnings immediately and saving `reviews/warmup.json`. Its two-minute ceiling and 4,096-token response cap consume the existing run budget. Native tool observations, including warmup calls, are in `reviews/native-tools.json`. Server connection, an indexed repository and a successful tool call are different states. Precomputed `--indexing` coverage does not determine which native MCPs are enabled. A connected graph server can still have no index. Prepare native indexes using the provider's own tooling and storage rules; a read-only repository mount cannot accept repository-local index writes. The precomputed Redline context does not populate native MCP graphs.
+
 ## Review a repository
 
 Open a terminal in the checkout you want to review as your regular, non-root user. Keep cache and output directories outside that checkout.
@@ -55,7 +63,7 @@ This reviews staged and unstaged tracked changes against `HEAD`. Use `--harness 
 
 The command maps your non-root host UID/GID so Git ownership and writable mounts work without permission changes. The image defaults to UID/GID10001. With named volumes, make sure your chosen runtime user can write them.
 
-Only reviewed data is mounted at `/repository`; it is read-only. Redline never executes repository scripts, tests, builds, installers or hooks. Generated configuration and captured snapshots live in container scratch/output directories. Review reasoning, retries and finding validation use the same engine as the npm CLI.
+The example mounts reviewed data read-only at `/repository`. Published 1.2.2 keeps model tools disabled. Current source instead permits native configured tools and plugins inside the container; their access follows the mounts and permissions you supply. Private request files and captured snapshots remain in container scratch/output directories. Review deadlines and finding validation use the shared engine.
 
 ## Read the results
 
@@ -68,10 +76,12 @@ Review suggestions before acting on them. No findings with failed or omitted req
 
 ## Persistent caches and GitHub Actions
 
-`/cache` and `/output` are declared volumes. `XDG_CACHE_HOME=/cache` directs both
+`/cache` and `/output` are declared volumes. `XDG_CACHE_HOME=/cache` directs precomputed
 CGC and GitNexus retained index data to `/cache/redline/indexes/v1`, separate from
 per-run state and model credentials. Entries remain keyed by repository/base,
 provider/version, platform and index configuration, with validation before reuse.
+
+Current CGC/GitNexus native MCP defaults use separate provider-managed state under `/cache/redline/native`. This is not the snapshot-validated precomputed index cache, and its availability does not prove source coverage.
 
 Bind a host directory to `/cache` to retain data across containers. GitHub Actions
 can restore/save that host directory with `actions/cache`. The Docker CI workflow
@@ -125,7 +135,16 @@ docker build --file containers/Dockerfile --tag redline:dev .
 docker run --rm redline:dev --help
 ```
 
-To use your local build, substitute `redline:dev` for the published image in the review command. The entrypoint is `node /opt/redline/bin/redline.mjs`; Redline has no `--isolation` or `--container-image` flags.
+To use your local build, substitute `redline:dev` for the published image in the review command. Published 1.2.2 starts `node /opt/redline/bin/redline.mjs` directly. Current source first seeds missing native MCP configuration and then executes that same Redline command. Redline has no `--isolation` or `--container-image` flags.
+
+For a linked worktree, its `.git` file points outside the branch folder. Mount the branch folder and its common Git directory read-only at their original absolute paths, and pass the branch path to `--repository`. The development script handles these mounts while retaining native checkout-local configuration:
+
+```bash
+bash ./test-cli.sh both
+bash ./test-cli.sh --docker both
+```
+
+The script logs the combined terminal stream with `tee`, preserves failures, and writes artifacts outside the reviewed checkout. Set `REDLINE_INDEXING=enabled` to add the independent precomputed context step; its default is disabled for this MCP-focused test.
 
 The pinned runtimes are Node24.21.0, Bun1.4.4 and Python3.12. Pi1.4.0,
 OpenCode1.18.34, CGC0.5.7, GitNexus1.6.12, context-mode1.0.169 and
@@ -133,9 +152,17 @@ sequential-thinking2.0.0 are installed during the trusted image build.
 The pinned tree-sitter parser and grammars are built from source with C++20 for
 Node24, because their Linux ARM64 prebuilds are missing or mislabeled. Only these
 packages receive build approval; general install scripts and esbuild remain
-disabled. Compilers are removed afterward, and nothing compiles during a review.
+disabled. Compilers are removed afterward; Redline's parser setup does not compile during review. Native configured tools and plugins remain user-controlled.
 
-MCP packages are installed and their server startup is tested. Exposing the approved
-read-only MCP tools to the review LLM is still tracked in
-[issue #209](https://github.com/dragoscirjan/redline/issues/209). Installation alone
-does not enable model tool access.
+Current source lets the native harness connect configured servers rather than prebuilding a second bounded MCP graph or deciding availability from package-version probes. The image supplies native defaults; existing global and project configuration remains authoritative. Missing requested integrations warn without suppressing extra servers. Native tool-call evidence is in `reviews/native-tools.json`; `reviews/analysis-tools.json` and the [read-only bridge](/harness-executor#optional-read-only-analysis) describe isolated Actions only.
+
+CGC grammars are preloaded during the trusted image build from the pinned
+1.22.1 manifest, with platform-bundle checksum verification. The staged libraries
+retain checksum-pinned upstream grammar notices in `/opt/cgc-parsers/v1.22.1/NOTICE.txt`.
+Both native image
+jobs test real captured-source graph queries without network access. Missing
+parsers fail locally under the default parser configuration rather than triggering a download during review.
+
+The published 1.2.2 image used in the quick start predates this tool integration
+and keeps model tools disabled. Installing MCP packages alone does not enable
+model access in that older image.

@@ -38,6 +38,17 @@ function terminalLines(writes: readonly string[]) {
 }
 
 describe('terminal progress and finding cards', () => {
+  it('redacts credentials from optional-analysis diagnostics before terminal output', () => {
+    const lines: string[] = [];
+    const key = 'synthetic-analysis-credential';
+    const reporter = new CliReporter(line => lines.push(line), line => lines.push(line), key);
+    reporter.progress({ kind: 'analysis-status', integrations: [
+      { component: 'cgc', status: 'unusable', reason: 'upstream echoed ' + key, version: null, tools: [] },
+    ] });
+    expect(lines.join('\n')).toContain('Optional analysis: cgc unusable');
+    expect(lines.join('\n')).toContain('[redacted]');
+    expect(lines.join('\n')).not.toContain(key);
+  });
   it('keeps one physical review line through workload logging and retry rounds', async () => {
     const { report } = await reportFixture(); const writes: string[] = [];
     const reporter = new CliReporter(line => writes.push(line + '\n'), line => writes.push(line + '\n'), undefined, {

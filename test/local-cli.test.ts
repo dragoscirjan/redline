@@ -471,7 +471,8 @@ describe('local Git review CLI', () => {
   it.each([['none', 0], ['findings', 3], ['high', 0], ['critical', 0]])('applies finding exit policy %s to validated findings', async (policy, expected) => {
     const f = await fixture(); const bin = join(f.root, 'bin'); await mkdir(bin);
     const finding = reviewFinding({ evidence: 'export const value = 2;' });
-    const document = { version: 3, fileId: '000001', outcome: 'findings', findings: [finding] };
+    const document = { version: 3, fileId: '000001', outcome: 'findings', findings: [finding],
+      impactAnalysis: { status: 'checked', changedSymbols: ['value'], callers: [], summary: 'Synthetic source-only impact check.', limitation: '' } };
     const event = { type: 'turn_end', message: { role: 'assistant', content: [{ type: 'text', text: JSON.stringify(document) }], stopReason: 'stop' } };
     await writeFile(join(bin, 'pi'), `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(JSON.stringify(event) + '\n')});\n`); await chmod(join(bin, 'pi'), 0o755);
     const result = await f.run(['--harness', 'pi', '--provider', 'mock', '--endpoint', 'http://127.0.0.1:1/v1', '--model', 'fixture', '--auth', 'none',
@@ -481,6 +482,44 @@ describe('local Git review CLI', () => {
     expect(result.stdout).toContain('Reviewed change');
     expect(result.stdout).toContain('+export const value = 2;');
     expect(result.stdout).not.toContain('behavioralContract');
+  });
+
+  it('does not treat an ambient container marker as proof of isolation', async () => {
+    const f = await fixture();
+    const result = await f.run(['--harness', 'pi', '--provider', 'mock', '--endpoint', 'http://127.0.0.1:1/v1',
+      '--model', 'fixture', '--auth', 'none', '--output', f.root], { container: 'redline' });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('UNSANDBOXED NATIVE CLI');
+    expect(result.stderr).not.toContain('Docker is the execution isolation boundary');
+  });
+
+  it('runs a native Pi CLI whose version differs from its Node interpreter without a false version rejection', async () => {
+    const f = await fixture(); const bin = join(f.root, 'bin'); await mkdir(bin);
+    const invocations = join(f.root, 'pi-arguments.jsonl');
+    const document = { version: 4, fileId: '000001', outcome: 'clean', reason: 'Synthetic clean result.', findings: [], contextRequests: [],
+      impactAnalysis: { status: 'not-applicable', changedSymbols: [], callers: [], summary: 'Synthetic source-only review.', limitation: '' } };
+    const event = { type: 'turn_end', message: { role: 'assistant', content: [{ type: 'text', text: JSON.stringify(document) }], stopReason: 'stop' } };
+    await writeFile(join(bin, 'pi'), `#!${process.execPath}\nconst fs = require('node:fs'); fs.appendFileSync(${JSON.stringify(invocations)}, JSON.stringify(process.argv.slice(2)) + '\\n'); if (process.argv.includes('--version')) process.stdout.write('1.4.0\\n'); else process.stdout.write(${JSON.stringify(JSON.stringify(event) + '\n')});\n`, { mode: 0o755 });
+    const version = execaSync(process.execPath, [join(bin, 'pi'), '--version']).stdout;
+    expect(version).toBe('1.4.0');
+    expect(Number(process.versions.node.split('.')[0])).toBeGreaterThanOrEqual(24);
+    const result = await f.run(['--harness', 'pi', '--provider', 'mock', '--endpoint', 'http://127.0.0.1:1/v1',
+      '--model', 'fixture', '--auth', 'none', '--base', f.base, '--head', f.head], { PATH: bin + delimiter + process.env.PATH });
+    expect(result.code, result.stderr).toBe(0);
+    expect(JSON.parse(await readFile(join(result.output, 'reviews/000001.json'), 'utf8')).outcome).toBe('clean');
+    const args = (await readFile(invocations, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as string[]);
+    expect(args.slice(1).every(call => !call.includes('--version'))).toBe(true);
+    expect(args.length).toBeGreaterThan(1);
+  });
+
+  it('rejects a repository-local native indexer override before starting warmup', async () => {
+    const f = await fixture(); const bin = join(f.root, 'bin'); await mkdir(bin);
+    const marker = join(f.root, 'unexpected-harness-start');
+    await writeFile(join(bin, 'pi'), `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)}, 'started');\n`, { mode: 0o755 });
+    const result = await f.run(['--harness', 'pi', '--provider', 'mock', '--endpoint', 'http://127.0.0.1:1/v1', '--model', 'fixture', '--auth', 'none',
+      '--indexing', 'enabled', '--index-executable', join(f.repository, 'untrusted-indexer')], { PATH: bin + delimiter + process.env.PATH });
+    expect(result.code).toBe(1); expect(result.stderr).toContain('indexer executable must be outside');
+    expect(await readFile(marker, 'utf8').catch(() => null)).toBeNull();
   });
 
   it('cancels an active harness and records an incomplete local status', async () => {

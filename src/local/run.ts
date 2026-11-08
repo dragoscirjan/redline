@@ -6,7 +6,7 @@ import { ReviewApplication, executePreparedReview, type CompositeReporter, type 
 import { createHarnessExecutor } from '../harness-executor/registry.ts';
 import { GitRevisionSource } from './git-source.ts';
 import type { LocalOptions } from './options.ts';
-import { cancellableSpawner, harnessCommand, inside, LocalOperationError } from './process.ts';
+import { cancellableSpawner, nativeHarnessCommand, inside, LocalOperationError } from './process.ts';
 import { prepareLocalContext } from './context.ts';
 import { localReviewReuse } from './reuse.ts';
 import { terminalText } from './reporter.ts';
@@ -37,11 +37,21 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
   let failureKind: 'configuration' | 'revision' | 'model' = 'configuration';
   try {
     signal.throwIfAborted();
-    // Preflight harness availability before capture/output creation. Never search repository-local PATH entries.
-    const launch = options.environment.harness === 'echo' ? undefined
-      : await harnessCommand(options.environment.harness, env.PATH ?? '', options.repository);
+    // Invoke the installed CLI entry point, leaving its own runtime and configuration loading intact.
+    const native = options.environment.harness !== 'echo';
+    if (native) {
+      stderr('WARNING: UNSANDBOXED NATIVE CLI. Configured tools and plugins can execute commands, modify files, access the network and use available credentials. Use a container, VM or other isolation when needed.');
+    }
+    const launch = native ? await nativeHarnessCommand(options.environment.harness, env.PATH ?? '', options.repository) : undefined;
+    if (native && options.indexing.mode !== 'disabled' && options.indexing.executable !== undefined) {
+      const canonical = await realpath(options.indexing.executable).catch(() => undefined);
+      if (inside(options.repository, options.indexing.executable) || canonical !== undefined && inside(options.repository, canonical)) {
+        throw new LocalOperationError('indexer executable must be outside the reviewed repository');
+      }
+    }
     const executor = createHarnessExecutor(options.environment.harness, {
       ...(launch === undefined ? {} : { command: launch.command }), spawner: cancellableSpawner(signal, launch),
+      ...(native ? { native: { directory: options.repository, environment: env } } : {}),
     });
     if (options.output === undefined) {
       if (inside(options.repository, options.stateDirectory)) throw new LocalOperationError('default output must be outside the reviewed repository');
@@ -100,9 +110,15 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
     const application = new ReviewApplication({
       source: new GitRevisionSource(options, env, destination), reporter,
       prepareContext: async (capture, contextSignal) => {
-        reuse = await localReviewReuse(capture, options);
-        stderr(`Review reuse: ${options.reuse === 'disabled' ? 'disabled' : reuse === undefined ? 'unavailable' : 'enabled'}`);
+        // Native plugins and MCPs can use changing external data that a captured-source fingerprint cannot prove unchanged.
+        reuse = native ? undefined : await localReviewReuse(capture, options);
+        stderr(native ? 'Review reuse: disabled for native configuration and external tool data'
+          : `Review reuse: ${options.reuse === 'disabled' ? 'disabled' : reuse === undefined ? 'unavailable' : 'enabled'}`);
         if (options.indexing.mode === 'disabled') return undefined;
+        if (native && options.indexing.artifact === undefined) {
+          stderr(`Native indexing: ${options.indexing.provider}; installation checks and indexing will run in model warmup.`);
+          return undefined;
+        }
         reporter.progress({ kind: 'context-started', provider: options.indexing.artifact === undefined ? options.indexing.provider : 'imported' });
         const context = await prepareLocalContext(capture, options, env, destination, contextSignal,
           Math.max(1, options.environment.runTimeout.milliseconds - (performance.now() - start)));
@@ -128,7 +144,12 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
       },
     });
     failureKind = 'revision';
-    const result = await application.run({ environment: { ...options.environment, outputDirectory: destination } }, signal);
+    const result = await application.run({ environment: { ...options.environment, outputDirectory: destination,
+      ...(native && options.indexing.mode !== 'disabled' ? { nativeIndexing: { provider: options.indexing.provider,
+        required: options.indexing.mode === 'required',
+        ...(options.indexing.executable === undefined ? {} : { executable: options.indexing.executable }),
+      } } : {}),
+    } }, signal);
     const incomplete = result.summary.omittedFiles > 0 || ['incomplete', 'unavailable'].includes(result.review.coverage.files.status);
     let code = incomplete ? 1 : result.exitCode;
     if (code === 0 && options.failOn !== 'none') {

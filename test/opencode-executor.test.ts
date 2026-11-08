@@ -21,11 +21,13 @@ class RecordingSpawner implements ProcessSpawner {
   readonly requests: Array<{ command: string; args: string[]; stdin?: string | undefined;
     env?: Record<string, string | undefined> | undefined }> = [];
   #stdout = '';
+  #stderr = '';
   #code: number | null = 0;
   #waitMs = 0;
 
-  script(stdout: string, code: number | null): void {
+  script(stdout: string, code: number | null, stderr = ''): void {
     this.#stdout = stdout;
+    this.#stderr = stderr;
     this.#code = code;
   }
 
@@ -38,13 +40,13 @@ class RecordingSpawner implements ProcessSpawner {
     this.requests.push({ command: request.command, args: [...request.args], stdin: request.stdin, env: request.env });
     const encoder = new TextEncoder();
     const stdout = encoder.encode(this.#stdout);
-    const empty = encoder.encode('');
+    const stderr = encoder.encode(this.#stderr);
     return {
       stdout: (async function* () {
         yield stdout;
       })(),
       stderr: (async function* () {
-        yield empty;
+        yield stderr;
       })(),
       wait: async () => {
         if (this.#waitMs > 0) await new Promise((resolve) => setTimeout(resolve, this.#waitMs));
@@ -56,6 +58,29 @@ class RecordingSpawner implements ProcessSpawner {
 }
 
 describe('createOpenCodeExecutor', () => {
+  it.each(['stderr', 'event'] as const)('suppresses native configuration secrets in %s before streaming or returning diagnostics', async (channel) => {
+    const workDirectory = await mkdtemp(join(tmpdir(), 'redline-oc-native-secrets-'));
+    try {
+      const secret = 'unselected-inline-provider-credential';
+      const spawner = new RecordingSpawner();
+      const diagnostic = 'Config parse failed: ' + JSON.stringify({ provider: { other: { options: { apiKey: secret } } } });
+      spawner.script(channel === 'event' ? JSON.stringify({ type: 'error',
+        error: { data: { message: diagnostic, statusCode: 401 } } }) : '', 1, channel === 'stderr' ? diagnostic : '');
+      const executor = createOpenCodeExecutor({ spawner, native: { directory: workDirectory,
+        environment: { OPENCODE_CONFIG_CONTENT: JSON.stringify({ provider: { other: { options: { apiKey: secret } } } }) } } });
+      const prepared = await executor.prepare({ ...SETTINGS, workDirectory, retryOwnership: 'caller' });
+      const streamed: string[] = [];
+      const result = await executor.execute(prepared, { system: 'policy', user: 'fixture' }, {
+        onOutputLine: event => { streamed.push(event.line); },
+      });
+      expect(result.status).toBe('failed');
+      expect(JSON.stringify(result) + streamed.join('\n')).not.toContain(secret);
+      expect(result.diagnostic).toContain('suppressed');
+      expect(spawner.requests[0]?.env?.OPENCODE_CONFIG_CONTENT).toContain(secret);
+      if (channel === 'event') expect(result.failureScope).toBe('run');
+    } finally { await rm(workDirectory, { recursive: true, force: true }); }
+  });
+
   it.each([[503, true, 'file'], [401, false, 'run']] as const)('classifies caller-managed runtime HTTP %s errors without accepting partial text', async (statusCode, retryable, scope) => {
     const workDirectory = await mkdtemp(join(tmpdir(), 'redline-oc-failure-'));
     try {
@@ -127,9 +152,10 @@ describe('createOpenCodeExecutor', () => {
       expect(request.env?.XDG_DATA_HOME).toContain(join('opencode', 'invocation-'));
       expect(request.env?.XDG_STATE_HOME).toContain(join('opencode', 'invocation-'));
       expect(request.env?.HOME).toContain(join('opencode', 'invocation-'));
+      expect(request.env?.USERPROFILE).toBe(request.env?.HOME);
       // No ambient credentials leak into the child environment.
       expect(Object.keys(request.env ?? {}).sort()).toEqual(
-        ['HOME', 'LANG', 'OPENCODE_CONFIG', 'PATH', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME'].sort(),
+        ['HOME', 'USERPROFILE', 'LANG', 'OPENCODE_CONFIG', 'PATH', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME'].sort(),
       );
       expect(prepared.description).not.toContain('test-key');
     } finally {

@@ -6,13 +6,19 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { reviewFinding } from './helpers/finding.ts';
+import { prepareCompiledTool } from './helpers/compiled-tool.ts';
 
 const exec = promisify(execFile);
 const enabled = process.env.REDLINE_NATIVE_CLI_TESTS === '1';
 const containerEnabled = process.env.REDLINE_NATIVE_CONTAINER_TESTS === '1';
 const packageRoot = fileURLToPath(new URL('..', import.meta.url));
+let tool: Awaited<ReturnType<typeof prepareCompiledTool>> | undefined;
+beforeAll(async () => {
+  if (enabled || containerEnabled) tool = await prepareCompiledTool();
+}, 60_000);
+afterAll(async () => { await tool?.close(); }, 60_000);
 const key = 'synthetic-native-cli-key-do-not-persist';
 const toolNames = ['global_ping', 'local_ping', 'extra_ping'];
 interface ModelBody {
@@ -52,6 +58,8 @@ function stream(response: ServerResponse, delta: unknown, stop: string) {
   response.end('data: [DONE]\n\n');
 }
 async function fixture(graph: 'failed' | 'missing' | 'ready' | 'deferred' | 'needs-choice' | 'lying' | 'codemode-ready' = 'failed') {
+  if (tool === undefined) throw new Error('Compiled native CLI fixture is unavailable');
+  const driver = tool.driver;
   const graphConfigured = ['ready', 'needs-choice', 'lying', 'codemode-ready'].includes(graph);
   const root = await mkdtemp(join(tmpdir(), 'redline-native-cli-'));
   const repo = join(root, 'repo'), home = join(root, 'home'), output = join(root, 'output');
@@ -193,7 +201,7 @@ async function fixture(graph: 'failed' | 'missing' | 'ready' | 'deferred' | 'nee
   const ocServer = (tool: string) => ({ type: 'remote', url: endpoint + '/mcp/' + tool });
   await writeFile(join(home, '.config/opencode/opencode.json'), JSON.stringify({ $schema: 'https://opencode.ai/config.json', mcp: { global_fixture: ocServer('global_ping'), ...(graphConfigured ? { cgc: ocServer('cgc') } : graph === 'failed' ? { cgc: { type: 'local', command: ['/redline-synthetic-missing-mcp'], enabled: true } } : {}) } }));
   await writeFile(join(repo, 'opencode.json'), JSON.stringify({ $schema: 'https://opencode.ai/config.json', mcp: { local_fixture: ocServer('local_ping'), extra_fixture: ocServer('extra_ping') } }));
-  return { root, repo, home, output, env, endpoint, base, requests, calls, graphCalls, get graphSessions() { return graphSessions; },
+  return { root, repo, home, output, driver, env, endpoint, base, requests, calls, graphCalls, get graphSessions() { return graphSessions; },
     async close() { await new Promise<void>(resolve => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); } };
 }
 
@@ -202,7 +210,7 @@ describe.runIf(enabled)('native warmup with a non-cooperative model', () => {
     it(harness + ' ' + graph + ' cannot claim completed indexing without execution', async () => {
       const f = await fixture(graph);
       try {
-        const child = spawn('bash', [join(packageRoot, 'test-cli.sh'), harness], { cwd: f.repo, env: { ...f.env,
+        const child = spawn('bash', [f.driver, harness], { cwd: f.repo, env: { ...f.env,
           TEST_NODE: process.execPath, TEST_LOG_DIR: join(f.root, 'logs'), TEST_OUTPUT_DIR: f.output,
           REDLINE_PROVIDER: 'openrouter', REDLINE_ENDPOINT: f.endpoint + '/v1', REDLINE_MODEL: 'test-model', REDLINE_BASE: f.base,
           REDLINE_INDEXING: 'enabled', REDLINE_INDEXING_PROVIDER: 'cgc', REDLINE_RETRIES: '0', REDLINE_REVIEW_CONCURRENCY: '1',
@@ -214,7 +222,9 @@ describe.runIf(enabled)('native warmup with a non-cooperative model', () => {
           const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('warmup contract timeout')); }, 70000);
           child.once('error', error => { clearTimeout(timer); reject(error); }); child.once('exit', code => { clearTimeout(timer); resolve(code); });
         });
-        const output = join(f.output, (await readdir(f.output))[0]!);
+        const outputDirectories = await readdir(f.output);
+        expect(outputDirectories, text).toHaveLength(1);
+        const output = join(f.output, outputDirectories[0]!);
         const warmup = JSON.parse(await readFile(join(output, 'reviews/warmup.json'), 'utf8'));
         const indexer = warmup.integrations.find((row: { category: string }) => row.category === 'indexer');
         expect(text).not.toContain('Preparing cgc context');
@@ -243,7 +253,7 @@ describe.runIf(runtime === 'cli' ? enabled : containerEnabled)('full native ' + 
           join(f.repo, '.pi/mcp.json'), join(f.repo, 'opencode.json'),
         ];
         const before = await Promise.all(configuredFiles.map(path => readFile(path, 'utf8')));
-        const command = ['bash', join(packageRoot, 'test-cli.sh'), ...(runtime === 'docker' ? ['--docker'] : []), harness];
+        const command = ['bash', f.driver, ...(runtime === 'docker' ? ['--docker'] : []), harness];
         const child = spawn(tty ? 'python3' : command[0]!, tty ? [join(packageRoot, 'test/fixtures/pty-run.py'), ...command] : command.slice(1),
         { cwd: f.repo, env: { ...f.env, TERM: 'xterm-256color', TEST_NODE: process.execPath,
           TEST_LOG_DIR: join(f.root, 'logs'), TEST_OUTPUT_DIR: f.output,

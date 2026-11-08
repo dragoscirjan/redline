@@ -61,6 +61,22 @@ describe('captured-source MCP permissions', () => {
       await expect(authorizeAnalysisCall('context-mode', 'ctx_search', args, captured)).rejects.toThrow();
     }
   });
+  it('pins allowed graph tool arguments and their resource limits', async () => {
+    const captured = { ...await scope(), files: ['src/value.ts'] };
+    expect(await authorizeAnalysisCall('gitnexus', 'query', { search_query: 'value' }, captured)).toEqual({
+      search_query: 'value', limit: 5, max_symbols: 10, maxTokens: 2000, include_content: false,
+    });
+    expect(await authorizeAnalysisCall('gitnexus', 'context', { name: 'value', file_path: 'src/value.ts' }, captured)).toEqual({
+      name: 'value', file_path: 'src/value.ts', include_content: false, maxTokens: 2000,
+    });
+    expect(await authorizeAnalysisCall('gitnexus', 'impact', { target: 'value', direction: 'upstream', maxDepth: 3 }, captured)).toEqual({
+      target: 'value', direction: 'upstream', maxDepth: 3, crossDepth: 0, mode: 'callgraph', limit: 20, maxTokens: 2000, timeoutMs: 3000,
+    });
+    expect(await authorizeAnalysisCall('cgc', 'analyze_code_relationships', { query_type: 'find_callers', target: 'value', context: 'value' }, captured)).toEqual({
+      query_type: 'find_callers', target: 'value', repo_path: captured.graphSource, depth: 2, context: 'value',
+    });
+    await expect(authorizeAnalysisCall('gitnexus', 'impact', { target: 'value', direction: 'upstream', maxDepth: 4 }, captured)).rejects.toThrow();
+  });
   it('binds graph queries to the captured repository, not model-selected state', async () => {
     const captured = await scope();
     expect(await authorizeAnalysisCall('cgc', 'find_code', { query: 'value' }, captured))

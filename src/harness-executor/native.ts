@@ -4,7 +4,6 @@ import type { HarnessName } from './types.ts';
 export interface NativeHarnessContext {
   readonly directory: string;
   readonly environment: Readonly<NodeJS.ProcessEnv>;
-  readonly container?: boolean;
 }
 export interface NativeToolCall {
   readonly name: string;
@@ -31,6 +30,7 @@ export function nativeEnvironment(environment: Readonly<NodeJS.ProcessEnv>): Nod
   return Object.fromEntries(Object.entries(environment).filter(([key, value]) => !key.startsWith('REDLINE_')
     && (publicationToken === undefined || value !== publicationToken)));
 }
+/** Merge bounded catalogues, server observations, and call counts without promoting visibility into successful execution. */
 export function mergeNativeToolEvidence(items: readonly NativeToolEvidence[]): NativeToolEvidence {
   const servers = new Map<string, NativeServerObservation>();
   let truncated = items.some(item => item.truncated);
@@ -74,9 +74,11 @@ export function nativeRequestedTools(evidence: NativeToolEvidence) {
   });
 }
 
+/** Ignore non-record native events before reading bounded observation metadata. */
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
+/** Restrict persisted native tool identifiers to a bounded printable alphabet. */
 function name(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_.:/-]{1,160}$/u.test(value);
 }
@@ -115,6 +117,7 @@ export function nativeToolEvidence(stdout: string, harness: HarnessName, capture
     const tool = isPi ? event['toolName'] : part?.['tool'];
     const id = isPi ? event['toolCallId'] : part?.['callID'] ?? part?.['id'];
     if (!name(tool) || typeof id !== 'string' || id.length > 256 || /\p{Cc}/u.test(id)) continue;
+    /** Bound the observed catalogue and flag truncation instead of retaining unlimited native metadata. */
     addName(tool);
     if (!calls.has(id)) {
       if (calls.size >= 512) { truncated = true; continue; }

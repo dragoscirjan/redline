@@ -228,6 +228,7 @@ function notStartedRecord(environment: ReviewEnvironment, context: LoadedReviewC
     errorKind: 'harness-failed', execution: 'not-started' };
 }
 
+/** Run bounded file attempts and follow-ups, accepting findings only after authoritative source and diff validation. */
 async function reviewOneFile(
   executor: HarnessExecutor,
   prepared: Awaited<ReturnType<HarnessExecutor['prepare']>>,

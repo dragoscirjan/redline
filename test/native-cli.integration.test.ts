@@ -31,6 +31,7 @@ interface ModelBody {
   readonly tools?: readonly { function: { name: string } }[];
   readonly messages?: readonly { role: string; content: unknown }[];
 }
+/** Bound synthetic HTTP request bodies before parsing fixture JSON. */
 async function body(request: IncomingMessage): Promise<Record<string, unknown>> {
   let text = '';
   for await (const chunk of request) { text += String(chunk); if (text.length > 2_000_000) throw new Error('oversized synthetic request'); }
@@ -39,6 +40,7 @@ async function body(request: IncomingMessage): Promise<Record<string, unknown>> 
 function json(response: ServerResponse, data: unknown, status = 200) {
   response.writeHead(status, { 'content-type': 'application/json' }); response.end(JSON.stringify(data));
 }
+/** Recognize the explicit warmup user payload without confusing length-delimited file-review data with setup instructions. */
 function warmupTarget(model: ModelBody): { head: string; sourceDirectory: string; indexingProvider: 'cgc' | 'gitnexus' | null } | undefined {
   for (const message of model.messages ?? []) {
     if (message.role !== 'user') continue;
@@ -57,7 +59,8 @@ function stream(response: ServerResponse, delta: unknown, stop: string) {
   response.write('data: ' + JSON.stringify({ id: 'native-response', object: 'chat.completion.chunk', model: 'test-model', choices: [{ index: 0, delta: {}, finish_reason: stop }], usage: { prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 } }) + '\n\n');
   response.end('data: [DONE]\n\n');
 }
-async function fixture(graph: 'failed' | 'missing' | 'ready' | 'deferred' | 'needs-choice' | 'lying' | 'codemode-ready' = 'failed') {
+/** Isolate synthetic Git history, native configuration, credentials, and loopback MCP/model endpoints; the caller owns teardown. */
+async function fixture(graph: 'failed' | 'missing' | 'ready' | 'deferred' | 'needs-choice' | 'lying' | 'codemode-ready' | 'unprobed-missing' = 'failed') {
   if (tool === undefined) throw new Error('Compiled native CLI fixture is unavailable');
   const driver = tool.driver;
   const graphConfigured = ['ready', 'needs-choice', 'lying', 'codemode-ready'].includes(graph);
@@ -142,7 +145,7 @@ async function fixture(graph: 'failed' | 'missing' | 'ready' | 'deferred' | 'nee
         }
         const ready = graphConfigured;
         const probe = model.tools?.find(tool => tool.function.name.endsWith('probe_indexer'))?.function.name;
-        if (!ready && resultCount < (graph === 'deferred' ? 2 : 1)) {
+        if (!ready && graph !== 'unprobed-missing' && resultCount < (graph === 'deferred' ? 2 : 1)) {
           if (probe === undefined) throw new Error('synthetic installation probe missing');
           stream(response, { role: 'assistant', tool_calls: [{ index: 0, id: 'warmup-probe', type: 'function', function: { name: probe, arguments: '{}' } }] }, 'tool_calls');
           return;
@@ -153,7 +156,7 @@ async function fixture(graph: 'failed' | 'missing' | 'ready' | 'deferred' | 'nee
           ...(indexingProvider === null ? [] : [{ component: indexingProvider, availability: ready ? 'available' : 'unavailable',
             tools: ready ? [index, query] : graph === 'deferred' ? ['mcp__codeindex_gitnexus__query'] : [],
             indexStatus: ready ? 'ready' : 'unavailable', indexedFiles: ready ? graph === 'lying' ? 120 : 1 : null,
-            persistence: ready ? 'shared' : 'unknown', probeTool: ready ? index : probe, indexTool: ready ? index : null,
+            persistence: ready ? 'shared' : 'unknown', probeTool: graph === 'unprobed-missing' ? null : ready ? index : probe, indexTool: ready ? index : null,
             queryTool: ready ? query : null, reason: ready ? 'Captured source indexed and queried.' : 'No usable indexer installed in this synthetic configuration.' }]),
         ] };
         stream(response, { role: 'assistant', content: JSON.stringify(report) }, 'stop'); return;
@@ -206,7 +209,35 @@ async function fixture(graph: 'failed' | 'missing' | 'ready' | 'deferred' | 'nee
 }
 
 describe.runIf(enabled)('native warmup with a non-cooperative model', () => {
-  for (const { harness, graph } of [{ harness: 'pi', graph: 'needs-choice' }, { harness: 'pi', graph: 'lying' }, { harness: 'opencode', graph: 'lying' }] as const) {
+  it('opencode configuration parse failures never expose unselected inline credentials in Redline logs or artifacts', async () => {
+    const f = await fixture();
+    try {
+      const selected = 'native"selected-key';
+      const unselected = 'private-unselected-inline-key';
+      const child = spawn('bash', [f.driver, 'opencode'], { cwd: f.repo, env: { ...f.env,
+        TEST_NODE: process.execPath, TEST_LOG_DIR: join(f.root, 'logs'), TEST_OUTPUT_DIR: f.output,
+        REDLINE_PROVIDER: 'openrouter', REDLINE_ENDPOINT: f.endpoint + '/v1', REDLINE_MODEL: 'test-model', REDLINE_BASE: f.base,
+        REDLINE_MODEL_AUTH: JSON.stringify({ openrouter: selected }), REDLINE_RETRIES: '0', REDLINE_INDEXING: 'disabled',
+        OPENCODE_CONFIG_CONTENT: JSON.stringify({ provider: { other: { options: { apiKey: unselected } } } }),
+      }, stdio: ['ignore', 'pipe', 'pipe'] });
+      let output = ''; child.stdout.on('data', b => { output += String(b); }); child.stderr.on('data', b => { output += String(b); });
+      const code = await new Promise<number | null>((resolve, reject) => {
+        const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('native configuration diagnostic timeout')); }, 70_000);
+        child.once('error', error => { clearTimeout(timer); reject(error); });
+        child.once('exit', code => { clearTimeout(timer); resolve(code); });
+      });
+      expect(code).not.toBe(0); expect(f.requests).toEqual([]);
+      for (const directory of [f.output, join(f.root, 'logs')]) {
+        const files = await readdir(directory, { recursive: true, withFileTypes: true });
+        output += (await Promise.all(files.filter(file => file.isFile()).map(file => readFile(join(file.parentPath, file.name), 'utf8')))).join('\n');
+      }
+      expect(output).toContain('diagnostic suppressed');
+      expect(output).not.toContain(selected); expect(output).not.toContain(unselected);
+    } finally { await f.close(); }
+  }, 80_000);
+
+  for (const { harness, graph } of [{ harness: 'pi', graph: 'needs-choice' }, { harness: 'pi', graph: 'lying' }, { harness: 'opencode', graph: 'lying' },
+    { harness: 'pi', graph: 'unprobed-missing' }, { harness: 'opencode', graph: 'unprobed-missing' }] as const) {
     it(harness + ' ' + graph + ' cannot claim completed indexing without execution', async () => {
       const f = await fixture(graph);
       try {
@@ -232,6 +263,13 @@ describe.runIf(enabled)('native warmup with a non-cooperative model', () => {
           expect(code, text).toBe(1); expect(warmup.status).toBe('incomplete'); expect(warmup.fatal).toBe(true);
           expect(indexer.indexedFiles).toBeNull(); expect(warmup.tools.calls).toEqual([]); expect(f.graphCalls).toEqual([]);
           expect(f.requests.filter(request => warmupTarget(request) === undefined)).toHaveLength(0);
+        } else if (graph === 'unprobed-missing') {
+          expect(code, text).toBe(0); expect(warmup.status).toBe('incomplete'); expect(warmup.fatal).toBe(false);
+          expect(indexer.indexStatus).toBe('unverified'); expect(indexer.indexedFiles).toBeNull();
+          expect(indexer.probeObserved).toBe(false); expect(indexer.indexAttempted).toBe(false);
+          expect(warmup.tools.calls).toEqual([]); expect(f.graphCalls).toEqual([]);
+          expect(f.requests.filter(request => warmupTarget(request) === undefined).length).toBeGreaterThan(0);
+          expect(text).toContain('file-only guidance');
         } else {
           expect(code, text).toBe(0); expect(indexer.indexStatus).toBe('reported-ready');
           expect(f.graphCalls).toEqual(['cgc_index', 'cgc_query', 'cgc_query']);
@@ -274,7 +312,8 @@ describe.runIf(runtime === 'cli' ? enabled : containerEnabled)('full native ' + 
         });
         expect(code, stdout + '\n' + stderr).toBe(0);
         expect(stdout.includes('\u001b[2K')).toBe(tty);
-        expect(stdout).toContain(runtime === 'cli' ? 'UNSANDBOXED NATIVE CLI' : 'Docker is the execution isolation boundary');
+        expect(stdout).toContain('UNSANDBOXED NATIVE CLI');
+        expect(stdout).not.toContain('Docker is the execution isolation boundary');
         const logFiles = await readdir(join(f.root, 'logs'));
         expect(logFiles).toHaveLength(1);
         expect(await readFile(join(f.root, 'logs', logFiles[0]!), 'utf8')).toBe(stdout);

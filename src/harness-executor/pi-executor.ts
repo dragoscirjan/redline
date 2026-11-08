@@ -476,6 +476,7 @@ function noAssistantTextDiagnostic(
   return JSON.stringify({ ...diagnostic, events: [], parts: [] });
 }
 
+/** Accept only completed assistant output and project bounded failure, usage, retry, and native tool evidence into the harness result. */
 function toHarnessRun(
   result: BoundedRunResult,
   timeToFirstTextMs: number | null,
@@ -579,12 +580,14 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+/** Construct a Pi executor with injected launch dependencies while keeping native and isolated configuration paths distinct. */
 export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecutor {
   const command = options.command ?? 'pi';
   const spawner = options.spawner ?? nodeProcessSpawner;
   const policy = validatePolicy(options);
   return {
     harness: 'pi',
+    /** Validate model controls and prepare native settings or isolated agent configuration without executing repository code. */
     async prepare(settings: HarnessSettings): Promise<PreparedPi> {
       if (settings.modelProtocol === 'openrouter-json' && settings.model.provider !== 'openrouter') {
         throw new Error('openrouter-json requires the openrouter provider');
@@ -642,6 +645,7 @@ export function createPiExecutor(options: PiExecutorOptions = {}): HarnessExecut
         maxOutputTokens: effectivePolicy.maxOutputTokens,
       });
     },
+    /** Bound each invocation and retry by the shared deadline, preserve prompt argument boundaries, and redact bounded live output. */
     async execute(prepared: PreparedHarness, prompt: HarnessPrompt, options?: HarnessExecuteOptions): Promise<HarnessRun> {
       const state = prepared as PreparedPi;
       const totalTimeoutMs = options?.timeoutMs ?? state.timeoutMs;

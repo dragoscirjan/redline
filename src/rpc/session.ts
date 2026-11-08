@@ -144,6 +144,7 @@ export class Session {
     }).catch(() => this.stop());
     return descriptor(job);
   }
+  /** Project only protocol-approved progress metadata, track required-file completion, and coalesce notifications without copying source or arbitrary fields. */
   private progress(job: Job, event: ReviewEvent): void {
     if (terminal(job)) return;
     // Availability is persisted in analysis-tools.json. Keep the v1 progress

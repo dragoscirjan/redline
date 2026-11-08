@@ -12,10 +12,12 @@ const roots: string[] = [];
 const containers: { name: string; env: NodeJS.ProcessEnv }[] = [];
 const children: ChildProcess[] = [];
 const key = 'synthetic-container-model-key-do-not-persist';
+/** Mount the selected tool checkout read-only when explicitly requested by the container test. */
 function runtimeMount(): string[] {
   const source = process.env.REDLINE_CONTAINER_RUNTIME;
   return source === undefined ? [] : ['--mount', 'type=bind,src=' + source + ',dst=/opt/redline,readonly'];
 }
+/** Require an explicit prebuilt fixture image rather than silently pulling or selecting another image. */
 function image(): string {
   const value = process.env.REDLINE_CONTAINER_IMAGE;
   if (value === undefined) throw new Error('Set REDLINE_CONTAINER_IMAGE to test the Redline image');
@@ -111,6 +113,7 @@ async function fixture(mode = 'finding') {
   const address = docker(['inspect', '--format', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', model], env);
   const common = ['--repository', '/repository', '--base', base, '--head', 'HEAD', '--indexing', 'disabled', '--reuse', 'disabled',
     '--provider', 'openrouter', '--endpoint', 'http://' + address + ':3000/v1', '--model', 'test-model', '--max-output-tokens', '4096', '--retries', '0'];
+  /** Construct isolated fixture mounts and runtime arguments without changing the checkout. */
   function runArgs() {
     return ['run', '--rm', '--name', named(env), ...profile, '--user', String(process.getuid?.() ?? 10001) + ':' + String(process.getgid?.() ?? 10001),
       '--mount', 'type=bind,src=' + repository + ',dst=/repository,readonly',

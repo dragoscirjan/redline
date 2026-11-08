@@ -28,10 +28,12 @@ interface RuntimeSdk {
   readonly ListToolsRequestSchema: unknown;
   readonly CallToolRequestSchema: unknown;
 }
+/** Reject malformed MCP records before reading upstream payload fields. */
 function record(value: unknown): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid MCP record');
   return value as Record<string, unknown>;
 }
+/** Load fixed trusted SDK modules and verify the required runtime exports before use. */
 async function sdk(paths: AnalysisSdk): Promise<RuntimeSdk> {
   const modules: unknown[] = await Promise.all([paths.client, paths.clientTransport, paths.server, paths.serverTransport, paths.types]
     .map(path => import(pathToFileURL(path).href)));
@@ -43,6 +45,7 @@ async function sdk(paths: AnalysisSdk): Promise<RuntimeSdk> {
   // Fixed exports from an already-installed trusted 1.x SDK; model data never selects this module.
   return merged as unknown as RuntimeSdk;
 }
+/** Connect an optional backend under its constructed environment and deadline; discard stderr and close failed clients. */
 async function connect(runtime: RuntimeSdk, backend: AnalysisBackend): Promise<Client> {
   const client = new runtime.Client({ name: 'redline-readonly-analysis', version: '1.0.0' }, { capabilities: {} });
   const transport = new runtime.StdioClientTransport({ command: backend.command, args: [...backend.args],
@@ -52,6 +55,7 @@ async function connect(runtime: RuntimeSdk, backend: AnalysisBackend): Promise<C
   try { await client.connect(transport, { timeout: backend.component === 'cgc' ? 8000 : 5000 }); return client; }
   catch (error) { await client.close().catch(() => undefined); throw error; }
 }
+/** Keep bounded text-only upstream content and replace dependency errors with controller-owned fallback guidance. */
 function result(value: unknown): { content: { type: 'text'; text: string }[]; isError?: boolean } {
   const row = record(value);
   if (row['isError'] === true) return { content: [{ type: 'text', text: 'Optional analysis dependency could not answer this scoped request. Continue with the captured review context.' }], isError: true };
@@ -61,10 +65,12 @@ function result(value: unknown): { content: { type: 'text'; text: string }[]; is
   }).join('\n');
   return { content: [{ type: 'text', text: Buffer.from(text, 'utf8').subarray(0, 16 * 1024).toString('utf8') }] };
 }
+/** Expose authorized tools only after readiness checks, without publishing backend launch configuration. */
 function status(backend: AnalysisBackend, state: IntegrationStatus['status'], reason: string): IntegrationStatus {
   return { component: backend.component, status: state, reason, version: backend.version,
     tools: state === 'ready' ? analysisTools(backend.component).map(tool => tool.name) : [] };
 }
+/** Copy only authorized captured code into a bounded graph mirror, excluding configuration and credential paths. */
 async function mirror(manifest: AnalysisManifest): Promise<number> {
   await mkdir(manifest.scope.graphSource, { recursive: true, mode: 0o700 });
   let bytes = 0, files = 0;
@@ -84,6 +90,7 @@ async function mirror(manifest: AnalysisManifest): Promise<number> {
   }
   return files;
 }
+/** Run the installed graph provider against the mirror under bounded subprocess limits and check the pinned CGC version. */
 async function index(backend: AnalysisBackend, manifest: AnalysisManifest): Promise<void> {
   if (backend.component !== 'cgc' && backend.component !== 'gitnexus') return;
   const args = backend.component === 'cgc' ? ['index', manifest.scope.graphSource, '--no-progress']
@@ -94,6 +101,7 @@ async function index(backend: AnalysisBackend, manifest: AnalysisManifest): Prom
   }
   await execute(backend.command, args, { env: backend.environment, cwd: backend.environment['HOME'], timeout: 12_000, maxBuffer: 64 * 1024 });
 }
+/** Verify optional backend indexing, catalogues, and queries; report sanitized failures and close every opened client. */
 async function probe(manifest: AnalysisManifest, runtime: RuntimeSdk): Promise<void> {
   const files = await mirror(manifest);
   await Promise.all(manifest.backends.map(async backend => {
@@ -151,6 +159,7 @@ async function probe(manifest: AnalysisManifest, runtime: RuntimeSdk): Promise<v
     }
   }
 }
+/** Authorize bounded captured-source requests before lazily connecting the optional upstream MCP backend. */
 async function serve(manifest: AnalysisManifest, component: AnalysisComponent, runtime: RuntimeSdk): Promise<void> {
   const backend = manifest.backends.find(item => item.component === component);
   if (backend === undefined) throw new Error('analysis backend not configured');
@@ -172,6 +181,7 @@ async function serve(manifest: AnalysisManifest, component: AnalysisComponent, r
     }
   });
   let closed = false;
+  /** Make signal and stdin cleanup idempotent and close both upstream and frontend connections. */
   const close = async (): Promise<void> => {
     if (closed) return; closed = true;
     await client?.then(value => value.close()).catch(() => undefined); await server.close().catch(() => undefined);

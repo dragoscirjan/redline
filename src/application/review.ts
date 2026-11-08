@@ -108,6 +108,7 @@ export interface ReviewApplicationDependencies {
 export class ReviewApplication {
   private readonly dependencies: ReviewApplicationDependencies;
   constructor(dependencies: ReviewApplicationDependencies) { this.dependencies = dependencies; }
+  /** Capture one revision snapshot, honor cancellation, and route validated review results through the selected reporters. */
   async run(command: ReviewCommand, signal: AbortSignal): Promise<ReviewRunResult> {
     const { source, reporter } = this.dependencies;
     await reporter.preflight();

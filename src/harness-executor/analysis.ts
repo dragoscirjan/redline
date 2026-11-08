@@ -60,10 +60,12 @@ export interface PreparedAnalysis {
 const versions = { 'context-mode': '1.0.169', gitnexus: '1.6.12', 'sequential-thinking': '2.0.0', cgc: '0.5.7' };
 const launcher = fileURLToPath(new URL('../../bin/redline-analysis.mjs', import.meta.url));
 const ownedSocketPaths = new Set<string>();
+/** Compare canonical path components without accepting similarly named sibling directories. */
 function inside(root: string, path: string): boolean {
   const value = relative(root, path);
   return value === '' || (!value.startsWith('..' + sep) && value !== '..' && !isAbsolute(value));
 }
+/** Reject both lexical and canonical paths inside reviewed roots; unavailable paths are not trusted dependency candidates. */
 async function permitted(path: string, blocked: readonly string[]): Promise<string | undefined> {
   if (blocked.some(root => inside(root, resolve(path)))) return undefined;
   try {
@@ -72,6 +74,7 @@ async function permitted(path: string, blocked: readonly string[]): Promise<stri
     return canonical;
   } catch { return undefined; }
 }
+/** Search absolute trusted PATH entries outside reviewed roots without invoking an installer. */
 async function executable(name: string, blocked: readonly string[]): Promise<string | undefined> {
   const suffixes = process.platform === 'win32' ? ['.exe', '.cmd', ''] : [''];
   for (const folder of (process.env.PATH ?? '').split(delimiter)) {
@@ -84,6 +87,7 @@ async function executable(name: string, blocked: readonly string[]): Promise<str
   }
   return undefined;
 }
+/** Read bounded installed-package metadata outside blocked roots and accept only the expected identity and a bounded version. */
 async function packageAt(roots: readonly string[], name: string, blocked: readonly string[]) {
   for (const root of roots) {
     const path = await permitted(join(root, name, 'package.json'), blocked);
@@ -98,6 +102,7 @@ async function packageAt(roots: readonly string[], name: string, blocked: readon
   }
   return undefined;
 }
+/** Resolve the fixed MCP SDK entrypoints from installed packages, rejecting any entry that resolves into reviewed source. */
 async function sdkAt(packages: readonly (string | undefined)[], blocked: readonly string[]): Promise<AnalysisSdk | undefined> {
   for (const path of packages) {
     if (path === undefined) continue;
@@ -143,6 +148,7 @@ export async function createAnalysisSocketPath(): Promise<string> {
   return path;
 }
 
+/** Resolve pinned optional dependencies and probe them against bounded captured source while retaining ownership of temporary sockets. */
 async function prepareChecked(request: AnalysisRequest | undefined, workDirectory: string, harness: 'pi' | 'opencode', harnessCommand: string, onSocketPath: (path: string) => void): Promise<PreparedAnalysis | undefined> {
   if (request === undefined) return undefined;
   const deadline = performance.now() + Math.max(0, Math.min(20_000, request.timeoutMs));
@@ -267,6 +273,7 @@ async function prepareChecked(request: AnalysisRequest | undefined, workDirector
     backends: ANALYSIS_COMPONENTS.filter(component => statuses.some(row => row.component === component && row.status === 'ready')) };
 }
 
+/** Contain optional setup failures, release any allocated socket, and return explicit unavailable integration coverage. */
 export async function prepareAnalysis(request: AnalysisRequest | undefined, workDirectory: string, harness: 'pi' | 'opencode', command: string): Promise<PreparedAnalysis | undefined> {
   let socketPath: string | undefined;
   try {
@@ -279,6 +286,7 @@ export async function prepareAnalysis(request: AnalysisRequest | undefined, work
   }
 }
 
+/** Generate harness-specific MCP launch configuration only for ready, controller-owned analysis backends. */
 export function integrationServers(analysis: PreparedAnalysis | undefined, harness: 'pi' | 'opencode'): Record<string, unknown> {
   return Object.fromEntries((analysis?.backends ?? []).map(component => {
     const value = analysis as PreparedAnalysis;
@@ -292,6 +300,7 @@ export function integrationServers(analysis: PreparedAnalysis | undefined, harne
   }));
 }
 
+/** Stop only sockets allocated by this controller and bound shutdown before removing their owned temporary directory. */
 async function disposeSocket(path: string | undefined): Promise<void> {
   if (path === undefined || !ownedSocketPaths.delete(path)) return;
   await new Promise<void>(done => {
@@ -308,6 +317,7 @@ export async function disposeAnalysis(analysis: PreparedAnalysis | undefined): P
   await disposeSocket(analysis?.cgcSocketPath);
 }
 
+/** Translate the ready backend allowlist into each harness's exact tool-name namespace. */
 export function integrationToolNames(analysis: PreparedAnalysis | undefined, harness: 'pi' | 'opencode'): string[] {
   return (analysis?.backends ?? []).flatMap(component => analysisTools(component).map(tool =>
     harness === 'pi' ? 'mcp__redline_' + component.replaceAll('-', '_') + '__' + tool.name

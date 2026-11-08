@@ -7,10 +7,12 @@ import { pathToFileURL } from 'node:url';
 export const CGC_GRAMMAR_VERSION = '1.22.1';
 export const CGC_GRAMMAR_MANIFEST_SHA256 = '94b201d924980c2d32b509796ecaf943898f8d13e3220c5dfcf1ba94890c10d8';
 export const CGC_GRAMMAR_IMAGE_DIRECTORY = '/opt/cgc-parsers/v' + CGC_GRAMMAR_VERSION;
+/** Compare path components so sibling prefixes and parent traversal cannot satisfy the blocked-root check. */
 function inside(root: string, path: string): boolean {
   const value = relative(root, path);
   return value === '' || (value !== '..' && !value.startsWith('..' + sep) && !isAbsolute(value));
 }
+/** Find preinstalled grammar libraries outside reviewed roots; reject unsafe ownership, permissions, links, and oversized libraries without downloading. */
 export async function locateCgcGrammars(blocked: readonly string[]): Promise<string | undefined> {
   const roots = await Promise.all(blocked.map(path => realpath(path).catch(() => resolve(path))));
   const base = process.env['TREE_SITTER_LANGUAGE_PACK_CACHE_DIR'] ?? process.env['XDG_CACHE_HOME'] ?? join(homedir(), '.cache');
@@ -39,6 +41,7 @@ export async function locateCgcGrammars(blocked: readonly string[]): Promise<str
   }
   return undefined;
 }
+/** Use a private parser cache and a nonexistent local manifest to prevent review-time grammar downloads. */
 export function cgcGrammarEnvironment(home: string, directory: string | undefined): Record<string, string> {
   return {
     ...(directory === undefined ? {} : { TREE_SITTER_LANGUAGE_PACK_LIBS_DIR: directory }),

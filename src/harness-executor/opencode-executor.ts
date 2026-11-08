@@ -41,6 +41,9 @@ export interface OpenCodeExecutorOptions {
 /** Agent name registered by the generated OpenCode configuration. */
 export const OPENCODE_REVIEW_AGENT = 'redline-review' as const;
 
+// Native diagnostics can include expanded configuration and credentials belonging to other providers.
+const NATIVE_DIAGNOSTIC = 'OpenCode native diagnostic suppressed because it may contain configuration credentials.';
+
 /**
  * Built-in OpenCode tool identifiers the generated agent disables. The
  * `skill` tool must be disabled explicitly; leaving it enabled leaks a tool
@@ -81,6 +84,7 @@ export interface PreparedOpenCode extends PreparedHarness {
   };
 }
 
+/** Generate the isolated agent configuration with deny-by-default tools and only authorized analysis capabilities. */
 function buildConfig(
   modelConfig: PreparedOpenCode['modelConfig'],
   systemPrompt: string,
@@ -111,6 +115,7 @@ function buildConfig(
   return `${JSON.stringify(config, null, 2)}\n`;
 }
 
+/** Merge request settings into native configuration without replacing unrelated providers, plugins, tools, or permissions. */
 function nativeConfig(state: PreparedOpenCode, prompt: HarnessPrompt): string {
   let base: unknown;
   try { base = JSON.parse(state.env['OPENCODE_CONFIG_CONTENT'] ?? '{}'); }
@@ -161,7 +166,7 @@ export function extractOpenCodeAssistantText(stdout: string): string | undefined
 }
 
 /** Only runtime error events are read. Response bodies and reasoning are never copied. */
-function openCodeFailure(result: BoundedRunResult, credential?: string) {
+function openCodeFailure(result: BoundedRunResult, credential?: string, native = false) {
   let message = result.stderr || result.error || '';
   let nativeRetryable = false;
   let reported = false;
@@ -180,12 +185,14 @@ function openCodeFailure(result: BoundedRunResult, credential?: string) {
   message = redactModelFailure(message, credential);
   if (message === '' && !reported) return undefined;
   const classification = classifyModelFailure(message, true);
-  return { message: message || 'OpenCode reported a runtime error', reported,
+  return { message: native ? NATIVE_DIAGNOSTIC : message || 'OpenCode reported a runtime error', reported,
     ...classification, retryable: classification.scope === 'file' && (classification.retryable || nativeRetryable) };
 }
 
+/** Project bounded process results into review status, retry classification, safe diagnostics, and observed tool telemetry. */
 function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null, state: PreparedOpenCode): HarnessRun {
-  const failure = state.retryOwnership === 'caller' ? openCodeFailure(result, state.credential) : undefined;
+  const failure = state.retryOwnership === 'caller' ? openCodeFailure(result, state.credential, state.native !== undefined) : undefined;
+  const diagnostic = state.native === undefined || result.stderr === '' ? result.stderr : NATIVE_DIAGNOSTIC;
   const text = result.code === 0 && failure?.reported !== true ? extractOpenCodeAssistantText(result.stdout) : undefined;
   const telemetry = {
     processStartupMs: result.processStartupMs ?? null,
@@ -202,7 +209,7 @@ function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null
       harness: 'opencode',
       exitCode: result.code,
       text: '',
-      diagnostic: result.stderr,
+      diagnostic,
       durationMs: result.durationMs,
       telemetry,
     };
@@ -215,9 +222,9 @@ function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null
       text: '',
       ...(failure === undefined ? {} : { failureScope: failure.scope, retryable: failure.retryable }),
       diagnostic:
-        failure?.message || result.stderr ||
+        failure?.message || diagnostic ||
         (result.error !== undefined
-          ? result.error
+          ? state.native === undefined ? result.error : NATIVE_DIAGNOSTIC
           : `opencode exited with code ${result.code ?? 'null'} and produced no assistant text`),
       durationMs: result.durationMs,
       telemetry,
@@ -228,17 +235,19 @@ function toHarnessRun(result: BoundedRunResult, timeToFirstTextMs: number | null
     harness: 'opencode',
     exitCode: result.code,
     text,
-    diagnostic: result.stderr,
+    diagnostic,
     durationMs: result.durationMs,
     telemetry,
   };
 }
 
+/** Construct an OpenCode executor with injected launch dependencies and explicit native or isolated configuration ownership. */
 export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): HarnessExecutor {
   const command = options.command ?? 'opencode';
   const spawner = options.spawner ?? nodeProcessSpawner;
   return {
     harness: 'opencode',
+    /** Validate supported controls and prepare either native settings or isolated analysis without starting a review model call. */
     async prepare(settings: HarnessSettings): Promise<PreparedOpenCode> {
       if (settings.modelProtocol === 'openrouter-json') throw new Error('openrouter-json is not supported by the OpenCode executor');
       const maxOutputTokens = settings.maxOutputTokens === undefined ? undefined : validateOutputTokens(settings.maxOutputTokens);
@@ -289,6 +298,7 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
         modelConfig,
       });
     },
+    /** Own invocation configuration and bounded process I/O; suppress native diagnostics that can contain expanded configuration credentials. */
     async execute(
       prepared: PreparedHarness,
       prompt: HarnessPrompt,
@@ -313,6 +323,7 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
       } else env.OPENCODE_CONFIG_CONTENT = nativeConfig(state, prompt);
       const invocationStartedAt = Date.now();
       let timeToFirstTextMs: number | null = null;
+      let nativeDiagnosticReported = false;
       const result = await runBoundedProcess(spawner, {
         command: state.command,
         args: state.args,
@@ -327,7 +338,10 @@ export function createOpenCodeExecutor(options: OpenCodeExecutorOptions = {}): H
           if (stream === 'stdout' && timeToFirstTextMs === null && openCodeTextPart(line) !== undefined) {
             timeToFirstTextMs = Math.max(0, Date.now() - invocationStartedAt);
           }
-          if (stream === 'stderr') options?.onOutputLine?.({ stream, kind: 'line', line });
+          if (stream === 'stderr' && (state.native === undefined || !nativeDiagnosticReported)) {
+            options?.onOutputLine?.({ stream, kind: 'line', line: state.native === undefined ? line : NATIVE_DIAGNOSTIC });
+            nativeDiagnosticReported = true;
+          }
         },
       });
       return toHarnessRun(result, timeToFirstTextMs, state);

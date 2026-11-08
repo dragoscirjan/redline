@@ -32,7 +32,9 @@ async function model() {
       }
     });
   });
-  return { port, requests, async close() {
+  return { port, requests,
+    /** Stop only this fixture's model-server process and wait for its exit. */
+    async close() {
     if (child.exitCode !== null) return;
     await new Promise<void>(resolve => { child.once('exit', () => resolve()); child.kill('SIGKILL'); });
   } };

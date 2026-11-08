@@ -25,6 +25,7 @@ export function isHarnessName(value: string): value is HarnessName {
   return (HARNESS_NAMES as readonly string[]).includes(value);
 }
 
+/** Select a registered harness implementation and pass through injected launch dependencies; unsupported names fail explicitly. */
 export function createHarnessExecutor(
   harness: HarnessName,
   options: HarnessExecutorOptions = {},

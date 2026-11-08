@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { nativePiExtension } from '../src/harness-executor/native-pi.ts';
 
+/** Load the generated request extension against a synthetic Pi API to inspect warmup and file-review controls without a model call. */
 function load(warmup: boolean, requiredTool?: string) {
   const handlers = new Map<string, (event: Record<string, unknown>) => Record<string, unknown> | void>();
   const source = nativePiExtension({ provider: 'openrouter', endpoint: 'http://127.0.0.1/v1', model: 'mock' }, 4096,

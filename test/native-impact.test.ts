@@ -5,7 +5,7 @@ import { runFileReviews } from '../src/review/runner.ts';
 import { parseReviewEnvironment } from '../src/review/environment.ts';
 import { WARMUP_TOOLS } from '../src/review/warmup.ts';
 import type { HarnessExecutor, HarnessRun } from '../src/harness-executor/types.ts';
-import { cleanReviewEnvironment, createBundleFixture, HEAD_SHA } from './helpers/bundle.ts';
+import { cleanReviewEnvironment, createBundleFixture, BASE_SHA, HEAD_SHA } from './helpers/bundle.ts';
 import { reviewFinding } from './helpers/finding.ts';
 
 const changed = 'export function format(value: string) {\n  return value.toUpperCase();\n}\n';
@@ -17,18 +17,20 @@ function run(text: unknown, names: string[]): HarnessRun {
         calls: names.map(name => ({ name, started: 1, succeeded: 1, failed: 0 })) } } };
 }
 describe('native code-impact reporting', () => {
-  for (const scenario of ['broken-caller', 'compatible-caller', 'forged-caller', 'missing-query', 'missing-impact'] as const) {
+  for (const scenario of ['broken-caller', 'compatible-caller', 'forged-caller', 'base-caller', 'missing-query', 'missing-impact'] as const) {
     it(scenario + ' preserves source authority and does not equate unchanged callers with defects', async () => {
       const fixture = await createBundleFixture({ diff, headContent: changed, manifestOverrides: { additions: 2, deletions: 2 } });
       try {
         await writeFile(join(fixture.review, 'base-files/000001'), 'export function format(value: unknown) {\n  return String(value);\n}\n');
         const caller = scenario === 'compatible-caller' ? 'export const rendered = format("ok");' : 'export const rendered = format(42);';
         await writeFile(join(fixture.source, 'src/caller.ts'), caller + '\n');
-        const citation = { role: 'caller-assumption' as const, revision: HEAD_SHA, path: 'src/caller.ts', startLine: 1, endLine: 1,
-          evidence: scenario === 'forged-caller' ? 'invented caller' : caller };
+        const citation = { role: 'caller-assumption' as const, revision: scenario === 'base-caller' ? BASE_SHA : HEAD_SHA,
+          path: scenario === 'base-caller' ? 'src/example.ts' : 'src/caller.ts', startLine: 1, endLine: 1,
+          evidence: scenario === 'base-caller' ? 'export function format(value: unknown) {' : scenario === 'forged-caller' ? 'invented caller' : caller };
         const environment = { ...parseReviewEnvironment(cleanReviewEnvironment(fixture, 'pi')).review!,
           nativeIndexing: { provider: 'cgc' as const, required: false }, retries: 0 };
         const executor: HarnessExecutor = { harness: 'pi', async prepare(settings) { return { harness: 'pi', model: settings.model, description: 'synthetic native', executionMode: 'native' }; },
+          /** Script warmup and per-file responses independently so caller authority and observed-query regressions exercise the real runner. */
           async execute(_prepared, prompt) {
             if (prompt.user.includes('REDLINE_NATIVE_WARMUP')) {
               const target = JSON.parse(prompt.user);
@@ -50,7 +52,7 @@ describe('native code-impact reporting', () => {
           } };
         const result = await runFileReviews({ environment, executor });
         const record = result.records[0]!;
-        if (scenario === 'forged-caller' || scenario === 'missing-impact') {
+        if (scenario === 'forged-caller' || scenario === 'base-caller' || scenario === 'missing-impact') {
           expect(record.outcome).toBe('omitted'); expect(record.errorKind).toBe('invalid-output');
         } else {
           expect(record.impactAnalysis?.status).toBe(scenario === 'missing-query' ? 'partial' : 'checked');

@@ -57,15 +57,19 @@ export interface WarmupGuidance {
   readonly integrations: readonly (Pick<WarmupTool, 'category' | 'component' | 'availability' | 'tools'>
     | Pick<WarmupIndexer, 'category' | 'component' | 'availability' | 'tools' | 'indexStatus' | 'persistence' | 'queryTool'>)[];
 }
+/** Reject non-record warmup responses before validating their exact schema. */
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
+/** Require every declared warmup field and reject extra keys rather than guessing their meaning. */
 function exact(value: Record<string, unknown>, keys: readonly string[]): boolean {
   return Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
 }
+/** Narrow untrusted warmup values to an explicitly supported string enumeration. */
 function member<T extends string>(value: unknown, choices: readonly T[]): value is T {
   return typeof value === 'string' && choices.includes(value as T);
 }
+/** Bound reported tool identifiers and exclude control characters before evidence matching. */
 function toolName(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_.:/-]{1,160}$/u.test(value);
 }
@@ -88,6 +92,7 @@ export function warmupGuidance(report: NativeWarmupReport): WarmupGuidance {
         indexStatus: row.indexStatus, persistence: row.persistence, queryTool: row.queryTool }
       : { category: row.category, component: row.component, availability: row.availability, tools: row.tools }) };
 }
+/** Build a closed warmup response schema for optional tools and exactly the selected repository indexer. */
 function schema(provider: NativeIndexingProvider | null): Readonly<Record<string, unknown>> {
   const common = {
     availability: { type: 'string', enum: ['available', 'unavailable', 'unknown'] },
@@ -141,6 +146,7 @@ export function validateWarmup(run: HarnessRun, head: string, sourceDirectory: s
   if (raw.sourceDirectory !== sourceDirectory) return invalid('sourceDirectory');
   if (!Array.isArray(raw.integrations) || raw.integrations.length !== components.length) return invalid('integrations');
   const integrations: WarmupIntegration[] = [], seen = new Set<Component>();
+  /** Count only successful observed calls with the exact reported tool name. */
   const succeeded = (name: unknown) => typeof name === 'string' ? evidence.calls.find(call => call.name === name)?.succeeded ?? 0 : 0;
   let incomplete = evidence.calls.length === 0;
   for (const [index, row] of raw.integrations.entries()) {
@@ -164,6 +170,7 @@ export function validateWarmup(run: HarnessRun, head: string, sourceDirectory: s
     if (!member(row.persistence, ['shared', 'session-only', 'unknown'])) return invalid(field + '.persistence');
     if (!(row.indexedFiles === null || Number.isSafeInteger(row.indexedFiles) && Number(row.indexedFiles) >= 0 && Number(row.indexedFiles) <= 20_000)) return invalid(field + '.indexedFiles');
     for (const key of ['probeTool', 'indexTool', 'queryTool']) if (!(row[key] === null || toolName(row[key]))) return invalid(field + '.' + key);
+    /** Accept only selected-provider operations or supported execution tools as candidates for indexing evidence. */
     const providerOperation = (tool: unknown) => typeof tool === 'string' && (patterns[row.component as Component].test(tool) || /^(bash|shell|powershell|terminal)$|(?:^|__)ctx_execute(?:_file)?$/u.test(tool));
     const probeOperation = typeof row.probeTool === 'string' && (providerOperation(row.probeTool) || /^(codemode|tool_search)$|(?:^|_)probe_indexer$/u.test(row.probeTool));
     const probeObserved = probeOperation && evidence.calls.some(call => call.name === row.probeTool && call.started > 0);
@@ -196,6 +203,7 @@ export function validateWarmup(run: HarnessRun, head: string, sourceDirectory: s
       : 'Warmup finished. Observed calls and model-reported counts do not prove complete graph coverage.', integrations, tools: evidence };
 }
 
+/** Share one preparation and execution budget across bounded corrections; permit missing optional indexers without accepting unobserved readiness. */
 export async function runNativeWarmup(executor: HarnessExecutor, settings: HarnessSettings,
   target: { readonly head: string; readonly sourceDirectory: string; readonly paths: readonly string[];
     readonly indexingProvider?: NativeIndexingProvider | null; readonly required?: boolean; readonly indexingExecutable?: string }, budgetMs: number): Promise<NativeWarmupReport> {
@@ -240,6 +248,11 @@ ${JSON.stringify(schema(provider))}`,
   }
   report ??= validateWarmup({ status: 'timed-out', harness: executor.harness, exitCode: null, text: '', diagnostic: '', durationMs: Math.ceil(performance.now() - started) }, target.head, target.sourceDirectory, budget, settings.credential?.value, provider);
   const indexer = report.integrations.find((row): row is WarmupIndexer => row.category === 'indexer');
-  const uncheckedSelection = provider !== null && report.status !== 'completed';
-  return { ...report, durationMs: Math.ceil(performance.now() - started), fatal: report.fatal || uncheckedSelection || target.required === true && indexer?.indexStatus !== 'reported-ready' };
+  const optionalMissing = target.required !== true && report.status === 'incomplete' && indexer !== undefined
+    && (indexer.availability === 'unknown' || indexer.availability === 'not-observed')
+    && indexer.tools.length === 0 && indexer.reportedTools.length === 0 && !indexer.probeObserved && !indexer.indexAttempted;
+  const uncheckedSelection = provider !== null && report.status !== 'completed' && !optionalMissing;
+  return { ...report, durationMs: Math.ceil(performance.now() - started),
+    ...(optionalMissing ? { reason: 'The selected optional indexer was not observed. Continuing with file-only guidance; availability and indexing remain unverified.' } : {}),
+    fatal: report.fatal || uncheckedSelection || target.required === true && indexer?.indexStatus !== 'reported-ready' };
 }

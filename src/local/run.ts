@@ -40,9 +40,7 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
     // Invoke the installed CLI entry point, leaving its own runtime and configuration loading intact.
     const native = options.environment.harness !== 'echo';
     if (native) {
-      stderr(env.container === 'redline'
-        ? 'Native harness configuration enabled. Docker is the execution isolation boundary.'
-        : 'WARNING: UNSANDBOXED NATIVE CLI. Configured tools and plugins can execute commands, modify files, access the network and use available credentials. Use a container, VM or other isolation when needed.');
+      stderr('WARNING: UNSANDBOXED NATIVE CLI. Configured tools and plugins can execute commands, modify files, access the network and use available credentials. Use a container, VM or other isolation when needed.');
     }
     const launch = native ? await nativeHarnessCommand(options.environment.harness, env.PATH ?? '', options.repository) : undefined;
     if (native && options.indexing.mode !== 'disabled' && options.indexing.executable !== undefined) {
@@ -53,7 +51,7 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
     }
     const executor = createHarnessExecutor(options.environment.harness, {
       ...(launch === undefined ? {} : { command: launch.command }), spawner: cancellableSpawner(signal, launch),
-      ...(native ? { native: { directory: options.repository, environment: env, container: env.container === 'redline' } } : {}),
+      ...(native ? { native: { directory: options.repository, environment: env } } : {}),
     });
     if (options.output === undefined) {
       if (inside(options.repository, options.stateDirectory)) throw new LocalOperationError('default output must be outside the reviewed repository');

@@ -1026,6 +1026,7 @@ function seconds(milliseconds: number): string {
   return `${(milliseconds / 1_000).toFixed(1)} s`;
 }
 
+/** Render recorded performance and quality evidence without treating timings or tool activity as proof of review coverage. */
 export function renderPerformanceMarkdown(report: PerformanceReport): string {
   const lines = [
     '# Review performance benchmark',

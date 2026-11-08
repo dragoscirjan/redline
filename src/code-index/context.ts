@@ -38,6 +38,7 @@ export interface PreparedReviewContext {
   readonly coverage: Awaited<ReturnType<typeof loadReviewCodeContext>>['coverage'];
 }
 
+/** Build captured-head context under a private environment and shared deadline; record unavailable coverage rather than execute repository code. */
 export async function prepareReviewContext(capture: CapturedRevision, options: ContextPreparationOptions, signal: AbortSignal): Promise<PreparedReviewContext> {
   signal.throwIfAborted();
   const bundle = await loadReviewBundle(capture.reviewDirectory, capture.sourceDirectory);

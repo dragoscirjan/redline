@@ -61,6 +61,7 @@ export async function main(
   }
 }
 
+/** Resolve trusted options before execution, own interrupt handlers, and return classified failures without echoing raw argument values. */
 async function executeReview(
   values: Readonly<Record<string, unknown>>,
   env: NodeJS.ProcessEnv,

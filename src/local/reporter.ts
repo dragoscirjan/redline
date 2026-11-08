@@ -81,6 +81,7 @@ export class CliReporter implements ReviewReporter {
     this.activeLine = false;
   }
   async preflight(): Promise<void> {}
+  /** Render sanitized progress and distinguish warmup reports from observed calls without overstating indexing readiness. */
   progress(event: ReviewEvent): void {
     if (event.kind === 'cleanup-failed') {
       this.finishLine();
@@ -233,6 +234,7 @@ export class CliReporter implements ReviewReporter {
     else { this.stdout('  Proposed fix (not applied or test-verified):'); this.block(finding.suggestion); }
     this.stdout('');
   }
+  /** Finish terminal output with validated findings, impact coverage, execution evidence, and artifact locations. */
   async complete(result: ReviewReport): Promise<void> {
     this.finishLine();
     this.reported = true;

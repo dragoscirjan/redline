@@ -822,6 +822,7 @@ describe('extractPiAssistantText', () => {
     const settings = await createSettings();
     try {
       const tool = (id: string) => JSON.stringify({ type: 'tool_execution_end', toolName: 'mcp__extra__ping', toolCallId: id, isError: false });
+      /** Produce a completed assistant event so a later failure can test that partial output is not accepted. */
       const turn = (text: string) => JSON.stringify({ type: 'turn_end', message: { role: 'assistant', content: [{ type: 'text', text }], stopReason: 'stop', usage: { input: 10, output: text === '' ? 0 : 2 } } });
       const spawner = new SequenceSpawner([{ code: 0, stdout: tool('one') + '\n' + turn('') }, { code: 0, stdout: tool('two') + '\n' + turn('done') }]);
       const executor = createPiExecutor({ spawner, transientRetries: 1,

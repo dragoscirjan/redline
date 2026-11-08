@@ -3,6 +3,7 @@ import { validateWarmup, runNativeWarmup, warmupGuidance, WARMUP_TOOLS, type War
 import type { HarnessExecutor, HarnessRun, HarnessSettings } from '../src/harness-executor/types.ts';
 
 const head = 'a'.repeat(40), source = '/captured/head';
+/** Build a closed synthetic report containing only the selected indexer and the two optional non-indexing tools. */
 function report(provider: 'cgc' | 'gitnexus' | null = 'cgc'): { kind: string; head: string; sourceDirectory: string; integrations: Record<string, unknown>[] } {
   return { kind: 'REDLINE_NATIVE_WARMUP', head, sourceDirectory: source, integrations: [
     ...WARMUP_TOOLS.map(component => ({ component, availability: 'unavailable', tools: [], reason: 'Missing optional tool.' })),
@@ -17,6 +18,7 @@ function run(value: unknown = report()): HarnessRun {
       tools: { catalogueSource: 'harness-catalogue', catalogue: ['cgc_index', 'cgc_query'], truncated: false,
         calls: [{ name: 'cgc_index', started: 1, succeeded: 1, failed: 0 }, { name: 'cgc_query', started: 1, succeeded: 1, failed: 0 }] } } };
 }
+/** Require an indexer row in fixture assertions so absent setup evidence cannot silently satisfy a test. */
 function indexer(result: ReturnType<typeof validateWarmup>): WarmupIndexer {
   const row = result.integrations.find((row): row is WarmupIndexer => row.category === 'indexer');
   if (row === undefined) throw new Error('test indexer missing');

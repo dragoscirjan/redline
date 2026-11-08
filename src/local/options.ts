@@ -213,6 +213,7 @@ export async function parseLocalOptions(args: readonly string[], env: NodeJS.Pro
   return resolveLocalOptions(values, env, cwd, signal);
 }
 
+/** Apply flag, environment, and trusted-config precedence while checking capabilities and resolving Git outside the reviewed repository. */
 export async function resolveLocalOptions(values: Readonly<Record<string, unknown>>, env: NodeJS.ProcessEnv, cwd: string, signal: AbortSignal): Promise<LocalOptions> {
   signal.throwIfAborted();
   const flag = (key: string): string | undefined => typeof values[key] === 'string' ? values[key] : undefined;

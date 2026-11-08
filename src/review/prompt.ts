@@ -82,6 +82,7 @@ function normalizeModule(value: string): string {
   return `${value.replaceAll('\r\n', '\n').trimEnd()}\n`;
 }
 
+/** Load only fixed policy modules under checked byte limits and include native guidance only for native execution. */
 export async function loadReviewPolicy(promptRoot = DEFAULT_PROMPT_ROOT, native = false): Promise<{ text: string; digest: string }> {
   const root = await checkedDirectory(promptRoot, 'prompt policy directory');
   const modules: string[] = [];
@@ -224,6 +225,7 @@ export async function buildFileContextPayload(
   return context;
 }
 
+/** Separate fixed trusted policy from captured untrusted file data and enforce isolated analysis capability names. */
 export async function buildFileReviewPrompt(options: FileReviewPromptOptions): Promise<FileReviewPrompt> {
   const { bundle, file } = options;
   if (!bundle.manifest.files.includes(file)) throw new Error('prompt file is not part of the review manifest');

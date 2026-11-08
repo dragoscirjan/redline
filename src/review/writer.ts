@@ -108,6 +108,7 @@ function renderFindingMarkdown(finding: PublishedFinding, index: number, path: s
   return lines.join('\n');
 }
 
+/** Render a validated file record with explicit impact limitations and observed tool activity. */
 function renderRecordMarkdown(record: FileReviewRecord): string {
   const lines = [
     `# Review: ${record.path}`,
@@ -162,6 +163,7 @@ function renderRecordMarkdown(record: FileReviewRecord): string {
   return `${lines.join('\n')}\n`;
 }
 
+/** Render aggregate coverage, warmup status, and execution evidence without hiding omitted required files. */
 function renderSummaryMarkdown(summary: ReviewRunSummary): string {
   const excludedFiles = summary.excludedFiles ?? [];
   const lines = [
@@ -316,6 +318,7 @@ export function createReviewWriter(outputDirectory: string): ReviewWriter {
       await prepare();
       await writeFile(join(reviewsDirectory, 'warmup.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
     },
+    /** Persist bounded observations without recording configuration, tool arguments, or results. */
     async writeNativeToolsReport(evidence: NativeToolEvidence, warmup?: NativeWarmupReport): Promise<void> {
       await prepare();
       await writeFile(join(reviewsDirectory, 'native-tools.json'), JSON.stringify({
@@ -326,6 +329,7 @@ export function createReviewWriter(outputDirectory: string): ReviewWriter {
         ...(warmup === undefined ? {} : { warmupReport: 'warmup.json' }),
       }, null, 2) + '\n', { mode: 0o600 });
     },
+    /** Write validated records and bounded raw output, keeping follow-up and verification artifacts separate. */
     async writeFileReview(record: FileReviewRecordWithRaw): Promise<void> {
       await prepare();
       const { rawModelOutput, verificationArtifact, followUpArtifact, ...rest } = record;

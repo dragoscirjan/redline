@@ -13,12 +13,15 @@ export interface FileImpactAnalysis {
   readonly limitation: string;
   readonly indexQueryObserved: boolean;
 }
+/** Reject non-record model output before checking the impact schema. */
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
+/** Bound model-supplied impact text before accepting it into persisted reports. */
 function text(value: unknown, maximum: number): value is string {
   return typeof value === 'string' && value.length <= maximum;
 }
+/** Validate caller citations against captured head source and downgrade indexed coverage when no successful per-file query was observed. */
 export async function extractNativeImpact(rawText: string, bundle: ReviewBundle, warmup: WarmupGuidance | undefined,
   evidence: NativeToolEvidence | undefined): Promise<{ text: string; impactAnalysis: FileImpactAnalysis }> {
   const raw: unknown = JSON.parse(rawText);
@@ -35,7 +38,7 @@ export async function extractNativeImpact(rawText: string, bundle: ReviewBundle,
   for (const item of value.callers) {
     if (!object(item) || Object.keys(item).length !== 6
       || !text(item.role, 40) || !['missing-guard', 'caller-assumption', 'contract', 'schema', 'test-gap', 'impact-path'].includes(item.role)
-      || !text(item.path, 4096) || !text(item.revision, 64) || !text(item.evidence, 8192)
+      || !text(item.path, 4096) || !text(item.revision, 64) || item.revision !== bundle.manifest.head || !text(item.evidence, 8192)
       || !Number.isSafeInteger(item.startLine) || !Number.isSafeInteger(item.endLine)) throw new Error('invalid native impact caller citation');
     const citation: SourceEvidence = { role: item.role as SourceEvidence['role'], path: item.path, revision: item.revision,
       startLine: Number(item.startLine), endLine: Number(item.endLine), evidence: item.evidence };

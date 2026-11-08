@@ -54,37 +54,44 @@ const tools: Readonly<Record<AnalysisComponent, readonly AnalysisTool[]>> = {
 };
 export function analysisTools(component: AnalysisComponent): readonly AnalysisTool[] { return tools[component]; }
 
+/** Reject non-record tool arguments before inspecting their authorized fields. */
 function object(value: unknown): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid analysis arguments');
   return value as Record<string, unknown>;
 }
+/** Require nonempty, NUL-free UTF-8 text within the analysis argument byte limit. */
 function string(value: unknown, maximum = 512): string {
   if (typeof value !== 'string' || value.length === 0 || Buffer.byteLength(value, 'utf8') > maximum || value.includes('\0')) {
     throw new Error('invalid analysis text');
   }
   return value;
 }
+/** Restrict graph symbols to the supported identifier alphabet rather than accepting query-language fragments. */
 function identifier(value: unknown): string {
   const result = string(value, 256);
   // No Cypher/SQL quoting, operators, interpolations or statement separators.
   if (!/^[\p{L}\p{N}_./:#@()<> -]+$/u.test(result)) throw new Error('invalid analysis symbol');
   return result;
 }
+/** Apply defaults only to omitted bounds and reject noninteger or out-of-range analysis limits. */
 function count(value: unknown, fallback: number, maximum: number): number {
   if (value === undefined) return fallback;
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > maximum) throw new Error('invalid analysis bound');
   return value;
 }
+/** Require an actual boolean so model-supplied strings cannot change analysis control flags. */
 function boolean(value: unknown): boolean {
   if (typeof value !== 'boolean') throw new Error('invalid analysis boolean');
   return value;
 }
+/** Accept only normalized captured-relative paths, excluding absolute paths, drive prefixes, and traversal components. */
 function path(value: unknown): string {
   const result = string(value);
   if (isAbsolute(result) || /^[A-Za-z]:/u.test(result) || result.includes('\\')
     || result.split('/').some(part => part === '' || part === '.' || part === '..')) throw new Error('path is not captured-relative');
   return result;
 }
+/** Read bounded regular captured source without following path-component symlinks; close the file handle on every exit. */
 async function capturedText(root: string, name: string): Promise<string> {
   const canonical = await realpath(root);
   if (!(await lstat(canonical)).isDirectory()) throw new Error('captured source is unavailable');

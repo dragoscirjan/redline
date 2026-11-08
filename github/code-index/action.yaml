@@ -1,133 +1,61 @@
-name: Redline code index
+name: Redline retired code-index compatibility
 
-description: Build bounded, source-validated code context for an exact pull request revision without executing repository code.
-
-author: dragoscirjan
+description: Compatibility entrypoint for older parent Actions. Reports unavailable context without installing or invoking an indexer.
 
 inputs:
   provider:
-    description: Code-index provider, cgc or gitnexus.
-    required: false
+    description: Requested provider, retained for license-sensitive compatibility.
     default: cgc
   mode:
-    description: Execution mode, review or warmup.
-    required: false
+    description: Former execution mode, review or warmup.
     default: review
   base:
-    description: Exact pull request base commit (full SHA-1 or SHA-256 identifier).
+    description: Former exact base revision input. Not read or indexed.
     required: true
   head:
-    description: Exact pull request head commit (full SHA-1 or SHA-256 identifier).
+    description: Former exact head revision input. Not read or indexed.
     required: true
   repository:
-    description: Repository identity in owner/name form.
+    description: Former repository identity input. Not read or indexed.
     required: true
   output-directory:
-    description: Directory under github.workspace where code-context.json is written.
+    description: Former artifact directory input. No artifact is written.
     required: true
 
 outputs:
   context-file:
-    description: Absolute path to the bounded code-context.json artifact.
-    value: ${{ steps.finalize.outputs.context-file }}
+    description: Empty because no precomputed context is produced.
+    value: ${{ steps.retired.outputs.context-file }}
   status:
-    description: "Context coverage status: complete, partial, unsupported, or unavailable."
-    value: ${{ steps.finalize.outputs.status }}
+    description: Always unavailable. No indexing coverage is claimed.
+    value: ${{ steps.retired.outputs.status }}
   cache-hit:
-    description: Whether a validated exact-base database was restored and reused.
-    value: ${{ steps.finalize.outputs.cache-hit }}
-  cache-identity:
-    description: Provider, platform, repository, configuration, and exact-revision cache identity.
-    value: ${{ steps.finalize.outputs.cache-identity }}
+    description: Always false. No cache is accessed.
+    value: ${{ steps.retired.outputs.cache-hit }}
   cache-save-outcome:
-    description: Cache save step outcome, success, failure, or skipped.
-    value: ${{ steps.finalize.outputs.cache-save-outcome }}
-  cache-size-bytes:
-    description: Bounded size of the validated provider cache tree.
-    value: ${{ steps.finalize.outputs.cache-size-bytes }}
-  duration-ms:
-    description: Total measured provider preparation, restore, index, query, and save duration.
-    value: ${{ steps.finalize.outputs.duration-ms }}
-  index-ms:
-    description: Provider indexing duration; zero on a validated exact-base cache hit.
-    value: ${{ steps.finalize.outputs.index-ms }}
+    description: Always skipped. No cache is saved.
+    value: ${{ steps.retired.outputs.cache-save-outcome }}
   warmup-result:
-    description: Warmup result, hit, saved, save-failed, failed, or not-requested.
-    value: ${{ steps.finalize.outputs.warmup-result }}
+    description: Always retired. This entrypoint cannot warm an index.
+    value: ${{ steps.retired.outputs.warmup-result }}
 
 runs:
   using: composite
   steps:
-    - name: Set up fixed GitNexus Node runtime
-      if: ${{ inputs.provider == 'gitnexus' }}
-      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.0.0
-      with:
-        node-version: 24
-
-    - name: Prepare pinned provider and cache identity
-      id: prepare
+    - name: Report retired host indexing
+      id: retired
       shell: bash
       env:
-        REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
-        REDLINE_CODE_INDEX_MODE: ${{ inputs.mode }}
-        REDLINE_CODE_INDEX_BASE: ${{ inputs.base }}
-        REDLINE_CODE_INDEX_HEAD: ${{ inputs.head }}
-        REDLINE_CODE_INDEX_REPOSITORY: ${{ inputs.repository }}
-        REDLINE_CODE_INDEX_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
-      run: bash "${{ github.action_path }}/run.sh" prepare
-
-    - name: Restore provider database
-      id: cache-restore
-      if: ${{ steps.prepare.outputs.available == 'true' }}
-      continue-on-error: true
-      uses: actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
-      with:
-        path: ${{ steps.prepare.outputs.cache-path }}
-        key: ${{ steps.prepare.outputs.cache-primary-key }}
-        restore-keys: |
-          ${{ steps.prepare.outputs.cache-base-prefix }}
-
-    - name: Reuse cached base graph or index base
-      id: build
-      if: ${{ steps.prepare.outputs.available == 'true' }}
-      shell: bash
-      env:
-        REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
-        REDLINE_CODE_INDEX_MODE: ${{ inputs.mode }}
-        REDLINE_CODE_INDEX_BASE: ${{ inputs.base }}
-        REDLINE_CODE_INDEX_HEAD: ${{ inputs.head }}
-        REDLINE_CODE_INDEX_REPOSITORY: ${{ inputs.repository }}
-        REDLINE_CODE_INDEX_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
-        REDLINE_CODE_INDEX_CACHE_MATCHED_KEY: ${{ steps.cache-restore.outputs.cache-matched-key }}
-        REDLINE_CODE_INDEX_CACHE_RESTORE_OUTCOME: ${{ steps.cache-restore.outcome }}
-      run: bash "${{ github.action_path }}/run.sh" build
-
-    - name: Start cache-save timing
-      if: ${{ steps.build.outputs.cache-ready == 'true' }}
-      shell: bash
-      env:
-        REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
-        REDLINE_CODE_INDEX_MODE: ${{ inputs.mode }}
-      run: bash "${{ github.action_path }}/run.sh" save-start
-
-    - name: Save validated provider database
-      id: cache-save
-      if: ${{ steps.build.outputs.cache-ready == 'true' }}
-      continue-on-error: true
-      uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
-      with:
-        path: ${{ steps.prepare.outputs.cache-path }}
-        key: ${{ steps.prepare.outputs.cache-primary-key }}
-
-    - name: Finalize code-context diagnostics
-      id: finalize
-      if: ${{ always() && steps.prepare.outcome == 'success' }}
-      shell: bash
-      env:
-        REDLINE_CODE_INDEX_PROVIDER: ${{ inputs.provider }}
-        REDLINE_CODE_INDEX_MODE: ${{ inputs.mode }}
-        REDLINE_CODE_INDEX_OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
-        REDLINE_CODE_INDEX_CACHE_IDENTITY: ${{ steps.prepare.outputs.cache-identity }}
-        REDLINE_CODE_INDEX_CACHE_READY: ${{ steps.build.outputs.cache-ready }}
-        REDLINE_CODE_INDEX_CACHE_SAVE_OUTCOME: ${{ steps.cache-save.outcome }}
-      run: bash "${{ github.action_path }}/run.sh" finalize
+        REQUESTED_PROVIDER: ${{ inputs.provider }}
+        REQUESTED_MODE: ${{ inputs.mode }}
+      run: |
+        case "$REQUESTED_PROVIDER" in
+          cgc|gitnexus) ;;
+          *) printf 'Unsupported code-index provider\n' >&2; exit 2 ;;
+        esac
+        case "$REQUESTED_MODE" in
+          review|warmup) ;;
+          *) printf 'Unsupported code-index mode\n' >&2; exit 2 ;;
+        esac
+        printf '::warning::Host-managed indexing is retired. Requested provider %s is not invoked; review uses file-only coverage.\n' "$REQUESTED_PROVIDER"
+        printf 'context-file=\nstatus=unavailable\ncache-hit=false\ncache-save-outcome=skipped\nwarmup-result=retired\n' >> "$GITHUB_OUTPUT"

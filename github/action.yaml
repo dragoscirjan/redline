@@ -64,11 +64,11 @@ inputs:
     required: false
     default: ""
   indexing:
-    description: Indexed-context mode, enabled or disabled. Enabled builds bounded context inside this action; unavailable context degrades to file-only review.
+    description: Indexing preference, enabled or disabled. Retained for compatibility; the isolated Action currently reports file-only coverage and invokes no indexer.
     required: false
     default: enabled
   indexing-provider:
-    description: Code-index provider, cgc or gitnexus.
+    description: Requested license-sensitive provider, cgc or gitnexus. No provider is invoked by the current isolated Action.
     required: false
     default: cgc
   artifact-name:
@@ -229,16 +229,14 @@ runs:
         git cat-file -e "$BASE_SHA^{commit}"
         git cat-file -e "$HEAD_SHA^{commit}"
 
-    - name: Build bounded code index
-      id: code-index
+    - name: Report file-only indexing coverage
       if: ${{ inputs.indexing == 'enabled' && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}
-      uses: $/github/code-index
-      with:
-        provider: ${{ inputs.indexing-provider }}
-        base: ${{ github.event.pull_request.base.sha }}
-        head: ${{ github.event.pull_request.head.sha }}
-        repository: ${{ github.repository }}
-        output-directory: ${{ github.workspace }}/code-index
+      shell: bash
+      env:
+        INDEXING_PROVIDER: ${{ inputs.indexing-provider }}
+      run: |
+        printf '::warning::Host-managed indexing is retired. This isolated Action uses file-only coverage; requested provider %s is not invoked. Native CLI and Docker retain prompt-driven indexing.\n' "$INDEXING_PROVIDER"
+        printf '\n## Indexing coverage\n\nFile-only. Requested provider %s is not invoked by this isolated Action. No alternative provider is selected.\n' "$INDEXING_PROVIDER" >> "$GITHUB_STEP_SUMMARY"
 
     - name: Build review context bundle
       shell: bash
@@ -278,7 +276,6 @@ runs:
       with:
         name: ${{ inputs.artifact-name }}-context
         path: |
-          code-index/code-context.json
           source-at-head/
           review/
         if-no-files-found: error
@@ -345,12 +342,6 @@ runs:
         REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews
         REDLINE_REUSE_DIR: ${{ runner.temp }}/redline-review-cache
         REDLINE_REUSE_NAMESPACE: ${{ format('{0}#{1}', github.repository, github.event.pull_request.number) }}
-        REDLINE_CODE_CONTEXT: ${{ steps.code-index.outputs.context-file }}
-        REDLINE_CODE_CONTEXT_REPOSITORY: ${{ steps.code-index.outputs.context-file != '' && github.repository || '' }}
-        CODE_INDEX_PROVIDER: ${{ inputs.indexing-provider }}
-        # Explicit gate: scripted replay is not independent live-model evidence.
-        # Never enable until the recall, clean-change, and latency gates pass.
-        CODE_INDEX_VERIFICATION_ENABLED: 'false'
         TYPESCRIPT_RUNTIME: ${{ inputs.runtime }}
       run: |
         set -euo pipefail

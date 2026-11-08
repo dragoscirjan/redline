@@ -231,15 +231,13 @@ export class GitRevisionSource implements RevisionSource {
       }
       const bundleDirectory = join(output, 'bundle');
       const sourceDirectory = join(output, 'source');
-      const exportSnapshot = async (revision: string, directory: string, sanitize = false) => {
+      const exportSnapshot = async (revision: string, directory: string) => {
         await mkdir(directory, { recursive: true });
         let writtenBytes = 0;
         let omittedSourceFiles = 0;
         let inertSubmodules = 0;
         const links: { path: string; target: string }[] = [];
-        const controls = new Set(['.codegraphcontext', '.gitnexus', '.cgcignore', '.gitnexusignore', '.gitnexusrc']);
         for (const entry of entries(await git.run(['ls-tree', '-r', '-z', revision]), false)) {
-          if (sanitize && entry.path.split('/').some((part) => controls.has(part))) continue;
           if (entry.mode === '160000') { inertSubmodules += 1; continue; }
           const size = Number(decode.decode(await git.run(['cat-file', '-s', entry.oid])).trim());
           if (!Number.isSafeInteger(size) || size > 128 * 1024) { omittedSourceFiles += 1; continue; }
@@ -281,18 +279,10 @@ export class GitRevisionSource implements RevisionSource {
         ...(capturedIndex === undefined ? {} : { indexDigest: capturedIndex }), excludedUntracked: ignoredUntracked,
         symlinks: links, coverage,
       }, null, 2)}\n`);
-      let prepared: Promise<{ baseDirectory: string; headDirectory: string }> | undefined;
       return {
         reviewDirectory: bundleDirectory, sourceDirectory, repositoryDirectory: root, coverage,
         contextSnapshot: {
           repository: repositoryIdentity, base, head,
-          prepareSources: (persistentBase) => prepared ??= (async () => {
-            const baseDirectory = persistentBase ?? join(output, 'index', 'base');
-            const headDirectory = join(output, 'index', 'head');
-            await exportSnapshot(base, baseDirectory, true);
-            await exportSnapshot(head, headDirectory, true);
-            return { baseDirectory, headDirectory };
-          })(),
         },
         dispose: () => rm(scratch, { recursive: true, force: true }),
       };

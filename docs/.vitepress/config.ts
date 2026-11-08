@@ -61,7 +61,7 @@ export default defineConfig({
           { text: 'Reusable workflow reference', link: '/reusable-review-workflow' },
           { text: 'Action reference', link: '/github-composite-action' },
           { text: 'Dogfood reviews', link: '/dogfood-review' },
-          { text: 'Code-index action', link: '/code-index-action' },
+          { text: 'Indexing and provider licenses', link: '/code-index-action' },
         ],
       },
       {
@@ -82,8 +82,6 @@ export default defineConfig({
           { text: 'Roadmap', link: '/roadmap' },
           { text: 'Application architecture', link: '/portable-architecture' },
           { text: 'Harness executor', link: '/harness-executor' },
-          { text: 'Change-impact planning', link: '/change-impact' },
-          { text: 'Code intelligence', link: '/code-intelligence' },
         ],
       },
       {

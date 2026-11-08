@@ -41,7 +41,7 @@ The caller pins the reusable workflow. Inside that workflow, `uses: $/github` re
 
 Review execution is enabled only when `backend` and `model-config` are supplied together with a non-empty `model-auth` secret. To run context-only instead, leave **all three** empty together — a partial set (for example a cleared `backend` next to a set `model-config`) is rejected rather than degraded.
 
-Configured reviews build indexed context inside the published Redline action by default. Set `indexing: disabled` for file-only review. The reusable workflow forwards `indexing` and `indexing-provider`; the published action still owns acquisition, provider execution, cache lifecycle, and bounded normalization.
+The reusable workflow retains `indexing` and `indexing-provider` for compatibility and explicit license-sensitive provider selection. The isolated Action currently invokes no indexer and uses file-only coverage. An enabled indexing request produces a warning and step summary. Native CLI and Docker retain prompt-driven indexing.
 
 In context-only mode the workflow does not index and uploads only the `<artifact-name>-context` artifact with the review context bundle and the source-at-head export. The `<artifact-name>-reviews` artifact with per-file review records is produced only when review execution is enabled.
 
@@ -72,7 +72,7 @@ In context-only mode the workflow does not index and uploads only the `<artifact
 
 ## What the run produces
 
-Two artifacts: `<artifact-name>-context` with the review context bundle, source-at-head export, explicit eligibility decisions and reasons, and bounded `code-context.json` when indexing runs; and `<artifact-name>-reviews` with the per-file review records and run summary described in [review output](/review-reporting) (the latter only when review execution is enabled). Configured reviews automatically restore and save a PR-scoped cache of fingerprint-matched validated per-file results; cache availability is optional, and the artifact reports reuse counts and estimated time saved. When `github-token` is supplied, publication adds one review per file with findings and a managed summary comment to the pull request; see [publication](/github-composite-action#publication).
+Two artifacts: `<artifact-name>-context` with the review context bundle, source-at-head export, explicit eligibility decisions and reasons; and `<artifact-name>-reviews` with the per-file review records and run summary described in [review output](/review-reporting) (the latter only when review execution is enabled). Configured reviews automatically restore and save a PR-scoped cache of fingerprint-matched validated per-file results; cache availability is optional, and the artifact reports reuse counts and estimated time saved. When `github-token` is supplied, publication adds one review per file with findings and a managed summary comment to the pull request; see [publication](/github-composite-action#publication).
 
 ## Calling within Redline itself
 

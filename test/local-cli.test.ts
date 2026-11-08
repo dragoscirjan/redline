@@ -68,7 +68,7 @@ describe('local Git review CLI', () => {
     { heading: 'Repository and target:', flags: ['repository', 'vcs', 'base', 'head', 'comparison', 'worktree', 'untracked'] },
     { heading: 'Configuration:', flags: ['config'] },
     { heading: 'Harness and model:', flags: ['harness', 'provider', 'endpoint', 'model', 'auth', 'model-protocol'] },
-    { heading: 'Harness tools and context:', flags: ['indexing', 'indexing-provider', 'index-executable', 'index-runtime', 'code-context', 'code-context-repository', 'head-context'] },
+    { heading: 'Harness tools and context:', flags: ['indexing', 'indexing-provider', 'index-executable', 'code-context', 'code-context-repository', 'head-context'] },
     { heading: 'Execution limits and reuse:', flags: ['max-output-tokens', 'timeout', 'retries', 'run-timeout', 'concurrency', 'scheduling', 'reuse'] },
     { heading: 'Output and finding policy:', flags: ['reporter', 'output', 'color', 'finding-scope', 'fail-on'] },
   ])('groups related arguments under $heading in generated help', ({ heading, flags }) => {

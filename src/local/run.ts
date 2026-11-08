@@ -7,7 +7,7 @@ import { createHarnessExecutor } from '../harness-executor/registry.ts';
 import { GitRevisionSource } from './git-source.ts';
 import type { LocalOptions } from './options.ts';
 import { cancellableSpawner, nativeHarnessCommand, inside, LocalOperationError } from './process.ts';
-import { prepareLocalContext } from './context.ts';
+import { importLocalContext } from './context.ts';
 import { localReviewReuse } from './reuse.ts';
 import { terminalText } from './reporter.ts';
 
@@ -115,13 +115,14 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
         stderr(native ? 'Review reuse: disabled for native configuration and external tool data'
           : `Review reuse: ${options.reuse === 'disabled' ? 'disabled' : reuse === undefined ? 'unavailable' : 'enabled'}`);
         if (options.indexing.mode === 'disabled') return undefined;
-        if (native && options.indexing.artifact === undefined) {
-          stderr(`Native indexing: ${options.indexing.provider}; installation checks and indexing will run in model warmup.`);
+        if (options.indexing.artifact === undefined) {
+          if (!native && options.indexing.mode === 'required') throw new LocalOperationError('required indexing needs a native harness or an imported context artifact');
+          stderr(native ? `Native indexing: ${options.indexing.provider}; installation checks and indexing will run in model warmup.`
+            : 'Indexing unavailable: echo has no indexing tools; review uses file-only context.');
           return undefined;
         }
         reporter.progress({ kind: 'context-started', provider: options.indexing.artifact === undefined ? options.indexing.provider : 'imported' });
-        const context = await prepareLocalContext(capture, options, env, destination, contextSignal,
-          Math.max(1, options.environment.runTimeout.milliseconds - (performance.now() - start)));
+        const context = await importLocalContext(capture, options, destination, contextSignal);
         reporter.progress({ kind: 'context-ready', status: context.coverage.status, relatedSpans: context.coverage.relatedSpans, fileOnlyFiles: context.fileOnlyReviewedFiles, indexCache: context.indexCache });
         if (options.indexing.mode === 'required' && context.fileOnlyReviewedFiles > 0) {
           throw new LocalOperationError('required indexed context is missing source-validated related spans for one or more reviewed files; review was not started');

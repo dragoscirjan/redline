@@ -1,74 +1,59 @@
-/** Local tool discovery only; the shared context builder owns artifact preparation. */
-import { createHash } from 'node:crypto';
-import { lstat, readFile, realpath } from 'node:fs/promises';
-import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
+/** Import bounded context data only. Native harness prompts own indexing and queries. */
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { CapturedRevision } from '../application/review.ts';
-import { prepareReviewContext, type PreparedReviewContext } from '../code-index/context.ts';
+import { loadCodeContextArtifact, type CodeContextArtifact } from '../code-context/artifact.ts';
+import { loadReviewBundle } from '../review/bundle.ts';
+import { codeContextForFile, loadReviewCodeContext, type ReviewCodeContextInput } from '../review/indexed-context.ts';
 import type { LocalOptions } from './options.ts';
-import { cancellableSpawner, executable, hostToolCommand, inside, LocalOperationError, type LaunchCommand } from './process.ts';
 
-const CGC_LINUX_SHA256 = '9b62140c77e88d153de24abfaebe1977f320511b170bf9aea6087106601d0e5f';
-
-async function suppliedCommand(path: string, repository: string): Promise<LaunchCommand> {
-  const canonical = await realpath(path);
-  const info = await lstat(canonical);
-  if (!info.isFile() || inside(repository, canonical) || /\.(?:cmd|bat|ps1)$/iu.test(canonical)) {
-    throw new LocalOperationError('indexer must be a trusted executable or Node entrypoint outside the repository');
-  }
-  return /\.(?:mjs|cjs|js)$/iu.test(canonical) ? { command: process.execPath, prefix: [canonical] } : { command: canonical, prefix: [] };
+export interface ImportedLocalContext {
+  readonly input: ReviewCodeContextInput;
+  readonly fileOnlyReviewedFiles: number;
+  readonly indexCache: 'imported' | 'unavailable';
+  readonly coverage: Awaited<ReturnType<typeof loadReviewCodeContext>>['coverage'];
 }
 
-export async function providerCommand(options: LocalOptions, env: NodeJS.ProcessEnv,
-  probe: { realpath(path: string): Promise<string>; readFile(path: string): Promise<Buffer> } = { realpath, readFile }): Promise<LaunchCommand> {
-  if (options.indexing.executable !== undefined) return suppliedCommand(options.indexing.executable, options.repository);
-  if (options.indexing.provider === 'cgc' && process.platform === 'linux' && process.arch === 'x64') {
-    const path = join(dirname(options.stateDirectory), 'tools/cgc/0.5.7/linux-x64/cgc');
-    const info = await lstat(path).catch(() => undefined);
-    if (info?.isFile() && !info.isSymbolicLink() && info.size <= 80 * 1024 * 1024) {
-      try {
-        const canonical = await probe.realpath(path);
-        if (!inside(options.repository, canonical)) {
-          const hash = createHash('sha256').update(await probe.readFile(canonical)).digest('hex');
-          if (hash === CGC_LINUX_SHA256) return { command: canonical, prefix: [] };
-        }
-      } catch {
-        // A managed-tool probe is optional. Explicit executable overrides
-        // still fail closed; automatic discovery can try a trusted PATH.
-      }
+/** Snapshot a validated import into private output, then resolve every related span from captured head source. */
+export async function importLocalContext(capture: CapturedRevision, options: LocalOptions,
+  outputDirectory: string, signal: AbortSignal): Promise<ImportedLocalContext> {
+  signal.throwIfAborted();
+  if (options.indexing.artifact === undefined) throw new Error('context import requires an artifact');
+  const repository = options.indexing.repository ?? capture.contextSnapshot?.repository;
+  if (repository === undefined) throw new Error('context repository identity is required');
+  const bundle = await loadReviewBundle(capture.reviewDirectory, capture.sourceDirectory);
+  const directory = join(outputDirectory, 'index');
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const path = join(directory, 'code-context.json');
+  let artifact: CodeContextArtifact;
+  let indexCache: ImportedLocalContext['indexCache'] = 'imported';
+  try {
+    artifact = await loadCodeContextArtifact(options.indexing.artifact);
+    if (artifact.repository !== repository || artifact.revision !== bundle.manifest.head
+      || artifact.baseRevision !== undefined && artifact.baseRevision !== bundle.manifest.base) {
+      throw new Error('imported context identity mismatch');
     }
+  } catch {
+    signal.throwIfAborted();
+    indexCache = 'unavailable';
+    artifact = { version: 2, repository, revision: bundle.manifest.head, baseRevision: bundle.manifest.base,
+      provider: { id: options.indexing.provider, version: 'unknown' }, status: 'unavailable', files: [],
+      diagnostics: [{ level: 'warning', code: 'imported-context-invalid', message: 'Imported context is invalid or does not match the captured revisions.' }],
+      timings: { installationMs: 0, restoreMs: 0, validationMs: 0, indexMs: 0, queryMs: 0, saveMs: null } };
   }
-  return hostToolCommand(options.indexing.provider, env.PATH ?? env.Path ?? '', options.repository);
-}
-
-export async function prepareLocalContext(capture: CapturedRevision, options: LocalOptions, env: NodeJS.ProcessEnv,
-  outputDirectory: string, signal: AbortSignal, remainingMs: number): Promise<PreparedReviewContext> {
-  const directories: string[] = [];
-  for (const directory of (env.PATH ?? env.Path ?? '').split(delimiter)) {
-    if (!isAbsolute(directory) || inside(options.repository, directory)) continue;
-    const canonical = await realpath(directory).catch(() => undefined);
-    if (canonical !== undefined && !inside(options.repository, canonical)) directories.push(canonical);
-  }
-  const python = async (): Promise<string> => {
-    if (options.indexing.runtime !== undefined) {
-      const command = await suppliedCommand(options.indexing.runtime, options.repository);
-      if (command.prefix.length !== 0) throw new LocalOperationError('index runtime must be a Python executable');
-      return command.command;
-    }
-    for (const name of ['python3', 'python']) {
-      const found = await executable(name, directories.join(delimiter), options.repository).catch(() => undefined);
-      if (found !== undefined && !found.toLowerCase().includes('windowsapps')) return found;
-    }
-    throw new LocalOperationError('Python is unavailable for code-context preparation');
-  };
   const credential = options.environment.credential?.value;
-  const cacheAnchor = env.XDG_CACHE_HOME === undefined ? dirname(options.stateDirectory) : join(resolve(env.XDG_CACHE_HOME), 'redline');
-  return prepareReviewContext(capture, {
-    provider: options.indexing.provider, outputDirectory,
-    importedArtifact: options.indexing.artifact, repository: options.indexing.repository,
-    timeoutMs: Math.max(1, Math.min(remainingMs, 5 * 60_000)), hostPath: directories.join(delimiter),
-    systemRoot: env.SystemRoot ?? env.SYSTEMROOT,
-    cacheDirectory: join(cacheAnchor, 'indexes', 'v1'), cacheAnchor, repositoryDirectory: options.repository,
-    spawner: cancellableSpawner(signal), resolveProvider: () => providerCommand(options, env), resolvePython: python,
-    redact: (text) => credential === undefined ? text : text.split(credential).join('[redacted]'),
-  }, signal);
+  const redact = (text: string): string => credential === undefined ? text : text.split(credential).join('[redacted]');
+  artifact = { ...artifact, diagnostics: artifact.diagnostics.map(item => ({ ...item,
+    code: redact(item.code) === item.code ? item.code : 'credential-redacted', message: redact(item.message) })) };
+  signal.throwIfAborted();
+  await writeFile(path, `${JSON.stringify(artifact, null, 2)}\n`, { mode: 0o600 });
+  const input = { path, repository };
+  const loaded = await loadReviewCodeContext(bundle, input);
+  signal.throwIfAborted();
+  const fileOnlyReviewedFiles = bundle.manifest.files.filter(file => file.reviewed
+    && codeContextForFile(loaded, file).coverage.relatedSpans === 0).length;
+  await writeFile(join(directory, 'status.json'), `${JSON.stringify({ version: 1, provider: loaded.coverage.provider,
+    status: loaded.coverage.status, relatedSpans: loaded.coverage.relatedSpans, fileOnlyReviewedFiles,
+    indexCache, diagnosticCodes: loaded.coverage.diagnosticCodes }, null, 2)}\n`, { mode: 0o600 });
+  return { input, coverage: loaded.coverage, fileOnlyReviewedFiles, indexCache };
 }

@@ -25,7 +25,7 @@ Pi or OpenCode must be installed separately on a trusted PATH outside the review
 
 Before file analysis, native CLI/Docker execution runs a bounded warmup through the selected harness and model. Warmup policy v3 checks context-mode and sequential-thinking as optional tools. Neither receives code-index status or file counts. Missing, disabled or disconnected tools warn without preventing review.
 
-`--indexing-provider cgc|gitnexus` selects the code indexer, defaulting to CGC while indexing is enabled. `--indexing disabled` selects no indexer. The model checks only the selected provider, using native MCP discovery or an installed CLI version probe. A missing/unusable provider warns and review continues from captured source. Redline does not install tools or manually start/probe native servers. Native automatic indexing no longer also runs the separate precomputed CLI pipeline before warmup. Explicit `--code-context` imports and isolated context preparation retain their existing validation/cache contracts.
+`--indexing-provider cgc|gitnexus` selects the code indexer, defaulting to CGC while indexing is enabled. `--indexing disabled` selects no indexer. The model checks only the selected provider, using native MCP discovery or an installed CLI version probe. A missing/unusable provider warns and review continues from captured source. Redline does not install tools or manually start/probe native servers. Host-managed context preparation is retired. Explicit `--code-context` imports retain revision and source validation without running an indexer.
 
 When the selected indexer is available, the warmup model must actually index the supplied captured head source or validate reuse of its exact index, wait for completion, and execute a relevant query. `reviews/warmup.json` separates tool availability from indexer status and records index/reuse and query observations. Unsupported prose such as "indexed 120 files" is not accepted as an executed operation or file count. Readiness requires observed successful index/reuse and query calls, positive model-reported counts and shared persistence. Those observations still do not prove complete graph coverage or correct query semantics.
 
@@ -77,7 +77,7 @@ Tags, object IDs, detached HEADs, and remote-tracking refs work as local Git rev
 
 ## Indexed cross-file context
 
-Indexing is enabled by default, with CGC as the default provider. Native Pi/OpenCode prepare captured **head** indexes through the model warmup described above. Isolated/echo execution retains the precomputed pipeline: like the GitHub action, it indexes captured **base** and resolves bounded related callers, tests and contracts from captured **head**. Working-tree reviews use synthetic revision IDs; later live edits cannot alter these inputs. New or unsupported files can lack base-graph anchors. Static-head discovery remains a separate bounded fallback.
+Indexing is enabled by default, with CGC as the requested provider. Native Pi/OpenCode ask the LLM to index captured **head** source or validate reuse through the harness's configured tools. Redline does not build graphs, query indexers, or maintain a base-index cache in the local preparation path. Working-tree reviews retain synthetic revision IDs and immutable captured source.
 
 ```bash
 redline review --base main --head HEAD --harness pi
@@ -85,13 +85,11 @@ redline review --base main --head HEAD --harness pi --indexing required
 redline review --base main --head HEAD --harness echo --indexing disabled
 ```
 
-- `enabled`: attempt indexing; retain explicit file-only coverage on unavailable providers, unsupported files, missing relationships, or invalid source evidence.
-- `required`: native execution requires reusable selected-provider readiness before file analysis, after model warmup. The isolated/precomputed path instead requires a usable source-validated related span for every reviewed file before model review, which can reject new files or documentation. Neither establishes complete semantic coverage.
-- `disabled`: do not request code-index preparation. Native configured MCPs and extra tools remain available.
+- `enabled`: request the selected provider through native warmup. Missing tools produce explicit coverage limitations. Echo has no tools and continues with file-only context.
+- `required`: native execution requires reusable selected-provider readiness from warmup. When an artifact is supplied, every reviewed file must also have a validated imported related span. Echo can use the validated import alone; without an import it stops before review.
+- `disabled`: do not request an indexer or import indexed context. Extra native configured tools remain available.
 
-The following pinned-version, Python and cache contract describes isolated/precomputed preparation, not native installation checks. The external provider and Python 3.12+ helper runtime must already be installed on the trusted host. Redline does not download, install, upgrade, or downgrade them. CGC must report exactly 0.5.7. An already-provisioned, checksum-matching Linux x64 binary at `$XDG_STATE_HOME/redline/tools/cgc/0.5.7/linux-x64/cgc` (or `$HOME/.local/state/...`) takes precedence over PATH; an explicit `--index-executable PATH` takes precedence over both. A mismatched global version is not silently replaced.
-
-`--index-runtime PATH` selects an existing Python executable; otherwise Redline searches trusted PATH directories for `python3` or `python`. Indexers, runtimes, and Node entrypoints must resolve outside the reviewed repository. GitNexus 1.6.12 is an explicit opt-in through `--indexing-provider gitnexus`; check its PolyForm Noncommercial license before use. CGC remains the default. Native provider assets and database backends do **not** have proven support on all six CLI targets. A provider that cannot run yields explicit unavailable coverage, not a claim of cross-platform compatibility.
+`--indexing-provider cgc|gitnexus` is an explicit license-sensitive choice, not an automatic fallback order. GitNexus uses PolyForm Noncommercial 1.0.0; confirm its suitability before selecting it. Redline does not silently substitute, install, upgrade, or downgrade providers. `--index-executable PATH` supplies a trusted installed-provider hint to native model warmup. Provider binaries and database backends do not have proven support on all six CLI targets.
 
 An existing artifact can be imported without running an indexer or Python:
 
@@ -101,34 +99,21 @@ redline review --base main --head HEAD --harness pi \
   --code-context-repository owner/repository
 ```
 
-Replace the path and namespace with the artifact's actual values. Without `--code-context-repository`, the expected namespace is `local/<opaque Git-common-directory hash>` from `capture.json`; no GitHub remote is needed. Import checks namespace, head, optional base identity, supported provider/schema, bounded paths/spans, and captured head source. An import is not trusted merely because it was produced earlier. Provider selection flags apply to building; an imported artifact supplies its own validated provider identity.
+Without `--code-context-repository`, the expected namespace is `local/<opaque Git-common-directory hash>` from `capture.json`. Import validates namespace, head, optional base revision, schema, bounded paths/spans, and captured head source. The imported artifact supplies its own provider identity. Only validated data and redacted diagnostics are copied into the private output directory. Invalid imports record unavailable coverage; required mode stops before review. The import step launches no provider process. Native warmup still runs separately and retains its required-mode checks.
 
-Local indexing retains validated base databases under `$XDG_CACHE_HOME/redline/indexes/v1` when `XDG_CACHE_HOME` is set. Otherwise it keeps the existing `$XDG_STATE_HOME/redline/indexes/v1` (or `$HOME/.local/state/redline/indexes/v1`) location. Provider data stays separate from review outputs and pinned tools. Identity includes the local repository namespace, base commit, provider/version, platform/architecture, and index configuration. Head-only changes and token-budget changes do not rebuild a healthy matching base index. Missing, corrupt, incompatible, or unsafe state is rebuilt; an unavailable cache falls back to a fresh per-run index rather than trusting it. The terminal reports `Base index:` with one of these values:
-
-- `reused`: a matching base index was reused.
-- `rebuilt`: a base index was built with persistent cache storage.
-- `uncached`: fresh per-run indexing was used without persistent cache storage.
-- `not-needed`: preparation skipped building a base index.
-- `unavailable`: provider-built index preparation was unavailable.
-- `imported`: an existing context artifact was selected; its identity, source validation, and coverage are reported separately.
-
-Each run refreshes sanitized base bytes from immutable Git objects at a stable pathname, validates the database through the pinned provider, and queries again. Head evidence and review artifacts are always rebuilt from the new captured head; retaining a graph does not retain model answers. Source export and provider query/startup time therefore remain on warm runs. Per-run head snapshots, socket directories, and provider homes are removed after preparation. The bounded artifact and coverage remain in `index/`.
-
-The private cache retains at most eight completed entries and 2 GiB of managed state, with least-recently-used eviction. Oversized or unsafe entries are not retained. An OS-backed lock serializes local index preparation, so overlapping runs do not publish partial databases or index the same base concurrently. Lock ownership releases on normal completion or process exit; cancelled incomplete builds are discarded. Unknown files are not deleted by cache cleanup. These controls do not establish arbitrary-runner sandboxing.
-
-This establishes context-input parity, not equal indexing latency, model output validity, or finding quality. The default local finding scope remains `defects`; use `--finding-scope defects-and-risks` to match the dogfood workflow's broader scope. Candidate verification remains disabled in both paths.
+The former host-managed base-index cache and Python runtime override are retired. Existing on-disk caches are not deleted automatically. Native index reuse belongs to the configured tools and the model's observed warmup calls.
 
 ## Static captured-head context
 
 `--head-context enabled|disabled` defaults to enabled locally, independent of whether an indexer runs. For reviewed text files with no usable base-graph spans, it finds literal relative ESM imports/re-exports and their importing files in captured JavaScript/TypeScript source. This includes test files when they import the changed module. It never runs a resolver, interpreter, test, or repository configuration. Package aliases, dynamic imports, Python imports, runtime resolution, and exhaustive test discovery are not implemented.
 
-Spans carry provider `static-head` version `1`, the captured **head** revision, and an explicit lexical-candidate limitation. They have no graph references and are never proof of reachability. Coverage remains partial. The graph artifact in `index/` still describes only the external provider; review coverage counts the additional source-backed spans and reports `static-head-context`. This fallback does not satisfy the isolated/precomputed `--indexing required` provider-context preflight. Native required indexing uses warmup readiness instead.
+Spans carry provider `static-head` version `1`, the captured **head** revision, and an explicit lexical-candidate limitation. They have no graph references and are never proof of reachability. Coverage remains partial. The graph artifact in `index/` still describes only the external provider; review coverage counts the additional source-backed spans and reports `static-head-context`. This fallback does not satisfy the imported-context `--indexing required` preflight. Native required indexing uses warmup readiness instead.
 
 Discovery examines at most 512 code files, 256 directories, depth 12, 4,096 entries per directory, 128 KiB per file, 8 MiB total, the first 4,096 lines per file, import lines at most 1,024 characters long, and 32 literal imports per file. Selection is deterministic; directories exceeding the entry bound are omitted. It selects at most four related files per reviewed file, 40 lines/8 KiB per span, within the existing 24 KiB per-file and 48 KiB run-wide related-source bounds. Missing, unsafe, symlinked, invalid-UTF8 or oversized source is never evidence of absence.
 
 ## Resume validated work
 
-Native Pi/OpenCode reviews disable persisted model-result reuse. User plugins and MCPs can depend on changing external data that a captured-source fingerprint cannot prove unchanged. The terminal states this explicitly. This does not disable the separate validated provider/base-index cache.
+Native Pi/OpenCode reviews disable persisted model-result reuse. User plugins and MCPs can depend on changing external data that a captured-source fingerprint cannot prove unchanged. The terminal states this explicitly. Native tool-owned index reuse is independent of model-result reuse.
 
 The isolated review engine and deterministic echo path retain result reuse. For example:
 
@@ -286,7 +271,6 @@ Run `redline review --help` for the complete contract.
 - `--indexing enabled|disabled|required`: default `enabled`.
 - `--indexing-provider cgc|gitnexus`: default `cgc`.
 - `--index-executable PATH`: trusted installed-provider path, also supplied to native model warmup. Never point it at repository code.
-- `--index-runtime PATH`: Python runtime override for the isolated/precomputed context pipeline, not a native harness-runtime override.
 - `--code-context PATH`, `--code-context-repository ID`: optional artifact import and expected namespace.
 - `--harness pi|opencode|echo`: default `pi`.
 - `--provider`, `--endpoint`, `--model`, `--auth none`: trusted model selection.
@@ -297,7 +281,7 @@ Run `redline review --help` for the complete contract.
 - `--max-output-tokens COUNT`: optional per-call generation cap, `1024`–`262144`; Pi defaults to `16384` when unset.
 - `--timeout`: initial per-file attempt deadline, default `4m`.
 - `--retries`: additional review attempts per file, default `3`, range `0`–`10`. Per-file timeouts add `2m` to the next attempt.
-- `--run-timeout`: whole-run deadline including capture, indexing, and review, default `10m`. Isolated/precomputed context preparation has an additional five-minute ceiling within that budget; native model warmup has its own bounded allowance above.
+- `--run-timeout`: whole-run deadline including capture, indexing, and review, default `10m`. Native model warmup has its own bounded allowance within that budget.
 - `--concurrency`: integer `1`–`8`, default `4`.
 - `--finding-scope defects|defects-and-risks`: default `defects`.
 - `--fail-on none|findings|high|critical`: default `none`.
@@ -311,7 +295,7 @@ Default artifact location: `$XDG_STATE_HOME/redline/reviews/run-*`, or `$HOME/.l
 - `bundle/`: authoritative manifest, diffs, base files, and commit metadata.
 - `source/`: captured bounded head files, never a live worktree.
 - `capture.json`: requested and resolved revisions, snapshot identity, capture coverage, excluded untracked paths, and inert symlink path/target data.
-- `index/code-context.json`, `index/status.json`: bounded normalized context and actual source-validated coverage when indexing/import is enabled.
+- `index/code-context.json`, `index/status.json`: validated imported context and its source-validated coverage, only when an artifact is supplied.
 - `reviews/`: existing validated file records, summary, and consolidated review as JSON and Markdown.
 - `reviews/warmup.json`: the bounded model-mediated startup readiness/indexing report, printed before file reviews.
 - `reviews/native-tools.json`: native catalog/server observations and observed calls, without arguments, results, reasoning or credentials. A successful call means the harness reported completion without a tool error, not semantic correctness. Isolated Actions use `reviews/analysis-tools.json` for their separate bounded MCP bridge.
@@ -355,7 +339,7 @@ Loopback success/error tests establish request and failure handling, not live-pr
 
 Git capture permits at most 20,000 tree/index entries, 16 MiB per captured working file or Git command output, and 256 MiB each for aggregate captured source, working-tree content, and bundle output. Every Git command has a 30-second ceiling and also observes whole-run cancellation. Head source embeds only files up to the existing 128 KiB source-file bound; larger files are not copied into `source/`. The review prompt retains the existing 64 KiB embedded side and 512 KiB total untrusted-payload bounds.
 
-Git commands use absolute trusted executables, argument arrays, a constructed environment, no lazy fetches, and scratch metadata without repository hooks, filters, text converters, credentials, or external diff configuration. Symlinks are captured as path/target data and are never installed into the source export. The capture and precomputed-context steps do not run project builds, tests, installers, scripts or executables. Native configured harness tools and plugins are unsandboxed in pure CLI and may do so.
+Git commands use absolute trusted executables, argument arrays, a constructed environment, no lazy fetches, and scratch metadata without repository hooks, filters, text converters, credentials, or external diff configuration. Symlinks are captured as path/target data and are never installed into the source export. Capture and artifact-import steps do not run project builds, tests, installers, scripts or executables. Native configured harness tools and plugins are unsandboxed in pure CLI and may do so.
 
 This is a trusted-host CLI, not malicious-host protection. The [Docker image](./docker-workers.md) runs this same Redline CLI and its installed harnesses together. Docker is invoked externally; Redline has no container-orchestration mode. Podman and protection from an untrusted host/kernel are not implemented. The independent finding verifier remains disabled; Docker mode does not activate that quality gate.
 

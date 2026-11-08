@@ -17,7 +17,7 @@ No HTTP listener, editor extension, or forge publication.
 See docs/stdio-protocol.md for schemas, limits, errors and recovery.
 `;
 const SETTINGS = ['config', 'harness', 'provider', 'endpoint', 'model', 'auth', 'indexing',
-  'indexing-provider', 'index-executable', 'index-runtime', 'max-output-tokens', 'timeout',
+  'indexing-provider', 'index-executable', 'max-output-tokens', 'timeout',
   'run-timeout', 'retries', 'concurrency', 'finding-scope', 'reuse', 'scheduling', 'head-context', 'model-protocol', 'fail-on'] as const;
 export async function main(
   args: readonly string[] = process.argv.slice(3),
@@ -35,7 +35,7 @@ export async function main(
     once = values.once === true;
     for (const key of SETTINGS) {
       const value = values[key];
-      if (typeof value === 'string') startup.push('--' + key, key === 'config' || key === 'index-executable' || key === 'index-runtime' ? resolve(value) : value);
+      if (typeof value === 'string') startup.push('--' + key, key === 'config' || key === 'index-executable' ? resolve(value) : value);
     }
   } catch { process.stderr.write('redline rpc: invalid startup settings; use --help. Credentials are not arguments.\n'); return 2; }
   const controller = new AbortController();

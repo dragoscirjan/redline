@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cgcGrammarEnvironment, locateCgcGrammars } from '../src/code-index/cgc-grammars.ts';
+import { cgcGrammarEnvironment, locateCgcGrammars } from '../src/harness-executor/cgc-grammars.ts';
 
 afterEach(() => vi.unstubAllEnvs());
 describe('CGC offline grammar boundary', () => {

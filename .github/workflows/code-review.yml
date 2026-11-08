@@ -31,12 +31,12 @@ on:
         type: string
         default: ""
       indexing:
-        description: Indexed-context mode, enabled or disabled. Default enabled.
+        description: Indexing preference retained for compatibility. The isolated Action currently reports file-only coverage.
         required: false
         type: string
         default: enabled
       indexing-provider:
-        description: Code-index provider, cgc or gitnexus. Default cgc.
+        description: Requested license-sensitive provider, cgc or gitnexus. No provider is invoked by the current isolated Action.
         required: false
         type: string
         default: cgc

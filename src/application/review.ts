@@ -32,7 +32,6 @@ export interface CapturedContextSnapshot {
   readonly repository: string;
   readonly base: string;
   readonly head: string;
-  prepareSources(baseDirectory?: string): Promise<{ readonly baseDirectory: string; readonly headDirectory: string }>;
 }
 
 export interface CapturedRevision {

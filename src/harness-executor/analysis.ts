@@ -8,7 +8,7 @@ import { homedir, tmpdir } from 'node:os';
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ANALYSIS_COMPONENTS, analysisTools, authorizeAnalysisCall, type AnalysisComponent, type AnalysisScope } from './analysis-policy.ts';
-import { cgcGrammarEnvironment, CGC_GRAMMAR_VERSION, CGC_GRAMMAR_MANIFEST_SHA256, locateCgcGrammars } from '../code-index/cgc-grammars.ts';
+import { cgcGrammarEnvironment, CGC_GRAMMAR_VERSION, CGC_GRAMMAR_MANIFEST_SHA256, locateCgcGrammars } from './cgc-grammars.ts';
 import { nodeProcessSpawner, runBoundedProcess } from './process-runner.ts';
 
 export interface AnalysisRequest {

@@ -43,9 +43,9 @@ jobs:
         uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: ${{ runner.temp }}/redline-code-index/cache
-          key: redline-image-index-${{ matrix.arch }}-${{ hashFiles('containers/Dockerfile', 'containers/package.json', 'containers/pnpm-lock.yaml', 'containers/requirements.txt', 'containers/preload-cgc-parsers.py', 'src/code-index/**') }}-${{ github.sha }}
+          key: redline-image-index-${{ matrix.arch }}-${{ hashFiles('containers/Dockerfile', 'containers/package.json', 'containers/pnpm-lock.yaml', 'containers/requirements.txt', 'containers/preload-cgc-parsers.py', 'src/harness-executor/cgc-grammars.ts') }}-${{ github.sha }}
           restore-keys: |
-            redline-image-index-${{ matrix.arch }}-${{ hashFiles('containers/Dockerfile', 'containers/package.json', 'containers/pnpm-lock.yaml', 'containers/requirements.txt', 'containers/preload-cgc-parsers.py', 'src/code-index/**') }}-
+            redline-image-index-${{ matrix.arch }}-${{ hashFiles('containers/Dockerfile', 'containers/package.json', 'containers/pnpm-lock.yaml', 'containers/requirements.txt', 'containers/preload-cgc-parsers.py', 'src/harness-executor/cgc-grammars.ts') }}-
       - name: Check the published version against the release source
         id: version
         shell: bash

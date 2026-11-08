@@ -6,7 +6,6 @@ setup() {
   REUSABLE_WORKFLOW="$ROOT/.github/workflows/code-review.yml"
   DOGFOOD_WORKFLOW="$ROOT/.github/workflows/dogfood-review.yml"
   PR_REVIEW_WORKFLOW="$ROOT/.github/workflows/pr-review.yml"
-  WARMUP_WORKFLOW="$ROOT/.github/workflows/code-index-warmup.yml"
   DOCS_WORKFLOW="$ROOT/.github/workflows/docs.publish.yml"
   CI_WORKFLOW="$ROOT/.github/workflows/ci.yml"
   CHECKOUT_BENCHMARK_WORKFLOW="$ROOT/.github/workflows/checkout-benchmark.yml"
@@ -53,7 +52,7 @@ for expected in [
     'Validate action inputs with trusted TypeScript',
     'Restore validated per-file review records',
     'Fetch pull request commits as data',
-    'Build bounded code index',
+    'Report file-only indexing coverage',
     'Build review context bundle',
     'Upload review context artifact',
     'Install trusted runtime dependencies',
@@ -91,21 +90,34 @@ PY
   grep -Fq 'REDLINE_REVIEW_DIR: ${{ github.workspace }}/review' "$ACTION"
   grep -Fq 'REDLINE_SOURCE_DIR: ${{ github.workspace }}/source-at-head' "$ACTION"
   grep -Fq 'REDLINE_OUTPUT_DIR: ${{ github.workspace }}/reviews' "$ACTION"
-  grep -Fq 'REDLINE_CODE_CONTEXT: ${{ steps.code-index.outputs.context-file }}' "$ACTION"
-  grep -Fq "REDLINE_CODE_CONTEXT_REPOSITORY: \${{ steps.code-index.outputs.context-file != '' && github.repository || '' }}" "$ACTION"
+  ! grep -Fq 'REDLINE_CODE_CONTEXT:' "$ACTION"
+  ! grep -Fq 'REDLINE_CODE_CONTEXT_REPOSITORY:' "$ACTION"
   ! grep -Fq 'inputs.code-context' "$ACTION"
 }
 
-@test "action composes its code-index action at the same running commit" {
-  grep -Fq 'uses: $/github/code-index' "$ACTION"
-  grep -Fq "if: \${{ inputs.indexing == 'enabled' && inputs.backend != '' && inputs.model-config != '' && inputs.model-auth != '' }}" "$ACTION"
-  grep -Fq 'provider: ${{ inputs.indexing-provider }}' "$ACTION"
-  grep -Fq 'base: ${{ github.event.pull_request.base.sha }}' "$ACTION"
-  grep -Fq 'head: ${{ github.event.pull_request.head.sha }}' "$ACTION"
-  grep -Fq 'repository: ${{ github.repository }}' "$ACTION"
-  grep -Fq 'output-directory: ${{ github.workspace }}/code-index' "$ACTION"
-  grep -Fq 'code-index/code-context.json' "$ACTION"
+@test "action reports file-only coverage without invoking a provider or switching licenses" {
+  ! grep -Fq 'uses: $/github/code-index' "$ACTION"
+  ! grep -Fq 'CODE_INDEX_VERIFICATION_ENABLED:' "$ACTION"
+  grep -Fq 'INDEXING_PROVIDER: ${{ inputs.indexing-provider }}' "$ACTION"
   grep -Fq "[[ \"\$INDEXING\" == 'enabled' || \"\$INDEXING\" == 'disabled' ]]" "$ACTION"
+  run python3 - "$ACTION" "$BATS_TEST_TMPDIR/notice.sh" <<'PY'
+import sys
+import textwrap
+from pathlib import Path
+source = Path(sys.argv[1]).read_text()
+step = source.split('    - name: Report file-only indexing coverage\n', 1)[1].split('\n    - name: ', 1)[0]
+assert "inputs.indexing == 'enabled'" in step
+assert "inputs.backend != ''" in step
+Path(sys.argv[2]).write_text(textwrap.dedent(step.split('      run: |\n', 1)[1]))
+PY
+  [ "$status" -eq 0 ]
+  for provider in cgc gitnexus; do
+    run env INDEXING_PROVIDER="$provider" GITHUB_STEP_SUMMARY="$BATS_TEST_TMPDIR/summary" bash "$BATS_TEST_TMPDIR/notice.sh"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"requested provider $provider is not invoked"* ]]
+    [[ "$output" == *"file-only coverage"* ]]
+  done
+  grep -Fq 'No alternative provider is selected.' "$BATS_TEST_TMPDIR/summary"
 }
 
 @test "reusable workflow composes the matching root action and forwards indexing policy" {
@@ -122,40 +134,14 @@ PY
   ! grep -Fq 'container-engine: ${{ inputs.container-engine }}' "$REUSABLE_WORKFLOW"
 }
 
-@test "default-branch warmup prepares both pinned provider caches with bounded concurrency" {
-  if ! python3 -c 'import yaml' 2>/dev/null; then
-    skip 'PyYAML is required to validate workflow YAML'
-  fi
-  python3 - "$WARMUP_WORKFLOW" <<'PY'
-import sys
-from pathlib import Path
-import yaml
-
-workflow = yaml.safe_load(Path(sys.argv[1]).read_text())
-assert workflow[True] == {'push': {'branches': ['main']}}
-assert workflow['permissions'] == {}
-assert workflow['concurrency'] == {
-    'group': 'redline-code-index-warmup-${{ github.repository_id }}',
-    'cancel-in-progress': True,
-}
-job = workflow['jobs']['warmup']
-assert job['permissions'] == {'contents': 'read'}
-assert job['strategy']['fail-fast'] is False
-assert job['strategy']['max-parallel'] == 2
-assert job['strategy']['matrix']['provider'] == ['cgc', 'gitnexus']
-steps = job['steps']
-checkout = next(step for step in steps if step.get('name') == 'Check out trusted default-branch revision')
-assert checkout['with']['ref'] == '${{ github.sha }}'
-assert checkout['with']['persist-credentials'] is False
-assert checkout['with']['fetch-depth'] == 0
-warmup = next(step for step in steps if step.get('id') == 'warmup')
-assert warmup['uses'] == './github/code-index'
-assert warmup['with']['mode'] == 'warmup'
-assert warmup['with']['base'] == warmup['with']['head'] == '${{ github.sha }}'
-assert warmup['with']['provider'] == '${{ matrix.provider }}'
-assert any(step.get('name') == 'Upload warmup diagnostics' for step in steps)
-assert any(step.get('name') == 'Fail visible warmup errors' for step in steps)
-PY
+@test "host-managed index preparation and cache warmup are retired" {
+  [ ! -f "$ROOT/.github/workflows/code-index-warmup.yml" ]
+  [ -f "$ROOT/github/code-index/action.yaml" ]
+  [ ! -f "$ROOT/github/code-index/run.sh" ]
+  [ ! -f "$ROOT/github/code-index/export.py" ]
+  grep -Fq 'context-file=' "$ROOT/github/code-index/action.yaml"
+  grep -Fq 'status=unavailable' "$ROOT/github/code-index/action.yaml"
+  [ ! -d "$ROOT/src/code-index" ]
 }
 
 @test "documentation workflow publishes through a destination pull request" {

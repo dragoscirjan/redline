@@ -89,11 +89,12 @@ describe.each(['node', ...(bunAvailable ? ['bun'] : [])])('offline installed pac
     expect(paths).toContain('src/harness-executor/analysis-server.ts');
     expect(paths).toContain('bin/redline.mjs');
     expect(paths.some(path => /^bin\/.*\.(?:sh|ps1|cmd)$/u.test(path))).toBe(false);
-    for (const entry of ['local/cli.js', 'review/cli.js', 'rpc/main.js', 'code-index/export.py', 'code-index/lock.py', 'code-index/gitnexus-query.mjs']) expect(paths).toContain(`dist/${entry}`);
+    for (const entry of ['local/cli.js', 'review/cli.js', 'rpc/main.js', 'harness-executor/cgc-grammars.js']) expect(paths).toContain(`dist/${entry}`);
     expect(paths).toContain('src/rpc/main.ts');
     expect(paths).toContain('schemas/rpc/v1/protocol.schema.json');
     expect(paths).toContain('docs/stdio-protocol.md');
-    for (const file of ['context.ts', 'cache.ts', 'cgc-grammars.ts', 'lock.py', 'export.py', 'gitnexus-query.mjs']) expect(paths).toContain(`src/code-index/${file}`);
+    expect(paths).toContain('src/harness-executor/cgc-grammars.ts');
+    expect(paths.some(path => /^(?:src|dist)\/code-index\//u.test(path))).toBe(false);
     expect(paths.some((path) => /^(?:test|benchmark|src\.old|node_modules|\.agents|\.github|scripts)\//u.test(path))).toBe(false);
     state.packed = packed;
   }, 60_000);
@@ -165,18 +166,21 @@ describe.each(['node', ...(bunAvailable ? ['bun'] : [])])('offline installed pac
     const revisions = run(['review', '--harness', 'echo', '--indexing', 'disabled', '--base', base, '--head', 'HEAD', '--max-output-tokens', '32768'], repository);
     expect(revisions.exitCode, revisions.stderr).toBe(0); expect(revisions.stdout).toContain('Artifacts:');
     expect(revisions.stdout).toContain('Output budget: 32768 tokens per model call');
-    const indexer = join(root, 'package-cgc.mjs');
-    await writeFile(indexer, `import fs from 'node:fs'; import path from 'node:path'; const a=process.argv.slice(2);
-if(a[0]==='version'){console.error('CodeGraphContext 0.5.7');process.exit(0);}
-const db=process.env.CGC_RUNTIME_DB_PATH;
-if(a[0]==='index'){fs.mkdirSync(path.dirname(db),{recursive:true});fs.writeFileSync(db,a[1]);process.exit(0);}
-if(a[0]==='query'){const source=fs.readFileSync(db,'utf8');console.log(JSON.stringify(a[1].includes('repository_count')?[{repository_count:1}]:a[1].startsWith('MATCH (related)')?[{changed_path:path.join(source,'example.ts'),related_path:path.join(source,'caller.ts'),start_line:1,end_line:1}]:[]));}else process.exit(1);`);
-    const indexed = run(['review', '--harness', 'echo', '--base', base, '--head', 'HEAD', '--indexing', 'required', '--index-executable', indexer], repository);
+    const artifact = join(root, 'package-context.json');
+    await writeFile(artifact, JSON.stringify({ version: 2, repository: 'local/package', revision: git('rev-parse', 'HEAD'), baseRevision: base,
+      provider: { id: 'cgc', version: 'fixture' }, status: 'complete',
+      files: [{ changedPath: 'example.ts', status: 'complete', related: [{ path: 'caller.ts', startLine: 1, endLine: 1, reason: 'recorded caller' }] }],
+      diagnostics: [], timings: { installationMs: 0, restoreMs: 0, validationMs: 0, indexMs: 0, queryMs: 0, saveMs: null } }));
+    const importedArgs = ['review', '--harness', 'echo', '--base', base, '--head', 'HEAD', '--indexing', 'required',
+      '--code-context', artifact, '--code-context-repository', 'local/package'];
+    const indexed = run(importedArgs, repository);
     expect(indexed.exitCode, indexed.stderr).toBe(0);
     expect(indexed.stdout).toMatch(/Indexed context:\s+complete/u);
     expect(indexed.stdout).toMatch(/Related source:\s+1 file with context; 1 related span/u);
-    const warm = run(['review', '--harness', 'echo', '--base', base, '--head', 'HEAD', '--indexing', 'required', '--index-executable', indexer], repository);
-    expect(warm.exitCode, warm.stderr).toBe(0); expect(warm.stderr).toContain('Base index: reused');
+    const importedAgain = run(importedArgs, repository);
+    expect(importedAgain.exitCode, importedAgain.stderr).toBe(0);
+    expect(importedAgain.stdout).toMatch(/Related source:\s+1 file with context; 1 related span/u);
+    expect(importedAgain.stderr).not.toContain('Base index: reused');
     await writeFile(join(repository, 'example.ts'), 'working\n');
     const working = run(['review', '--harness', 'echo', '--indexing', 'disabled'], repository);
     expect(working.exitCode, working.stderr).toBe(0);

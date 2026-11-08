@@ -25,7 +25,7 @@ There is no inheritance hierarchy or plugin loader. Adding an adapter requires t
 
 ## Capture is not review policy
 
-`src/local/` owns CLI parsing, trusted user configuration, Git process controls, immutable capture, and terminal rendering. `src/application/` owns ordering and contracts. `src/review/` still owns fixed prompts, bounded evidence, model-result validation, synthesis, reuse, and deterministic artifact writing. `src/code-index/context.ts` prepares revision-bound context through the shared Python artifact builder in `src/code-index/export.py`. The source port supplies immutable base/head exports; local tool discovery stays in `src/local/context.ts`. The action keeps compatibility entrypoints under `github/code-index/`. `src/publish/` retains existing managed GitHub publication.
+`src/local/` owns CLI parsing, trusted user configuration, Git process controls, immutable capture, and terminal rendering. `src/application/` owns ordering and contracts. `src/review/` still owns fixed prompts, bounded evidence, model-result validation, synthesis, reuse, and deterministic artifact writing. Native harness prompts own indexer discovery, indexing, reuse checks, and queries. `src/local/context.ts` only imports bounded, revision-matched artifacts and resolves their spans from captured source. Isolated GitHub Actions currently reports file-only coverage; it does not run a host indexing pipeline. `src/publish/` retains existing managed GitHub publication.
 
 `buildBundle()` accepts a bounded Git command port. The existing context-bundle CLI uses its original implementation; the local revision adapter supplies a scratch-repository implementation. Local capture does not require modifying the existing manifest or review schemas.
 
@@ -33,11 +33,11 @@ A working-tree review writes synthetic tree/commit objects into temporary metada
 
 ## Context preparation
 
-A captured revision can expose a provider-neutral context snapshot: namespace, immutable base/head IDs, and a lazy bounded source exporter. The application injects context preparation between capture and review. It does not construct environment-variable workarounds or move provider logic into a forge adapter.
+A captured revision exposes its repository namespace and immutable base/head IDs for artifact imports and result-reuse identity. The application imports supplied context between capture and review. It does not build graphs, query providers, or maintain base-index databases.
 
-The local composition root resolves only separately installed trusted providers/runtimes. The shared builder indexes sanitized base source with repository/provider configuration excluded, queries bounded relationships, and re-resolves related spans from captured head source. The same artifact loader and prompt builder then serve local and GitHub execution. Model/publication credentials never enter provider environments. Pinned CGC machine output uses a fixed wide terminal width because CGC 0.5.7 otherwise wraps long path strings inside JSON.
+Native Pi/OpenCode use model warmup and configured harness tools for indexing and queries. Provider selection remains explicit because indexers have different licenses. Required native indexing needs observed reusable readiness. A supplied artifact must also provide source-validated related context for every reviewed file in required mode. Echo can satisfy required mode with that import alone; native execution still requires warmup readiness. Invalid or unavailable imports retain explicit file-only coverage and never trigger provider installation or execution.
 
-Unavailable or invalid context records explicit file-only coverage. Required mode checks every reviewed file after source validation and aborts before model calls on any file-only gap. Local provider state uses a private, bounded exact-base cache behind an OS-backed cross-process lease. A stable base-source pathname preserves CGC graph references, but base bytes are refreshed from captured Git objects before validation. Provider/version, platform, repository, base, and configuration changes invalidate reuse. Head-only changes reuse validated databases, not head evidence or model output. Per-run socket/head/home scratch is removed; persistent action cache orchestration remains unchanged. An imported artifact bypasses provider execution but not identity, schema, path, or source validation. No verifier is activated.
+The retained isolated analysis bridge has separate tool permissions and parser support. This cleanup does not change its server or authorization policy. The published Action retires its precomputed indexing and cache-warmup pipeline and reports file-only coverage until a separate harness migration.
 
 ## Artifacts precede reporters
 

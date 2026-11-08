@@ -15,7 +15,17 @@ LANGUAGES = ["c", "cpp", "csharp", "go", "java", "javascript", "php", "python", 
 DESTINATION = Path("/opt/cgc-parsers") / f"v{VERSION}"
 
 
+def stage_parsers(source: Path, destination: Path) -> None:
+    """Reject cache symlinks before copying and preserve late symlinks for rejection, never dereference them."""
+    if source.is_symlink() or any(path.is_symlink() for path in source.rglob("*")):
+        raise RuntimeError("CGC parser cache contains a symlink")
+    shutil.copytree(source, destination, symlinks=True)
+    if any(path.is_symlink() for path in destination.rglob("*")):
+        raise RuntimeError("CGC parser staging contains a symlink")
+
+
 def main() -> None:
+    """Verify pinned metadata and stage offline grammars without consuming review content."""
     if importlib.metadata.version("tree-sitter-language-pack") != VERSION:
         raise RuntimeError("unexpected CGC grammar package version")
     url = f"https://github.com/xberg-io/tree-sitter-language-pack/releases/download/v{VERSION}/parsers.json"
@@ -53,7 +63,7 @@ def main() -> None:
         for language in LANGUAGES:
             get_parser(language).parse(b"")
         # Keep only runtime libraries, not download archives or writable build caches.
-        shutil.copytree(Path(cache_dir()), DESTINATION)
+        stage_parsers(Path(cache_dir()), DESTINATION)
     (DESTINATION / "NOTICE.txt").write_text("\n".join(notices), encoding="utf-8")
     for path in [DESTINATION, *DESTINATION.rglob("*")]:
         if path.is_symlink():

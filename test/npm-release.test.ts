@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertNpmVersionAvailable, assertPublishOnlyChangesets } from '../src/release/npm-check.ts';
+import { assertNpmVersionAvailable, assertPublishOnlyChangesets } from '../scripts/release/npm-check.ts';
 
 const roots: string[] = [];
 const lineEndings = [['LF', '\n'], ['CRLF', '\r\n']] as const;
@@ -144,24 +144,29 @@ describe('npm release boundary', () => {
     await expect(assertPublishOnlyChangesets(join(root, '.changeset'))).resolves.toBeUndefined();
   });
 
+  it('runs repository release tooling with an explicit Node type-stripping flag', async () => {
+    const metadata = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    expect(metadata.scripts['release:preflight']).toBe('node --experimental-strip-types scripts/release/npm-check.ts');
+  });
+
   it('uses the reviewed manifest version by default and ignores ambient VERSION without registry access', async () => {
-    const source = new URL('../src/release/npm-check.ts', import.meta.url);
+    const source = new URL('../scripts/release/npm-check.ts', import.meta.url);
     const metadata = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
     const root = await mkdtemp(join(tmpdir(), 'redline-release-version-')); roots.push(root);
-    await mkdir(join(root, 'src/release'), { recursive: true }); await mkdir(join(root, '.changeset'));
+    await mkdir(join(root, 'scripts/release'), { recursive: true }); await mkdir(join(root, '.changeset'));
     await writeFile(join(root, 'package.json'), JSON.stringify({ name: metadata.name, version: metadata.version, type: 'module' }));
     await writeFile(join(root, '.changeset/config.json'), '{}');
-    const file = pathToFileURL(join(root, 'src/release/npm-check.ts'));
+    const file = pathToFileURL(join(root, 'scripts/release/npm-check.ts'));
     await writeFile(file, await readFile(source));
     for (const explicit of [false, true]) {
       const script = `globalThis.fetch = async () => new Response('', { status: 404 });
         process.argv = [process.execPath, ${JSON.stringify(fileURLToPath(file))}${explicit ? ', ' + JSON.stringify(metadata.version) : ''}];
         await import(${JSON.stringify(file.href)});`;
-      const result = execaSync(process.execPath, ['--input-type=module', '--eval', script], {
+      const result = execaSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '--eval', script], {
         extendEnv: false,
         stripFinalNewline: false,
         reject: false,
-        env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, VERSION: 'invalid' },
+        env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, VERSION: 'invalid', NODE_OPTIONS: '--no-strip-types' },
         encoding: 'utf8',
         timeout: 10_000,
         maxBuffer: 1024 * 1024,
@@ -314,7 +319,7 @@ require('node:fs').appendFileSync(process.env.FIXTURE_ROOT + '/delays', process.
     expect(source).not.toContain('workflow_dispatch:');
     expect(source).not.toContain('gh run list');
     expect(source).not.toContain('inputs.version');
-    expect(source).not.toContain('run: node src/release/npm-check.ts');
+    expect(source).not.toMatch(/run:\s*(?:node|bun)\b[^\n]*npm-check\.ts/u);
     expect(source).toContain('dragoscirjan/tempel-javascript/.github/actions/release@71e3379b37d477ae0e7915f6463b0a3921d28f8d');
     expect(source).toContain('fetch-depth: 0');
     expect(source).toContain('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}');

@@ -47,7 +47,7 @@
     "test": "vitest run && bats test/*.bats",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:package": "vitest run test/package.test.ts",
-    "release:preflight": "node src/release/npm-check.ts"
+    "release:preflight": "node --experimental-strip-types scripts/release/npm-check.ts"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.3",

@@ -6,7 +6,7 @@ import { ReviewApplication, executePreparedReview, type CompositeReporter, type 
 import { createHarnessExecutor } from '../harness-executor/registry.ts';
 import { GitRevisionSource } from './git-source.ts';
 import type { LocalOptions } from './options.ts';
-import { cancellableSpawner, executable, inside, LocalOperationError } from './process.ts';
+import { cancellableSpawner, nativeHarnessCommand, inside, LocalOperationError } from './process.ts';
 import { prepareLocalContext } from './context.ts';
 import { localReviewReuse } from './reuse.ts';
 import { terminalText } from './reporter.ts';
@@ -44,7 +44,7 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
         ? 'Native harness configuration enabled. Docker is the execution isolation boundary.'
         : 'WARNING: UNSANDBOXED NATIVE CLI. Configured tools and plugins can execute commands, modify files, access the network and use available credentials. Use a container, VM or other isolation when needed.');
     }
-    const command = native ? await executable(options.environment.harness, env.PATH ?? '', options.repository) : undefined;
+    const launch = native ? await nativeHarnessCommand(options.environment.harness, env.PATH ?? '', options.repository) : undefined;
     if (native && options.indexing.mode !== 'disabled' && options.indexing.executable !== undefined) {
       const canonical = await realpath(options.indexing.executable).catch(() => undefined);
       if (inside(options.repository, options.indexing.executable) || canonical !== undefined && inside(options.repository, canonical)) {
@@ -52,7 +52,7 @@ export async function runLocalReview(options: LocalOptions, env: NodeJS.ProcessE
       }
     }
     const executor = createHarnessExecutor(options.environment.harness, {
-      ...(command === undefined ? {} : { command }), spawner: cancellableSpawner(signal),
+      ...(launch === undefined ? {} : { command: launch.command }), spawner: cancellableSpawner(signal, launch),
       ...(native ? { native: { directory: options.repository, environment: env, container: env.container === 'redline' } } : {}),
     });
     if (options.output === undefined) {

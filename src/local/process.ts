@@ -103,6 +103,12 @@ export async function hostToolCommand(name: 'pi' | 'opencode' | 'cgc' | 'gitnexu
   throw new LocalOperationError(`trusted ${name} executable not found outside the reviewed repository`);
 }
 
+/** Keep POSIX CLI entrypoints native; resolve Windows npm entrypoints without cmd.exe or a shell. */
+export async function nativeHarnessCommand(name: 'pi' | 'opencode', path: string, repository: string): Promise<LaunchCommand> {
+  if (process.platform === 'win32') return hostToolCommand(name, path, repository);
+  return { command: await executable(name, path, repository), prefix: [] };
+}
+
 /** Bind caller cancellation to owned process trees while preserving the runner's streaming interface. */
 export function cancellableSpawner(signal: AbortSignal, launch?: LaunchCommand): ProcessSpawner {
   return {

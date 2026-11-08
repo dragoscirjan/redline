@@ -6,7 +6,7 @@ import { loadReviewCodeContext } from '../src/review/indexed-context.ts';
 import { cleanReviewEnvironment, createBundleFixture } from './helpers/bundle.ts';
 
 describe('model-protocol reuse identity', () => {
-  it('invalidates changed available tools and captured analysis bytes', async () => {
+  it('keeps equal tool-aware inputs stable and invalidates changed tools or captured analysis bytes', async () => {
     const f = await createBundleFixture();
     try {
       const bundle = await loadReviewBundle(f.review, f.source);
@@ -18,6 +18,9 @@ describe('model-protocol reuse identity', () => {
       const first = await buildReviewSemanticFingerprint({ ...common, tools: [tool], analysisIdentity: 'captured-bytes-a' });
       const next = await buildReviewSemanticFingerprint({ ...common, tools: [tool], analysisIdentity: 'captured-bytes-b' });
       expect(first).not.toBe(none); expect(next).not.toBe(first);
+      expect(await buildReviewSemanticFingerprint(common)).toBe(none);
+      expect(await buildReviewSemanticFingerprint({ ...common, tools: [tool], analysisIdentity: 'captured-bytes-a' })).toBe(first);
+      expect(await buildReviewSemanticFingerprint({ ...common, tools: [tool], analysisIdentity: 'captured-bytes-b' })).toBe(next);
       expect(await buildReviewSemanticFingerprint({ ...common, tools: [], analysisIdentity: 'captured-bytes-a' })).not.toBe(first);
     } finally { await f.cleanup(); }
   });

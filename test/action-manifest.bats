@@ -136,7 +136,11 @@ PY
 
 @test "host-managed index preparation and cache warmup are retired" {
   [ ! -f "$ROOT/.github/workflows/code-index-warmup.yml" ]
-  [ ! -f "$ROOT/github/code-index/action.yaml" ]
+  [ -f "$ROOT/github/code-index/action.yaml" ]
+  [ ! -f "$ROOT/github/code-index/run.sh" ]
+  [ ! -f "$ROOT/github/code-index/export.py" ]
+  grep -Fq 'context-file=' "$ROOT/github/code-index/action.yaml"
+  grep -Fq 'status=unavailable' "$ROOT/github/code-index/action.yaml"
   [ ! -d "$ROOT/src/code-index" ]
 }
 

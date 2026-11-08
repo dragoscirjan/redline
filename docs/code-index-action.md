@@ -22,6 +22,8 @@ The current isolated Action does not expose graph-index creation tools to the LL
 
 The public `indexing` and `indexing-provider` inputs remain accepted. When a configured review requests indexing, the Action emits a warning and a step summary stating that the requested provider is not invoked. It never selects an alternative provider. No provider installation, graph build, provider-cache restore/save, or background index warmup runs through the retired pipeline.
 
+A minimal compatibility descriptor remains at `github/code-index/action.yaml` because older trusted parent Actions resolve that child at the new PR revision. It returns an empty context path and unavailable coverage without installing tools, building graphs, or accessing caches. The current parent Action does not invoke it.
+
 The context artifact still contains the authoritative review bundle and captured head source. Publication credentials remain outside review execution. Finding schema, exact-diff evidence validation, and publication rules are unchanged.
 
 ## Imported context

@@ -1,0 +1,61 @@
+name: Redline retired code-index compatibility
+
+description: Compatibility entrypoint for older parent Actions. Reports unavailable context without installing or invoking an indexer.
+
+inputs:
+  provider:
+    description: Requested provider, retained for license-sensitive compatibility.
+    default: cgc
+  mode:
+    description: Former execution mode, review or warmup.
+    default: review
+  base:
+    description: Former exact base revision input. Not read or indexed.
+    required: true
+  head:
+    description: Former exact head revision input. Not read or indexed.
+    required: true
+  repository:
+    description: Former repository identity input. Not read or indexed.
+    required: true
+  output-directory:
+    description: Former artifact directory input. No artifact is written.
+    required: true
+
+outputs:
+  context-file:
+    description: Empty because no precomputed context is produced.
+    value: ${{ steps.retired.outputs.context-file }}
+  status:
+    description: Always unavailable. No indexing coverage is claimed.
+    value: ${{ steps.retired.outputs.status }}
+  cache-hit:
+    description: Always false. No cache is accessed.
+    value: ${{ steps.retired.outputs.cache-hit }}
+  cache-save-outcome:
+    description: Always skipped. No cache is saved.
+    value: ${{ steps.retired.outputs.cache-save-outcome }}
+  warmup-result:
+    description: Always retired. This entrypoint cannot warm an index.
+    value: ${{ steps.retired.outputs.warmup-result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Report retired host indexing
+      id: retired
+      shell: bash
+      env:
+        REQUESTED_PROVIDER: ${{ inputs.provider }}
+        REQUESTED_MODE: ${{ inputs.mode }}
+      run: |
+        case "$REQUESTED_PROVIDER" in
+          cgc|gitnexus) ;;
+          *) printf 'Unsupported code-index provider\n' >&2; exit 2 ;;
+        esac
+        case "$REQUESTED_MODE" in
+          review|warmup) ;;
+          *) printf 'Unsupported code-index mode\n' >&2; exit 2 ;;
+        esac
+        printf '::warning::Host-managed indexing is retired. Requested provider %s is not invoked; review uses file-only coverage.\n' "$REQUESTED_PROVIDER"
+        printf 'context-file=\nstatus=unavailable\ncache-hit=false\ncache-save-outcome=skipped\nwarmup-result=retired\n' >> "$GITHUB_OUTPUT"

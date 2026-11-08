@@ -23,6 +23,15 @@ describe('native harness environment', () => {
 });
 
 describe('observed native tool activity', () => {
+  it.each([
+    ['complete', 'incomplete', 'incomplete'], ['incomplete', 'complete', 'incomplete'],
+    ['complete', 'complete', 'complete'], ['incomplete', undefined, 'incomplete'],
+    ['complete', undefined, 'complete'], [undefined, undefined, undefined],
+  ] as const)('merges discovery %s and %s conservatively as %s', (first, second, expected) => {
+    const observations = [first, second].map(discovery => ({ ...nativeToolEvidence('', 'pi'),
+      ...(discovery === undefined ? {} : { discovery }) }));
+    expect(mergeNativeToolEvidence(observations).discovery).toBe(expected);
+  });
   it('reads historical server observations without treating a connection as a successful call', () => {
     const report = mergeNativeToolEvidence([{ ...nativeToolEvidence('', 'opencode'),
       servers: [{ name: 'gitnexus', status: 'connected' }, { name: 'cgc', status: 'failed' }], discovery: 'complete' }]);

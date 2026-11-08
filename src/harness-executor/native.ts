@@ -52,7 +52,7 @@ export function mergeNativeToolEvidence(items: readonly NativeToolEvidence[]): N
     }
   }
   return { ...(servers.size === 0 ? {} : { servers: [...servers.values()] }),
-    ...(items.some(item => item.discovery !== undefined) ? { discovery: items.some(item => item.discovery === 'complete') ? 'complete' as const : 'incomplete' as const } : {}),
+    ...(items.some(item => item.discovery !== undefined) ? { discovery: items.some(item => item.discovery === 'incomplete') ? 'incomplete' as const : 'complete' as const } : {}),
     catalogueSource: items.some(item => item.catalogueSource === 'harness-catalogue') ? 'harness-catalogue' : 'observed-calls',
     catalogue: [...catalogue].sort(), calls: [...calls.values()].sort((a, b) => a.name.localeCompare(b.name)), truncated };
 }

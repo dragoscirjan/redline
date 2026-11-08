@@ -307,7 +307,7 @@ function expectedAggregateStatus(files: readonly ChangedFileCodeContext[]): Code
   return 'unavailable';
 }
 
-/** Strictly parses the compact provider-neutral artifact emitted by github/code-index. */
+/** Strictly parses a compact provider-neutral context artifact from an external producer. */
 export function parseCodeContextArtifact(value: unknown): CodeContextArtifact {
   const input = record(value, 'code-context');
   onlyKeys(input, ['version', 'provider', 'repository', 'revision', 'baseRevision', 'status', 'files', 'diagnostics', 'timings'], 'code-context');

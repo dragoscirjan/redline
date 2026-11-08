@@ -24,7 +24,6 @@ export interface LocalOptions {
     readonly mode: 'enabled' | 'disabled' | 'required';
     readonly provider: 'cgc' | 'gitnexus';
     readonly executable: string | undefined;
-    readonly runtime: string | undefined;
     readonly artifact: string | undefined;
     readonly repository: string | undefined;
   };
@@ -88,8 +87,8 @@ export function createReviewCommand(command: Command = new Command('review')): C
     .option('--model-protocol <compatible|openrouter-json>', 'Model request protocol; default compatible; explicit Pi/OpenRouter controls')
 
     .optionsGroup('Harness tools and context:')
-    // Choose whether to prepare indexed related-source context or allow file-only review.
-    // Required mode stops before review if a reviewed file lacks validated related spans.
+    // Select prompt-driven indexing or file-only review without changing the permitted provider.
+    // Required mode needs verified warmup readiness or validated imported context for every reviewed file.
     .option('--indexing <enabled|disabled|required>', 'Indexed context; default enabled; required rejects file-only fallback')
     // Choose which external code indexer supplies relationships, independently of the model provider.
     // Redline resolves related source from the capture rather than trusting graph text.
@@ -97,10 +96,7 @@ export function createReviewCommand(command: Command = new Command('review')): C
     // Use a specific trusted indexer program instead of automatic tool discovery.
     // Repository-local programs are rejected; this does not install an indexer.
     .option('--index-executable <path>', 'Trusted existing indexer override')
-    // Choose the Python interpreter for code-context preparation when automatic discovery is unsuitable.
-    // This is not the runtime for Redline or the review harness.
-    .option('--index-runtime <path>', 'Trusted Python helper runtime override')
-    // Import an existing context artifact instead of preparing one through the local indexer.
+    // Import an existing context artifact without launching an indexer.
     // The artifact must pass repository and revision checks before it can supply context.
     .option('--code-context <path>', 'Import an existing revision-matched context artifact')
     // Set the expected owner/name identity used to prepare or validate context artifacts.
@@ -312,7 +308,6 @@ export async function resolveLocalOptions(values: Readonly<Record<string, unknow
   };
   const artifact = optional('code-context');
   const indexExecutable = optional('index-executable');
-  const indexRuntime = optional('index-runtime');
   const contextRepository = optional('code-context-repository');
   const indexMode = choice(get('indexing', 'enabled'), ['enabled', 'disabled', 'required'], 'indexing');
   if (artifact !== undefined && (indexMode === 'disabled' || indexExecutable !== undefined)) throw new UsageError('imported context conflicts with disabled indexing or an indexer executable');
@@ -327,7 +322,7 @@ export async function resolveLocalOptions(values: Readonly<Record<string, unknow
     indexing: { mode: indexMode, provider: choice(get('indexing-provider', 'cgc'), ['cgc', 'gitnexus'], 'indexing-provider'),
       artifact: artifact === undefined ? undefined : resolve(cwd, artifact),
       executable: indexExecutable === undefined ? undefined : resolve(cwd, indexExecutable),
-      runtime: indexRuntime === undefined ? undefined : resolve(cwd, indexRuntime), repository: contextRepository },
+      repository: contextRepository },
     progress: choice(get('progress', 'auto'), ['auto', 'always', 'never'], 'progress'),
     reporters, color: choice(get('color', 'auto'), ['auto', 'always', 'never'], 'color'), failOn: choice(get('fail-on', 'none'), ['none', 'findings', 'high', 'critical'], 'fail-on'), environment: { ...parsed.review,
       retries,

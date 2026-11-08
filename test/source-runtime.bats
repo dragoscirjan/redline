@@ -74,7 +74,7 @@ teardown() {
   [ -f "$TMP/source-runtime.md" ]
 }
 
-@test "loads opt-in and installer entrypoints without emitted JavaScript" {
+@test "loads opt-in entrypoints without emitted JavaScript" {
   run env -u REDLINE_LIVE_BENCHMARK "$RUNTIME" "$ROOT/src/benchmark/live-cli.ts" \
     --output "$TMP/live-model.json"
   [ "$status" -eq 1 ]
@@ -101,7 +101,4 @@ teardown() {
   [ "$status" -eq 1 ]
   [[ "$output" == *'redline-live-verification-judge:'* ]]
 
-  run "$RUNTIME" "$ROOT/src/code-index/install-gitnexus.ts"
-  [ "$status" -eq 2 ]
-  [[ "$output" == *'destination must be an absolute path'* ]]
 }

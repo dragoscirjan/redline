@@ -1,7 +1,6 @@
 /** Build the Node distribution without changing source imports or installing tools. */
 import { execaSync } from 'execa';
-import { cp, mkdir } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -18,11 +17,4 @@ if (result.failed) {
     process.stderr.write(`redline build: compiler process ${reason}${code === undefined ? '' : ` (${code})`}\n`);
   }
   process.exitCode = result.exitCode ?? 1;
-} else {
-  // These helpers are resolved relative to compiled code-index modules.
-  for (const name of ['lock.py', 'export.py', 'gitnexus-query.mjs']) {
-    const target = join(output, 'code-index', name);
-    await mkdir(dirname(target), { recursive: true });
-    await cp(join(root, 'src/code-index', name), target);
-  }
 }

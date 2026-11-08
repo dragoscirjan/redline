@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { CGC_GRAMMAR_MANIFEST_SHA256 } from '../src/code-index/cgc-grammars.ts';
+import { CGC_GRAMMAR_MANIFEST_SHA256 } from '../src/harness-executor/cgc-grammars.ts';
 
 async function patterns(): Promise<string[]> {
   return (await readFile(new URL('../.dockerignore', import.meta.url), 'utf8'))

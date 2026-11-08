@@ -61,7 +61,7 @@ export default defineConfig({
           { text: 'Reusable workflow reference', link: '/reusable-review-workflow' },
           { text: 'Action reference', link: '/github-composite-action' },
           { text: 'Dogfood reviews', link: '/dogfood-review' },
-          { text: 'Code-index action', link: '/code-index-action' },
+          { text: 'Indexing and provider licenses', link: '/code-index-action' },
         ],
       },
       {

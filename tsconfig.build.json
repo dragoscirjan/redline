@@ -11,6 +11,7 @@
   "files": [
     "src/local/cli.ts",
     "src/review/cli.ts",
-    "src/rpc/main.ts"
+    "src/rpc/main.ts",
+    "src/harness-executor/analysis-server.ts"
   ]
 }

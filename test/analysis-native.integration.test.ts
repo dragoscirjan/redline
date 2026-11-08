@@ -1,5 +1,5 @@
-import { spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { execa } from 'execa';
+import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -10,19 +10,27 @@ import { createBundleFixture, cleanReviewEnvironment } from './helpers/bundle.ts
 const enabled = process.env.REDLINE_MCP_INTEGRATION_TESTS === '1';
 const key = 'synthetic-container-model-key-do-not-persist';
 interface ModelRequest { authorization: string; body: { tools?: { function: { name: string } }[]; messages?: { role: string; content: unknown }[] } }
+/** Own the synthetic model process from startup through close, including failed readiness. */
 async function model() {
-  const child = spawn(process.execPath, [fileURLToPath(new URL('./fixtures/container-model.mjs', import.meta.url))], {
+  const child = execa(process.execPath, [fileURLToPath(new URL('./fixtures/container-model.mjs', import.meta.url))], {
     env: { PATH: process.env.PATH, REDLINE_MOCK_MODE: 'analysis', REDLINE_MOCK_HOST: '127.0.0.1', REDLINE_MOCK_PORT: '0' },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+    stdio: ['ignore', 'pipe', 'pipe'], extendEnv: false, reject: false, buffer: false,
+  }).nodeChildProcess;
+  if (child.stdout === null || child.stderr === null) throw new Error('Synthetic model requires piped output');
+  const stdout = child.stdout;
   const requests: ModelRequest[] = [];
   let lines = '', stderr = '';
   child.stderr.on('data', chunk => { stderr = (stderr + String(chunk)).slice(-4000); });
+  /** Wait for process exit before any fixture-owned state can be removed. */
+  const close = async (): Promise<void> => {
+    if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return;
+    await new Promise<void>(resolve => { child.once('exit', () => resolve()); child.kill('SIGKILL'); });
+  };
   const port = await new Promise<number>((resolve, reject) => {
     const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('Synthetic model startup timed out')); }, 5000);
     child.once('error', error => { clearTimeout(timer); reject(error); });
     child.once('exit', () => { clearTimeout(timer); reject(new Error('Synthetic model exited: ' + stderr)); });
-    child.stdout.on('data', chunk => {
+    stdout.on('data', chunk => {
       lines += String(chunk);
       for (;;) {
         const end = lines.indexOf('\n'); if (end < 0) break;
@@ -31,18 +39,33 @@ async function model() {
         if (row.type === 'request') requests.push(row as ModelRequest);
       }
     });
-  });
-  return { port, requests,
-    /** Stop only this fixture's model-server process and wait for its exit. */
-    async close() {
-    if (child.exitCode !== null) return;
-    await new Promise<void>(resolve => { child.once('exit', () => resolve()); child.kill('SIGKILL'); });
-  } };
+  }).catch(async error => { await close(); throw error; });
+  return { port, requests, close };
 }
+
+/** Release the bundle if model startup fails; after startup, close the model before deleting captured state. */
+async function analysisFixture(startModel: (fixture: Awaited<ReturnType<typeof createBundleFixture>>) => ReturnType<typeof model> = () => model()) {
+  const fixture = await createBundleFixture();
+  try {
+    const server = await startModel(fixture);
+    return { ...fixture, server, async cleanup() { try { await server.close(); } finally { await fixture.cleanup(); } } };
+  } catch (error) { await fixture.cleanup(); throw error; }
+}
+
+it('cleans captured bundle directories when the native analysis model cannot start', async () => {
+  let paths: string[] = [];
+  await expect(analysisFixture(async fixture => {
+    paths = [fixture.review, fixture.source, fixture.output];
+    throw new Error('synthetic startup failure');
+  })).rejects.toThrow('synthetic startup failure');
+  expect(paths).toHaveLength(3);
+  for (const path of paths) await expect(access(path)).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
 describe.runIf(enabled)('native local read-only analysis', () => {
   for (const harness of ['pi', 'opencode'] as const) {
     it(harness + ' runs a real prompt when no trusted optional dependencies can be discovered', async () => {
-      const fixture = await createBundleFixture(); const server = await model();
+      const fixture = await analysisFixture(); const server = fixture.server;
       try {
         const parsed = parseReviewEnvironment({ ...cleanReviewEnvironment(fixture, harness),
           REDLINE_MODEL_CONFIG: JSON.stringify({ provider: 'mock', endpoint: `http://127.0.0.1:${server.port}/v1`, model: 'test-model' }),
@@ -55,10 +78,10 @@ describe.runIf(enabled)('native local read-only analysis', () => {
         const report = JSON.parse(await readFile(join(fixture.output, 'reviews/analysis-tools.json'), 'utf8'));
         expect(report.integrations.every((row: {status:string}) => row.status !== 'ready')).toBe(true);
         expect(report.integrations.some((row: {status:string}) => row.status === 'missing')).toBe(true);
-      } finally { await server.close(); await fixture.cleanup(); }
+      } finally { await fixture.cleanup(); }
     }, 50_000);
     it(harness + ' indexes captured source, searches it, denies outside paths and still returns validated findings', async () => {
-      const fixture = await createBundleFixture(); const server = await model();
+      const fixture = await analysisFixture(); const server = fixture.server;
       try {
         const parsed = parseReviewEnvironment({ ...cleanReviewEnvironment(fixture, harness),
           REDLINE_MODEL_CONFIG: JSON.stringify({ provider: 'mock', endpoint: `http://127.0.0.1:${server.port}/v1`, model: 'test-model' }),
@@ -83,7 +106,7 @@ describe.runIf(enabled)('native local read-only analysis', () => {
         expect(statuses.find(row => row.component === 'context-mode')?.status).toBe('ready');
         expect(statuses.find(row => row.component === 'sequential-thinking')?.status).toBe('ready');
         expect(report + JSON.stringify(result)).not.toContain(key);
-      } finally { await server.close(); await fixture.cleanup(); }
+      } finally { await fixture.cleanup(); }
     }, 80_000);
   }
 });

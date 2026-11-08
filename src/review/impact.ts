@@ -29,7 +29,7 @@ export async function extractNativeImpact(rawText: string, bundle: ReviewBundle,
   const value = raw.impactAnalysis;
   const keys = ['status', 'changedSymbols', 'callers', 'summary', 'limitation'];
   if (Object.keys(value).length !== keys.length || keys.some(key => !Object.hasOwn(value, key))
-    || !['checked', 'partial', 'not-applicable'].includes(String(value.status))
+    || typeof value.status !== 'string' || !['checked', 'partial', 'not-applicable'].includes(value.status)
     || !Array.isArray(value.changedSymbols) || value.changedSymbols.length > 32
     || !value.changedSymbols.every(symbol => text(symbol, 160) && symbol.length > 0)
     || !Array.isArray(value.callers) || value.callers.length > 16

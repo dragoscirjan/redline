@@ -26,7 +26,7 @@ export interface NativeToolEvidence {
 
 /** Keep native configuration variables and user-owned MCP credentials, never Redline's publication context. */
 export function nativeEnvironment(environment: Readonly<NodeJS.ProcessEnv>): NodeJS.ProcessEnv {
-  const publicationToken = environment.REDLINE_PUBLISH_TOKEN;
+  const publicationToken = environment.REDLINE_PUBLISH_TOKEN || undefined;
   return Object.fromEntries(Object.entries(environment).filter(([key, value]) => !key.startsWith('REDLINE_')
     && (publicationToken === undefined || value !== publicationToken)));
 }

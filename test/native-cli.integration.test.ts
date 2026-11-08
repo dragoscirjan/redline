@@ -1,7 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { spawn } from 'node:child_process';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { execa } from 'execa';
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,8 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { reviewFinding } from './helpers/finding.ts';
 import { prepareCompiledTool } from './helpers/compiled-tool.ts';
+import { removeFixtureContainers, runFixtureProcess } from './helpers/fixture-process.ts';
 
-const exec = promisify(execFile);
+const exec = execa({ extendEnv: false, preferLocal: false, shell: false, verbose: 'none', stripFinalNewline: false });
 const enabled = process.env.REDLINE_NATIVE_CLI_TESTS === '1';
 const containerEnabled = process.env.REDLINE_NATIVE_CONTAINER_TESTS === '1';
 const packageRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -66,6 +65,7 @@ async function fixture(graph: 'failed' | 'missing' | 'ready' | 'deferred' | 'nee
   const graphConfigured = ['ready', 'needs-choice', 'lying', 'codemode-ready'].includes(graph);
   const root = await mkdtemp(join(tmpdir(), 'redline-native-cli-'));
   const repo = join(root, 'repo'), home = join(root, 'home'), output = join(root, 'output');
+  const containerIdPrefix = join(root, 'docker-container');
   await Promise.all([repo, home].map(path => mkdir(path)));
   const requests: ModelBody[] = [], calls: string[] = [];
   const graphCalls: string[] = [];
@@ -188,7 +188,7 @@ async function fixture(graph: 'failed' | 'missing' | 'ready' | 'deferred' | 'nee
   await writeFile(join(repo, 'sample.ts'), 'export const value = 1;\n'); await git('add', '.'); await git('commit', '-m', 'base');
   const base = (await git('rev-parse', 'HEAD')).stdout.trim();
   await git('checkout', '-b', 'feature'); await writeFile(join(repo, 'sample.ts'), 'export const value = 2;\n'); await git('add', '.'); await git('commit', '-m', 'change');
-  const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
+  const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEST_DOCKER_CIDFILE: containerIdPrefix,
     ...(process.env.DOCKER_HOST === undefined ? {} : { DOCKER_HOST: process.env.DOCKER_HOST }),
     HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'), XDG_CACHE_HOME: join(home, '.cache'), XDG_DATA_HOME: join(home, '.local/share'), XDG_STATE_HOME: join(home, '.local/state'),
     PI_OFFLINE: '1', PI_SKIP_VERSION_CHECK: '1', OPENCODE_DISABLE_AUTOUPDATE: '1', OPENCODE_DISABLE_MODELS_FETCH: '1', OPENCODE_DISABLE_TELEMETRY: '1',
@@ -205,7 +205,11 @@ async function fixture(graph: 'failed' | 'missing' | 'ready' | 'deferred' | 'nee
   await writeFile(join(home, '.config/opencode/opencode.json'), JSON.stringify({ $schema: 'https://opencode.ai/config.json', mcp: { global_fixture: ocServer('global_ping'), ...(graphConfigured ? { cgc: ocServer('cgc') } : graph === 'failed' ? { cgc: { type: 'local', command: ['/redline-synthetic-missing-mcp'], enabled: true } } : {}) } }));
   await writeFile(join(repo, 'opencode.json'), JSON.stringify({ $schema: 'https://opencode.ai/config.json', mcp: { local_fixture: ocServer('local_ping'), extra_fixture: ocServer('extra_ping') } }));
   return { root, repo, home, output, driver, env, endpoint, base, requests, calls, graphCalls, get graphSessions() { return graphSessions; },
-    async close() { await new Promise<void>(resolve => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); } };
+    async close() {
+      try { await removeFixtureContainers(containerIdPrefix, env); }
+      finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+      await rm(root, { recursive: true, force: true });
+    } };
 }
 
 describe.runIf(enabled)('native warmup with a non-cooperative model', () => {
@@ -214,18 +218,14 @@ describe.runIf(enabled)('native warmup with a non-cooperative model', () => {
     try {
       const selected = 'native"selected-key';
       const unselected = 'private-unselected-inline-key';
-      const child = spawn('bash', [f.driver, 'opencode'], { cwd: f.repo, env: { ...f.env,
+      const result = await runFixtureProcess('bash', [f.driver, 'opencode'], { cwd: f.repo, env: { ...f.env,
         TEST_NODE: process.execPath, TEST_LOG_DIR: join(f.root, 'logs'), TEST_OUTPUT_DIR: f.output,
         REDLINE_PROVIDER: 'openrouter', REDLINE_ENDPOINT: f.endpoint + '/v1', REDLINE_MODEL: 'test-model', REDLINE_BASE: f.base,
         REDLINE_MODEL_AUTH: JSON.stringify({ openrouter: selected }), REDLINE_RETRIES: '0', REDLINE_INDEXING: 'disabled',
         OPENCODE_CONFIG_CONTENT: JSON.stringify({ provider: { other: { options: { apiKey: unselected } } } }),
-      }, stdio: ['ignore', 'pipe', 'pipe'] });
-      let output = ''; child.stdout.on('data', b => { output += String(b); }); child.stderr.on('data', b => { output += String(b); });
-      const code = await new Promise<number | null>((resolve, reject) => {
-        const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('native configuration diagnostic timeout')); }, 70_000);
-        child.once('error', error => { clearTimeout(timer); reject(error); });
-        child.once('exit', code => { clearTimeout(timer); resolve(code); });
-      });
+      } });
+      const { code } = result;
+      let output = result.stdout + result.stderr;
       expect(code).not.toBe(0); expect(f.requests).toEqual([]);
       for (const directory of [f.output, join(f.root, 'logs')]) {
         const files = await readdir(directory, { recursive: true, withFileTypes: true });
@@ -241,18 +241,15 @@ describe.runIf(enabled)('native warmup with a non-cooperative model', () => {
     it(harness + ' ' + graph + ' cannot claim completed indexing without execution', async () => {
       const f = await fixture(graph);
       try {
-        const child = spawn('bash', [f.driver, harness], { cwd: f.repo, env: { ...f.env,
+        const result = await runFixtureProcess('bash', [f.driver, harness], { cwd: f.repo, env: { ...f.env,
           TEST_NODE: process.execPath, TEST_LOG_DIR: join(f.root, 'logs'), TEST_OUTPUT_DIR: f.output,
           REDLINE_PROVIDER: 'openrouter', REDLINE_ENDPOINT: f.endpoint + '/v1', REDLINE_MODEL: 'test-model', REDLINE_BASE: f.base,
           REDLINE_INDEXING: 'enabled', REDLINE_INDEXING_PROVIDER: 'cgc', REDLINE_RETRIES: '0', REDLINE_REVIEW_CONCURRENCY: '1',
           REDLINE_TIMEOUT: '1m', REDLINE_RUN_TIMEOUT: '2m', REDLINE_MAX_OUTPUT_TOKENS: '8192',
           REDLINE_MODEL_PROTOCOL: harness === 'pi' ? 'openrouter-json' : 'compatible',
-        }, stdio: ['ignore', 'pipe', 'pipe'] });
-        let text = ''; child.stdout.on('data', b => { text = (text + String(b)).slice(-20000); }); child.stderr.on('data', b => { text = (text + String(b)).slice(-20000); });
-        const code = await new Promise<number | null>((resolve, reject) => {
-          const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('warmup contract timeout')); }, 70000);
-          child.once('error', error => { clearTimeout(timer); reject(error); }); child.once('exit', code => { clearTimeout(timer); resolve(code); });
-        });
+        } });
+        const { code } = result;
+        const text = result.stdout + result.stderr;
         const outputDirectories = await readdir(f.output);
         expect(outputDirectories, text).toHaveLength(1);
         const output = join(f.output, outputDirectories[0]!);
@@ -292,7 +289,7 @@ describe.runIf(runtime === 'cli' ? enabled : containerEnabled)('full native ' + 
         ];
         const before = await Promise.all(configuredFiles.map(path => readFile(path, 'utf8')));
         const command = ['bash', f.driver, ...(runtime === 'docker' ? ['--docker'] : []), harness];
-        const child = spawn(tty ? 'python3' : command[0]!, tty ? [join(packageRoot, 'test/fixtures/pty-run.py'), ...command] : command.slice(1),
+        const execution = await runFixtureProcess(tty ? 'python3' : command[0]!, tty ? [join(packageRoot, 'test/fixtures/pty-run.py'), ...command] : command.slice(1),
         { cwd: f.repo, env: { ...f.env, TERM: 'xterm-256color', TEST_NODE: process.execPath,
           TEST_LOG_DIR: join(f.root, 'logs'), TEST_OUTPUT_DIR: f.output,
           TEST_DOCKER_IMAGE: process.env.REDLINE_NATIVE_IMAGE ?? 'redline-native209:dev',
@@ -301,15 +298,8 @@ describe.runIf(runtime === 'cli' ? enabled : containerEnabled)('full native ' + 
           REDLINE_BASE: f.base, REDLINE_INDEXING: 'enabled', REDLINE_INDEXING_PROVIDER: graph === 'deferred' ? 'gitnexus' : 'cgc', REDLINE_RETRIES: '0',
           REDLINE_REVIEW_CONCURRENCY: '1', REDLINE_TIMEOUT: '1m', REDLINE_RUN_TIMEOUT: '2m',
           REDLINE_MAX_OUTPUT_TOKENS: '8192', REDLINE_MODEL_PROTOCOL: harness === 'pi' ? 'openrouter-json' : 'compatible',
-        }, stdio: ['ignore', 'pipe', 'pipe'] });
-        let stdout = '', stderr = '';
-        child.stdout.on('data', chunk => { stdout = (stdout + String(chunk)).slice(-20000); });
-        child.stderr.on('data', chunk => { stderr = (stderr + String(chunk)).slice(-20000); });
-        const code = await new Promise<number | null>((resolve, reject) => {
-          const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('Native CLI fixture timed out')); }, 70000);
-          child.once('error', error => { clearTimeout(timer); reject(error); });
-          child.once('exit', code => { clearTimeout(timer); resolve(code); });
-        });
+        } });
+        const { code, stdout, stderr } = execution;
         expect(code, stdout + '\n' + stderr).toBe(0);
         expect(stdout.includes('\u001b[2K')).toBe(tty);
         expect(stdout).toContain('UNSANDBOXED NATIVE CLI');

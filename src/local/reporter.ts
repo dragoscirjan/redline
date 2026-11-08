@@ -121,7 +121,7 @@ export class CliReporter implements ReviewReporter {
       this.clearLine();
       for (const integration of event.integrations) {
         if (integration.status === 'missing' || integration.status === 'unusable') {
-          this.stderr(`Optional analysis: ${terminalText(integration.component)} ${terminalText(integration.status)}. Reason ${terminalText(integration.reason)}. Review continues without it.`);
+          this.stderr(`Optional analysis: ${terminalText(integration.component, this.credential)} ${terminalText(integration.status, this.credential)}. Reason ${terminalText(integration.reason, this.credential)}. Review continues without it.`);
         }
       }
     } else if (event.kind === 'workload') {

@@ -108,7 +108,10 @@ for harness in "${HARNESSES[@]}"; do
     printf 'Repository: %s\nHead: %s\nHarness: %s\nLog: %s\nArtifacts: %s\n' "$REPO" "$REVIEW_HEAD" "$harness" "$log" "$output"
     printf 'Native indexing: %s, provider %s. Checks and indexing run in model warmup.\n' "${REDLINE_INDEXING:-enabled}" "${REDLINE_INDEXING_PROVIDER:-cgc}"
     if [[ "$MODE" == docker ]]; then
-      docker run "${container_args[@]}" "$IMAGE" "${review_args[@]}"
+      # A fixture can retain the daemon-owned container ID for timeout teardown.
+      docker_args=("${container_args[@]}")
+      if [[ -n "${TEST_DOCKER_CIDFILE:-}" ]]; then docker_args+=(--cidfile "$TEST_DOCKER_CIDFILE-$harness"); fi
+      docker run "${docker_args[@]}" "$IMAGE" "${review_args[@]}"
     else
       "$NODE" "$SCRIPT_DIR/bin/redline.mjs" "${review_args[@]}"
     fi

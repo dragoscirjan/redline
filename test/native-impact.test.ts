@@ -17,7 +17,7 @@ function run(text: unknown, names: string[]): HarnessRun {
         calls: names.map(name => ({ name, started: 1, succeeded: 1, failed: 0 })) } } };
 }
 describe('native code-impact reporting', () => {
-  for (const scenario of ['broken-caller', 'compatible-caller', 'forged-caller', 'base-caller', 'missing-query', 'missing-impact'] as const) {
+  for (const scenario of ['broken-caller', 'compatible-caller', 'forged-caller', 'base-caller', 'missing-query', 'missing-impact', 'array-status', 'null-status', 'zero-start', 'reversed-span'] as const) {
     it(scenario + ' preserves source authority and does not equate unchanged callers with defects', async () => {
       const fixture = await createBundleFixture({ diff, headContent: changed, manifestOverrides: { additions: 2, deletions: 2 } });
       try {
@@ -25,7 +25,8 @@ describe('native code-impact reporting', () => {
         const caller = scenario === 'compatible-caller' ? 'export const rendered = format("ok");' : 'export const rendered = format(42);';
         await writeFile(join(fixture.source, 'src/caller.ts'), caller + '\n');
         const citation = { role: 'caller-assumption' as const, revision: scenario === 'base-caller' ? BASE_SHA : HEAD_SHA,
-          path: scenario === 'base-caller' ? 'src/example.ts' : 'src/caller.ts', startLine: 1, endLine: 1,
+          path: scenario === 'base-caller' ? 'src/example.ts' : 'src/caller.ts',
+          startLine: scenario === 'zero-start' ? 0 : scenario === 'reversed-span' ? 2 : 1, endLine: 1,
           evidence: scenario === 'base-caller' ? 'export function format(value: unknown) {' : scenario === 'forged-caller' ? 'invented caller' : caller };
         const environment = { ...parseReviewEnvironment(cleanReviewEnvironment(fixture, 'pi')).review!,
           nativeIndexing: { provider: 'cgc' as const, required: false }, retries: 0 };
@@ -46,13 +47,13 @@ describe('native code-impact reporting', () => {
               impactPath: { status: 'complete', steps: [{ from: 'unchanged numeric caller', to: 'format', relationship: 'passes a number to the string-only implementation', evidence: 'source', referenceIndex: 0 }] },
               behavioralContract: 'Existing numeric inputs were supported.', failureScenario: 'The unchanged caller passes 42; toUpperCase is not a function.' })] : [];
             return run({ version: 4, fileId: '000001', outcome: findings.length > 0 ? 'findings' : 'clean', contextRequests: [], findings,
-              ...(scenario === 'missing-impact' ? {} : { impactAnalysis: { status: 'checked', changedSymbols: ['format'], callers: [citation],
+              ...(scenario === 'missing-impact' ? {} : { impactAnalysis: { status: scenario === 'array-status' ? ['checked'] : scenario === 'null-status' ? null : 'checked', changedSymbols: ['format'], callers: [citation],
                 summary: scenario === 'compatible-caller' ? 'The unchanged string caller remains compatible.' : 'The unchanged numeric caller relies on the old coercion contract.', limitation: '' } }) },
             scenario === 'missing-query' ? [] : ['cgc_query']);
           } };
         const result = await runFileReviews({ environment, executor });
         const record = result.records[0]!;
-        if (scenario === 'forged-caller' || scenario === 'base-caller' || scenario === 'missing-impact') {
+        if (['forged-caller', 'base-caller', 'missing-impact', 'array-status', 'null-status', 'zero-start', 'reversed-span'].includes(scenario)) {
           expect(record.outcome).toBe('omitted'); expect(record.errorKind).toBe('invalid-output');
         } else {
           expect(record.impactAnalysis?.status).toBe(scenario === 'missing-query' ? 'partial' : 'checked');

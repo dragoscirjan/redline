@@ -33,6 +33,12 @@ try {
       }, undefined, { timeout: 15000 });
       if (response.isError || !JSON.stringify(response).includes('value')) throw new Error('captured symbol unavailable');
       if (component === 'cgc') {
+        const catalogue = await client.listTools();
+        if (!catalogue.tools.some(tool => tool.name === 'get_repository_stats')) throw new Error('healthy stats tool not registered');
+        const healthy = await client.callTool({ name: 'get_repository_stats', arguments: {} }, undefined, { timeout: 5000 });
+        if (healthy.isError === true) throw new Error('healthy stats baseline failed');
+        const statistics = JSON.parse(healthy.content.find(part => part.type === 'text').text);
+        if (statistics.success !== true || !(statistics.stats.files > 0)) throw new Error('healthy stats baseline has no captured files');
         const data = JSON.parse(response.content.find(part => part.type === 'text').text);
         if (data.success !== true || data.results.functions_by_name.length === 0) throw new Error('captured CGC function unavailable');
       }
@@ -45,8 +51,13 @@ try {
   manifest.backends.find(backend => backend.component === 'cgc').command = '/unavailable/cgc';
   await writeFile(prepared.manifestFile, JSON.stringify(manifest));
   await withClient('cgc', async client => {
+    const catalogue = await client.listTools();
+    if (!catalogue.tools.some(tool => tool.name === 'get_repository_stats')) throw new Error('broken backend removed tool registration');
     const response = await client.callTool({ name: 'get_repository_stats', arguments: {} }, undefined, { timeout: 5000 });
     if (response.isError !== true) throw new Error('broken backend not reported');
+    if (!response.content.some(part => part.type === 'text' && part.text.includes('optional dependency unavailable'))) {
+      throw new Error('broken backend did not return the scoped dependency error');
+    }
   });
   console.log(JSON.stringify(prepared.statuses));
 } finally { await disposeAnalysis(prepared); }

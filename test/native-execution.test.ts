@@ -4,6 +4,10 @@ import { nativeEnvironment, nativeToolEvidence, mergeNativeToolEvidence, nativeR
 const lines = (...events: unknown[]) => events.map(event => JSON.stringify(event)).join('\n');
 
 describe('native harness environment', () => {
+  it('preserves empty native variables when the publication token is empty', () => {
+    const env = nativeEnvironment({ REDLINE_PUBLISH_TOKEN: '', NO_COLOR: '', MCP_OPTION: '', PATH: '/bin' });
+    expect(env).toEqual({ NO_COLOR: '', MCP_OPTION: '', PATH: '/bin' });
+  });
   it('preserves normal configuration and MCP environment without forwarding Redline publication credentials', () => {
     const env = nativeEnvironment({ HOME: '/user', PI_CODING_AGENT_DIR: '/user/pi',
       OPENCODE_CONFIG: '/user/opencode.json', MCP_TOKEN: 'user-owned-token',

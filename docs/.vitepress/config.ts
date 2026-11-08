@@ -82,7 +82,6 @@ export default defineConfig({
           { text: 'Roadmap', link: '/roadmap' },
           { text: 'Application architecture', link: '/portable-architecture' },
           { text: 'Harness executor', link: '/harness-executor' },
-          { text: 'Change-impact planning', link: '/change-impact' },
           { text: 'Code intelligence', link: '/code-intelligence' },
         ],
       },

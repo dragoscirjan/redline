@@ -15,7 +15,7 @@
     "src/rpc/*.ts",
     "schemas/rpc/v1/*.json", "docs/stdio-protocol.md",
     "src/harness-executor/*.ts", "src/publish/*.ts",
-    "src/code-context/*.ts", "src/code-intelligence/*.ts", "src/change-impact/*.ts",
+    "src/code-context/*.ts", "src/code-intelligence/*.ts",
     "src/context-bundle.ts", "src/duration.ts", "src/process-runner.ts", "src/review-eligibility.ts",
     "src/code-index/context.ts", "src/code-index/cache.ts", "src/code-index/cgc-grammars.ts", "src/code-index/lock.py", "src/code-index/export.py", "src/code-index/gitnexus-query.mjs",
     "prompts/v12/*.md", "prompts/verification/v3/*.md",

@@ -12,8 +12,9 @@ The current milestone provides:
 - strict runtime parsing and cross-contract identity validation;
 - deterministic provider and snapshot compatibility digests;
 - a dependency-injected provider registry with no provider-name branching in review code;
-- offline GitNexus and CodeGraphContext recordings exercised through one conformance fixture;
-- direct consumption of normalized snapshots by the change-impact planner.
+- offline GitNexus and CodeGraphContext recordings exercised through one conformance fixture.
+
+These contracts do not calculate change impact. Native reviews ask the LLM to assess impact through the harness and its available tools. Redline validates the reported source evidence. See [Local CLI](/local-cli) for native review behavior and coverage limitations.
 
 Concrete GitNexus and CodeGraphContext process adapters, tool installation, and index storage are not implemented by this milestone. Tool acquisition and cache reuse belong to issue #111. The recorded fixtures verify the common contract without presenting fixture behavior as a live-provider integration.
 
@@ -50,13 +51,13 @@ Every `CodeIntelligenceSnapshot` binds normalized facts to:
 - language- and file-level coverage;
 - unsupported, skipped, failed, or truncated inputs.
 
-Base and head snapshots have independent identities. The change-impact planner validates the full snapshot contract before comparing them, so a base-only index cannot silently stand in for a head snapshot. Snapshot source provenance is revision-relative; `base` and `head` are assigned only when the review projects two snapshots into a comparison, which keeps an immutable cached revision reusable across pull requests.
+Base and head snapshots have independent identities. Each snapshot must match its own immutable repository revision; a base-only index cannot stand in for a head snapshot. Snapshot source provenance is revision-relative, so an immutable cached revision remains reusable across pull requests.
 
 Every node and edge carries provider, version, adapter, snapshot, revision, query, retrieval reason, status, and optional captured-source provenance. Facts with mismatched snapshot identity are rejected.
 
 ## Bounded queries
 
-Models never receive provider or shell tools. Host code constructs a `CodeIntelligenceQuery` with explicit depth, fan-out, result-count, byte, and elapsed-time limits. Results report observed depth and maximum fan-out so the host can validate every bound rather than trusting provider status alone. Results distinguish:
+These contracts describe host-side queries, not native harness tool permissions. Host code constructs a `CodeIntelligenceQuery` with explicit depth, fan-out, result-count, byte, and elapsed-time limits. Results report observed depth and maximum fan-out so the host can validate every bound rather than trusting provider status alone. Results distinguish:
 
 - complete and partial results;
 - valid empty results;
@@ -64,7 +65,7 @@ Models never receive provider or shell tools. Host code constructs a `CodeIntell
 - provider failure;
 - truncation and ambiguity.
 
-`assertQueryResultMatches` verifies immutable identity, fact provenance, capability support, and every deterministic result budget before a result reaches impact planning.
+`assertQueryResultMatches` verifies immutable identity, fact provenance, capability support, and every deterministic result budget against the originating query.
 
 ## Compatibility and caching
 
@@ -87,4 +88,4 @@ Recorded conformance is deliberately separate from opt-in live tests. A future l
 
 ## Security boundary
 
-Repository content, paths, provider output, and diagnostics are untrusted data. Runtime parsers reject unknown fields, invalid paths and identities, oversized extensions, malformed spans, duplicate or nondeterministically ordered facts, dangling edges, and inconsistent coverage. Providers must operate on captured source under trusted host configuration and must never expose credentials or direct tools to a review model.
+Repository content, paths, provider output, and diagnostics are untrusted data. Runtime parsers reject unknown fields, invalid paths and identities, oversized extensions, malformed spans, duplicate or nondeterministically ordered facts, dangling edges, and inconsistent coverage. Providers using these contracts must operate on captured source under trusted host configuration. The contracts describe data and do not grant tool access or expose credentials. Native harness tool access follows its configuration.

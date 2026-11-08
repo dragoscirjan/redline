@@ -72,7 +72,7 @@ describe('task-first documentation', () => {
     const config = await doc('.vitepress/config.ts');
     for (const route of ['/docker-workers', '/stdio-protocol', '/reusable-review-workflow', '/github-composite-action',
       '/dogfood-review', '/code-index-action', '/review-eligibility', '/review-reporting', '/runnable-review-configuration',
-      '/portable-architecture', '/harness-executor', '/change-impact', '/code-intelligence', '/review-quality-benchmark',
+      '/portable-architecture', '/harness-executor', '/code-intelligence', '/review-quality-benchmark',
       '/performance-benchmark', '/checkout-benchmark', '/model-execution-benchmark', '/roadmap']) {
       expect(config).toContain("link: '" + route + "'");
     }

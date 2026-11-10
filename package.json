@@ -2,24 +2,25 @@
   "name": "@dragoscirjan/redline",
   "version": "1.2.2",
   "type": "module",
-  "description": "Local Git code reviews and forge-independent review execution.",
+  "description": "Initiative 4.0 scaffold for local and containerized code reviews.",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/dragoscirjan/redline.git" },
-  "engines": { "node": ">=24" },
-  "publishConfig": { "access": "public", "provenance": true },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dragoscirjan/redline.git"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "exports": {},
   "files": [
     "bin/*.mjs",
-    "dist/**",
-    "src/application/*.ts", "src/local/*.ts", "src/review/*.ts",
-    "src/rpc/*.ts",
-    "schemas/rpc/v1/*.json", "docs/stdio-protocol.md",
-    "src/harness-executor/*.ts", "src/publish/*.ts",
-    "src/code-context/*.ts",
-    "src/context-bundle.ts", "src/duration.ts", "src/process-runner.ts", "src/review-eligibility.ts",
-    "prompts/v12/*.md", "prompts/verification/v3/*.md",
-    "docs/local-cli.md", "docs/portable-architecture.md",
-    "docs/docker-workers.md"
+    "dist/**/*.js",
+    "src/cli/*.ts",
+    "src/application/*.ts"
   ],
   "bin": {
     "redline": "bin/redline.mjs",
@@ -28,26 +29,12 @@
   "scripts": {
     "build": "node scripts/build.js",
     "prepack": "pnpm run build",
-    "benchmark": "node src/benchmark/cli.ts",
-    "benchmark:live-model": "node src/benchmark/live-cli.ts",
-    "benchmark:performance": "node src/benchmark/performance-cli.ts",
-    "benchmark:code-index-value": "node src/benchmark/code-index-value-cli.ts",
-    "benchmark:model-execution": "node src/benchmark/model-execution-cli.ts report --capture benchmark/model-execution/v1/live-glm-5.3-flash/capture.json --output-json benchmark/model-execution/v1/live-glm-5.3-flash/report.json --output-markdown benchmark/model-execution/v1/live-glm-5.3-flash/report.md",
-    "benchmark:review-eligibility": "node src/benchmark/review-eligibility-cli.ts benchmark/review-eligibility/v1/capture.json benchmark/review-eligibility/v1/report.json benchmark/review-eligibility/v1/report.md",
-    "benchmark:checkout": "node src/benchmark/checkout-cli.ts benchmark/checkout/v1/profile.json benchmark/checkout/v1/aggregate.json benchmark/checkout/v1/report.md",
-    "benchmark:model-execution:live": "node src/benchmark/model-execution-cli.ts capture --capture benchmark/model-execution/v1/live-glm-5.3-flash/capture.json --input-price 0.00000015 --output-price 0.0000005 --cache-read-price 0.00000003 && pnpm run benchmark:model-execution",
-    "benchmark:source-runtime": "node src/benchmark/source-runtime-cli.ts --runtime node && bun src/benchmark/source-runtime-cli.ts --runtime bun",
-    "benchmark:performance:live": "node src/benchmark/performance-cli.ts --live",
-    "benchmark:verification": "node src/benchmark/verification-cli.ts",
-    "benchmark:live-verification": "node src/benchmark/live-verification-cli.ts",
-    "benchmark:judge-live-verification": "node src/benchmark/judge-live-verification.ts",
     "docs": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "serve": "vitepress dev docs",
     "test": "vitest run && bats test/*.bats",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test:package": "vitest run test/package.test.ts",
-    "release:preflight": "node --experimental-strip-types scripts/release/npm-check.ts"
+    "test:package": "vitest run test/package.test.ts"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.3",

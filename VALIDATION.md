@@ -14,10 +14,9 @@ mise run validate
 The gate runs these tasks in order and stops on the first failure:
 
 1. `mise run typecheck` checks TypeScript without emitting files.
-2. `mise run test` runs the vitest and bats suites against TypeScript source.
-   Node/Bun compatibility is enforced by no-emit type checking and the
-   source-runtime integration matrix.
-3. `mise run docs` builds the VitePress site.
+2. `mise run test` runs the active Vitest and Bats suites. Scaffold tests cover
+   Node/Bun command execution, build/package boundaries and honest status.
+3. `mise run docs` builds the VitePress site for the active implementation.
 
 Formatting, linting, duplication analysis, dependency vulnerability audits,
 recorded review-quality evaluation, and Git hooks are not implemented gates.
@@ -32,6 +31,30 @@ Dependency setup follows `CONTRIBUTING.md`. If installation is approved, use
 override, and minimum-release-age policy. Stop and report missing tools rather
 than installing or reconfiguring them without approval.
 
+## Initiative 4.0 scaffold coverage
+
+The owner-approved scaffold parks the previous implementation in `src.pre-v4/`
+and related material in `archive/pre-v4/`. The legacy suites, harness matrix,
+benchmarks, and production review/release workflows are preserved but inactive.
+This is an explicit temporary reduction in active review-feature coverage, not
+a successful execution of those suites or proof that v4 reviews work.
+
+Keep meaningful active scaffold tests, including nonzero unsupported-review
+behavior and exclusion of archives from active imports, builds, packages and
+Docker contexts. Restore relevant behavioral and security regressions as their
+features are reused or adapted. Do not skip failures in active tests or replace
+the gate with unconditional success.
+
+Run `pnpm run build` and an installed/packed-artifact smoke when entrypoints or
+packaging change. Test the local command without Docker. Run Docker build/run
+smokes when explicitly authorized and available; record unrun checks and any
+network/image prerequisites. No standalone-binary, container-platform or live
+provider compatibility claim follows from static scaffold tests alone.
+
+Automatic publication and production review automation remain inactive until
+an explicit delivery/security proposal is approved and the restored behavior
+passes its applicable checks.
+
 ## Every change
 
 - Run `git diff --check`.
@@ -41,7 +64,7 @@ than installing or reconfiguring them without approval.
 - State failures, unrun checks, and remaining risks without claiming success.
 
 Tests use temporary directories and repositories and must not mutate the source
-checkout. Network tests beyond loopback and live-harness tests remain opt-in.
+checkout. Network tests beyond loopback and live-model checks remain opt-in.
 Never execute untrusted pull request code, scripts, builds, tests, or installers
 during a review.
 

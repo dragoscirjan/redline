@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "noEmitOnError": true,
+    "rewriteRelativeImportExtensions": true,
+    "rootDir": "./src",
+    "outDir": "./dist"
+  },
+  "include": [],
+  "files": [
+    "src/local/cli.ts",
+    "src/review/cli.ts",
+    "src/rpc/main.ts",
+    "src/harness-executor/analysis-server.ts"
+  ]
+}

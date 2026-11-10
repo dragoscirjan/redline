@@ -23,5 +23,6 @@
   "include": [
     "src/**/*.ts",
     "test/**/*.ts"
-  ]
+  ],
+  "exclude": ["src.pre-v4", "archive", "dist", "node_modules"]
 }

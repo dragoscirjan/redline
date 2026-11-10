@@ -1,0 +1,343 @@
+{
+  "version": 1,
+  "initiative": "4.0",
+  "issue": 235,
+  "baseline": "8986941ea0294b6da356ec6dd6aa43bfc047ad49",
+  "directoryHash": "sha256 of sorted relative paths + literal \\\\0 + per-file sha256 hex + literal \\\\n",
+  "snapshots": [
+    {
+      "original": "src",
+      "archived": "src.pre-v4",
+      "kind": "directory",
+      "files": 96,
+      "sha256": "da1bde0a1f57635e6b9ea4165fae4cc2b5e20e4c74a161bf6c769c53447804bb",
+      "gitObject": "653f99be0c0c32a290a3047d7567f5ca400c8c53"
+    },
+    {
+      "original": "test",
+      "archived": "archive/pre-v4/test",
+      "kind": "directory",
+      "files": 116,
+      "sha256": "7a107d93a09463d2155217166f6a5635d0de342dd990514e52a0a5e0eac81b15",
+      "gitObject": "1f70461bed3a0175f47e50aee29a57ef5e6960a2"
+    },
+    {
+      "original": "benchmark",
+      "archived": "archive/pre-v4/benchmark",
+      "kind": "directory",
+      "files": 95,
+      "sha256": "1aa791fc76ef9ccc3794878fafb0327c9a65370721f47a0fee2549004851ac84",
+      "gitObject": "e80b76129c00bf57f6ec72cfa025f337a7c0e3f6"
+    },
+    {
+      "original": "bin",
+      "archived": "archive/pre-v4/bin",
+      "kind": "directory",
+      "files": 4,
+      "sha256": "0edc1340864675ebc4e2ca9d4926293511de455e5628401582b066eeb8f0f87b",
+      "gitObject": "a0ad9ca25a5b1eb6f6158f5f08d949b0577713cd"
+    },
+    {
+      "original": "scripts",
+      "archived": "archive/pre-v4/scripts",
+      "kind": "directory",
+      "files": 2,
+      "sha256": "58ce1cea77a706265d90b93875f9c3bd8cbb775aab56cf0a9646423391c29176",
+      "gitObject": "1561ac5d4d108a8e5370c9d741db5980878655c2"
+    },
+    {
+      "original": "containers",
+      "archived": "archive/pre-v4/containers",
+      "kind": "directory",
+      "files": 9,
+      "sha256": "849dc7687554f332ba40a14f50af650cc2eb24b660d8238ccd1f516df3a5b546",
+      "gitObject": "6d7e5f0f62705cbdd0d3542f43ec132184038d17"
+    },
+    {
+      "original": "github",
+      "archived": "archive/pre-v4/github",
+      "kind": "directory",
+      "files": 3,
+      "sha256": "062b5ce1b76c70ac025be9f94d597a7078741c43f0fe3c328d49643d528ef07b",
+      "gitObject": "6023715f3f37dc211f2ef610f13357ad7ef83561"
+    },
+    {
+      "original": "packages",
+      "archived": "archive/pre-v4/packages",
+      "kind": "directory",
+      "files": 15,
+      "sha256": "2e00bde8b5ec2abdc8409cb61af47ded9719b378bc7df5bfb34beffd54db3b54",
+      "gitObject": "3fe23c382217a084138a8bab88f18832ed80591c"
+    },
+    {
+      "original": "prompts",
+      "archived": "archive/pre-v4/prompts",
+      "kind": "directory",
+      "files": 43,
+      "sha256": "45f13854618494da8f6886d558c52c78e9667a9dd245dded7ddf149601f60cde",
+      "gitObject": "a2375d590d1c7b06f1b3c57fe4c948b5bd87090d"
+    },
+    {
+      "original": "schemas",
+      "archived": "archive/pre-v4/schemas",
+      "kind": "directory",
+      "files": 1,
+      "sha256": "39efe3e20deb9cbe83e1add2aa82f747648e981a82cebc9d14a69346f3c0e35a",
+      "gitObject": "0df6e444dce77a5056520a4d895b0a73d2153075"
+    },
+    {
+      "original": "docs",
+      "archived": "archive/pre-v4/docs",
+      "kind": "directory",
+      "files": 35,
+      "sha256": "27cd81ab5535481fd2c7dabce66a3ec73dd663ccae1666057db931f68270b319",
+      "gitObject": "bec1ea66a951c92b590fa8241fc3123854eecdd2"
+    },
+    {
+      "original": ".github/workflows",
+      "archived": "archive/pre-v4/.github/workflows",
+      "kind": "directory",
+      "files": 8,
+      "sha256": "54d118beddcba0b6bccfbdaf1cd961e04df8c3a511f3b0cdea67852038cfff4a",
+      "gitObject": "d7477e0e4395bc6efffbf74c8a958832490c9236"
+    },
+    {
+      "original": ".github/actionlint.yaml",
+      "archived": "archive/pre-v4/.github/actionlint.yaml",
+      "kind": "file",
+      "files": 1,
+      "sha256": "f0dc853f314858ba2e1ab591d9d4a63fbb045d86ec51e957dd46dda820695578",
+      "gitObject": "e9376b30a663cd447f9155087f43212655d25a00"
+    },
+    {
+      "original": ".github/release.json",
+      "archived": "archive/pre-v4/.github/release.json",
+      "kind": "file",
+      "files": 1,
+      "sha256": "bb69f3e3f5a04d6b8c10d0beba2d36320ef374fb6ad28d168ebfe70f761045af",
+      "gitObject": "dcf3c60b90a2f001902eecf2b591a3d00e7bad3e"
+    },
+    {
+      "original": ".redline",
+      "archived": "archive/pre-v4/.redline",
+      "kind": "directory",
+      "files": 1,
+      "sha256": "c77cacf4c92909d60f4da2e8cb5d2dbd110be35a2e39c817890e230168f6a2bd",
+      "gitObject": "3e5d985f48bdd7c98d13bd4f322f9c66a32be25e"
+    },
+    {
+      "original": ".changeset/read-only-analysis.md",
+      "archived": "archive/pre-v4/.changeset/read-only-analysis.md",
+      "kind": "file",
+      "files": 1,
+      "sha256": "d0898b29bd535c2ca0fe85752ab7f57d745c1f20330105e95f9855c11dbe0d62",
+      "gitObject": "f49e4575fa1e6cee56056029182b61694970de4f"
+    },
+    {
+      "original": "test-cli.sh",
+      "archived": "archive/pre-v4/test-cli.sh",
+      "kind": "file",
+      "files": 1,
+      "sha256": "f80b644967db837c4934572eced99eeb26d3647d60ca55a3c9fa2119b385dfa1",
+      "gitObject": "9a5cc4416ffe4ff7b21d30904be4350324184e6e"
+    },
+    {
+      "original": "test-docker.sh",
+      "archived": "archive/pre-v4/test-docker.sh",
+      "kind": "file",
+      "files": 1,
+      "sha256": "6fc70bce6fb9d835b8f1c761862bf58b49b3ed4bd377a1c1c532fff47544fc10",
+      "gitObject": "9b0977b4ca2c9886a32cf0a89742912aa134a0c1"
+    },
+    {
+      "original": "package.json",
+      "archived": "archive/pre-v4/package.json",
+      "kind": "file",
+      "files": 1,
+      "sha256": "6bb35f6c53960d3c7f004196ab5b9fd1a53aeffe9cb42ba87906980a377a1e7e",
+      "gitObject": "9a9d92a0bb1fee598154febe1a05cc62ce4488fc"
+    },
+    {
+      "original": "pnpm-lock.yaml",
+      "archived": "archive/pre-v4/pnpm-lock.yaml",
+      "kind": "file",
+      "files": 1,
+      "sha256": "4be43718aa114d89e436276e250fa8f6167bb1722c8a7a8ab99a32705fc70552",
+      "gitObject": "0c35777533b117a29bc547b156206f024351ad0e"
+    },
+    {
+      "original": "pnpm-workspace.yaml",
+      "archived": "archive/pre-v4/pnpm-workspace.yaml",
+      "kind": "file",
+      "files": 1,
+      "sha256": "d06c64b71c0ace07f767dac0ef359602285988ccc53cfda2e1cd439f2767e602",
+      "gitObject": "360af00b6461fafb19edf0453eb8d4f36de101ff"
+    },
+    {
+      "original": "tsconfig.json",
+      "archived": "archive/pre-v4/tsconfig.json",
+      "kind": "file",
+      "files": 1,
+      "sha256": "c8e924ababff52f3657676ab22153763346265ba712055423822a6aaeda8c47b",
+      "gitObject": "6155104a6a34ccbadc98d06ad450a0af614374dc"
+    },
+    {
+      "original": "tsconfig.build.json",
+      "archived": "archive/pre-v4/tsconfig.build.json",
+      "kind": "file",
+      "files": 1,
+      "sha256": "81a289f73396e6e44f3b3d9e69380a37c427c1f9d85d9bc24ae8fc5c8f4eff49",
+      "gitObject": "8a01bf627e829920c97458887adeeeb1af26f4b0"
+    },
+    {
+      "original": "vitest.config.ts",
+      "archived": "archive/pre-v4/vitest.config.ts",
+      "kind": "file",
+      "files": 1,
+      "sha256": "71ee2750df68845e08c2e30814d469b4ff9c9c055537a11dd55f2d32a8cd7071",
+      "gitObject": "dc43aad663d9907f923e1df1338d6ced5911927d"
+    },
+    {
+      "original": "mise.toml",
+      "archived": "archive/pre-v4/mise.toml",
+      "kind": "file",
+      "files": 1,
+      "sha256": "ac61dde16ba5f22188f5b0fbac1c9d3a7d20ddf37ae2e9752da4b3c59feafb53",
+      "gitObject": "3688a095ded40f0fe62753ad10481b1448cf51f3"
+    },
+    {
+      "original": "mise.lock",
+      "archived": "archive/pre-v4/mise.lock",
+      "kind": "file",
+      "files": 1,
+      "sha256": "e0a93a4dbda7bf72de2759880ee974ad91d664bf31784d6a02d21fc9e471063e",
+      "gitObject": "b5d1cfce6bc225356fa053259a5deb956543deaf"
+    },
+    {
+      "original": "README.md",
+      "archived": "archive/pre-v4/README.md",
+      "kind": "file",
+      "files": 1,
+      "sha256": "f6ee0e146149df4692861e3500a5512beccf2d6a772cb8f2f4bd59d95b4ffa57",
+      "gitObject": "6e5c6846e1d854459e771ce0fdff7064a89a4d96"
+    },
+    {
+      "original": ".dockerignore",
+      "archived": "archive/pre-v4/.dockerignore",
+      "kind": "file",
+      "files": 1,
+      "sha256": "0bf275aa819dc4625fb8e91ea06c9711d5fae7ff25b2943e316e393e53c2f2ca",
+      "gitObject": "d8b2160da757fb5ca934abaf23425ef796cd1a15"
+    },
+    {
+      "original": ".gitignore",
+      "archived": "archive/pre-v4/.gitignore",
+      "kind": "file",
+      "files": 1,
+      "sha256": "0df2c54969c52df4f331cb88d98332af2a26e6db42afb63d1397e6b43e70ea2b",
+      "gitObject": "246f31c5f942f224e1a01ef4abf2591359e02a07"
+    },
+    {
+      "original": ".hadolint.yaml",
+      "archived": "archive/pre-v4/.hadolint.yaml",
+      "kind": "file",
+      "files": 1,
+      "sha256": "4e40b6620c21b3aa6575652eea6c96f22bb7a8dd62101d48103995222e0791dc",
+      "gitObject": "db0343935043e5cb9a5f3b3be51242f23d9bf8b2"
+    },
+    {
+      "original": "AGENTS.md",
+      "archived": "archive/pre-v4/AGENTS.reference.md",
+      "kind": "file",
+      "files": 1,
+      "sha256": "766acd694b1e3815b8bd4bc5f26ac95001df7c35872f2b64393c7ebff9fb2a1b",
+      "gitObject": "e5fbb33637f236d68b6612693726804425b58e06"
+    },
+    {
+      "original": "CONTRIBUTING.md",
+      "archived": "archive/pre-v4/CONTRIBUTING.reference.md",
+      "kind": "file",
+      "files": 1,
+      "sha256": "58ee856457f3ca3ff57442960f523e3593d958318f845a635231820c792a4019",
+      "gitObject": "0232718a792d847beba58591a908958ce9fd5bdc"
+    },
+    {
+      "original": "VALIDATION.md",
+      "archived": "archive/pre-v4/VALIDATION.reference.md",
+      "kind": "file",
+      "files": 1,
+      "sha256": "9a46fe43221603bfdd1f53d4d7137f816281e286dee15f48622a156e10892f90",
+      "gitObject": "38390855871c21259c0f07994608a058a221e1e9"
+    }
+  ],
+  "reuse": [
+    {
+      "source": "archive/pre-v4/bin/runtime.mjs",
+      "active": "bin/runtime.mjs",
+      "decision": "reuse",
+      "reason": "Preserve explicit Node/Bun selection, argument and signal forwarding, version guards and no silent fallback."
+    },
+    {
+      "source": "archive/pre-v4/bin/redline.mjs",
+      "active": "bin/redline.mjs",
+      "decision": "adapt",
+      "reason": "Use the shared scaffold command instead of dispatching to the former review/RPC implementations."
+    },
+    {
+      "source": "archive/pre-v4/bin/redline-review.mjs",
+      "active": "bin/redline-review.mjs",
+      "decision": "adapt",
+      "reason": "Keep the executable name but fail explicitly while reviews are unavailable."
+    },
+    {
+      "source": "archive/pre-v4/scripts/build.js",
+      "active": "scripts/build.js",
+      "decision": "reuse",
+      "reason": "Retain compiled Node output without loader hooks or changing TypeScript source imports."
+    },
+    {
+      "source": "archive/pre-v4/test/runtime-launcher.test.ts",
+      "active": "test/runtime-launcher.test.ts",
+      "decision": "adapt",
+      "reason": "Retain launcher, argument, runtime, failure and signal regression cases with the new entrypoint paths."
+    },
+    {
+      "source": "archive/pre-v4/test/build.test.ts",
+      "active": "test/build.test.ts",
+      "decision": "reuse",
+      "reason": "Retain compiler process failure diagnostics tests."
+    },
+    {
+      "source": "archive/pre-v4/test/helpers",
+      "active": "test/helpers",
+      "decision": "reuse-subset",
+      "reason": "Reuse offline npm packaging helpers without network dependency resolution."
+    },
+    {
+      "source": "archive/pre-v4/containers/Dockerfile",
+      "active": "containers/Dockerfile",
+      "decision": "adapt",
+      "reason": "Reuse the pinned Node base and compilation pattern; remove the obsolete harness/tool installation."
+    },
+    {
+      "source": "src.pre-v4/local/cli.ts",
+      "active": "src/cli/main.ts",
+      "decision": "replace",
+      "reason": "The old command runs repository/model/review orchestration; scaffold-only approval requires a small truthful status/help command without invoking any of it."
+    }
+  ],
+  "retained": [
+    "LICENSE",
+    "CHANGELOG.md",
+    ".gitattributes",
+    ".agents",
+    ".claude",
+    "CLAUDE.md",
+    ".pi",
+    ".mcp.json",
+    "skills-lock.json",
+    ".changeset/config.json",
+    ".changeset/README.md",
+    ".github/actions/install-dependencies"
+  ]
+}

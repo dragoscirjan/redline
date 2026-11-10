@@ -1,0 +1,91 @@
+# Contributing to Redline
+
+## Set up the repository
+
+Mise installs Node.js 24, Bun 1.4.4, Python 3.12, and pnpm 10.33.0. Use pnpm for dependency installation. The pinned pnpm version supports the minimum-release-age, overrides, and ignored-esbuild-installer policy in `pnpm-workspace.yaml`. Do not enable esbuild's installer or change that policy to make setup pass.
+
+```bash
+mise trust
+mise run deps:sync
+```
+
+Run `mise tasks` to list the available tasks. Use `mise run <task>` when a task exists. Dependency installation does not configure Git hooks. Run the validation gate yourself before pushing.
+
+## Development model
+
+Use GitHub Issues for defects, features, and acceptance criteria. Keep product documentation and design decisions under `docs/`, rendered as a VitePress site (`pnpm run docs` builds it; `pnpm run serve` serves it during editing). Link implementation pull requests to the relevant docs and issues.
+
+The repository is in a restart phase: the current implementation is the leaner harness-executor design described in `AGENTS.md`. Docker provides the isolation boundary for container reviews. Pure CLI reviews are unsandboxed and display a prominent warning. Both invoke native Pi/OpenCode entry points and respect normal global and checkout-local configuration, including MCP servers and plugins. Users are responsible for isolation and configured-tool permissions. GitHub Actions retains its existing isolated execution until its planned migration to Docker. Managed local model runtimes, Forgejo/Gitea entry points, and protection from untrusted hosts or kernels remain planned follow-ups. GitHub publication (one review per file plus a managed summary, dogfood auto-review on this repository) is implemented. `src.old/` and `github/action.yaml.old` keep the earlier design as reference material; do not import from them.
+
+The stack is pnpm, TypeScript, Node, Bun, vitest, bats, and VitePress. Do not add a second package manager, task runner, formatter, or test framework without an accepted design change. Follow `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `mise.toml`, and the scripts in `package.json`.
+
+## Branches and pull requests
+
+1. Create a focused branch from `main` for each issue.
+2. Follow `.agents/skills/isolated-workspace/SKILL.md` to plan and create its dedicated sibling worktree. Pass `--vcs git`, the full branch name, and `--base origin/main`. Obtain approval of the exact plan before applying it. Do not implement changes in the primary checkout.
+3. Commit with Conventional Commits.
+4. Run `mise run validate` before pushing.
+5. Open a pull request linked to the issue and relevant docs pages.
+
+Never merge a pull request without explicit owner approval. Approval, completed tasks, or a green review is not permission to merge.
+
+## Implementation rules
+
+- Never disable model reasoning. Preserve the owner's model/provider reasoning behavior; do not force reasoning off to optimize cost, latency, or output budgets. Do not override owner decisions without explicit approval.
+- Keep the review core (`src/review/`) independent of forges, harnesses, and the GitHub Action surface. New harnesses go behind the `HarnessExecutor` interface in `src/harness-executor/`; forge behavior goes behind adapters when forge support lands.
+- Pass dependencies into services; do not read `process.env` in domain code — environment parsing lives in `src/review/environment.ts`.
+- Treat pull request content as untrusted data. Never execute PR code, scripts, builds, or installers during isolated reviews, and never let PR content alter isolated prompts, permissions, schemas, or output paths. Native CLI and Docker reviews use normal global and checkout-local harness configuration, including executable tools and plugins. CLI execution is unsandboxed; Docker provides the container boundary. Authoritative diff validation, finding schemas, and publication policy remain fixed in every mode.
+- Comments explain policy or non-obvious constraints, not the code.
+- Prompt modules under `prompts/v4/` are versioned policy. Changing them is a policy change: bump the prompt version and update tests.
+- State unsupported behavior directly. Do not present planned behavior as implemented.
+
+## Tests
+
+Each pull request adds or updates tests for changed behavior.
+
+- **Unit tests** (vitest, `test/*.test.ts`) cover parsing, validation, prompt assembly, diff-line mapping, finding validation, and output writing.
+- **Integration tests** (vitest) cover the review runner end to end with the echo harness and a scripted executor, plus the CLI entry points.
+- **CLI and manifest tests** (bats, `test/*.bats`) cover the direct TypeScript source CLIs against real bundle fixtures, the Node/Bun runtime contract, the GitHub Action manifest contract, and the validation gate itself.
+- **Harness matrix** (`test/harness-matrix-run.sh`, used by CI) runs echo, pi, and opencode end to end against the local mock model endpoint; CI uploads each harness's review output as a per-harness artifact, with a scripted finding for pi and opencode so the artifacts demonstrate diff-validated findings.
+- **Live-harness tests** are opt-in: `REDLINE_LIVE_HARNESS_TESTS=1` with the harness binaries on PATH.
+- **End-to-end tests** against a real repository are manual and opt-in; never target a production repository.
+
+Tests use temporary directories and repositories. They must not modify the contributor's checkout. Network tests beyond loopback must be opt-in and clearly named.
+
+## Before pushing, run the validation gate
+
+Read and follow [`VALIDATION.md`](VALIDATION.md) before validating, committing,
+pushing, or publishing. It defines the existing `mise run validate` gate and
+the checks for agent-asset changes. Do not install missing tools or change
+validation policy without owner approval.
+
+The publication layer keeps the pull request informed while a review runs: a start notification is published into the managed summary comment before the review executes, and the same comment is replaced by the run summary or the failure state at completion. In the action these are separate steps with their own freshly minted tokens (the review step runs token-free); a failed start notification never aborts the review — artifacts remain the guaranteed output.
+
+## Agent instruction maintenance
+
+`AGENTS.md` routes shared instructions; `CLAUDE.md` imports it for Claude Code.
+Keep detailed reusable procedures in skills and validation policy in
+`VALIDATION.md`. Imported assets do not override Redline's security rules,
+workflow gates, toolchain policy, or owner authority.
+
+Use `instruction-maintenance` to audit instruction drift and prepare an exact
+proposal. Obtain explicit owner approval of the stated files and changes before
+editing instructions. Changed evidence, scope, dependencies, or protected rules
+requires a revised proposal and approval. An audit is not permission to mutate,
+commit, push, publish, merge, or release.
+
+## Documentation
+
+Product documentation lives under `docs/` as a VitePress site. Register new pages in `docs/.vitepress/config.ts`. Build with `pnpm run docs` before pushing; the gate enforces it. Write documentation plainly and concretely; avoid filler.
+
+## Releasing the action
+
+Published `vMAJOR.MINOR.PATCH` action tags are immutable. Consumers pin the full version; the `vMAJOR` alias moves only through the guarded manual release flow described in the Wiki's Release operations runbook, with repository tag rules requiring the trusted releaser. A release tag must contain the exact reviewed TypeScript source used by the composite action; emitted `dist/**/*.js` files are not part of the runtime contract. Legacy runner images remain reference material. The Redline image is built and published to GHCR only after a successful npm publication, using the same package version. Action tags remain separate.
+
+## Pull request checklist
+
+- Branch from `main`, worktree used, Conventional Commits.
+- `mise run validate` passes locally.
+- Tests added or updated for changed behavior.
+- Docs updated when behavior, contracts, or security boundaries change.
+- PR linked to its issue; unsupported behavior stated explicitly.

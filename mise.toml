@@ -1,88 +1,37 @@
-[settings]
-lockfile = true
-
 [tools]
 pnpm = "10.33.0"
 node = "24"
 bun = "1.4.4"
 python = "3.12"
 
-[tasks.benchmark]
-description = "Run the deterministic recorded review-quality benchmark"
-run = "pnpm run benchmark"
-
-[tasks."benchmark:live-model"]
-description = "Run the opt-in live-model benchmark capture"
-run = "pnpm run benchmark:live-model"
-
-[tasks."benchmark:performance"]
-description = "Run the deterministic 20-file performance baseline"
-run = "pnpm run benchmark:performance"
-
-[tasks."benchmark:performance-live"]
-description = "Run the opt-in live 20-file performance capture"
-run = "pnpm run benchmark:performance:live"
-
-[tasks."benchmark:code-index-value"]
-description = "Regenerate the checked-in code-index provider value report"
-run = "pnpm run benchmark:code-index-value"
-
-[tasks."benchmark:model-execution"]
-description = "Regenerate the checked-in Pi model-execution policy report"
-run = "pnpm run benchmark:model-execution"
-
-[tasks."benchmark:review-eligibility"]
-description = "Regenerate the checked-in trusted review eligibility evidence"
-run = "pnpm run benchmark:review-eligibility"
-
-[tasks."benchmark:checkout"]
-description = "Regenerate the checked-in checkout benchmark report"
-run = "pnpm run benchmark:checkout"
-
-[tasks."benchmark:model-execution-live"]
-description = "Run the opt-in live Pi thinking, output-bound, and structured-output capture"
-run = "pnpm run benchmark:model-execution:live"
-
-[tasks."benchmark:source-runtime"]
-description = "Measure pinned Node and Bun TypeScript source startup and echo review time"
-run = "pnpm run benchmark:source-runtime"
-
-[tasks."benchmark:live-verification"]
-description = "Opt-in independent live discovery-to-verifier capture; never runs in CI"
-run = "pnpm run benchmark:live-verification"
-
 [tasks.typecheck]
-description = "Check TypeScript types"
+description = "Check active scaffold TypeScript"
 run = "pnpm run typecheck"
 
+[tasks.build]
+description = "Build the project to mjs 'binary'"
+run = "pnpm run build"
+
 [tasks.test]
-description = "Run the Vitest and Bats suites against TypeScript source"
+description = "Run active Vitest and Bats scaffold tests"
 run = "pnpm test"
 
 [tasks.validate]
-description = "Check types, test TypeScript source, and build the docs"
-run = [
-  "mise run typecheck",
-  "mise run test",
-  "mise run docs",
-]
+description = "Check types, test the active scaffold, and build its docs"
+run = ["mise run typecheck", "mise run test", "mise run docs"]
 
 [tasks.docs]
-description = "Build the VitePress documentation site"
+description = "Build the active VitePress documentation site"
 run = "pnpm run docs"
 
 [tasks."docs:serve"]
-description = "Serve the VitePress documentation site locally"
+description = "Serve the active documentation site"
 run = "pnpm run serve"
 
 [tasks."docs:preview"]
-description = "Preview the built VitePress documentation site"
+description = "Preview the active documentation build"
 run = "pnpm run docs:preview"
 
 [tasks."deps:sync"]
-description = "Install mise tools and project dependencies"
+description = "Install the approved mise tools and project dependencies"
 run = ["mise install --yes", "pnpm install --frozen-lockfile"]
-
-[tasks."deps:clean"]
-description = "Remove installed dependencies"
-run = "rm -rf node_modules"

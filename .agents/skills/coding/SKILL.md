@@ -1,6 +1,6 @@
 ---
 name: coding
-description: Design, implement, refactor, review, or test code with project-first conventions, contextual engineering principles, risk-based security, behavior-focused tests, and applicable quality gates. Use for any task that writes or changes code in any language. Combine it with the matching coding language or extension skills when available.
+description: "Design, implement, refactor, review, or test code under project conventions, risk-based security, and behavior-focused checks."
 metadata:
   author: dragoscirjan
   version: "1.0"
@@ -9,113 +9,80 @@ metadata:
 
 # Coding
 
-Produce the smallest correct change that fits the project. Preserve behavior and compatibility unless the task explicitly changes them.
+Produce the smallest correct change that fits the project. Preserve behavior and compatibility unless the approved task changes them.
 
-Use engineering principles as decision tools, not rituals. Do not add abstractions, patterns, dependencies, or infrastructure merely to make code look sophisticated.
+## 1. Establish the project constraints
 
-## Understand the project first
+Read applicable instructions, nearby code, public interfaces, tests, build files, tool configuration, and CI. Identify languages, runtimes, deployment, compatibility, trust boundaries, and applicable language/extension constraints.
 
-Before changing code:
+Use established architecture, terminology, tools, and conventions unless unsafe or inconsistent with the task. Tool installation, replacement, and reconfiguration need human approval. Continue when the requested behavior and applicable constraints are clear.
 
-1. Read the applicable project instructions.
-2. Inspect nearby code, public interfaces, tests, build files, tool configuration, and CI commands.
-3. Identify the language, runtime, deployment environment, compatibility requirements, and trust boundaries.
-4. Load the matching `coding-*` skills when the harness advertises them.
-5. Prefer established project architecture, terminology, tools, and conventions unless they are unsafe or conflict with the task.
+## 2. Choose the design
 
-Do not install, replace, or reconfigure development tools without human approval.
+Use principles to answer concrete design questions:
 
-## Choose the smallest sound design
+- KISS favors the simplest design covering known requirements and failure modes.
+- YAGNI keeps hypothetical extension points and generalized infrastructure out of the change.
+- DRY combines a stable repeated concept, not code that merely looks similar.
+- SOLID helps where object-oriented boundaries benefit; it does not justify otherwise unnecessary classes or interfaces.
+- A design pattern earns its place by solving a demonstrated recurring problem better than direct code.
 
-Apply these principles in context:
+Keep responsibilities cohesive and dependencies explicit. Prefer composition when it expresses the domain as clearly as inheritance. Add indirection only to reduce coupling, isolate volatility, or enable a required test boundary.
 
-- **KISS:** Prefer the simplest design that handles the known requirements and failure modes.
-- **YAGNI:** Do not build extension points or generalized infrastructure for hypothetical needs.
-- **DRY:** Remove duplication when the repeated concept is stable. Do not merge code that only looks similar.
-- **SOLID:** Use these principles when object-oriented boundaries benefit from them. Do not create interfaces or classes solely to satisfy an acronym.
-- **Design patterns:** Use a pattern only when it solves a demonstrated recurring problem better than a direct implementation.
+For simple work, prefer pure functions, immutable values, explicit inputs/outputs, and a functional core with side effects at its boundaries where idiomatic. Use procedural, object-oriented, concurrent, or stateful designs when ownership, performance, or domain behavior benefits.
 
-Keep responsibilities cohesive and dependencies explicit. Prefer composition over inheritance when both express the domain equally well. Introduce indirection only when it reduces coupling, isolates volatility, or enables a required test boundary.
+Continue when the design covers the known requirements without speculative mechanisms.
 
-For simple work, prefer pure functions, immutable values, explicit inputs and outputs, and a functional core with side effects at the boundaries when that style is idiomatic. Use procedural, object-oriented, concurrent, or stateful designs when they make ownership, performance, or domain behavior clearer.
+## 3. Implement clearly
 
-## Implement clearly
+- Use domain names and focused functions/modules.
+- Make state changes and side effects visible. Preserve module and API invariants.
+- Handle errors where context or recovery is available; propagate failures rather than discarding them.
+- Use standard-library features when sufficient and keep new dependencies justified.
+- Comment decisions, constraints, and non-obvious risks rather than narrating obvious code.
+- Preserve public API compatibility unless its change is approved.
+- Remove dead code introduced by this change while leaving unrelated cleanup out of scope.
 
-- Use names that describe domain intent.
-- Keep functions and modules focused on one coherent responsibility.
-- Make state changes and side effects visible.
-- Handle errors at the layer that can add context or recover. Do not silently discard failures.
-- Preserve invariants at module and API boundaries.
-- Minimize new dependencies and use standard-library features when they are sufficient.
-- Comment decisions, constraints, and non-obvious risks. Do not narrate obvious code.
-- Keep public APIs backward compatible unless the approved change says otherwise.
-- Remove dead code introduced by the change, but do not broaden cleanup beyond the task.
+## 4. Apply controls to actual risks
 
-## Apply risk-based security
+Identify trusted and untrusted data and what the code protects. Apply every relevant control:
 
-Identify what is trusted, what is untrusted, and what the code protects. Apply controls that match the actual risk.
-
-- Validate untrusted input at the boundary where it enters the system.
-- Encode output for its destination context.
-- Use structured APIs and argument arrays for queries, commands, and subprocesses. Do not build them through untrusted string interpolation.
-- Enforce authorization at the protected operation, not only in the user interface.
-- Use least privilege and deny by default when access is uncertain.
-- Keep secrets out of source code, logs, errors, tests, and generated artifacts.
-- Use established cryptographic libraries and protocols. Do not design custom cryptography.
+- Validate input where untrusted data enters, and encode output for its destination.
+- Use structured query APIs and subprocess argument arrays rather than interpolating untrusted values into executable strings.
+- Enforce authorization at the protected operation. Use least privilege and deny uncertain access by default.
+- Keep secrets out of source, logs, errors, tests, and generated artifacts.
+- Use established cryptographic libraries and protocols, never custom cryptography.
 - Bound resource use, handle timeouts and cancellation, and release resources on every path.
-- Check memory, integer, concurrency, path, serialization, and dependency risks when they apply to the language and environment.
-- Return useful errors without exposing sensitive internals.
+- Check applicable memory, integer, concurrency, path, serialization, and dependency risks.
+- Return useful errors without sensitive internals.
 
-Use the [OWASP Developer Guide](https://devguide.owasp.org/), its [secure coding checklist](https://devguide.owasp.org/en/04-design/02-web-app-checklist/), and the [CWE Top 25](https://cwe.mitre.org/top25/) as risk references, not as substitutes for project-specific threat analysis.
+Consult the [OWASP Developer Guide](https://devguide.owasp.org/), [secure coding checklist](https://devguide.owasp.org/en/04-design/02-web-app-checklist/), and [CWE Top 25](https://cwe.mitre.org/top25/) where relevant. These support project-specific threat analysis; one checklist or scanner is not proof of security.
 
-Do not claim that code is secure because it follows a checklist or passes one scanner.
+## 5. Test changed behavior
 
-## Test changed behavior
+Add or update tests for behavior changes. Cover public behavior and observable contracts, normal paths, relevant boundaries, failures, and security regressions. Use integration tests where unit tests cannot verify the boundary.
 
-Add or update tests when behavior changes.
+Keep tests deterministic and isolated from uncontrolled time, randomness, network, and process state. Preserve meaningful coverage instead of deleting, weakening, skipping, or over-mocking tests to obtain a pass. Apply project coverage thresholds rather than inventing a percentage.
 
-- Test public behavior and observable contracts rather than implementation details.
-- Cover the normal path, relevant boundaries, expected failures, and security regressions.
-- Keep tests deterministic and isolated from uncontrolled time, randomness, network, and process state.
-- Use integration tests where unit tests cannot verify the real boundary.
-- Do not delete, weaken, skip, or over-mock tests to make a change pass.
-- Follow existing project coverage thresholds. Do not invent a universal percentage.
+## 6. Run the quality gates
 
-## Run applicable quality gates
+Discover configured commands and CI behavior before choosing tools. Run applicable checks in this order:
 
-Discover the project's configured commands before choosing tools. Use project configuration and CI behavior first.
-
-Run applicable gates in a useful order:
-
-1. Formatting check.
+1. Formatting.
 2. Compilation or type checking.
 3. Linting and static analysis.
-4. Focused tests for the changed area.
+4. Focused tests.
 5. The broader applicable test suite.
 6. Duplicate-code detection.
 7. Security analysis.
 8. Dependency or package audit.
 
-Use the project's duplicate detector when configured. Otherwise use [jscpd](https://jscpd.dev/) as the cross-language fallback when it is available or the human approves installing it. Apply only project-defined duplication thresholds.
+Use the configured duplicate detector. Otherwise use [jscpd](https://jscpd.dev/) when available or when the human approves installing it. Apply only project-defined thresholds.
 
-Do not install a missing gate, change its configuration, lower a threshold, add a suppression, or run a broad automatic fix without approval. Inspect every automatic edit before keeping it.
+Obtain approval before installing a gate, changing its configuration, lowering thresholds, adding suppressions, or running broad automatic fixes. Inspect every automatic edit before retaining it.
 
-Report each applicable gate as:
+Report every applicable gate as passed, failed with the failure, not run with its reason, or unsupported when no suitable ecosystem/project gate exists. Only an executed successful check passes.
 
-- **passed**
-- **failed**, with the relevant failure
-- **not run**, with the reason
-- **unsupported**, when the ecosystem or project has no suitable gate
+## 7. Finish
 
-Never describe an unavailable, unsupported, or unexecuted gate as passed.
-
-## Finish the change
-
-Review the complete diff. Confirm that the change:
-
-- satisfies the requested behavior
-- follows the project's architecture and language guidance
-- does not include unrelated edits
-- updates affected documentation and examples
-- preserves security and compatibility constraints
-- reports all validation limits and remaining risks
+Review the full diff against requested behavior, project architecture and language guidance, scope, affected documentation/examples, security, and compatibility. Finish only when each applicable check is accounted for and remaining risks or validation limits are reported.

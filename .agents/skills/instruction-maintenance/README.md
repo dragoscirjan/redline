@@ -8,19 +8,9 @@ The skill covers startup routes, deferred policy documents, instruction dependen
 
 Loading or invoking the skill authorizes a read-only audit and an exact proposal. Repository mutation requires explicit human approval after the proposal is shown.
 
-The proposal identifies:
+Before presenting a proposal or treating a response as approval, read the [complete proposal and approval contract](references/approval-proposal.md). It defines required evidence, exact changes, protected-rule approval, and when changed scope invalidates approval.
 
-- the mismatch and evidence
-- current and proposed behavior
-- every affected file
-- exact route, policy, relationship, or metadata changes
-- effects on progressive disclosure
-- protected rules that remain unchanged or need separate approval
-- validation and publication steps
-
-Approval applies only to that proposal. A changed scope, changed file set, or changed protected rule requires a new proposal and new approval.
-
-After approval, the agent still follows the repository's issue, isolated-workspace, validation, commit, and pull-request gates. Approval never grants merge or release authority.
+Approved changes still follow issue, workspace, validation, commit, and pull-request gates. Approval grants no merge or release authority.
 
 ## Relationship types
 
@@ -46,8 +36,6 @@ The agent must present the exact proposal and wait for approval before mutation.
 ## Files
 
 - [`SKILL.md`](SKILL.md) contains the audit, proposal, approval, and adaptation workflow.
-- `README.md` explains the design and permission boundary.
+- [Proposal and approval contract](references/approval-proposal.md) defines the exact proposal and its approval boundary.
 
 Keep the directory name and the `name` field in `SKILL.md` set to `instruction-maintenance` for portable Agent Skills discovery.
-
-See [issue 11](https://github.com/dragoscirjan/ai/issues/11) for the design requirements.

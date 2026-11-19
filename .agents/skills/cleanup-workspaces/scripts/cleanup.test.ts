@@ -467,6 +467,29 @@ describe("cleanup-workspaces script", () => {
       .not.toContain("change/merged");
   });
 
+  test("ordinary Jujutsu cleanup protects all same-leaf bookmarks before filtering targets", () => {
+    const repository = jjRepository();
+    const workspace = create(repository, "jj", "change/ambiguous");
+    const parent = mustRun("jj", ["log", "-r", "change/ambiguous-", "--no-graph", "-T", "commit_id"], repository).stdout;
+    const root = mustRun("jj", ["log", "-r", "root()", "--no-graph", "-T", "commit_id"], repository).stdout;
+    const unrelated = parent === root ? "@" : "root()";
+    const unrelatedTip = mustRun("jj", ["log", "-r", unrelated, "--no-graph", "-T", "commit_id"], repository).stdout;
+    expect(unrelatedTip).not.toBe(parent);
+    expect(unrelatedTip).not.toBe(mustRun("jj", ["log", "-r", "change/ambiguous", "--no-graph", "-T", "commit_id"], repository).stdout);
+    mustRun("jj", ["bookmark", "create", "other/ambiguous", "-r", unrelated], repository);
+    const before = mustRun("jj", ["bookmark", "list", "--all"], repository).stdout;
+    const args = ["--vcs", "jj"];
+    const plan = output(invoke(repository, args));
+    expect(plan.eligible).toEqual([]);
+    expect(plan.skipped).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "ambiguous", reason: "ambiguous-bookmark-mapping" }),
+    ]));
+    const applied = output(invoke(repository, approvedApply(args, plan)));
+    expect(applied.result?.failed).toEqual([]);
+    expect(existsSync(workspace)).toBe(true);
+    expect(mustRun("jj", ["bookmark", "list", "--all"], repository).stdout).toBe(before);
+  });
+
   test("removes exactly one integrated Jujutsu lane from the canonical workspace", () => {
     const repository = jjRepository();
     const canonicalRef = "change/canonical";

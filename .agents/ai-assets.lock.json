@@ -310,7 +310,6 @@
       }
     ],
     "harnesses": [
-      "claude-code",
       "opencode",
       "pi"
     ],
@@ -328,7 +327,7 @@
       "CONTRIBUTING.md": "Owner approved the exact staged instruction diff 85dc5ad93125455e69e1cd2b5a5359bd339186711d605f01ed5ac8e088437439, preserving current Redline adaptations and adopting this displayed replacement under the new manager.",
       "VALIDATION.md": "Owner approved the exact staged instruction diff 85dc5ad93125455e69e1cd2b5a5359bd339186711d605f01ed5ac8e088437439, preserving current Redline adaptations and adopting this displayed replacement under the new manager."
     },
-    "targetRequirements": "Preserve Redline's complete existing project facts, architecture, security boundaries, issue gate, owner authority, exact workspace cleanup approval, native harness configuration boundaries, model reasoning policy, mise validation gate, pnpm installer policy and publication rules. Canonical flat skill packages for Pi, OpenCode and Claude Code. No initializer execution or application/toolchain changes. Existing managed root instruction adaptations must be preserved or incorporated, not overwritten by upstream identity. Install all catalog project skills except init-project; include Archify. Personal updater stays outside the project.",
+    "targetRequirements": "Preserve Redline's complete existing project facts, architecture, security boundaries, issue gate, owner authority, exact workspace cleanup approval, native harness configuration boundaries, model reasoning policy, mise validation gate, pnpm installer policy and publication rules. Canonical flat skill packages for Pi and OpenCode. Claude Code is disabled for this project; do not recreate project-local Claude projections without explicit owner approval. No initializer execution or application/toolchain changes. Existing managed root instruction adaptations must be preserved or incorporated, not overwritten by upstream identity. Install all catalog project skills except init-project; include Archify. Personal updater stays outside the project.",
     "instructionFiles": [
       "AGENTS.md",
       "CLAUDE.md",
@@ -4224,137 +4223,6 @@
       "mode": 420
     }
   },
-  "projections": {
-    ".claude/skills/archify": {
-      "harness": "claude-code",
-      "skill": "archify",
-      "target": "../../.agents/skills/archify"
-    },
-    ".claude/skills/asd-ste100-technical": {
-      "harness": "claude-code",
-      "skill": "asd-ste100-technical",
-      "target": "../../.agents/skills/asd-ste100-technical"
-    },
-    ".claude/skills/caveman": {
-      "harness": "claude-code",
-      "skill": "caveman",
-      "target": "../../.agents/skills/caveman"
-    },
-    ".claude/skills/cleanup-workspaces": {
-      "harness": "claude-code",
-      "skill": "cleanup-workspaces",
-      "target": "../../.agents/skills/cleanup-workspaces"
-    },
-    ".claude/skills/code-review": {
-      "harness": "claude-code",
-      "skill": "code-review",
-      "target": "../../.agents/skills/code-review"
-    },
-    ".claude/skills/coding": {
-      "harness": "claude-code",
-      "skill": "coding",
-      "target": "../../.agents/skills/coding"
-    },
-    ".claude/skills/coding-with-rules": {
-      "harness": "claude-code",
-      "skill": "coding-with-rules",
-      "target": "../../.agents/skills/coding-with-rules"
-    },
-    ".claude/skills/debloat": {
-      "harness": "claude-code",
-      "skill": "debloat",
-      "target": "../../.agents/skills/debloat"
-    },
-    ".claude/skills/document-project": {
-      "harness": "claude-code",
-      "skill": "document-project",
-      "target": "../../.agents/skills/document-project"
-    },
-    ".claude/skills/excalidraw": {
-      "harness": "claude-code",
-      "skill": "excalidraw",
-      "target": "../../.agents/skills/excalidraw"
-    },
-    ".claude/skills/grill-me": {
-      "harness": "claude-code",
-      "skill": "grill-me",
-      "target": "../../.agents/skills/grill-me"
-    },
-    ".claude/skills/grilling": {
-      "harness": "claude-code",
-      "skill": "grilling",
-      "target": "../../.agents/skills/grilling"
-    },
-    ".claude/skills/initiative": {
-      "harness": "claude-code",
-      "skill": "initiative",
-      "target": "../../.agents/skills/initiative"
-    },
-    ".claude/skills/instruction-maintenance": {
-      "harness": "claude-code",
-      "skill": "instruction-maintenance",
-      "target": "../../.agents/skills/instruction-maintenance"
-    },
-    ".claude/skills/isolated-workspace": {
-      "harness": "claude-code",
-      "skill": "isolated-workspace",
-      "target": "../../.agents/skills/isolated-workspace"
-    },
-    ".claude/skills/plan-tasks": {
-      "harness": "claude-code",
-      "skill": "plan-tasks",
-      "target": "../../.agents/skills/plan-tasks"
-    },
-    ".claude/skills/research": {
-      "harness": "claude-code",
-      "skill": "research",
-      "target": "../../.agents/skills/research"
-    },
-    ".claude/skills/retro": {
-      "harness": "claude-code",
-      "skill": "retro",
-      "target": "../../.agents/skills/retro"
-    },
-    ".claude/skills/scaffold": {
-      "harness": "claude-code",
-      "skill": "scaffold",
-      "target": "../../.agents/skills/scaffold"
-    },
-    ".claude/skills/specify": {
-      "harness": "claude-code",
-      "skill": "specify",
-      "target": "../../.agents/skills/specify"
-    },
-    ".claude/skills/subagent-orchestration": {
-      "harness": "claude-code",
-      "skill": "subagent-orchestration",
-      "target": "../../.agents/skills/subagent-orchestration"
-    },
-    ".claude/skills/systematic-debugging": {
-      "harness": "claude-code",
-      "skill": "systematic-debugging",
-      "target": "../../.agents/skills/systematic-debugging"
-    },
-    ".claude/skills/tdd": {
-      "harness": "claude-code",
-      "skill": "tdd",
-      "target": "../../.agents/skills/tdd"
-    },
-    ".claude/skills/unslop": {
-      "harness": "claude-code",
-      "skill": "unslop",
-      "target": "../../.agents/skills/unslop"
-    },
-    ".claude/skills/wait-what": {
-      "harness": "claude-code",
-      "skill": "wait-what",
-      "target": "../../.agents/skills/wait-what"
-    },
-    ".claude/skills/writing-for-agents": {
-      "harness": "claude-code",
-      "skill": "writing-for-agents",
-      "target": "../../.agents/skills/writing-for-agents"
-    }
-  },
+  "projections": {},
   "legacyInstructions": {}
 }

@@ -18,13 +18,7 @@ Use four phases: investigate, compare, test a hypothesis, then fix and verify. K
 
 ## Follow project boundaries
 
-This skill owns diagnosis. It does not grant mutation, delegation, infrastructure, or publication authority.
-
-- Read the applicable project instructions first. Honor workspace and approval gates before diagnostic edits, generated files, tests that write state, or other mutations.
-- Before changing code, load the sibling `coding` skill by its advertised name and path, then the applicable language and extension skills. If `coding` is missing, stop that phase and ask the owner to expose or install it; do not install it automatically or recreate its rules.
-- Before validation, follow the project's validation instructions, including `VALIDATION.md` when applicable. Use project-owned test and tool configuration rather than introducing a competing toolchain.
-- Before any delegation, load and follow the advertised `subagent-orchestration` skill. If it is unavailable, do not delegate. This skill does not create extra agent capacity.
-- Read-only investigation does not require loading all implementation skills. These are phase handoffs, not instructions to preload every dependency.
+This skill owns diagnosis, not authority to mutate, delegate, change infrastructure, or publish. Follow project instructions and approval/workspace gates before diagnostic edits, generated files, or state-writing tests. Use project coding standards, validation commands, and tool configuration. Delegation requires separate authorization and must respect the project's capacity limits. Read-only investigation needs no implementation workflow.
 
 ## Phase 1: investigate the failure
 
@@ -90,26 +84,16 @@ If an exploratory edit remains, identify whether it belongs in the final fix. Re
 6. Remove temporary instrumentation and test fixtures you introduced unless they are an intentional part of the fix. Re-run affected checks after removal.
 7. Inspect the complete diff for unintended behavior and report verification gaps.
 
-Use `coding` for implementation standards and project validation policy for quality gates. Do not weaken tests, suppress unexplained errors, add arbitrary sleeps, or call a failure fixed because its message disappeared.
+Apply project implementation standards and validation gates. Do not weaken tests, suppress unexplained errors, add arbitrary sleeps, or call a failure fixed because its message disappeared.
 
 ## Stop and reassess
 
-If a fix fails, return to investigation with the new evidence. Count failed corrective attempts, not ordinary diagnostic observations.
+Return to investigation after a failed fix. After three failed corrective attempts at the same unresolved failure—not ordinary diagnostic observations—stop patching. Summarize the attempts and reassess reproduction, assumptions, environment, shared state, coupling, and architecture. Three failures signal escalation, not proof of bad architecture.
 
-After three failed corrective attempts for the same unresolved failure, stop further patches and reassess reproduction, assumptions, environment, shared state, coupling, and architecture. Summarize what each attempt established. Three failures are an escalation signal, not proof that the architecture is wrong.
+Ask the owner before architectural changes, broader scope, or experiments needing additional authority. If evidence is unavailable, report the blocker and smallest useful next observation.
 
-Ask the owner before an architectural change, broader scope, or an experiment requiring additional authority. If evidence is unavailable, report a blocked diagnosis and the smallest next observation needed.
-
-Urgent containment, such as an authorized rollback, is not a root-cause fix. Label it as containment, preserve evidence where safe, and keep the underlying diagnosis open.
+An authorized emergency rollback is containment, not a root-cause fix. Label it accordingly, preserve evidence where safe, and leave the diagnosis open.
 
 ## Report the result
 
-State:
-
-- the failure and affected revision or environment
-- the cause and supporting evidence, or remaining uncertainty
-- the focused change, distinct from any containment
-- checks that passed, failed, or did not run, with reasons
-- remaining risks and the next action
-
-Follow the project's branch and workspace reporting requirements. Never claim a diagnosis or fix beyond the evidence collected.
+Report the failure and revision/environment, cause with evidence or uncertainty, corrective change distinct from containment, checks and unrun reasons, remaining risks, and next action. Follow project branch/workspace reporting rules. Never claim more than the evidence supports.

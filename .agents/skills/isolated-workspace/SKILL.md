@@ -1,6 +1,6 @@
 ---
 name: isolated-workspace
-description: Plan, create, or reuse one isolated Git worktree or Jujutsu workspace before repository mutation. Use before architecture, code, documentation, configuration, or policy changes. Requires an explicit VCS and branch or bookmark name while detecting repository and workspace paths automatically.
+description: "Create or reuse an isolated Git worktree or Jujutsu workspace before mutation, using an explicit VCS and branch or bookmark."
 compatibility: Requires Bun and either Git with worktree support or Jujutsu 0.38 or newer with workspace support.
 metadata:
   author: dragoscirjan
@@ -10,33 +10,23 @@ metadata:
 
 # Isolated workspace
 
-Establish a dedicated workspace before the first repository mutation. Do not edit, generate, move, or delete repository files until this gate passes.
+Establish a dedicated workspace before the first repository mutation. Until this gate passes, leave repository files unchanged. Use the bundled automation rather than recreating its path or VCS procedures.
 
-A normal tracked change uses one canonical branch or bookmark and workspace. Approved subagent orchestration may add temporary sibling lanes, but the canonical workspace remains the integration and pull-request workspace. Every workspace still has one writer, and workspaces are never nested.
+Keep one canonical integration and pull-request workspace. Every workspace has one writer. Preserve pre-existing changes without stashing, resetting, cleaning, moving, or deleting them; never mutate the primary checkout.
 
-Use the bundled TypeScript automation. Do not recreate its path derivation or VCS procedures manually.
+## 1. Resolve the inputs
 
-## Read project configuration
+Read applicable `AGENTS.md` configuration. Obtain the selected VCS, configured base, and full branch or bookmark name, including its required prefix.
 
-Read the nearest applicable `AGENTS.md`. Obtain:
+Pass `--vcs git` or `--vcs jj` explicitly and use only that VCS throughout, including in colocated repositories. Pass the full name through `--branch` and the configured base through `--base`. Without a configured base, the helper uses the Git remote default branch, then the current Git branch, or `trunk()` for Jujutsu.
 
-- the VCS selected by the project or owner
-- the base revision, when the project configures one
-- the full branch or bookmark name for the tracked change
+For an approved temporary orchestration lane, read [lane creation](references/orchestration-lanes.md) before selecting its ref and base. Keep workspaces unnested.
 
-The script must receive `--vcs git` or `--vcs jj`. It never infers the VCS, including in a colocated repository. Do not mix Git and Jujutsu commands.
+Bun runs the helper without becoming a target dependency. Stop if Bun or the selected VCS is missing. Tool installation or reconfiguration needs owner approval.
 
-Pass the full branch or bookmark name through `--branch`. Apply the configured prefix before invoking the script. For example, use `--branch change/issue-42`, not only `issue-42`.
+## 2. Review the plan
 
-Pass a configured base through `--base`. When it is omitted, the script uses the Git remote default branch, then the current Git branch, or `trunk()` for Jujutsu.
-
-For a temporary orchestration lane, use the full ref `${CANONICAL_REF}--lane-${LANE_KEY}`, where `LANE_KEY` is one safe path component, and pass `CANONICAL_REF` exactly through `--base`. The lane workspace name and leaf are the basename of that full ref. The `--lane-` marker is reserved for temporary lanes, so canonical refs must not contain it. The helper validates this identity, requires the explicit canonical base, and rejects nested lane provenance. Do not let a lane default to the repository trunk or create a lane from another temporary lane.
-
-Bun runs the helper but is not added to the target repository. If Bun or the selected VCS is unavailable, stop. Do not install or reconfigure tools without owner approval.
-
-## Plan the workspace
-
-Resolve this skill's directory, then run:
+Resolve `<skill-directory>` to this skill's directory, then run:
 
 ```sh
 bun <skill-directory>/scripts/create.ts \
@@ -45,97 +35,28 @@ bun <skill-directory>/scripts/create.ts \
   --base main
 ```
 
-Use `--vcs jj` for Jujutsu. The default is a JSON plan. `--dry-run` is an optional explicit alias for plan mode.
+Select `--vcs jj` for Jujutsu and substitute the approved name and base. Default output is a JSON plan; `--dry-run` explicitly selects the same mode.
 
-The script detects the repository that contains the current directory. It identifies the primary Git worktree or the Jujutsu `default` workspace, then derives:
+The helper detects the primary local repository and derives its sibling `<repository>--workspaces` directory without hosted identity or remote URLs. Review the VCS, primary repository, base expression and resolved commit, full ref, workspace name and absolute path, create/attach/repair/reuse action, exact commands, and `planId`.
 
-```text
-workspace root = <primary repository parent>/<primary repository name>--workspaces
-workspace path = <workspace root>/<final branch component>
-workspace name = <final branch component>
-```
+Stop on unsafe names, path escapes, symlinked roots, unregistered destinations, conflicting names, or branches attached elsewhere. Reuse requires an exact registered path and ref match. Inspect a reused workspace's status and confirm that every existing change belongs to this task; the helper cannot establish ownership.
 
-For `change/issue-42` in `/work/project`, the derived path is `/work/project--workspaces/issue-42`. Its `worker-a` lane uses ref `change/issue-42--lane-worker-a` and sibling path `/work/project--workspaces/issue-42--lane-worker-a`; it is not created inside the canonical workspace.
+Continue only with a verified exact reuse or the human's approval of the complete plan.
 
-The script rejects unsafe names, path escapes, symlinked workspace roots, unregistered destination collisions, conflicting workspace names, and branches attached elsewhere. It does not use hosted-repository identity or a remote URL to derive local paths.
+## 3. Apply and verify
 
-Review the plan. Confirm that it reports the intended:
+For creation, attachment, or repair, repeat the approved command and append `--apply --confirm --plan-id PLAN_ID`.
 
-- VCS
-- primary repository
-- base revision and resolved commit
-- full branch or bookmark
-- workspace name and absolute path
-- create, attach, repair, or reuse action
-- exact VCS commands
-- the `planId` that binds apply mode to this exact plan
+Use the approved plan's actual ID. The helper rebuilds the plan and stops when its ID, action, path, or resolved base changes. Git creates a branch from the base or attaches an existing branch only when unattached elsewhere. Jujutsu adds a named workspace, describes its change with the full bookmark name, and creates that bookmark at `@`.
 
-## Protect existing work
+Reuse is idempotent only while registration, path, and ref match. Repair a missing Jujutsu bookmark only when the exact registered workspace's description equals the requested full name; preserve existing bookmarks.
 
-- Never mutate the primary checkout.
-- Never stash, reset, clean, move, or delete pre-existing changes.
-- Keep one active writer per workspace.
-- Keep one canonical integration workspace for the tracked change.
-- Do not create a nested workspace or base a temporary lane on another temporary lane.
-- Give concurrent writable lanes exclusive files or a stable contract boundary.
-- Treat a branch, bookmark, workspace-name, or path collision as a stop.
-- Reuse only an exact registered path and branch or bookmark match.
-- Before continuing in a reused workspace, inspect its status and confirm that existing changes belong to the current task. The script cannot determine task ownership.
+Require successful apply output or exact reusable state. Verify and report VCS, absolute workspace path, resolved base, branch or bookmark, and current status.
 
-## Apply the approved plan
+## Handoff
 
-After the human approves the exact plan, rerun the same command with both mutation gates:
+Run all subsequent reads, writes, commands, checks, commits, and publication from the verified isolated workspace. Pass its absolute working directory when a tool does not preserve `cd`.
 
-```sh
-bun <skill-directory>/scripts/create.ts \
-  --vcs git \
-  --branch change/issue-42 \
-  --base main \
-  --apply \
-  --confirm \
-  --plan-id PLAN_ID
-```
+JSON is the default output; `--format text` selects a concise report. Report bounded diagnostics and actual failures, with credential-bearing values redacted.
 
-Replace `PLAN_ID` with the value emitted by the approved plan-mode run. Apply mode requires `--apply`, `--confirm`, and the matching `--plan-id`. It rebuilds the plan before mutation and stops if the approved plan ID, action, path, or resolved base changed.
-
-For Git, it either:
-
-- creates the branch from the base and adds its worktree, or
-- attaches an existing branch only when it is not attached elsewhere.
-
-For Jujutsu, it:
-
-1. adds a named workspace from the base
-2. describes its working-copy change with the full bookmark name
-3. creates the full bookmark at `@`
-
-A later run is idempotent when the registration, path, and branch or bookmark still match. It can repair a missing Jujutsu bookmark only when the exact registered workspace's description equals the requested full bookmark name. It never overwrites a bookmark.
-
-## Verify the gate
-
-Require successful apply output or an exact reusable workspace. Then verify and report:
-
-- selected VCS
-- absolute workspace path
-- resolved base
-- branch or bookmark
-- current status
-
-Run every subsequent read, write, command, validation, commit, and publication step from the isolated workspace. When tools do not preserve `cd`, pass the absolute workspace path as their working directory.
-
-## Output and failures
-
-JSON is the default output. Use `--format text` for a concise human-readable report. Diagnostics are bounded and redact common credential-bearing values.
-
-Exit codes are:
-
-- `0`: success
-- `2`: invalid arguments or missing confirmation
-- `3`: state, identity, or path conflict
-- `4`: missing environment prerequisite
-- `5`: VCS command failure
-- `6`: filesystem or unexpected failure
-
-## Cleanup handoff
-
-Do not remove the workspace here. When the owner asks to clean completed workspaces, load and follow the `cleanup-workspaces` skill. Creation does not authorize cleanup, merge, or release.
+Stop after establishing the workspace. The project or user selects cleanup separately. Creation grants no cleanup, merge, or release authority.

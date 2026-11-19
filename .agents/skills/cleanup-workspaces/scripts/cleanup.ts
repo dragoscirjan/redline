@@ -664,7 +664,7 @@ function auditJj(options: CleanupOptions): CleanupPlan {
       skipped.push({ name: workspace.name, path, reason: "lane-bookmark-mismatch" });
       continue;
     }
-    if (matching.length > 1) {
+    if (namedBookmarks.length > 1) {
       skipped.push({ name: workspace.name, path, reason: "ambiguous-bookmark-mapping" });
       continue;
     }

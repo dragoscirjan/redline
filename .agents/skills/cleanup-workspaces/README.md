@@ -10,7 +10,7 @@ The skill includes Bun-executed TypeScript automation:
 - [`scripts/cleanup.test.ts`](scripts/cleanup.test.ts) exercises successful and protected Git and Jujutsu states.
 - Shared repository and path helpers come from [`isolated-workspace/scripts/lib.ts`](../isolated-workspace/scripts/lib.ts).
 
-`isolated-workspace` is a required sibling dependency. Consumers must resolve it by its advertised skill name and path; the cleanup skill never installs it automatically.
+The skill is model-discoverable, but loading it authorizes audit only. Read [`SKILL.md`](SKILL.md) before applying a plan. For the relative commands below, use this skill's directory inside a surviving target checkout as the working directory. If the helper is outside that checkout, invoke its absolute path from the surviving target checkout instead.
 
 The caller must select the VCS explicitly:
 
@@ -38,17 +38,13 @@ bun scripts/cleanup.ts --vcs git \
   --apply --confirm --plan-id PLAN_ID
 ```
 
-Use `--vcs jj` for Jujutsu. A temporary lane ref is `${CANONICAL_REF}--lane-${LANE_KEY}` and its workspace leaf is the basename of that ref. The `--lane-` marker is reserved, the lane key is one safe component, and a temporary lane cannot act as the canonical caller. Lane mode selects no other workspace, validates the target ref under the caller's canonical ref, disables stale/global cleanup, and binds the target plus canonical workspace, ref, tip, and base into the plan.
+Use `--vcs jj` for Jujutsu. Before planning a lane, read [exact-lane identity, authorization, and cleanup](references/orchestration-lanes.md).
 
 ## Safety model
 
-Git candidates require a clean status, matching registration and branch tip, no active operation, and exact local ancestry to the selected base. Removal uses `git worktree remove` and `git branch -d` without force. In lane mode both commands run from the surviving canonical workspace, after the target tip is proven to be an ancestor of canonical `HEAD`/base; this permits safe deletion even when the primary checkout has not merged the lane.
+Ordinary cleanup requires the owner's exact-plan approval. The current-task lane exception permits only the parent to confirm the exact plan covered by its initial orchestration authorization.
 
-Git stale pruning runs only when every prunable registration is in scope. This prevents repository-wide `git worktree prune --expire now` from silently affecting another workspace root.
-
-Jujutsu 0.38 or newer is required. Candidates require an exact integrated working-copy commit or an empty child whose parents are integrated. Cleanup uses `jj workspace forget` and `jj bookmark forget`, then removes only the revalidated original workspace path. In lane mode those commands run from the canonical workspace and the registered path must equal the named sibling target. Before every destructive step, cleanup rejects symlinks, path aliases, and changed directory identity; directory removal never dereferences a substituted path. An unresolved workspace root is skipped rather than inferred stale. Cleanup never abandons commits or propagates bookmark deletion.
-
-Primary, canonical, active, dirty, locked, conflicted, detached, changed, stale, unmerged, out-of-scope, and ambiguous lane targets remain protected. Apply mode repeats the audit and rechecks each candidate immediately before removal.
+Read the applicable eligibility and stale-registration rules before auditing or applying: [Git](references/git.md) or [Jujutsu](references/jj.md). The main workflow defines universal protected states and confirmation gates. These checks keep unproven or changed targets intact rather than forcing removal.
 
 ## Tests
 
@@ -66,4 +62,4 @@ bun test \
   ./.agents/skills/cleanup-workspaces/scripts/cleanup.test.ts
 ```
 
-See [`SKILL.md`](SKILL.md) for the complete agent workflow, safety stops, and exit codes.
+See [`SKILL.md`](SKILL.md) for the complete agent workflow and safety stops. Report the helper's actual diagnostics and exit status; partial cleanup failure is not success.

@@ -1,5 +1,23 @@
 # Contributing to Redline
 
+Read before planning or changing the repository. Follow `AGENTS.md` for phase
+prerequisites, workspaces, safety, and owner authority.
+
+## Task records and scope
+
+GitHub Issues hold agreed requirements and acceptance criteria. Follow the
+interview, owner-confirmation, and issue gates in `AGENTS.md` before beginning
+work. Keep changes within that scope; a new phase does not authorize the next.
+
+## Workflow
+
+1. Confirm the outcome, scope, and required task record.
+2. Satisfy the mutation and workspace rules in `AGENTS.md`.
+3. Implement a focused change using the rules below.
+4. Follow `DOCUMENTATION.md` while implementing. Explain any no-change documentation assessment.
+5. Run applicable checks from `VALIDATION.md`. Report missing checks.
+6. Follow the commit, PR, versioning, and publication rules. One phase does not authorize the next.
+
 ## Set up the repository
 
 Mise installs Node.js 24, Bun 1.4.4, Python 3.12, and pnpm 10.33.0. Use pnpm for dependency installation. The pinned pnpm version supports the minimum-release-age, overrides, and ignored-esbuild-installer policy in `pnpm-workspace.yaml`. Do not enable esbuild's installer or change that policy to make setup pass.
@@ -52,6 +70,20 @@ Each pull request adds or updates tests for changed behavior.
 
 Tests use temporary directories and repositories. They must not modify the contributor's checkout. Network tests beyond loopback must be opt-in and clearly named.
 
+## Configuration
+
+The action's `REDLINE_*` contract is defined by `src/review/environment.ts` and
+explained in `docs/runnable-review-configuration.md`. Preserve required input
+groups, rejected unknown names, selected-credential handling, and publication
+separation. The environment summary in `AGENTS.md` does not replace the parser.
+
+For the local CLI, use `docs/local-cli.md#configuration`. Non-secret command
+arguments override supported environment settings, then trusted user
+configuration, then built-in defaults. Private user configuration stays outside
+reviewed repositories. Do not inspect credential files to document the public
+contract. Native harness configuration remains subject to the mode-specific
+security boundaries in `AGENTS.md`.
+
 ## Before pushing, run the validation gate
 
 Read and follow [`VALIDATION.md`](VALIDATION.md) before validating, committing,
@@ -69,18 +101,34 @@ Keep detailed reusable procedures in skills and validation policy in
 workflow gates, toolchain policy, or owner authority.
 
 Use `instruction-maintenance` to audit instruction drift and prepare an exact
-proposal. Obtain explicit owner approval of the stated files and changes before
+proposal. `DOCUMENTATION.md` owns documentation procedures; `VALIDATION.md`
+owns check requirements. Future synchronization uses the personal
+`sync-my-skills` manager, canonical `.agents/skills/<name>/` packages, and exact
+relative Claude projections. The manager owns `.agents/ai-assets.lock.json`;
+Skills CLI alone owns `skills-lock.json`. Obtain explicit owner approval of the stated files and changes before
 editing instructions. Changed evidence, scope, dependencies, or protected rules
 requires a revised proposal and approval. An audit is not permission to mutate,
 commit, push, publish, merge, or release.
 
 ## Documentation
 
-Product documentation lives under `docs/` as a VitePress site. Register new pages in `docs/.vitepress/config.ts`. Build with `pnpm run docs` before pushing; the gate enforces it. Write documentation plainly and concretely; avoid filler.
+Read and follow `DOCUMENTATION.md` for audience, engine, ownership, commands,
+and maintenance rules. Product documentation remains under `docs/` as a
+VitePress site. Register new pages in `docs/.vitepress/config.ts`. Keep the
+existing documentation build requirement in `VALIDATION.md`.
 
-## Releasing the action
+## Versions and releases
+
+The npm package version comes from `package.json`. Follow the existing
+Changesets/main-CI release process described in `docs/local-cli.md#release-operations`;
+local checks do not publish a package or authorize a release. Keep npm, Docker,
+and GitHub Action versioning distinct.
+
+### Releasing the action
 
 Published `vMAJOR.MINOR.PATCH` action tags are immutable. Consumers pin the full version; the `vMAJOR` alias moves only through the guarded manual release flow described in the Wiki's Release operations runbook, with repository tag rules requiring the trusted releaser. A release tag must contain the exact reviewed TypeScript source used by the composite action; emitted `dist/**/*.js` files are not part of the runtime contract. Legacy runner images remain reference material. The Redline image is built and published to GHCR only after a successful npm publication, using the same package version. Action tags remain separate.
+
+Release procedures do not grant publication authority. Follow `AGENTS.md`.
 
 ## Pull request checklist
 

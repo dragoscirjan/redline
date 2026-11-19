@@ -23,6 +23,8 @@ The default mode emits a JSON plan and does not create a workspace. The plan inc
 
 ## Examples
 
+For the relative commands below, use this skill's directory inside the target checkout as the working directory. If the helper is outside that checkout, invoke its absolute path from the target checkout instead. Read the approval and safety gates in [`SKILL.md`](SKILL.md) before applying a plan.
+
 Plan and then create a Git workspace:
 
 ```sh
@@ -43,7 +45,7 @@ bun scripts/create.ts --vcs git \
   --apply --confirm --plan-id PLAN_ID
 ```
 
-Use the same pattern with `--vcs jj`. Temporary lane refs must be `${CANONICAL_REF}--lane-${LANE_KEY}` with a one-component lane key; their workspace leaf is the basename of that ref. The `--lane-` marker is reserved, so canonical refs cannot contain it. The helper requires the exact canonical ref as the explicit base and rejects nested lane provenance.
+Use the same pattern with `--vcs jj`. Before creating or reusing a temporary lane, read [lane identity, ownership, and base requirements](references/orchestration-lanes.md).
 
 Plan and then create a Jujutsu workspace and bookmark:
 

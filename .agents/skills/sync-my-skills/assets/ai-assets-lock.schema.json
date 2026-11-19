@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Machine-owned skill synchronization state",
+  "description": "Versions 1 and 2 are read for reviewed migration. Version 3 manages only explicitly adopted instruction bundles; other legacy instructions remain historical.",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "managerVersion", "catalogHash", "source", "selection", "skills", "files", "projections", "legacyInstructions", "instructions"],
+  "properties": {
+    "schemaVersion": { "const": 3 },
+    "managerVersion": { "type": "string" },
+    "catalogHash": { "$ref": "#/$defs/digest" },
+    "catalogSource": {
+      "type": ["object", "null"], "additionalProperties": false,
+      "required": ["repository", "ref", "revision", "path", "sha256"],
+      "properties": {
+        "repository": { "type": "string" }, "ref": { "type": "string" },
+        "revision": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "path": { "const": ".agents/skills/sync-my-skills/assets/skill-catalog.yaml" },
+        "sha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "source": {
+      "type": "object", "additionalProperties": false, "required": ["repository", "ref"],
+      "properties": { "repository": { "type": "string" }, "ref": { "type": "string" } }
+    },
+    "selection": { "$ref": "./selection.schema.json" },
+    "skills": { "type": "object", "additionalProperties": { "$ref": "#/$defs/skill" } },
+    "instructions": { "anyOf": [{ "$ref": "#/$defs/instructions" }, { "type": "null" }] },
+    "files": { "type": "object", "additionalProperties": { "$ref": "#/$defs/file" } },
+    "legacyInstructions": { "type": "object", "additionalProperties": { "$ref": "#/$defs/legacyFile" } },
+    "projections": {
+      "type": "object", "additionalProperties": {
+        "type": "object", "additionalProperties": false,
+        "required": ["harness", "skill", "target"],
+        "properties": {
+          "harness": { "const": "claude-code" }, "skill": { "type": "string" },
+          "target": { "type": "string" }, "retained": { "type": "boolean" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "digests": { "type": "object", "additionalProperties": { "$ref": "#/$defs/digest" } },
+    "file": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "sourcePath", "installedSha256"],
+      "properties": {
+        "kind": { "enum": ["skill", "instruction"] }, "skill": { "type": "string" },
+        "origin": { "$ref": "#/$defs/skill/properties/origin" },
+        "sourcePath": { "type": "string" },
+        "sourceSha256": { "anyOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "installedSha256": { "$ref": "#/$defs/digest" },
+        "mode": { "enum": [420, 493] },
+        "retained": { "type": "boolean" }, "retentionReason": { "type": "string" },
+        "retainedFromCommit": { "type": "string" }
+      },
+      "allOf": [{ "if": { "properties": { "kind": { "const": "skill" } } }, "then": { "required": ["skill"] } }]
+    },
+    "instructions": {
+      "type": "object", "additionalProperties": false,
+      "required": ["origin", "files", "sourceFiles", "recipeHash", "inputHash", "prerequisites", "selectedPrerequisites", "review", "contextHash", "outputHash"],
+      "properties": {
+        "origin": { "$ref": "#/$defs/skill/properties/origin" },
+        "files": { "$ref": "./selection.schema.json#/properties/instructionFiles" },
+        "sourceFiles": { "$ref": "#/$defs/digests" },
+        "recipeHash": { "$ref": "#/$defs/digest" }, "inputHash": { "$ref": "#/$defs/digest" },
+        "prerequisites": { "$ref": "#/$defs/digests" },
+        "selectedPrerequisites": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "contextHash": { "$ref": "#/$defs/digest" }, "outputHash": { "$ref": "#/$defs/digest" },
+        "review": {
+          "type": "object", "additionalProperties": false, "required": ["note", "outputHash", "evidence", "extraEvidence", "selectedGuidance"],
+          "properties": {
+            "note": { "type": "string", "minLength": 1 }, "outputHash": { "$ref": "#/$defs/digest" },
+            "selectedGuidance": { "$ref": "#/$defs/digests" },
+            "extraEvidence": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+            "evidence": { "type": "object", "additionalProperties": { "$ref": "#/$defs/evidenceState" } }
+          }
+        }
+      }
+    },
+    "evidenceState": {
+      "type": "object", "additionalProperties": false, "required": ["type"],
+      "properties": { "type": { "enum": ["file", "missing"] }, "sha256": { "$ref": "#/$defs/digest" }, "mode": { "enum": [420, 493] } },
+      "allOf": [{ "if": { "properties": { "type": { "const": "file" } } }, "then": { "required": ["sha256", "mode"] } }]
+    },
+    "legacyFile": {
+      "type": "object", "required": ["kind", "installedSha256"],
+      "properties": { "kind": { "const": "instruction" }, "installedSha256": { "$ref": "#/$defs/digest" } }
+    },
+    "skill": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "origin", "upstream", "legal", "recipeHash", "sourceFiles", "sourceModes", "inputHash", "contextHash", "outputHash"],
+      "properties": {
+        "kind": { "enum": ["authored", "upstream", "adapted"] },
+        "origin": {
+          "type": "object", "additionalProperties": false,
+          "required": ["repository", "revision", "path"],
+          "properties": {
+            "repository": { "type": "string" }, "revision": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            "path": { "type": "string" }, "dirty": { "type": "boolean" }
+          }
+        },
+        "upstream": { "anyOf": [{ "$ref": "./skill-catalog.schema.json#/$defs/source" }, { "type": "null" }] },
+        "legal": { "type": "array", "items": { "type": "object" } },
+        "recipeHash": { "$ref": "#/$defs/digest" }, "sourceFiles": { "$ref": "#/$defs/digests" },
+        "sourceModes": { "type": "object", "additionalProperties": { "enum": [420, 493] } },
+        "inputHash": { "$ref": "#/$defs/digest" }, "contextHash": { "$ref": "#/$defs/digest" },
+        "outputHash": { "$ref": "#/$defs/digest" },
+        "review": {
+          "type": "object", "additionalProperties": false, "required": ["note", "outputHash"],
+          "properties": { "note": { "type": "string", "minLength": 1 }, "outputHash": { "$ref": "#/$defs/digest" } }
+        }
+      }
+    }
+  }
+}

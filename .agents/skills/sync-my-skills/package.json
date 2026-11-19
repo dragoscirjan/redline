@@ -1,0 +1,14 @@
+{
+  "name": "@dragoscirjan/sync-my-skills",
+  "version": "2.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Plan and apply approved project skill synchronization from a curated YAML catalog.",
+  "engines": { "node": ">=22.20.0" },
+  "scripts": {
+    "test": "node --test scripts/sync-my-skills.test.mjs",
+    "check": "node --check scripts/sync-core.mjs && node --check scripts/sync-my-skills.mjs"
+  },
+  "dependencies": { "yaml": "2.9.1" }
+}

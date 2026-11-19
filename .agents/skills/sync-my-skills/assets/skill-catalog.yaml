@@ -1,0 +1,762 @@
+# yaml-language-server: $schema=./skill-catalog.schema.json
+# One authored catalog: sources, installation, adaptation intent, selection, and deprecations.
+# Installation argv describes an approved mechanism; inspection never executes it.
+schemaVersion: 2
+repository: https://github.com/dragoscirjan/ai
+ref: main
+defaults:
+  exclude: [ agents/openai.yaml, "**/agents/openai.yaml", node_modules/**, .git/** ]
+skills:
+  archify:
+    kind: upstream
+    description: "Generate validated interactive HTML diagrams or one-page explainers with Archify, including architecture, workflows, Mermaid input, and image/SVG/WebM exports."
+    source:
+      type: github
+      repository: https://github.com/tt-a1i/archify
+      revision: a7ed6fd6657da90414831d1d42cf95987188750c
+      path: archify
+    category: diagramming
+    selection: optional
+    safety: project-write-with-confirmation
+    harnesses: [pi, opencode, claude-code]
+    prerequisites: []
+    signals:
+      askWithoutSignals: true
+    install:
+      argv: [npx, -y, skills@1.7.4, add, https://github.com/tt-a1i/archify/tree/a7ed6fd6657da90414831d1d42cf95987188750c/archify, --skill, archify]
+    runtime:
+      - "Node.js 18 or newer; Chrome/Chromium or Microsoft Edge for required browser verification. The package is self-contained; missing tools require separately approved setup."
+    legal:
+      - path: archify/LICENSE
+        target: LICENSE
+        spdx: Apache-2.0
+      - path: archify/LICENSE-MIT
+        target: LICENSE-MIT
+        spdx: MIT
+      - path: archify/NOTICE
+        target: NOTICE
+        spdx: NOASSERTION
+      - path: archify/THIRD_PARTY_NOTICES.md
+        target: THIRD_PARTY_NOTICES.md
+        spdx: NOASSERTION
+      - path: archify/assets/JetBrainsMono-OFL.txt
+        target: assets/JetBrainsMono-OFL.txt
+        spdx: OFL-1.1
+      - path: archify/explainer/vendor/pele/LICENSE
+        target: explainer/vendor/pele/LICENSE
+        spdx: MIT
+  asd-ste100-technical:
+    kind: authored
+    description: "Technical writing: use ASD-STE100-inspired plain language for software responses and documentation."
+    source:
+      type: local
+      path: .agents/skills/documentation/asd-ste100-technical
+    category: communication
+    selection: recommended
+    safety: read-only-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals:
+      askWithoutSignals: true
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/documentation/asd-ste100-technical, --skill, asd-ste100-technical ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  caveman:
+    kind: authored
+    description: Concise communication that preserves complete technical substance.
+    source:
+      type: local
+      path: .agents/skills/documentation/caveman
+    category: communication
+    selection: optional
+    safety: read-only-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals:
+      askWithoutSignals: true
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/documentation/caveman, --skill, caveman ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  cleanup-workspaces:
+    kind: authored
+    description: "Audit integrated Git/Jujutsu workspaces, stale registrations, or authorized temporary lanes; apply only an approved exact cleanup plan."
+    source:
+      type: local
+      path: .agents/skills/utility/cleanup-workspaces
+    category: workspace
+    selection: optional
+    safety: destructive-with-confirmation
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: [ isolated-workspace ]
+    runtime:
+      - Requires Bun and either Git with worktree support or Jujutsu 0.38 or newer with workspace support.
+    signals: {}
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/utility/cleanup-workspaces, --skill, cleanup-workspaces ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  code-review:
+    kind: adapted
+    description: "Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes: Standards
+      (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating
+      issue/spec asked for?). Runs both reviews in parallel sub-agents and reports them side by side. Use when the user
+      wants to review a branch, a PR, work-in-progress changes, or asks to \"review since X\"."
+    source:
+      type: local
+      path: .agents/skills/coding/code-review
+    upstream:
+      type: github
+      repository: https://github.com/mattpocock/skills
+      revision: 59db609eb1e18aaf59b63284d0e52255aff0c63c
+      path: skills/engineering/code-review
+    category: review
+    selection: optional
+    safety: read-only-subagents
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    capabilities: [ parallel-subagents ]
+    runtime:
+      - Requires Git and a harness that can run two read-only subagents in parallel.
+    signals:
+      askWithoutSignals: true
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/coding/code-review, --skill, code-review ]
+    adaptation:
+      instructions: Preserve separate Standards and Spec reviews, read-only parallel reviewers, immutable Git endpoints, safe
+        revision arguments, and the chosen comparison semantics. Reviewers must not mutate, publish, or delegate. Do not
+        restore harness/model configuration.
+      review:
+        - Preserve substantive behavior and all mandatory prerequisites.
+        - Show the diff and explain any target-specific change.
+        - Keep required legal notices unchanged; omit agents/openai.yaml.
+  coding:
+    kind: authored
+    description: "Design, implement, refactor, review, or test code under project conventions, risk-based security, and behavior-focused checks."
+    source:
+      type: local
+      path: .agents/skills/coding/coding
+    category: coding-base
+    selection: detected
+    safety: project-write-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals:
+      extensions:
+        - .c
+        - .cc
+        - .cpp
+        - .cxx
+        - .gd
+        - .go
+        - .js
+        - .jsx
+        - .lua
+        - .mjs
+        - .php
+        - .py
+        - .rs
+        - .sh
+        - .swift
+        - .ts
+        - .tsx
+        - .zig
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/coding/coding, --skill, coding ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  coding-with-rules:
+    kind: authored
+    description: "Language-aware coding: resolve the base workflow, then select rules for the languages and file extensions being changed."
+    source:
+      type: local
+      path: .agents/skills/coding/coding-with-rules
+    category: coding-wrapper
+    selection: optional
+    safety: project-write-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: [ coding ]
+    signals: {}
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/coding/coding-with-rules, --skill, coding-with-rules ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  debloat:
+    kind: authored
+    description: "Prevent overengineering during design; simplify existing code, configuration, or dependencies while preserving required behavior, contracts, security, and operational needs."
+    source:
+      type: local
+      path: .agents/skills/coding/debloat
+    category: refactoring
+    selection: optional
+    safety: project-write-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals:
+      askWithoutSignals: true
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/coding/debloat, --skill, debloat ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  grilling:
+    kind: upstream
+    description: Stress-test a plan or decision through an explicit interview.
+    source:
+      type: github
+      repository: https://github.com/mattpocock/skills
+      revision: 95249b0b49782349740fd9b8c6ce32b4e59e497a
+      path: skills/productivity/grilling
+    category: interview
+    selection: optional
+    safety: read-only-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals: {}
+    install:
+      argv:
+        [
+          npx,
+          -y,
+          skills@1.7.4,
+          add,
+          https://github.com/mattpocock/skills/tree/95249b0b49782349740fd9b8c6ce32b4e59e497a/skills/productivity/grilling,
+          --skill,
+          grilling
+        ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  document-project:
+    kind: authored
+    description: "Maintain task-based developer documentation during implementation; create or refactor VitePress/MkDocs documentation within approved scope."
+    source:
+      type: local
+      path: .agents/skills/documentation/document-project
+    category: documentation
+    selection: recommended
+    safety: project-write-with-confirmation
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals: {}
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/documentation/document-project, --skill, document-project ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  excalidraw:
+    kind: authored
+    description: "Generate PNG or SVG diagrams with local Excalidraw rendering. Use for project structure, component relationships, workflows, or revisions to an existing diagram. Retain scene JSON as editable source and deliver images first."
+    source:
+      type: local
+      path: .agents/skills/documentation/excalidraw
+    category: diagramming
+    selection: optional
+    safety: project-write-with-confirmation
+    harnesses: [pi, opencode, claude-code]
+    prerequisites: []
+    signals:
+      askWithoutSignals: true
+    install:
+      argv: [npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/documentation/excalidraw, --skill, excalidraw]
+    runtime:
+      - "Requires Node.js 22 or newer, the official @excalidraw/cli 0.3.0 package, and an installed Chrome, Chromium, Edge, or Firefox."
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  grill-me:
+    kind: adapted
+    description: A relentless interview to sharpen a plan or design.
+    source:
+      type: local
+      path: .agents/skills/productivity/grill-me
+    upstream:
+      type: github
+      repository: https://github.com/mattpocock/skills
+      revision: fcf0071560d32913c9d4f820e0d7ca467c881619
+      path: skills/productivity/grill-me
+    category: interview-wrapper
+    selection: optional
+    safety: read-only-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: [ grilling ]
+    signals: {}
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/productivity/grill-me, --skill, grill-me ]
+    adaptation:
+      instructions: Keep the maintained interview wrapper and its grilling prerequisite. Replace harness-specific Skill-tool
+        calls with portable entry instructions. Do not add provider/model configuration.
+      review:
+        - Preserve substantive behavior and all mandatory prerequisites.
+        - Show the diff and explain any target-specific change.
+        - Keep required legal notices unchanged; omit agents/openai.yaml.
+  init-project:
+    kind: authored
+    description: "Initialize or adopt project foundations, TypeScript tooling, or Godot GDScript tooling only when explicitly requested."
+    source:
+      type: local
+      path: .agents/skills/coding/init-project
+    category: initializer
+    selection: initializer
+    safety: project-and-user-write
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    runtime:
+      - Requires Git, mise, and Bun with Bun.TOML.parse. Initialized targets require an approved Node 24-or-newer/pnpm
+        control plane; GDScript also needs an explicitly selected compatible Godot toolchain. Installation and lockfile
+        updates require approval.
+    signals:
+      askWithoutSignals: true
+      files:
+        - project.godot
+        - tsconfig.json
+      extensions:
+        - .gd
+        - .ts
+        - .tsx
+        - .mts
+        - .cts
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/coding/init-project, --skill, init-project ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  initiative:
+    kind: authored
+    description: "Turn an idea or research into an agreed brief covering the problem, outcomes, scope, constraints, and success measures."
+    source:
+      type: local
+      path: .agents/skills/productivity/initiative
+    category: planning
+    selection: optional
+    safety: document-write-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: [ grilling ]
+    signals:
+      askWithoutSignals: true
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/productivity/initiative, --skill, initiative ]
+  instruction-maintenance:
+    kind: authored
+    description: "Audit instruction drift, routing, and skill metadata; propose exact changes for human approval before mutation."
+    source:
+      type: local
+      path: .agents/skills/unpolished/instruction-maintenance
+    category: instruction-policy
+    selection: optional
+    safety: read-only-until-approved
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals: {}
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/unpolished/instruction-maintenance, --skill, instruction-maintenance ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  isolated-workspace:
+    kind: authored
+    description: "Create or reuse an isolated Git worktree or Jujutsu workspace before mutation, using an explicit VCS and branch or bookmark."
+    source:
+      type: local
+      path: .agents/skills/utility/isolated-workspace
+    category: workspace
+    selection: optional
+    safety: project-vcs-write-with-confirmation
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    runtime:
+      - Requires Bun and either Git with worktree support or Jujutsu 0.38 or newer with workspace support.
+    signals: {}
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/utility/isolated-workspace, --skill, isolated-workspace ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  plan-tasks:
+    kind: authored
+    description: "Divide an agreed specification or clear scope into bounded, verifiable tasks with explicit dependencies and completion evidence."
+    source:
+      type: local
+      path: .agents/skills/productivity/plan-tasks
+    category: planning
+    selection: optional
+    safety: document-write-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals:
+      askWithoutSignals: true
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/productivity/plan-tasks, --skill, plan-tasks ]
+  research:
+    kind: authored
+    description: "Research a question, compare alternatives, or investigate feasibility; report verified evidence, uncertainty, and limits."
+    source:
+      type: local
+      path: .agents/skills/productivity/research
+    category: research
+    selection: optional
+    safety: document-write-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: [ grilling ]
+    signals:
+      askWithoutSignals: true
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/productivity/research, --skill, research ]
+  retro:
+    kind: authored
+    description: "Review a bounded work period for evidence-backed process improvements, including workflow, instructions, tools, and handoffs."
+    source:
+      type: local
+      path: .agents/skills/productivity/retro
+    category: review
+    selection: optional
+    safety: document-write-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals:
+      askWithoutSignals: true
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/productivity/retro, --skill, retro ]
+  scaffold:
+    kind: authored
+    description: "Create source skeletons for an approved feature, validate their structure, and stop before implementing behavior."
+    source:
+      type: local
+      path: .agents/skills/coding/scaffold
+    category: design
+    selection: optional
+    safety: project-write-with-confirmation
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals:
+      askWithoutSignals: true
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/coding/scaffold, --skill, scaffold ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  specify:
+    kind: authored
+    description: "Turn agreed decisions into a compact specification with observable behavior, acceptance criteria, constraints, and test boundaries."
+    source:
+      type: local
+      path: .agents/skills/productivity/specify
+    category: planning
+    selection: optional
+    safety: document-write-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: [ grilling ]
+    signals:
+      askWithoutSignals: true
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/productivity/specify, --skill, specify ]
+  subagent-orchestration:
+    kind: authored
+    description: "Before delegating, bound child-agent work, assign read/write lanes, integrate results, review, validate, and clean temporary lanes."
+    source:
+      type: local
+      path: .agents/skills/unpolished/subagent-orchestration
+    category: orchestration
+    selection: optional
+    safety: bounded-child-agents-and-workspace-lanes
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    runtime:
+      - Requires a harness with child-agent support; writable parallel lanes also need owner-approved workspace creation
+        and exact-lane cleanup procedures.
+    signals: {}
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/unpolished/subagent-orchestration, --skill, subagent-orchestration ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  sync-my-skills:
+    kind: authored
+    description: Synchronize project skills and agent instructions through a guided, approved plan.
+    source:
+      type: local
+      path: .agents/skills/agentic-work/sync-my-skills
+    scope: personal
+    category: asset-manager
+    selection: optional
+    safety: project-write-with-confirmation
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    runtime:
+      - Requires Node.js 22.20 or newer, Git, and the pinned yaml dependency installed during approved personal setup.
+        Target writes require an isolated Git worktree.
+    signals: {}
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/agentic-work/sync-my-skills, --skill, sync-my-skills, --global ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  systematic-debugging:
+    kind: adapted
+    description: Diagnose bugs, failing tests, regressions, flaky behavior, and unexpected results through evidence,
+      root-cause tracing, and single-hypothesis experiments before proposing fixes. Use for debugging in any language,
+      including failures across component or environment boundaries.
+    source:
+      type: local
+      path: .agents/skills/coding/systematic-debugging
+    upstream:
+      type: github
+      repository: https://github.com/obra/superpowers
+      revision: 22f0b463e7a5e579904dd6211a520321035526f7
+      path: skills/systematic-debugging
+    category: debugging
+    selection: optional
+    safety: project-write-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals:
+      askWithoutSignals: true
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/coding/systematic-debugging, --skill, systematic-debugging ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+    adaptation:
+      instructions: Use the substantial maintained local variant, not a wholesale upstream replacement. Preserve
+        evidence-first root-cause diagnosis, single-hypothesis experiments, boundary checks and reassessment after
+        repeated failures. Keep target-owned implementation/validation/workspace handoffs; do not import executable
+        utilities or new Superpowers dependencies.
+      review:
+        - Preserve substantive behavior and all mandatory prerequisites.
+        - Show the diff and explain any target-specific change.
+        - Keep required legal notices unchanged; omit agents/openai.yaml.
+  tdd:
+    kind: adapted
+    description: Test-driven development. Use when the user wants to build features or fix bugs test-first, mentions
+      "red-green-refactor", or wants integration tests.
+    source:
+      type: local
+      path: .agents/skills/coding/tdd
+    upstream:
+      type: github
+      repository: https://github.com/mattpocock/skills
+      revision: 4ae2317ddb22b046e26455e4f9c9b3aaaf62212d
+      path: skills/engineering/tdd
+    category: testing
+    selection: optional
+    safety: project-write-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals:
+      askWithoutSignals: true
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/coding/tdd, --skill, tdd ]
+    adaptation:
+      instructions: Keep the maintained testing workflow, behavior-focused examples, module responsibilities and public test
+        seams. Replace mandatory codebase-design/Skill-tool coupling with self-contained guidance. Preserve the
+        red-before-green loop and its documented later review/refactoring stage. Do not introduce a model or provider
+        requirement.
+      review:
+        - Preserve substantive behavior and all mandatory prerequisites.
+        - Show the diff and explain any target-specific change.
+        - Keep required legal notices unchanged; omit agents/openai.yaml.
+  unslop:
+    kind: upstream
+    description: Remove AI-generated prose patterns while preserving meaning.
+    source:
+      type: github
+      repository: https://github.com/cursor/plugins
+      revision: bc697d0a5a163cec979e362b601e36f5616083fd
+      path: pstack/skills/unslop
+    category: communication
+    selection: recommended
+    safety: read-only-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals:
+      askWithoutSignals: true
+    install:
+      argv:
+        [
+          npx,
+          -y,
+          skills@1.7.4,
+          add,
+          https://github.com/cursor/plugins/tree/bc697d0a5a163cec979e362b601e36f5616083fd/pstack/skills/unslop,
+          --skill,
+          unslop
+        ]
+    legal:
+      - path: pstack/LICENSE
+        target: LICENSE
+        spdx: MIT
+  wait-what:
+    kind: upstream
+    description: Explain the current proposal again with simpler language and missing context.
+    source:
+      type: github
+      repository: https://github.com/mattpocock/skills
+      revision: d80fa0f4ebe0c5714af0adf8670336065233ecc6
+      path: skills/productivity/wait-what
+    category: communication-wrapper
+    selection: optional
+    safety: read-only-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals:
+      askWithoutSignals: true
+    install:
+      argv:
+        [
+          npx,
+          -y,
+          skills@1.7.4,
+          add,
+          https://github.com/mattpocock/skills/tree/d80fa0f4ebe0c5714af0adf8670336065233ecc6/skills/productivity/wait-what,
+          --skill,
+          wait-what
+        ]
+    legal:
+      - path: LICENSE
+        target: LICENSE
+        spdx: MIT
+  writing-for-agents:
+    kind: adapted
+    description: Writing documents for agents. Use when creating or editing skills, or modifying AGENTS.md or CLAUDE.md.
+    source:
+      type: local
+      path: .agents/skills/agentic-work/writing-for-agents
+    upstream:
+      type: github
+      repository: https://github.com/mattpocock/skills
+      revision: 5863806dd4e15c63174bee4e7515a4256792ecfa
+      path: skills/productivity/writing-for-agents
+    category: agent-writing
+    selection: optional
+    safety: read-only-guidance
+    harnesses: [ pi, opencode, claude-code ]
+    prerequisites: []
+    signals: {}
+    install:
+      argv: [ npx, -y, skills@1.7.4, add, https://github.com/dragoscirjan/ai/tree/main/.agents/skills/agentic-work/writing-for-agents, --skill, writing-for-agents ]
+    legal:
+      - path: .agents/skills/agentic-work/writing-for-agents/LICENSE
+        target: LICENSE
+        spdx: MIT
+    adaptation:
+      instructions: Preserve the maintained writing guidance, context pointers, progressive disclosure, completion criteria,
+        and skill mechanics. Keep source attribution and the upstream legal notice. Omit provider configuration.
+      review:
+        - Keep all meaningful writing guidance and the linked skill mechanics.
+        - Explain consequential adaptations; preserve the original legal notice.
+deprecations:
+  coding-bash:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-c:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-cjs:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-cpp:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-cts:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-gdscript:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-go:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-js:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-jsx:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-lua:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-mjs:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-mts:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-php:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-py:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-pyi:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-rs:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-sh:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-swift:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-ts:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-tsx:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  coding-zig:
+    replacements: [ coding-with-rules ]
+    reason: Language and extension guidance is now selected on demand by coding-with-rules. Retain or remove this exact
+      installation only after approval.
+  sync-agent-assets:
+    replacements: [ sync-my-skills ]
+    reason: Converted to the single personal sync-my-skills manager. Do not keep a second compatibility skill; ask before
+      removing an existing project installation.
+instructionTemplates:
+  enabled: true
+  issue: 68
+  path: templates
+  prerequisites: [ isolated-workspace, document-project, asd-ste100-technical, unslop ]

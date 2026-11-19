@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Reviewed project skills and instruction selection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["selectedSkills", "declinedSkills", "harnesses"],
+  "properties": {
+    "selectedSkills": { "$ref": "#/$defs/names" },
+    "declinedSkills": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["name", "reason"],
+        "properties": { "name": { "$ref": "#/$defs/name" }, "reason": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "harnesses": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "enum": ["pi", "opencode", "claude-code"] }
+    },
+    "removeSkills": { "$ref": "#/$defs/names" },
+    "resolutions": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
+    "targetRequirements": { "type": "string" },
+    "rootFiles": { "type": "array", "maxItems": 0, "description": "Legacy field; never authorizes instruction adoption." },
+    "instructionFiles": {
+      "type": "array", "uniqueItems": true,
+      "items": { "enum": ["AGENTS.md", "CONTRIBUTING.md", "DOCUMENTATION.md", "VALIDATION.md", "CLAUDE.md"] },
+      "allOf": [{ "if": { "minItems": 1 }, "then": { "allOf": [
+        { "contains": { "const": "AGENTS.md" } }, { "contains": { "const": "CONTRIBUTING.md" } },
+        { "contains": { "const": "DOCUMENTATION.md" } }, { "contains": { "const": "VALIDATION.md" } }
+      ] } }]
+    },
+    "instructionApproval": { "type": "string" }
+  },
+  "allOf": [{
+    "if": { "required": ["instructionFiles"], "properties": { "instructionFiles": { "minItems": 1 } } },
+    "then": { "required": ["instructionApproval"], "properties": { "instructionApproval": { "minLength": 1 } } }
+  }],
+  "$defs": {
+    "name": { "type": "string", "maxLength": 64, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "names": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/name" } }
+  }
+}

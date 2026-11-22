@@ -1,5 +1,5 @@
-/** Scaffold capabilities are explicit so entrypoints cannot imply working reviews. */
-export interface ScaffoldStatus {
+/** Report implemented capabilities without implying that reviews work. */
+export interface ApplicationStatus {
   readonly version: string;
   readonly initiative: '4.0';
   readonly phase: 'scaffold';
@@ -12,7 +12,7 @@ export interface ScaffoldStatus {
   readonly docker: 'scaffold-only';
 }
 
-export function scaffoldStatus(version: string): ScaffoldStatus {
+export function applicationStatus(version: string): ApplicationStatus {
   return {
     version, initiative: '4.0', phase: 'scaffold', review: 'not-implemented',
     modelRuntime: 'not-implemented', mcp: 'not-implemented', publication: 'not-implemented',

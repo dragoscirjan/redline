@@ -1,59 +1,52 @@
 # Redline
 
-AI code reviews for your Git changes. Review local work or pull requests in GitHub Actions with Pi or OpenCode and your choice of model. Read findings in the terminal and keep JSON and Markdown reports.
+Initiative 4.0 implementation is in progress under [#234](https://github.com/dragoscirjan/redline/issues/234). Immutable Git capture and context-bundle generation now work. The complete replacement review engine is not implemented.
 
-[Documentation](https://lunaticthinker.me/projects/redline/) · [Get started](docs/get-started/index.md) · [GitHub Actions](docs/get-started/github-actions.md)
+The local command supports help and status. Review and RPC commands still exit with code `2`. Git capture is currently a module API, not a new CLI command. Model calls, MCP execution, validated findings, review reports and publication remain unimplemented.
 
-## Quick start
+## Check the local command
 
-Requires Node.js 24 and Git. Install Redline:
-
-```sh
-npm install --global --ignore-scripts @dragoscirjan/redline
-```
-
-[Install Pi or OpenCode and connect a model](docs/get-started/configuration.md). Then run this from a Git repository with a commit and tracked changes. Model reviews send captured source to your selected provider and can incur charges.
+Use the pinned tools and installed dependencies described in [CONTRIBUTING.md](CONTRIBUTING.md). From the isolated worktree root:
 
 ```sh
-redline review --indexing disabled
+mise run build
+mise exec -- node bin/redline.mjs status --json
 ```
 
-Redline prints findings, review coverage and the path to saved reports. Start with `reviews/review.md` in that directory. `--indexing disabled` keeps the first run independent of optional indexer setup.
-
-## Start here
-
-- [Run your first review](docs/get-started/first-review.md), then [read the results](docs/results.md).
-- [Find a command](docs/commands.md) for staged changes, branches or commits.
-- [Run with Docker](docs/docker-workers.md) to use the bundled runtimes and harnesses.
-- [Set up GitHub Actions](docs/get-started/github-actions.md) to review pull requests.
-- [Troubleshoot a run](docs/troubleshooting.md).
-
-## How review works
-
-Redline captures the selected change, reviews eligible files and checks findings against the diff. It does not execute the reviewed code, run its tests or apply changes. Review model suggestions before acting on them.
-
-Use the [CLI reference](docs/local-cli.md) for all options, the [JSON-RPC protocol](docs/stdio-protocol.md) for client integrations, and the [architecture reference](docs/portable-architecture.md) for internals.
-
-## Product direction
-
-The goal is one review engine for local changes, forges and editors. Git, the local CLI/RPC and GitHub reviews are available today. Planned integrations and their tracking issues are listed in the [roadmap](docs/roadmap.md).
-
-## Roadmap
-
-See the [project roadmap](docs/roadmap.md) for upcoming work, integration targets and dependencies.
-
-## A safe source-checkout trial
-
-To check setup without a model or API key, use the [optional no-key example](docs/get-started/first-review.md#_3-run-the-safe-review). From a Redline source checkout, install the locked dependencies and build the Node distribution first:
+The status reports `phase: "scaffold"` and `review: "not-implemented"`. To check the Bun source path:
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm run build
-node bin/redline.mjs review --repository /path/to/your/repository --harness echo --indexing disabled
+mise exec -- env REDLINE_ENV=bun node bin/redline.mjs status --json
 ```
 
-Replace the path with a Git repository containing a commit and tracked changes. `echo` always returns a clean answer. It checks the workflow, not code quality.
+These checks do not review a repository or contact a model. Do not publish this scaffold as a completed review product.
 
-## Development
+## Capture a Git change
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before contributing. See [release operations](docs/local-cli.md#release-operations) for the release workflow.
+`src/revision-source/git.ts` captures committed revisions or staged, unstaged and combined working-tree changes without changing the source repository. It writes an authoritative bundle and bounded source snapshot into a new private directory outside that repository. Existing destinations are rejected.
+
+See [capture usage and limits](docs/capture.md). The module does not execute reviewed code, contact a model or produce a clean-review result.
+
+## Effect application boundary
+
+`src/application/review.ts` prototypes `ReviewApplication.review(request)` and `ReviewApplication.layer` using normal application names. `ReviewRequest` selects a repository change; `ReviewResult` describes terminal state and artifact location. The method body states the intended flow and fails with `Not implemented`. CLI behavior is unchanged and does not call this prototype.
+
+Effect `4.1.5` is the only added dependency. The existing Vitest version tests Effects directly, without `@effect/vitest` or a test-framework upgrade.
+
+- [Local command and limits](docs/index.md)
+- [Git capture](docs/capture.md)
+- [Architecture and unfinished work](docs/architecture.md)
+- [Contribution rules](CONTRIBUTING.md)
+- [Validation requirements](VALIDATION.md)
+
+## Historical implementation
+
+`src.pre-v4/` and `archive/pre-v4/` preserve the preceding implementation and its tests for approved reuse. They are not active runtime fallbacks and must not enter the new package.
+
+## Validation
+
+```sh
+mise run validate
+```
+
+The gate checks types, active Vitest/Bats tests and the documentation build. Tests exercise real Git capture, unchanged CLI behavior and offline-installed Node/Bun packages. A controlled-process test checks capture cancellation and scratch/output cleanup on POSIX. These checks do not prove model/tool-runtime cleanup, live model compatibility, Docker isolation or review quality. Production review and release automation remain parked.

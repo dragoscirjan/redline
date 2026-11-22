@@ -20,7 +20,10 @@
     "bin/*.mjs",
     "dist/**/*.js",
     "src/cli/*.ts",
-    "src/application/*.ts"
+    "src/application/*.ts",
+    "src/revision-source/*.ts",
+    "src/context-bundle.ts",
+    "src/review-eligibility.ts"
   ],
   "bin": {
     "redline": "bin/redline.mjs",
@@ -46,6 +49,7 @@
   },
   "dependencies": {
     "commander": "^15.0.0",
+    "effect": "4.1.5",
     "execa": "^10.2.1"
   }
 }

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { Command, CommanderError } from 'commander';
-import { scaffoldStatus } from '../application/status.ts';
+import { applicationStatus } from '../application/status.ts';
 
 /** The package metadata is local distribution input, not model or repository content. */
 async function packageVersion(): Promise<string> {
@@ -30,7 +30,7 @@ export async function main(args: readonly string[] = process.argv.slice(2), _env
       .option('--json', 'Print machine-readable scaffold status')
       .action((options: { json?: boolean }) => {
         process.stdout.write(options.json === true
-          ? JSON.stringify(scaffoldStatus(version)) + '\n'
+          ? JSON.stringify(applicationStatus(version)) + '\n'
           : 'Redline Initiative 4.0: scaffold\nReview, model, MCP and publication execution are not implemented.\nLocal execution uses Node or Bun; a standalone binary is not implemented.\nDocker delivery is scaffold-only.\n');
       });
     for (const name of ['review', 'rpc']) {

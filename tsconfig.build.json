@@ -7,11 +7,5 @@
     "rootDir": "./src",
     "outDir": "./dist"
   },
-  "include": [],
-  "files": [
-    "src/cli/main.ts",
-    "src/cli/review.ts",
-    "src/application/review.ts",
-    "src/revision-source/git.ts"
-  ]
+  "include": ["src/**/*.ts"]
 }

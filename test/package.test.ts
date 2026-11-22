@@ -8,6 +8,19 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
+const architectureModules = [
+  'application/configuration', 'application/budget', 'application/warmup', 'application/composition',
+  'model-runtime/types', 'model-runtime/bindings', 'model-runtime/conversation',
+  'model-runtime/drivers/openai', 'model-runtime/drivers/anthropic', 'model-runtime/drivers/gemini',
+  'mcp/client', 'mcp/tools', 'code-context/provider',
+  'review/types', 'review/engine', 'review/report', 'review/remediation', 'review/synthesis',
+  'review/writer', 'review/policy', 'review/diagnostics', 'review/reuse',
+  'reporter/cli/format', 'reporter/file/format', 'reporter/github/format',
+  'publish/types', 'publish/service', 'publish/github', 'publish/forgejo-gitea',
+  'publish/gitlab', 'publish/bitbucket-cloud', 'publish/azure-devops',
+  'rpc/service', 'editor/client', 'observability/service',
+  'revision-source/jujutsu', 'revision-source/mercurial',
+] as const;
 interface PackedPackage {
   readonly name: string;
   readonly filename: string;
@@ -114,6 +127,26 @@ describe('package distribution', () => {
       'src/revision-source/git.ts', 'src/revision-source/process.ts', 'src/revision-source/types.ts',
       'src/context-bundle.ts', 'src/review-eligibility.ts',
     ]));
+  });
+
+  it('ships each approved architecture module for both runtime paths', () => {
+    expect(archive.files.map(entry => entry.path)).toEqual(expect.arrayContaining(
+      architectureModules.flatMap(module => [`dist/${module}.js`, `src/${module}.ts`]),
+    ));
+  });
+
+  it.each(['node', 'bun'])('imports all installed architecture prototypes safely using %s', runtime => {
+    const directory = runtime === 'node' ? 'dist' : 'src';
+    const extension = runtime === 'node' ? '.js' : '.ts';
+    const paths = architectureModules.map(module => './node_modules/@dragoscirjan/redline/' + directory + '/' + module + extension);
+    const script = `
+      for (const path of ${JSON.stringify(paths)}) await import(path);
+      console.log('architecture-imports-ready');
+    `;
+    const result = execaSync(runtime, ['--input-type=module', '-e', script], {
+      cwd: installed, env, extendEnv: false, maxBuffer: 1024 * 1024,
+    });
+    expect(result.stdout).toBe('architecture-imports-ready');
   });
 
   it('excludes historical and development content even when present during packing', () => {

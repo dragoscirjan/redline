@@ -27,9 +27,13 @@ These checks do not review a repository or contact a model. Do not publish this 
 
 See [capture usage and limits](docs/capture.md). The module does not execute reviewed code, contact a model or produce a clean-review result.
 
-## Effect application boundary
+## Architecture prototypes
 
-`src/application/review.ts` prototypes `ReviewApplication.review(request)` and `ReviewApplication.layer` using normal application names. `ReviewRequest` selects a repository change; `ReviewResult` describes terminal state and artifact location. The method body states the intended flow and fails with `Not implemented`. CLI behavior is unchanged and does not call this prototype.
+`src/application/composition.ts` declares the shared dependency graph. Model drivers, MCP/tools, review policy/validation, artifacts, reporting, publication, RPC/editor clients, observability and later native VCS adapters now have source prototypes with normal application names.
+
+Their callable bodies fail with `Not implemented`. They do not make model calls, publish findings, write reports, send telemetry or activate clients. Existing CLI behavior and working Git capture remain unchanged. No provider SDK or native editor package was added.
+
+Established neutral finding, evidence, synthesis and per-file document contracts are reused. Undecided payloads remain named `unknown` types, not invented schemas or proof of authorization. See the [architecture guide](docs/architecture.md) for the file map, intended flow and remaining decisions.
 
 Effect `4.1.5` is the only added dependency. The existing Vitest version tests Effects directly, without `@effect/vitest` or a test-framework upgrade.
 
@@ -49,4 +53,4 @@ Effect `4.1.5` is the only added dependency. The existing Vitest version tests E
 mise run validate
 ```
 
-The gate checks types, active Vitest/Bats tests and the documentation build. Tests exercise real Git capture, unchanged CLI behavior and offline-installed Node/Bun packages. A controlled-process test checks capture cancellation and scratch/output cleanup on POSIX. These checks do not prove model/tool-runtime cleanup, live model compatibility, Docker isolation or review quality. Production review and release automation remain parked.
+The gate checks types, active Vitest/Bats tests and the documentation build. Tests exercise real Git capture, unchanged CLI behavior, prototype type/import/failure contracts and offline-installed Node/Bun packages. Structural tests are not implementation or compatibility evidence for the prototypes. A controlled-process test checks capture cancellation and scratch/output cleanup on POSIX. These checks do not prove model/tool-runtime cleanup, live model compatibility, Docker isolation or review quality. Production review and release automation remain parked.

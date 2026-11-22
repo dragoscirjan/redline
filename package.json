@@ -19,11 +19,7 @@
   "files": [
     "bin/*.mjs",
     "dist/**/*.js",
-    "src/cli/*.ts",
-    "src/application/*.ts",
-    "src/revision-source/*.ts",
-    "src/context-bundle.ts",
-    "src/review-eligibility.ts"
+    "src/**/*.ts"
   ],
   "bin": {
     "redline": "bin/redline.mjs",

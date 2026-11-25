@@ -1,5 +1,6 @@
 ---
 name: excalidraw
+disable-model-invocation: true
 description: Generate PNG or SVG diagrams with local Excalidraw rendering. Use for project structure, component relationships, workflows, or revisions to an existing diagram. Retain scene JSON as editable source and deliver images first.
 compatibility: Requires Node.js 22 or newer, the official @excalidraw/cli 0.3.0 package, and an installed Chrome, Chromium, Edge, or Firefox.
 license: MIT

@@ -1,26 +1,26 @@
 # Writing examples and scenario checks
 
-Assume the reader can use standard development tools. Supply the project-specific facts needed to complete the task. The catalog example below uses this repository's real read-only helper; adapt it rather than copying it into another project's documentation.
+Assume the reader can use standard development tools. Supply the project-specific facts needed to complete the task. The example below uses Git in a trusted checkout. Adapt the working directory and expected state to the project being documented.
 
 ## Replace shorthand with a complete task
 
 An unclear instruction:
 
-> Run the catalog helper and check the output.
+> Check Git and decide whether it is safe to continue.
 
 A developer-focused how-to:
 
-### Check the skill catalog
+### Inspect existing changes
 
-Prerequisites: a trusted checkout of this repository, Node.js 22.20 or newer, and the manager's pinned parser dependency installed through [approved setup](https://github.com/dragoscirjan/ai/blob/7c0599e3fa167004b5adb6cb38d46faa5f356e5e/.agents/skills/agentic-work/sync-my-skills/README.md). Do not install dependencies merely to perform this check. Run this command from the repository root:
+Prerequisites: Git and a trusted Git checkout. Run this command from the project root before starting work:
 
 ```sh
-node .agents/skills/sync-my-skills/scripts/sync-my-skills.mjs catalog --source-root .
+git status --short
 ```
 
-The command exits with code 0 and prints JSON containing `schemaVersion`, `catalogHash`, `skills`, and `deprecations`. Check that `schemaVersion` is `2` and that `skills` includes `document-project` with `selection: recommended`. A recommendation does not authorize installation. This command reads the catalog and skill metadata; it does not install skills, create a documentation site, or modify the checkout.
+With exit code 0, an empty result means Git reports no changes. Otherwise, each row shows a status and path. Inspect the existing work and establish ownership before editing; the command does not authorize a reset or removal.
 
-If the helper rejects the Node.js version, select a supported runtime. If the parser dependency is unavailable, request its approved setup before retrying. For a catalog coverage mismatch, compare local-source entries with directories under `.agents/skills/`. Upstream-only entries deliberately have no vendored directory. Correct the mismatch rather than bypassing validation.
+If Git reports that the directory is not a repository, check the working directory. If Git is unavailable, request approved setup. Do not install tools, discard existing work, or change repository configuration merely to make this read-only check pass.
 
 This guide supplies the runtime, working directory, exact command, expected result, and relevant recovery. It does not explain how to open a terminal.
 
@@ -69,6 +69,5 @@ The owner-selected examples support different parts of the workflow:
 - [Task quick start](https://taskfile.dev/docs/getting-started) and [configuration reference](https://taskfile.dev/docs/reference/config) serve learning and lookup separately.
 - [AI Hero's learning map](https://www.aihero.dev/learn) organizes material around reader questions.
 - [PR-Agent's overview](https://docs.pr-agent.ai/) demonstrates useful output before advanced configuration.
-- [Cursor's technical-writing guidance](https://github.com/cursor/plugins/blob/bf0c7cd80abdbf7fe47b634978a7d1b4071f71a7/pstack/skills/technical-writing/SKILL.md) distinguishes tutorials, how-to guides, reference, and explanations. Adapt its guidance, not its repository-specific requirements.
 
 These observations came from content and navigation inspection. They are not a comparative usability study.

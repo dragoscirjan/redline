@@ -1,5 +1,6 @@
 ---
 name: scaffold
+disable-model-invocation: true
 description: "Create source skeletons for an approved feature, validate their structure, and stop before implementing behavior."
 metadata:
   author: dragoscirjan

@@ -1,7 +1,20 @@
-# Plan tasks
+# plan-tasks
 
-## Workflow
+Divide an agreed specification or clear scope into bounded, verifiable tasks with explicit dependencies and completion evidence.
 
-Include enough context and completion evidence for another implementer to work without repeating the design discussion. Include inspected file and interface references when useful. Check coverage and dependency cycles. Name a shared integration check when individual migration steps cannot pass alone.
+## Usage
 
-Do not force every task through nonexistent layers, prescribe program bodies, copy fixed plan paths, or impose an execution method. Task order does not authorize workers, commits, or tracker publication.
+Example request to an agent with the skill installed:
+
+```text
+Use plan-tasks to divide this agreed specification into bounded tasks with dependencies and verifiable completion criteria.
+```
+
+## Install
+
+Run from the target project with Node.js 22.20 or newer, Git, and npm available. Replace the value of `ref` with a published tag or commit that contains this skill.
+
+```sh
+ref="<published-tag-or-commit>"
+npx -y skills@1.7.4 add "https://github.com/dragoscirjan/ai/tree/$ref/.agents/skills/productivity/plan-tasks" --skill plan-tasks
+```

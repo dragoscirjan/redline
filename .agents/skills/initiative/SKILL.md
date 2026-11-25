@@ -1,5 +1,6 @@
 ---
 name: initiative
+disable-model-invocation: true
 description: Turn an idea or research into an agreed brief covering the problem, outcomes, scope, constraints, and success measures.
 requires: ["grilling"]
 ---

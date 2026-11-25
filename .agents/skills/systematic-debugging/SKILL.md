@@ -5,9 +5,6 @@ metadata:
   author: dragoscirjan
   version: "1.0"
   opencode/slash: "true"
-  source: https://github.com/obra/superpowers/tree/22f0b463e7a5e579904dd6211a520321035526f7/skills/systematic-debugging
-  upstream-commit: "22f0b463e7a5e579904dd6211a520321035526f7"
-  adaptation: "Adapted by dragoscirjan from obra/superpowers (Jesse Vincent)."
 ---
 
 # Systematic debugging

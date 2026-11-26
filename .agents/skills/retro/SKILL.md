@@ -1,5 +1,6 @@
 ---
 name: retro
+disable-model-invocation: true
 description: Review a bounded work period for evidence-backed process improvements, including workflow, instructions, tools, and handoffs.
 ---
 

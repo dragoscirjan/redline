@@ -1,7 +1,20 @@
-# Retro
+# retro
 
-## Workflow
+Review a bounded period of work for evidence-backed improvements to the development process.
 
-Inspect the concrete environment and broader process findings. Inspect existing checks before proposing new ones. Recommend automation for mechanical violations and written guidance for judgment calls. Name the evidence, cause, change, destination, and verification for each proposal.
+## Usage
 
-Do not adopt reviewer-only coding standards, mandatory model-specific reviewers, automatic backlog filing, automatic instruction edits, or access to unrelated transcripts. Project approval and instruction-maintenance gates remain in force.
+Example request to an agent with the skill installed:
+
+```text
+Use retro to review this completed work period and propose evidence-backed process improvements.
+```
+
+## Install
+
+Run from the target project with Node.js 22.20 or newer, Git, and npm available. Replace the value of `ref` with a published tag or commit that contains this skill.
+
+```sh
+ref="<published-tag-or-commit>"
+npx -y skills@1.7.4 add "https://github.com/dragoscirjan/ai/tree/$ref/.agents/skills/productivity/retro" --skill retro
+```

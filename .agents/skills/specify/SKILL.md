@@ -1,5 +1,6 @@
 ---
 name: specify
+disable-model-invocation: true
 description: Turn agreed decisions into a compact specification with observable behavior, acceptance criteria, constraints, and test boundaries.
 requires: ["grilling"]
 ---
@@ -10,9 +11,9 @@ Record agreed behavior so implementation and review share the same requirements.
 
 ## 1. Resolve the requirements
 
-Read source requirements, relevant issue comments, and confirmed answers. Inspect available code, contracts, and tests. Use the project's vocabulary and recorded architectural decisions. A separate initiative document is optional.
+Read source requirements, relevant issue comments, and confirmed answers. Inspect available code, contracts, and tests. Use the project's vocabulary and recorded architectural decisions. Use existing context when it is available.
 
-Use the required interview for unresolved behavior, constraints, contract values, or test expectations. Reuse confirmed answers and inspect available facts yourself. Obtain agreement for any change to initiative scope. Return to clarification whenever another material decision appears.
+Use the required interview for unresolved behavior, constraints, contract values, or test expectations. Reuse confirmed answers and inspect available facts yourself. Obtain agreement for any change to the agreed scope. Return to clarification whenever another material decision appears.
 
 Continue only when the requirements and test boundaries are settled. Report blockers instead of speculative requirements.
 

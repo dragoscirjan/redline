@@ -1,12 +1,19 @@
 {
   "version": 1,
   "skills": {
+    "archify": {
+      "source": "tt-a1i/archify",
+      "ref": "a0199aab7bc1e87821c286f9b297afb8f98894ec",
+      "sourceType": "github",
+      "skillPath": "archify/SKILL.md",
+      "computedHash": "d247fea14fa441325e381beff37bcb0ea391a1251c7bed1098e4ce7923530361"
+    },
     "asd-ste100-technical": {
       "source": "dragoscirjan/ai",
-      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "ref": "main",
       "sourceType": "github",
-      "skillPath": ".agents/skills/asd-ste100-technical/SKILL.md",
-      "computedHash": "5150a0a2a3695d7554e24c0c57d09f6d8ebe9c598c4e4771fb3f6f39d2a5d03e"
+      "skillPath": ".agents/skills/documentation/asd-ste100-technical/SKILL.md",
+      "computedHash": "3d49c583f17da93f775e8e540339765434f9e238c2324b6eab975a3c06262f93"
     },
     "caveman": {
       "source": "dragoscirjan/ai",
@@ -17,24 +24,24 @@
     },
     "cleanup-workspaces": {
       "source": "dragoscirjan/ai",
-      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "ref": "main",
       "sourceType": "github",
-      "skillPath": ".agents/skills/cleanup-workspaces/SKILL.md",
-      "computedHash": "48b3288971c4b633012281759e1decfe51b7edff6b044628dc9ba38b4bf24013"
+      "skillPath": ".agents/skills/utility/cleanup-workspaces/SKILL.md",
+      "computedHash": "7d4b0f7ec7dcc73bcf3a1c5ef00fa9330effc52144b568dee4f82f85c734884d"
     },
     "code-review": {
       "source": "dragoscirjan/ai",
-      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "ref": "main",
       "sourceType": "github",
-      "skillPath": ".agents/skills/code-review/SKILL.md",
-      "computedHash": "6ad28bac758922b7b3c4e5a6b930a8d9e7365de2c64dbba6a9e34ae7b8df3b01"
+      "skillPath": ".agents/skills/coding/code-review/SKILL.md",
+      "computedHash": "62412a8ed86e5d2fca968650397db73c4803d82aed3c0447e680a9656078a408"
     },
     "coding": {
       "source": "dragoscirjan/ai",
-      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "ref": "main",
       "sourceType": "github",
-      "skillPath": ".agents/skills/coding/SKILL.md",
-      "computedHash": "cadededc6d86776d7e5625fa0d87ba21c1ccd0b360a064660d9fc0ccb22038a3"
+      "skillPath": ".agents/skills/coding/coding/SKILL.md",
+      "computedHash": "0bbba5f9d780753f43ae921acb775d2e898394a73edd51b399ec9aa016a2499d"
     },
     "coding-bash": {
       "source": "dragoscirjan/ai",
@@ -78,40 +85,110 @@
       "skillPath": ".agents/skills/coding-ts/SKILL.md",
       "computedHash": "64a89c49f854bfaca9e7be42b370ee94112a6010259f9e6711cca05e5806904d"
     },
-    "grill-me": {
+    "coding-with-rules": {
       "source": "dragoscirjan/ai",
-      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "ref": "main",
       "sourceType": "github",
-      "skillPath": ".agents/skills/grill-me/SKILL.md",
-      "computedHash": "3dbb212af4dc05c2de8929e1959c976edccb3045de509c22f9ac741c321c00a6"
+      "skillPath": ".agents/skills/coding/coding-with-rules/SKILL.md",
+      "computedHash": "28661cca4e7cf863c00d94d11bb231d958f2bc7439941970f6a28c0fdb4aa43a"
+    },
+    "debloat": {
+      "source": "dragoscirjan/ai",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/coding/debloat/SKILL.md",
+      "computedHash": "182594dc849c39fb1ccd101e3e9e47cf86ae9c91c8684106dd0295ad82d68d52"
+    },
+    "document-project": {
+      "source": "dragoscirjan/ai",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/documentation/document-project/SKILL.md",
+      "computedHash": "51a7f870c2ecb2a350cef0ba6607419066061899b90d69f3dcc6c13d9479a06e"
+    },
+    "excalidraw": {
+      "source": "dragoscirjan/ai",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/documentation/excalidraw/SKILL.md",
+      "computedHash": "08212cfc4bcf4bd37f04ec8afd88fa860d09c43c350b80919cbc5e0ed545ec07"
+    },
+    "grill-me": {
+      "source": "mattpocock/skills",
+      "ref": "fcf0071560d32913c9d4f820e0d7ca467c881619",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/grill-me/SKILL.md",
+      "computedHash": "9cdbb4b8f7a3aeaef82e6230c9e823500d4a8a1214c726cf342cf9829d34fc7d"
     },
     "grilling": {
-      "source": "dragoscirjan/ai",
-      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "source": "mattpocock/skills",
+      "ref": "95249b0b49782349740fd9b8c6ce32b4e59e497a",
       "sourceType": "github",
-      "skillPath": ".agents/skills/grilling/SKILL.md",
-      "computedHash": "10d5bcce93e8a40c691a98934f608f172ade8e1c8248c979dfbbf363f2140a78"
+      "skillPath": "skills/productivity/grilling/SKILL.md",
+      "computedHash": "ef1641a2047b71b60f1942cd35efb47d3afc9d584dff5a0b01f8c7db923aaa08"
+    },
+    "initiative": {
+      "source": "dragoscirjan/ai",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/productivity/initiative/SKILL.md",
+      "computedHash": "7d3e44439b6798c48453ed666b9de2eee40f98c908f4c60706fc68f0c3d051c4"
     },
     "instruction-maintenance": {
       "source": "dragoscirjan/ai",
-      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "ref": "main",
       "sourceType": "github",
-      "skillPath": ".agents/skills/instruction-maintenance/SKILL.md",
-      "computedHash": "1003cc0192c767852e5f180c4da1199ae83f0bd0f185bfb3d9b7af69816946e9"
+      "skillPath": ".agents/skills/unpolished/instruction-maintenance/SKILL.md",
+      "computedHash": "5b9ecd8f2bdd2a10891395aef05b14321fbf3ae668a37dd5be7532eaebc09068"
     },
     "isolated-workspace": {
       "source": "dragoscirjan/ai",
-      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "ref": "main",
       "sourceType": "github",
-      "skillPath": ".agents/skills/isolated-workspace/SKILL.md",
-      "computedHash": "184b0a8519e5880fe83a25d41958c1c1e4fb4a3522ce9fe1a436e72a07420bc4"
+      "skillPath": ".agents/skills/utility/isolated-workspace/SKILL.md",
+      "computedHash": "40d54101cb65c85caaf87b75572f5992c95487c811c2601222bf53d7e84b5868"
+    },
+    "plan-tasks": {
+      "source": "dragoscirjan/ai",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/productivity/plan-tasks/SKILL.md",
+      "computedHash": "4a17dfecc71a09bcc1cb314325b40c7694f9d88e1a061c53579a2a86ed47afd7"
+    },
+    "research": {
+      "source": "dragoscirjan/ai",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/productivity/research/SKILL.md",
+      "computedHash": "6bbf352a6e17f83b0de2feed25640d3eef4480a9c6b042ea97d46ddcc9fa1a9e"
+    },
+    "retro": {
+      "source": "dragoscirjan/ai",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/productivity/retro/SKILL.md",
+      "computedHash": "8b22b31a0a27064b6e7ff02a928a63d86f7664ed867fddde972611f293975e0e"
+    },
+    "scaffold": {
+      "source": "dragoscirjan/ai",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/coding/scaffold/SKILL.md",
+      "computedHash": "bfc721e32c57e4639596d29a6b845dff151a999e8789a622de47e72315681bf9"
+    },
+    "specify": {
+      "source": "dragoscirjan/ai",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/productivity/specify/SKILL.md",
+      "computedHash": "a1d5cdc8048797c550b6b54ecc70d5ccb972beff672fa3079b396a25445895bb"
     },
     "subagent-orchestration": {
       "source": "dragoscirjan/ai",
-      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "ref": "aac74b503774285bb287ef8202c210bda74a8f6f",
       "sourceType": "github",
-      "skillPath": ".agents/skills/subagent-orchestration/SKILL.md",
-      "computedHash": "873617fe68f1d18e93d8f5606e1e8c4221d223e368409086093f7c76484af748"
+      "skillPath": ".agents/skills/unpolished/subagent-orchestration/SKILL.md",
+      "computedHash": "f65dcb3eca2b3f183d556d88580dc08e9160ba6c8d4f4f3592415b7251e0fa79"
     },
     "sync-agent-assets": {
       "source": "dragoscirjan/ai",
@@ -120,26 +197,54 @@
       "skillPath": ".agents/skills/sync-agent-assets/SKILL.md",
       "computedHash": "c041035cac078959088a89f2a0b273f9c2dabd132be99acb1407cbd5411778ca"
     },
+    "sync-my-agents": {
+      "source": "dragoscirjan/ai",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/agentic-work/sync-my-agents/SKILL.md",
+      "computedHash": "ff523de656489fb8fa531e1a99b314b20d9e53c06ac511f1c03de54c6fdb9cf5"
+    },
+    "sync-my-skills": {
+      "source": "dragoscirjan/ai",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/agentic-work/sync-my-skills/SKILL.md",
+      "computedHash": "ea9d26ca895db2d8df4ca24697e974e70353e801d5d3b905671fadb5e08afc4f"
+    },
     "systematic-debugging": {
       "source": "dragoscirjan/ai",
-      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "ref": "main",
       "sourceType": "github",
-      "skillPath": ".agents/skills/systematic-debugging/SKILL.md",
-      "computedHash": "7972fd475308173b73843acfc11e83209a9526c813d8a95fb2cd5a531f2d26a7"
+      "skillPath": ".agents/skills/coding/systematic-debugging/SKILL.md",
+      "computedHash": "5b3ceb987d719ed84788ce085e91ea0b9f06833594eabbd34572fabf619a5616"
+    },
+    "tdd": {
+      "source": "dragoscirjan/ai",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/coding/tdd/SKILL.md",
+      "computedHash": "ef737697d9f9297e18d413389953ecedcdcc5fee1694240279c9d6beb6b1242e"
     },
     "unslop": {
-      "source": "dragoscirjan/ai",
-      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "source": "cursor/plugins",
+      "ref": "bc697d0a5a163cec979e362b601e36f5616083fd",
       "sourceType": "github",
-      "skillPath": ".agents/skills/unslop/SKILL.md",
-      "computedHash": "d003127ca47fb71416c3bb06ad01abd81c68fe47d96a708a0dac5f3d41b29bb4"
+      "skillPath": "pstack/skills/unslop/SKILL.md",
+      "computedHash": "eca0ad9fa3a3867c83f3aaf3a058e247a569c8976a68ca423a569b93eb86de5d"
     },
     "wait-what": {
       "source": "dragoscirjan/ai",
-      "ref": "0b60693f94690ff54260a2e0d9071ebf4985a61c",
+      "ref": "main",
       "sourceType": "github",
-      "skillPath": ".agents/skills/wait-what/SKILL.md",
-      "computedHash": "a32b8ec8e65cacd0f81aa3602fa2136880a3e3c7e7c7b54f6c6584fa1d59936e"
+      "skillPath": ".agents/skills/productivity/wait-what/SKILL.md",
+      "computedHash": "3ffcd0ec03e8cc427b38effb2cda99ded6f63f9415573166d4f4b53f4ca61622"
+    },
+    "writing-for-agents": {
+      "source": "mattpocock/skills",
+      "ref": "5863806dd4e15c63174bee4e7515a4256792ecfa",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/writing-for-agents/SKILL.md",
+      "computedHash": "95da47fc97af998e85b7d7e6d57b3ac76727c1e290cfe9ea09005aacb826959f"
     }
   }
 }

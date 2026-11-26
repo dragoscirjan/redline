@@ -37,7 +37,7 @@ Approval covers only its stated files and rules. Changed evidence, scope, depend
 
 ## 4. Apply only the approved adaptation
 
-After approval, create or link the required issue and follow contribution, isolated-workspace, validation, commit, and pull-request gates. Keep startup instructions compact, detailed workflows deferred, and phase handoffs conditional. Update approved stale paths, names, catalogs, and examples together.
+After approval, create or link the required issue and follow contribution, task-branch, working-location, validation, commit, and pull-request gates. Keep startup instructions compact, detailed workflows deferred, and phase handoffs conditional. Update approved stale paths, names, catalogs, and examples together.
 
 Run every applicable check. Stop and report any deviation before proceeding outside the approved proposal. Approval grants no merge or release authority.
 

@@ -1,19 +1,20 @@
-# ASD-STE100 technical writing
+# asd-ste100-technical
 
-`asd-ste100-technical` guides developer-facing responses, explanations, plans, reviews, documentation, instructions, and error reports. It uses plain language without losing technical meaning.
+Write software documentation and responses in plain language inspired by ASD-STE100 while preserving technical meaning, conditions, and uncertainty.
 
-## Approach
+## Usage
 
-This is a software-focused adaptation, not a claim of ASD-STE100 compliance. It keeps active voice, clear terms, and actionable steps without fixed word lists or sentence limits. Accuracy, uncertainty, exact technical text, and safety warnings take priority over brevity.
-
-[`SKILL.md`](SKILL.md) is the complete, standalone instruction set. No scripts, dependencies, or harness extensions are needed.
-
-## Use
-
-Load the skill through your harness. In Pi:
+Example request to an agent with the skill installed:
 
 ```text
-/skill:asd-ste100-technical
+Use asd-ste100-technical to rewrite this API guide in plain language while preserving its conditions, warnings, and exact identifiers.
 ```
 
-A project can select it through agent instructions. Keep the directory name and frontmatter `name` as `asd-ste100-technical`.
+## Install
+
+Run from the target project with Node.js 22.20 or newer, Git, and npm available. Replace the value of `ref` with a published tag or commit that contains this skill.
+
+```sh
+ref="<published-tag-or-commit>"
+npx -y skills@1.7.4 add "https://github.com/dragoscirjan/ai/tree/$ref/.agents/skills/documentation/asd-ste100-technical" --skill asd-ste100-technical
+```

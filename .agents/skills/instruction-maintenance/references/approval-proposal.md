@@ -31,4 +31,4 @@ If evidence, affected files, scope, dependencies, handoffs, or protected rules c
 
 Keep changes within the approved files and rules. Preserve phase handoffs as conditional pointers rather than eager dependencies. Update approved stale names, paths, catalogs, and examples together.
 
-Apply the normal issue, isolated-workspace, validation, commit, and pull-request gates. Stop and report deviations before continuing. Approval permits neither merge nor release.
+Apply the normal issue, task-branch, working-location, validation, commit, and pull-request gates. Stop and report deviations before continuing. Approval permits neither merge nor release.

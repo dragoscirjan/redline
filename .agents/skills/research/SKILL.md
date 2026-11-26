@@ -1,5 +1,6 @@
 ---
 name: research
+disable-model-invocation: true
 description: Research a question, compare alternatives, or investigate feasibility; report verified evidence, uncertainty, and limits.
 requires: ["grilling"]
 ---

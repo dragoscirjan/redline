@@ -1,11 +1,24 @@
-# Test-driven development
+# tdd
 
-[SKILL.md](SKILL.md) contains the workflow, with supporting guidance in [tests.md](tests.md) and [mocking.md](mocking.md).
+Build behavior in small test-first slices, with tests that fail before implementation and pass afterward.
 
-The TypeScript examples illustrate testing principles; they do not require TypeScript, Jest, or a particular LLM. Use the target project's language, test framework, architecture guidance, and safety gates.
+## Usage
 
-## Updates
+Example request to an agent with the skill installed:
 
-Use `/sync-my-skills` and the [YAML catalog](https://github.com/dragoscirjan/ai/blob/7c0599e3fa167004b5adb6cb38d46faa5f356e5e/.agents/skills/agentic-work/sync-my-skills/assets/skill-catalog.yaml) to stage and review the complete package. Keep module/interface agreement self-contained and preserve the red → green workflow. The later `code-review` reference is informational, not a required skill or permission to launch reviewers.
+```text
+Use tdd to implement this approved behavior in small test-first slices, proving each test fails before its implementation passes.
+```
 
-Keep provider configuration excluded and the [MIT notice](LICENSE) intact. Validate metadata, supporting links, and selected harness discovery after an approved update.
+## Install
+
+Run from the target project with Node.js 22.20 or newer, Git, and npm available. Replace the value of `ref` with a published tag or commit that contains this skill.
+
+```sh
+ref="<published-tag-or-commit>"
+npx -y skills@1.7.4 add "https://github.com/dragoscirjan/ai/tree/$ref/.agents/skills/coding/tdd" --skill tdd
+```
+
+## Origin
+
+Adapted from [tdd](https://github.com/mattpocock/skills/tree/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d/skills/engineering/tdd) at revision `4ae2317ddb22b046e26455e4f9c9b3aaaf62212d`.
